@@ -5,7 +5,7 @@
 - Every signed-in WebUI profile can open the existing Dashboard directly from the guide profile menu.
 - WebUI profile menus show Admin Settings to profile admins and Server Settings to server owners.
 
-- WebUI Dashboard charts fill the available card width when stacked in split-screen windows.
+- WebUI Dashboard charts fill the available card width when stacked, use shorter panels, and keep axis text the same size as metric labels.
 
 ## Bug fixes
 

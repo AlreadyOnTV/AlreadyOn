@@ -40,6 +40,17 @@ export default function ServerMetrics({ actions }: { actions?: ReactNode }) {
   const [expanded, setExpanded] = useState<MetricKey | null>(null);
   const [hover, setHover] = useState<{ key: MetricKey; large: boolean; fraction: number; clientX: number; clientY: number } | null>(null);
   const [expandedSize, setExpandedSize] = useState({ width: 900, height: 450 });
+  const [panelSize, setPanelSize] = useState({ width: 350, height: 320 });
+  useEffect(() => {
+    const panel = grid.current?.querySelector('.metric-panel');
+    if (!panel) return;
+    // Draw in screen pixels so axis text matches the HTML legends at any width.
+    const observer = new ResizeObserver(([entry]) => {
+      setPanelSize({ width: entry.contentRect.width, height: entry.contentRect.height });
+    });
+    observer.observe(panel);
+    return () => observer.disconnect();
+  }, []);
   const expandGraph = (key: MetricKey | null) => {
     setHover(null);
     setExpanded(key);
@@ -187,11 +198,11 @@ export default function ServerMetrics({ actions }: { actions?: ReactNode }) {
     const peak = Math.max(1, ...points.flatMap((p) => left.map((k) => k.value(p) ?? 0)), ...left.map((k) => k.value(current) ?? 0));
     const autoScale = network || disk;
     const ceiling = autoScale ? Math.pow(10, Math.floor(Math.log10(peak))) * Math.ceil(peak / Math.pow(10, Math.floor(Math.log10(peak)))) : 100;
-    const width = large ? expandedSize.width - 2 : 350;
-    const height = large ? expandedSize.height - 2 : 320;
+    const width = large ? expandedSize.width - 2 : panelSize.width;
+    const height = large ? expandedSize.height - 2 : panelSize.height;
     const right = width - (disk ? 45 : 30);
     const bottom = height - 45;
-    const plotTop = disk ? Math.max(115, height * 0.36) : 90;
+    const plotTop = disk ? Math.max(115, height * 0.36) : Math.max(90, height * 0.25);
     const x = (at: number) => 48 + ((at - start) / (end - start)) * (right - 48);
     const y = (value: number) => bottom - (value / ceiling) * (bottom - plotTop);
     const percentY = (value: number) => bottom - (value / 100) * (bottom - plotTop);

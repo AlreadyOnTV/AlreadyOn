@@ -720,7 +720,7 @@ button.admin-badge:disabled {
   gap: 16px;
 }
 .metric-panel {
-  aspect-ratio: 1;
+  aspect-ratio: 4 / 3;
   position: relative;
   border: 1px solid var(--border);
   border-radius: var(--radius);
@@ -746,7 +746,7 @@ button.admin-badge:disabled {
 }
 .metric-panel text {
   fill: var(--text-muted);
-  font-size: 10px;
+  font-size: var(--admin-body-size);
 }
 .metric-gridline {
   stroke: var(--border);
@@ -1213,7 +1213,7 @@ button.admin-badge:disabled {
   top: 12px;
 }
 .metrics-expanded-dialog .metric-panel text {
-  font-size: 12px;
+  font-size: var(--admin-body-size);
 }
 
 .metric-tooltip {
