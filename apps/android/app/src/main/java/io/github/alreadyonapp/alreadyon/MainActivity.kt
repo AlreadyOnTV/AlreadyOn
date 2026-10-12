@@ -321,7 +321,7 @@ internal fun ChannelGuide(state: PhoneState, model: PhoneModel, palette: PhonePa
     val localNow = Instant.ofEpochMilli(now).atZone(ZoneId.systemDefault())
     val origin = localNow.withMinute(localNow.minute / 30 * 30).withSecond(0).withNano(0)
         .toInstant().toEpochMilli()
-    val minutesToDp = 4f
+    val minutesToDp = 6f
     val width = (12 * 60 * minutesToDp).dp
     Column(modifier) {
         Row(Modifier.fillMaxWidth().background(palette.alternate)) {

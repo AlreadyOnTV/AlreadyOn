@@ -25,3 +25,5 @@ Clients accept the selected instance certificate automatically, then send userna
 Build `./gradlew :tv:assembleDebug` in `apps/android`. For performance use `:tv:assembleDeviceReview`: optimized, non-debuggable, signed with the same debug key/identity to preserve sessions. Install its APK from `tv/build/outputs/apk/deviceReview/`.
 
 Use a 3840×2160 Google TV AVD. Run `scripts/android/test-tv.py --serial emulator-5554 --sdk /path/to/Android/Sdk`. It clears only the selected emulator's debug app and uses disposable HTTPS/database/media fixtures on port 19900.  Physical-TV validation is still needed for LAN discovery and hardware 4K/HDR decoding.
+
+The guide fits two hours beside the channel column at every screen width. Remote Left/Right navigation scrolls to programs outside that window. Each program shows its start and end times, a single-line title, and an episode line (`S1E2 - Episode title`) for episodic content. Text is truncated inside the program cell.
