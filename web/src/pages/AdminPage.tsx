@@ -1,7 +1,6 @@
 import Brand from '../components/Brand';
 import { useEffect, useRef, useState } from 'react';
 import { useNavigate, useParams } from 'react-router-dom';
-import DashboardPage from './admin/DashboardPage';
 import ChannelsPage from './admin/ChannelsPage';
 import CommercialsPage from './admin/CommercialsPage';
 import MediaPage from './admin/MediaPage';
@@ -15,12 +14,11 @@ import StartupNotice from '../status/StartupNotice';
 import { useStartupStatus } from '../status/useStartupStatus';
 import './AdminPage.css';
 
-type AdminTab = 'dashboard' | 'accounts' | 'channels' | 'commercials' | 'media' | 'server' | 'logs' | 'api';
+type AdminTab = 'accounts' | 'channels' | 'commercials' | 'media' | 'server' | 'logs' | 'api';
 
-const DEFAULT_TAB: AdminTab = 'dashboard';
+const DEFAULT_TAB: AdminTab = 'accounts';
 
 const TABS: { id: AdminTab; label: string }[] = [
-  { id: 'dashboard', label: 'Dashboard' },
   { id: 'accounts', label: 'Accounts' },
   { id: 'media', label: 'Media' },
   { id: 'commercials', label: 'Commercials' },
@@ -31,7 +29,6 @@ const TABS: { id: AdminTab; label: string }[] = [
 ];
 
 const TAB_COMPONENTS: Record<AdminTab, () => React.JSX.Element> = {
-  dashboard: DashboardPage,
   accounts: AccountsPage,
   channels: ChannelsPage,
   commercials: CommercialsPage,
@@ -51,8 +48,7 @@ function isAdminTab(value: string | undefined): value is AdminTab {
 export default function AdminPage() {
   const { isOwner: ownerAccount } = useAccount();
   const { isAdmin } = useUsers();
-  // Matches the profile menu: Server Settings needs an Owner on an admin profile.
-  const isOwner = ownerAccount && isAdmin;
+  const isOwner = ownerAccount;
   useEffect(() => {
     document.title = 'AlreadyOn - Server Settings';
   }, []);

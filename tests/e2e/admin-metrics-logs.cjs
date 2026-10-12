@@ -17,7 +17,7 @@ module.exports = async function adminMetricsAndLogs({browser, login, url, assert
       cpuCores:Array.from({length:8},(_,j)=>({core:j,utilization:i===30?null:(i*3+j*10)%100})),cpuLoad:1.5,cpuPressure:2.25,
       memoryUsedBytes:4e9,memoryLimitBytes:8e9,memoryLimited:true,diskReadMBps:i===30?null:i/2,diskWriteMBps:i/4,ioPressure:i%100,
       disk:41.2,diskUsedBytes:32e9,diskTotalBytes:128e9,diskPath:'/config',diskScope:'container',mediaUsedBytes:12.2e12,mediaTotalBytes:16e12});
-    return route.fulfill({json:{intervalSeconds:15,points:Array.from({length:60},(_,i)=>point(i)),current:point(60)}});
+    return route.fulfill({json:{intervalSeconds:15,points:[point(-10), ...Array.from({length:60},(_,i)=>point(i))],current:point(60)}});
   });
   await page.route('**/api/server/activity',route=>route.fulfill({json:{sessions:[],processes:[]}}));
   await page.goto(url+'/admin/dashboard');
@@ -27,6 +27,14 @@ module.exports = async function adminMetricsAndLogs({browser, login, url, assert
   const positions=await panels.evaluateAll(es=>es.map(e=>({x:e.getBoundingClientRect().x,y:e.getBoundingClientRect().y})));
   assert(positions[0].y===positions[1].y&&positions[2].y===positions[3].y&&positions[0].x===positions[2].x&&positions[2].y>positions[0].y,'Two-by-two layout');
   const cpuPanel=page.locator('[data-metric="cpu"]');
+  const gutter = await cpuPanel.evaluate(panel => ({
+    left: Number(panel.querySelector('.metric-gridline').getAttribute('x1')),
+    label: Number(panel.querySelector('text').getAttribute('x')),
+    points: [...panel.querySelectorAll('circle')].map(dot => Number(dot.getAttribute('cx'))),
+  }));
+  assert(gutter.label + 10 < gutter.left && gutter.points.every(x => x >= gutter.left),
+    'Old history samples must not overlap the y-axis gutter: ' + JSON.stringify(gutter));
+
   assert(await cpuPanel.locator('.metric-line').count()===8,'Each logical CPU needs its own line');
   const coreColors=await cpuPanel.locator('.metric-line').evaluateAll(es=>es.map(e=>getComputedStyle(e).stroke));
   assert(new Set(coreColors).size===8,'Core lines should be distinguishable');

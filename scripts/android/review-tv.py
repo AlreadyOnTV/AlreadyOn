@@ -120,7 +120,7 @@ def main():
     assert focused(snapshot()) == initial, 'Mini-player Down must restore guide focus'
     key(4)
     key(19)
-    assert focused(snapshot()) == 'Switch Profile', 'Mini-player Up must open and focus Switch Profile'
+    assert focused(snapshot()) == 'Dashboard', 'Mini-player Up must open and focus Dashboard'
     key(4)
     assert focused(snapshot()) == 'Pause', 'Profile-menu Back must restore mini-player focus'
     key(4)

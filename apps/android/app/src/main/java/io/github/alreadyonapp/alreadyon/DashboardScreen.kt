@@ -273,15 +273,16 @@ private fun DashboardMetric(key: String, history: JSONObject?, minutes: Int, lat
         }
         val gridColor = phonePalette.muted.copy(alpha = 0.3f)
         val labelColor = phonePalette.muted
-        Canvas(Modifier.fillMaxWidth().height(if (BuildConfig.IS_TV) 210.dp else 180.dp).semantics { contentDescription = "$key performance history" }) {
-            // Reserve space for real axes; all series share the same timestamp coordinates.
-            val left = 54.dp.toPx()
-            val right = size.width - if (key == "disk") 44.dp.toPx() else 6.dp.toPx()
+        Canvas(Modifier.fillMaxWidth().height((if (BuildConfig.IS_TV) 210f else 180f).times(0.5625f).dp).semantics { contentDescription = "$key performance history" }) {
+            // Reserve an axis gutter and match legend text using the user’s font scale.
+            // Samples outside the selected history never draw into this gutter.
+            val left = 64.dp.toPx()
+            val right = size.width - if (key == "disk") 52.dp.toPx() else 6.dp.toPx()
             val top = 10.dp.toPx()
             val bottom = size.height - 24.dp.toPx()
             val paint = android.graphics.Paint(android.graphics.Paint.ANTI_ALIAS_FLAG).apply {
                 color = labelColor.toArgb()
-                textSize = 10.dp.toPx()
+                textSize = metricStyle.fontSize.toPx()
             }
             repeat(5) { index ->
                 val fraction = index / 4.0
@@ -290,7 +291,7 @@ private fun DashboardMetric(key: String, history: JSONObject?, minutes: Int, lat
                 paint.textAlign = android.graphics.Paint.Align.RIGHT
                 val value = ceiling * (1 - fraction)
                 val label = if (key == "cpu" || key == "ram") "${value.toInt()}%" else String.format(Locale.US, "%.1f", value)
-                drawContext.canvas.nativeCanvas.drawText(label, left - 6.dp.toPx(), y + 3.dp.toPx(), paint)
+                drawContext.canvas.nativeCanvas.drawText(label, left - 12.dp.toPx(), y + 3.dp.toPx(), paint)
                 if (key == "disk") {
                     paint.textAlign = android.graphics.Paint.Align.LEFT
                     drawContext.canvas.nativeCanvas.drawText("${((1 - fraction) * 100).toInt()}%", right + 4.dp.toPx(), y + 3.dp.toPx(), paint)

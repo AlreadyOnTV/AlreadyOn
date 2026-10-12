@@ -1,6 +1,6 @@
 # TV profile settings
 
-Open the profile menu and choose **Profile Settings**, between **Switch Profile** and **Sign Out**. The full-screen page stops playback and removes the player and guide. It uses the same current-profile API and fields as the WebUI; it does not expose administration of other profiles.
+Open the profile menu and choose **Profile Settings**, between **Dashboard** and **Switch Profile**. The full-screen page stops playback and removes the player and guide. It uses the same current-profile API and fields as the WebUI; it does not expose administration of other profiles.
 
 Use Up/Down to preview categories automatically. Select or Right focuses Name, the first icon, Set/Clear PIN, the time/audio dropdown or the subtitle-default toggle. Focus starts on **Display Name**. A white outline marks the focused control. Choice menus focus and mark the current value. Name and PIN fields use the TV’s on-screen keyboard.
 

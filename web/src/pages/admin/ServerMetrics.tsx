@@ -40,6 +40,17 @@ export default function ServerMetrics({ actions }: { actions?: ReactNode }) {
   const [expanded, setExpanded] = useState<MetricKey | null>(null);
   const [hover, setHover] = useState<{ key: MetricKey; large: boolean; fraction: number; clientX: number; clientY: number } | null>(null);
   const [expandedSize, setExpandedSize] = useState({ width: 900, height: 450 });
+  const [panelSize, setPanelSize] = useState({ width: 350, height: 320 });
+  useEffect(() => {
+    const panel = grid.current?.querySelector('.metric-panel');
+    if (!panel) return;
+    // Draw in screen pixels so axis text matches the HTML legends at any width.
+    const observer = new ResizeObserver(([entry]) => {
+      setPanelSize({ width: entry.contentRect.width, height: entry.contentRect.height });
+    });
+    observer.observe(panel);
+    return () => observer.disconnect();
+  }, []);
   const expandGraph = (key: MetricKey | null) => {
     setHover(null);
     setExpanded(key);
@@ -180,19 +191,21 @@ export default function ServerMetrics({ actions }: { actions?: ReactNode }) {
             : [{ id: 'cpu', label: 'CPU', unit: '%', value: (p) => p?.cpu }];
     // Per-core tooltips still lead with the aggregate shown in the title.
     const tooltipRows = coreIds.length ? [{ id: 'cpu', label: 'CPU', unit: '%' as const, value: (p: MetricSample | undefined) => p?.cpu }, ...series] : series;
-    const points = (data?.points ?? []).filter(
+    // Older samples must not draw into the axis gutter outside the selected history.
+    const points = (data?.points ?? []).filter(p => p.at >= start && p.at <= end).filter(
       (p) => !network || (p.networkInterface === data?.current.networkInterface && p.networkScope === data?.current.networkScope),
     );
     const left = series.filter((line) => !line.right);
     const peak = Math.max(1, ...points.flatMap((p) => left.map((k) => k.value(p) ?? 0)), ...left.map((k) => k.value(current) ?? 0));
     const autoScale = network || disk;
     const ceiling = autoScale ? Math.pow(10, Math.floor(Math.log10(peak))) * Math.ceil(peak / Math.pow(10, Math.floor(Math.log10(peak)))) : 100;
-    const width = large ? expandedSize.width - 2 : 350;
-    const height = large ? expandedSize.height - 2 : 320;
+    const width = large ? expandedSize.width - 2 : panelSize.width;
+    const height = large ? expandedSize.height - 2 : panelSize.height;
+    const plotLeft = 64;
     const right = width - (disk ? 45 : 30);
     const bottom = height - 45;
-    const plotTop = disk ? Math.max(115, height * 0.36) : 90;
-    const x = (at: number) => 48 + ((at - start) / (end - start)) * (right - 48);
+    const plotTop = disk ? Math.max(115, height * 0.36) : Math.max(90, height * 0.25);
+    const x = (at: number) => plotLeft + ((at - start) / (end - start)) * (right - plotLeft);
     const y = (value: number) => bottom - (value / ceiling) * (bottom - plotTop);
     const percentY = (value: number) => bottom - (value / 100) * (bottom - plotTop);
     const rate = (value: number | null | undefined) => (value == null ? 'Unavailable' : value.toFixed(1) + 'MB/s');
@@ -216,7 +229,7 @@ export default function ServerMetrics({ actions }: { actions?: ReactNode }) {
           const matrix = svg?.getScreenCTM();
           if (!matrix) return;
           const position = new DOMPoint(event.clientX, event.clientY).matrixTransform(matrix.inverse());
-          setHover({ key, large, fraction: Math.max(0, Math.min(1, (position.x - 48) / (right - 48))), clientX: event.clientX, clientY: event.clientY });
+          setHover({ key, large, fraction: Math.max(0, Math.min(1, (position.x - plotLeft) / (right - plotLeft))), clientX: event.clientX, clientY: event.clientY });
         }}
         onPointerLeave={() => setHover(null)}
         data-metric={key}
@@ -306,8 +319,8 @@ export default function ServerMetrics({ actions }: { actions?: ReactNode }) {
             const value = (fraction * ceiling) / 100;
             return (
               <g key={fraction}>
-                <line x1="48" x2={right} y1={y(value)} y2={y(value)} className="metric-gridline" />
-                <text x="43" y={y(value) + 4} textAnchor="end">
+                <line x1={plotLeft} x2={right} y1={y(value)} y2={y(value)} className="metric-gridline" />
+                <text x={plotLeft - 16} y={y(value) + 4} textAnchor="end">
                   {autoScale ? value.toLocaleString(undefined, { maximumFractionDigits: 2 }) : value + '%'}
                 </text>
                 {disk && (
@@ -351,10 +364,10 @@ export default function ServerMetrics({ actions }: { actions?: ReactNode }) {
             );
           })}
           {nearest && <line x1={x(nearest.at)} x2={x(nearest.at)} y1={plotTop} y2={bottom} className="metric-hover-line" />}
-          <text x="48" y={height - 19} textAnchor="start">
+          <text x={plotLeft} y={height - 19} textAnchor="start">
             {time(start)}
           </text>
-          <text x={(48 + right) / 2} y={height - 19} textAnchor="middle">
+          <text x={(plotLeft + right) / 2} y={height - 19} textAnchor="middle">
             {time((start + end) / 2)}
           </text>
           <text x={right} y={height - 19} textAnchor="end">
