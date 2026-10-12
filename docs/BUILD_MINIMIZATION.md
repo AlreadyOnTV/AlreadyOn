@@ -39,4 +39,4 @@ Retain private hashes/timestamps and validate media and the disposable runtime b
 
 Public inventory SBOMs are approved for release attachments. Generate them separately from private vulnerability/secret reports, bind them to image digests or APK checksums, and retain the same SBOM bytes when promoting tested artifacts. See [scanning](VULNERABILITY_SCANNING.md) and [release gates](CI_CD.md).
 
-CI now pins npm 11.21.0 with locked patched dependencies. Its rescan found zero Critical/High/secret matches, with 43 Medium and 10 Low remaining. Public SBOMs use allowlisted inventories bound through release provenance.
+CI now pins npm 11.21.0 with locked patched dependencies. Its rescan found zero Critical/High/secret matches, with 42 Medium and 10 Low remaining. Public SBOMs use allowlisted inventories bound through release provenance.
