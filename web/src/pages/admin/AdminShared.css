@@ -720,7 +720,7 @@ button.admin-badge:disabled {
   gap: 16px;
 }
 .metric-panel {
-  aspect-ratio: 4 / 3;
+  aspect-ratio: 16 / 9;
   position: relative;
   border: 1px solid var(--border);
   border-radius: var(--radius);

@@ -9,4 +9,6 @@
 
 ## Bug fixes
 
+- WebUI performance charts keep older history samples outside the y-axis label area.
+
 - The WebUI volume slider now supports clicking and dragging in the small, large and fullscreen players.
