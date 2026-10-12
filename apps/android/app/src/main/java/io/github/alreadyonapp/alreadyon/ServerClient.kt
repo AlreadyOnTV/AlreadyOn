@@ -64,7 +64,7 @@ internal class ServerClient(val origin: String, store: SessionStore, bypassTls: 
 
     suspend fun request(path: String, method: String = "GET", body: JSONObject? = null, upload: ByteArray? = null): String =
         withContext(Dispatchers.IO) {
-            require(path.startsWith("/api/") && !path.startsWith("//"))
+            require((path.startsWith("/api/") && !path.startsWith("//")) || path == "/healthz")
             val url = base.resolve(path) ?: throw IOException("Invalid server route.")
             require(sameOrigin(base, url))
             val payload = if (method == "GET") null else

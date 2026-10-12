@@ -27,6 +27,8 @@ def main():
     parser.add_argument("--serial", required=True)
     parser.add_argument("--sdk", required=True, type=Path)
     parser.add_argument("--screenshots", type=Path, help="Optional local directory for emulator screenshots")
+    parser.add_argument("--entry-mode", action="append", choices=("discovery", "manual"), help="Limit to selected connection flow; default runs both")
+    parser.add_argument("--test-class", choices=("TvNavigationTest", "DashboardTest"), default="TvNavigationTest", help="Select native navigation or focused Dashboard coverage")
     parser.add_argument("--interactive", action="store_true", help="Leave the disposable server running for manual emulator checks until Enter is pressed")
     args = parser.parse_args()
     adb = str(args.sdk / "platform-tools/adb")
@@ -48,8 +50,8 @@ def main():
             "./cmd/server", cwd=ROOT / "server")
         with socket.socket() as sock:
             # Fail if occupied; never replace a live service for the fixture.
-            sock.bind(("127.0.0.1", 19900))
-            port = 19900
+            sock.bind(("127.0.0.1", 0 if args.test_class == "DashboardTest" else 19900))
+            port = sock.getsockname()[1]
         with (root / "server.log").open("w") as log:
             process = subprocess.Popen([str(binary)], cwd=root,
                 env=dict(os.environ, ALREADYON_WEB_PORT=str(port)), stdout=log, stderr=log)
@@ -111,17 +113,23 @@ def main():
                     print(f"Fixture WebUI: {base}; password only for WebUI: synthetic-tv-fixture-pass", flush=True)
                     input("Press Enter to stop the disposable fixture: ")
                     return
-                for entry_mode in ("discovery", "manual"):
+                for entry_mode in args.entry_mode or ("discovery", "manual"):
                     run(adb, "-s", args.serial, "shell", "pm", "clear", "io.github.alreadyonapp.alreadyon.tv.debug")
                     result = run(adb, "-s", args.serial, "shell", "am", "instrument", "-w", "-e", "serverPort", str(port),
-                        "-e", "entryMode", entry_mode, "-e", "class", "io.github.alreadyonapp.alreadyon.TvNavigationTest",
+                        "-e", "entryMode", entry_mode, "-e", "class", "io.github.alreadyonapp.alreadyon." + args.test_class,
                         "io.github.alreadyonapp.alreadyon.tv.debug.test/androidx.test.runner.AndroidJUnitRunner", capture=True)
                     print(result)
+                    if "OK (1 test)" not in result:
+                        if args.screenshots:
+                            args.screenshots.mkdir(parents=True, exist_ok=True)
+                            run(adb, "-s", args.serial, "pull", "/sdcard/Android/data/io.github.alreadyonapp.alreadyon.tv.debug/files/tv-last-state.png", str(args.screenshots / f"tv-failed-{entry_mode}.png"))
+                        raise RuntimeError("TV instrumentation did not pass")
                     if args.screenshots:
                         args.screenshots.mkdir(parents=True, exist_ok=True)
                         run(adb, "-s", args.serial, "pull", "/sdcard/Android/data/io.github.alreadyonapp.alreadyon.tv.debug/files/tv-guide.png", str(args.screenshots / f"tv-guide-{entry_mode}.png"))
-                    if "OK (1 test)" not in result:
-                        raise RuntimeError("TV instrumentation did not pass")
+                        if args.test_class == "DashboardTest":
+                            for name in ("tv-dashboard", "tv-dashboard-metrics"):
+                                run(adb, "-s", args.serial, "pull", f"/sdcard/Android/data/io.github.alreadyonapp.alreadyon.tv.debug/files/{name}.png", str(args.screenshots / f"{name}-{entry_mode}.png"))
             finally:
                 process.terminate()
                 try:

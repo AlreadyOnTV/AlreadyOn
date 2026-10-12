@@ -8,6 +8,7 @@ import androidx.lifecycle.ViewModelProvider
 import org.junit.Rule
 import androidx.compose.ui.test.junit4.createAndroidComposeRule
 import androidx.compose.ui.test.*
+import androidx.compose.ui.semantics.SemanticsActions
 import org.junit.Test
 import org.junit.runner.RunWith
 import java.net.ServerSocket
@@ -43,6 +44,9 @@ class TvNavigationTest {
         }
         val manual = InstrumentationRegistry.getArguments().getString("entryMode") == "manual"
         try {
+            // Advance the static startup cover on Compose's test clock before sending input.
+            compose.mainClock.advanceTimeBy(3000)
+            compose.waitForIdle()
             compose.onAllNodes(hasClickAction() and (hasContentDescription("AlreadyOn") or hasAnyDescendant(hasContentDescription("AlreadyOn")))).assertCountEquals(0)
             fun exists(text: String) = compose.onAllNodesWithText(text).fetchSemanticsNodes().isNotEmpty()
             fun click(text: String) {
@@ -69,10 +73,11 @@ class TvNavigationTest {
             } else {
                 compose.waitUntil(60000) { compose.onAllNodes(hasText("10.0.2.2:19900", substring = true)).fetchSemanticsNodes().isNotEmpty() }
                 val server = hasText("10.0.2.2:19900", substring = true)
-                // Real remote events catch parent focus targets that swallow navigation.
+                // Establish a known start below the discovered server, then navigate with the remote.
+                compose.onNodeWithText("Rescan").performSemanticsAction(SemanticsActions.RequestFocus) { it() }
                 repeat(8) {
                     if (compose.onAllNodes(server and isFocused()).fetchSemanticsNodes().isEmpty()) {
-                        device.pressDPadDown()
+                        device.pressDPadUp()
                         compose.waitForIdle()
                     }
                 }
@@ -103,7 +108,8 @@ class TvNavigationTest {
             compose.onNodeWithText("Admin").performClick()
             compose.onNodeWithText("Switch Profile").assertExists()
             compose.onNodeWithText("Sign Out").assertExists()
-            compose.onNodeWithText("Profile Settings").assertDoesNotExist()
+            compose.onNodeWithText("Profile Settings").assertExists()
+            compose.onNodeWithText("Dashboard").assertExists()
             device.pressBack()
             val model = ViewModelProvider(compose.activity)[PhoneModel::class.java]
             compose.runOnIdle { model.setQuality(720); model.setSubtitle(null) }

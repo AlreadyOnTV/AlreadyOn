@@ -149,6 +149,13 @@ internal class PhoneModel(application: Application) : AndroidViewModel(applicati
         }
     }
 
+    /** Screen-owned polling is cancelled on exit; use the existing authenticated client. */
+    suspend fun dashboardRequest(path: String): String {
+        val api = client ?: throw IOException("Sign in to view Dashboard.")
+        try { return api.request(path) }
+        catch (e: Exception) { handleFailure(e); throw e }
+    }
+
     fun openSettings(screen: String) {
         if (screen == "account" && state.value.profile?.role != "admin") return
         stopWatching()

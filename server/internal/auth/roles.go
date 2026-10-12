@@ -22,6 +22,10 @@ var viewerRoutes = []string{
 	"GET /api/auth/sessions",
 	"DELETE /api/auth/sessions/{id}",
 	"POST /api/auth/sessions/revoke",
+	// Read-only monitoring is visible to every signed-in household profile.
+	"GET /api/server/details",
+	"GET /api/server/metrics",
+	"GET /api/server/activity",
 	// Watching.
 	"GET /api/guide",
 	"GET /api/status/startup",
