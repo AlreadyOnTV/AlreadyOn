@@ -32,7 +32,7 @@ class SecurityScanTest(unittest.TestCase):
         with tempfile.TemporaryDirectory() as tmp:
             path = Path(tmp) / 'go.json'
             path.write_text('\n'.join(json.dumps(r) for r in [
-                {'config': {'scanner_version': 'v1.9.0', 'scan_level': 'symbol'}},
+                {'config': {'scanner_version': 'v1.9.0', 'scan_level': 'symbol', 'db_last_modified': '2026-10-08T22:31:09Z'}},
                 {'osv': {'details': 'private advisory'}},
                 {'finding': {'trace': [{'module': 'synthetic'}]}},
                 {'finding': {'trace': [{'function': 'syntheticFunction'}]}}]))

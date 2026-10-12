@@ -46,7 +46,10 @@ def govuln_summary(path):
             called += any(frame.get('function') for frame in record['finding'].get('trace', []))
     if not config or config.get('scanner_version') != GOVULNCHECK_VERSION or config.get('scan_level') != 'symbol':
         raise ValueError('Missing reviewed Go symbol scan coverage')
-    return {'version': GOVULNCHECK_VERSION, 'database_updated_at': config.get('db_last_modified'),
+    if not config.get('db_last_modified'):
+        raise ValueError('Missing Go advisory database timestamp')
+    return {'version': GOVULNCHECK_VERSION, 'database_updated_at': config['db_last_modified'],
+            'report_sha256': hashlib.sha256(path.read_bytes()).hexdigest(),
             'findings': findings, 'called_function_findings': called}
 
 
