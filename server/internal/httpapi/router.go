@@ -53,7 +53,7 @@ func NewRouterWithSessionCookie(webDir, uploadDir string, db *sql.DB, cookieName
 	mux.HandleFunc("GET /api/settings/loudness", handleLoudness(db))
 	mux.HandleFunc("PUT /api/settings/loudness", handleLoudness(db))
 	mux.HandleFunc("POST /api/settings/loudness/run", handleLoudness(db))
-	mux.HandleFunc("GET /api/server/details", handleServerDetails())
+	mux.HandleFunc("GET /api/server/details", handleServerDetails(db))
 	mux.HandleFunc("GET /api/server/metrics", handleServerMetrics(db))
 	for _, p := range playbackHandlers {
 		p.register(mux)

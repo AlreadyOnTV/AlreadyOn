@@ -32,7 +32,7 @@ export default function ServerDetails({ actions }: { actions?: ReactNode }) {
     {details && <dl className="server-build-details">
       <div><dt>Uptime</dt><dd>{uptime(details.uptimeSeconds)}</dd></div>
       <div><dt>IP Address</dt><dd>{details.ipAddresses.join(', ') || 'Unavailable (host address cannot be detected)'}</dd></div>
-      <div><dt>App Version</dt><dd>{details.appVersion}</dd></div>
+      <div><dt>Server Version</dt><dd>{details.appVersion}</dd></div>
       <div><dt>Time Zone</dt><dd>{details.timeZone}</dd></div>
       <div><dt>FFmpeg Version</dt><dd>{details.ffmpegVersion}</dd></div>
     </dl>}

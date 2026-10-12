@@ -165,6 +165,7 @@ class MainActivity : ComponentActivity() {
                                 state.mustChangePassword -> AccountScreen(state, model, forced = true)
                                 state.settings == "account" -> AccountScreen(state, model)
                                 state.settings == "profile" -> ProfileSettingsScreen(state, model)
+                                state.settings == "dashboard" -> DashboardScreen(state, model, Modifier.weight(1f))
                                 state.profile == null -> ProfileScreen(state, model)
                                 else -> {
                                     if (state.channel != null) {
@@ -190,16 +191,17 @@ class MainActivity : ComponentActivity() {
 internal fun ProfileMenu(state: PhoneState, model: PhoneModel, modifier: Modifier = Modifier, openSignal: Int = 0, onMenuDismiss: () -> Unit = {}) {
     var open by remember { mutableStateOf(false) }
     var consumedSignal by remember { mutableIntStateOf(openSignal) }
-    val switchFocus = remember { FocusRequester() }
+    val dashboardFocus = remember { FocusRequester() }
     LaunchedEffect(openSignal) {
         if (openSignal > consumedSignal) open = true
         consumedSignal = openSignal
     }
-    LaunchedEffect(open) { if (open && BuildConfig.IS_TV) { withFrameNanos { }; switchFocus.requestFocus() } }
+    LaunchedEffect(open) { if (open && BuildConfig.IS_TV) { withFrameNanos { }; dashboardFocus.requestFocus() } }
     Box {
         TextButton(onClick = { open = true }, modifier = modifier) { ProfileName(state.profile!!, model) }
         DropdownMenu(expanded = open, onDismissRequest = { open = false; onMenuDismiss() }) {
-            DropdownMenuItem(text = { Text("Switch Profile") }, modifier = Modifier.focusRequester(switchFocus).tvFocusOutline(), onClick = { open = false; model.changeProfile() })
+            DropdownMenuItem(text = { Text("Dashboard") }, modifier = Modifier.focusRequester(dashboardFocus).tvFocusOutline(), onClick = { open = false; model.openSettings("dashboard") })
+            DropdownMenuItem(text = { Text("Switch Profile") }, modifier = Modifier.tvFocusOutline(), onClick = { open = false; model.changeProfile() })
             DropdownMenuItem(text = { Text("Profile Settings") }, modifier = Modifier.tvFocusOutline(), onClick = { open = false; model.openSettings("profile") })
             DropdownMenuItem(text = { Text("Sign Out") }, onClick = { open = false; model.logout() })
         }
@@ -321,7 +323,7 @@ internal fun ChannelGuide(state: PhoneState, model: PhoneModel, palette: PhonePa
     val localNow = Instant.ofEpochMilli(now).atZone(ZoneId.systemDefault())
     val origin = localNow.withMinute(localNow.minute / 30 * 30).withSecond(0).withNano(0)
         .toInstant().toEpochMilli()
-    val minutesToDp = 4f
+    val minutesToDp = 6f
     val width = (12 * 60 * minutesToDp).dp
     Column(modifier) {
         Row(Modifier.fillMaxWidth().background(palette.alternate)) {

@@ -63,7 +63,10 @@ internal fun TvGuide(state: PhoneState, palette: PhonePalette, modifier: Modifie
             targets[channels[index].id]?.requestFocus()
         }
     }
-    Column(modifier) {
+    BoxWithConstraints(modifier) {
+    // Fit exactly two hours beside the fixed channel column at every viewport width.
+    val minuteWidth = ((maxWidth.value - 100).coerceAtLeast(1f) / 120).dp
+    Column(Modifier.fillMaxSize()) {
         Row(Modifier.fillMaxWidth().background(palette.alternate)) {
             Text("CHANNEL", Modifier.width(100.dp).padding(4.dp), color = palette.heading)
             Canvas(Modifier.weight(1f).height(34.dp)) {
@@ -72,7 +75,7 @@ internal fun TvGuide(state: PhoneState, palette: PhonePalette, modifier: Modifie
                 var stamp = origin
                 while (x < size.width) {
                     drawIntoCanvas { it.nativeCanvas.drawText(format.format(Instant.ofEpochMilli(stamp)), x + 4.dp.toPx(), 23.dp.toPx(), paint) }
-                    x += 120.dp.toPx(); stamp += 1_800_000
+                    x += minuteWidth.toPx() * 30; stamp += 1_800_000
                 }
             }
         }
@@ -90,7 +93,7 @@ internal fun TvGuide(state: PhoneState, palette: PhonePalette, modifier: Modifie
                     Triple(it, Instant.parse(it.startsAt).toEpochMilli(), Instant.parse(it.endsAt).toEpochMilli())
                 } }
                 BoxWithConstraints(Modifier.fillMaxWidth()) {
-                    val windowMs = ((maxWidth.value - 100) / 4 * 60_000).toLong()
+                    val windowMs = 120 * 60_000L
                     fun selectionIndex(at: Long = selectedTime): Int = programs.indexOfFirst { at >= it.second && at < it.third }
                         .takeIf { it >= 0 } ?: programs.indexOfFirst { it.second >= at }.takeIf { it >= 0 } ?: programs.lastIndex
                     fun reveal(start: Long, end: Long) {
@@ -151,7 +154,7 @@ internal fun TvGuide(state: PhoneState, palette: PhonePalette, modifier: Modifie
                             val labelPaint = remember { TextPaint(Paint.ANTI_ALIAS_FLAG) }
                             Box(Modifier.weight(1f).fillMaxHeight()) {
                             Canvas(Modifier.fillMaxSize()) {
-                                val scale = 4.dp.toPx() / 60_000
+                                val scale = minuteWidth.toPx() / 60_000
                                 val gap = 3.dp.toPx()
                                 programs.forEach { (program, start, end) ->
                                     val left = ((start - origin) * scale).coerceAtLeast(0f) + gap
@@ -163,17 +166,20 @@ internal fun TvGuide(state: PhoneState, palette: PhonePalette, modifier: Modifie
                                     labelPaint.color = (if (current) palette.nowText else palette.text).toArgb()
                                     val available = (right-left-8.dp.toPx()).coerceAtLeast(0f)
                                     labelPaint.textSize = 11.dp.toPx()
-                                    val label = (if (current) "Now · " else "") + format.format(Instant.ofEpochMilli(if (current) end else start))
+                                    val label = "${format.format(Instant.ofEpochMilli(start))} - ${format.format(Instant.ofEpochMilli(end))}"
                                     drawIntoCanvas { canvas ->
                                         canvas.nativeCanvas.drawText(TextUtils.ellipsize(label, labelPaint, available, TextUtils.TruncateAt.END).toString(), left+4.dp.toPx(), 17.dp.toPx(), labelPaint)
-                                        labelPaint.textSize = 13.dp.toPx()
-                                        canvas.nativeCanvas.drawText(TextUtils.ellipsize(program.title, labelPaint, available, TextUtils.TruncateAt.END).toString(), left+4.dp.toPx(), 39.dp.toPx(), labelPaint)
+                                        canvas.nativeCanvas.drawText(TextUtils.ellipsize(program.title, labelPaint, available, TextUtils.TruncateAt.END).toString(), left+4.dp.toPx(), 33.dp.toPx(), labelPaint)
+                                        if (program.episodeNumber > 0) {
+                                            val episode = "S${program.seasonNumber}E${program.episodeNumber} - ${program.episodeTitle}"
+                                            canvas.nativeCanvas.drawText(TextUtils.ellipsize(episode, labelPaint, available, TextUtils.TruncateAt.END).toString(), left+4.dp.toPx(), 49.dp.toPx(), labelPaint)
+                                        }
                                     }
                                 }
                             }
                             // Keep the hot remote-focus draw separate from the cached program labels.
                             Canvas(Modifier.fillMaxSize()) {
-                                val scale = 4.dp.toPx() / 60_000
+                                val scale = minuteWidth.toPx() / 60_000
                                 val selected = selectionIndex()
                                 if (focused) programs.getOrNull(selected)?.let { (_, start, end) ->
                                     val left = ((start - origin) * scale).coerceIn(0f, (size.width - 12.dp.toPx()).coerceAtLeast(0f))
@@ -191,4 +197,5 @@ internal fun TvGuide(state: PhoneState, palette: PhonePalette, modifier: Modifie
         }
         }
     }
+}
 }

@@ -2756,7 +2756,7 @@ const noWorkers = async (unreleased = () => 0) => {
       (await page.locator(".admin-card").count()) === 2,
       "Server should show build details and settings",
     );
-    await page.getByText("App Version", { exact: true }).waitFor();
+    await page.getByText("Server Version", { exact: true }).waitFor();
     const details = await (
       await page.request.get(url + "/api/server/details")
     ).json();

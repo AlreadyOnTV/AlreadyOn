@@ -2,6 +2,7 @@ package httpapi
 
 import (
 	"context"
+	"database/sql"
 	"net"
 	"net/http"
 	"os"
@@ -11,6 +12,8 @@ import (
 	"strings"
 	"sync"
 	"time"
+
+	"github.com/alreadyonapp/alreadyon/server/internal/serversettings"
 )
 
 // Process uptime resets on restart, independently of the Docker host's uptime.
@@ -75,7 +78,7 @@ func serverTimeZone() string {
 	return zone
 }
 
-func handleServerDetails() http.HandlerFunc {
+func handleServerDetails(db *sql.DB) http.HandlerFunc {
 	// FFmpeg's immutable version is cached; bound the subprocess even if a
 	// request disconnects and share it across simultaneous dashboard requests.
 	var once sync.Once
@@ -92,14 +95,20 @@ func handleServerDetails() http.HandlerFunc {
 				}
 			}
 		})
+		settings, err := serversettings.Get(r.Context(), db)
+		if err != nil {
+			writeJSONError(w, 500, "could not read server details")
+			return
+		}
 		w.Header().Set("Cache-Control", "no-store")
 		writeJSON(w, http.StatusOK, struct {
+			ServerName    string   `json:"serverName"`
 			UptimeSeconds int64    `json:"uptimeSeconds"`
 			IPAddresses   []string `json:"ipAddresses"`
 			AppVersion    string   `json:"appVersion"`
 			TimeZone      string   `json:"timeZone"`
 			FFmpegVersion string   `json:"ffmpegVersion"`
-		}{int64(time.Since(processStarted).Seconds()), hostAddresses(), version, serverTimeZone(), ffmpegVersion})
+		}{settings.ServerName, int64(time.Since(processStarted).Seconds()), hostAddresses(), version, serverTimeZone(), ffmpegVersion})
 	}
 }
 

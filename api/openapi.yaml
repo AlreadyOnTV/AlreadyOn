@@ -2866,7 +2866,7 @@ paths:
         '409': { description: Loudness Detection is disabled }
   /api/server/details:
     get:
-      x-alreadyon-roles: [owner]
+      x-alreadyon-roles: [owner, viewer]
       summary: Get server process and image build details
       responses:
         '200':
@@ -2875,8 +2875,9 @@ paths:
             application/json:
               schema:
                 type: object
-                required: [uptimeSeconds, ipAddresses, appVersion, timeZone, ffmpegVersion]
+                required: [serverName, uptimeSeconds, ipAddresses, appVersion, timeZone, ffmpegVersion]
                 properties:
+                  serverName: { type: string, description: Configured server display name }
                   uptimeSeconds: { type: integer, minimum: 0, description: Seconds since app process initialization }
                   ipAddresses:
                     {
@@ -2894,7 +2895,7 @@ paths:
         '401': { description: Authentication required }
   /api/server/metrics:
     get:
-      x-alreadyon-roles: [owner]
+      x-alreadyon-roles: [owner, viewer]
       summary: Server CPU, RAM, disk and bandwidth history
       parameters:
         - in: query
@@ -2924,12 +2925,12 @@ paths:
         '400': { description: Unsupported window }
   /api/server/activity:
     get:
-      x-alreadyon-roles: [owner]
+      x-alreadyon-roles: [owner, viewer]
       operationId: getServerActivity
       tags: [admin]
       summary: Active viewers and background processes
       description: >
-        Authenticated management-only, no-store snapshot. Viewers publish the entry
+        Authenticated read-only, no-store snapshot available to owner and viewer accounts. Viewers publish the entry
         actually attached to their player, never prefetched entries. Commercials
         retain the preceding program and freeze its readings. A viewer joining
         during a commercial is hidden until a program plays. Reports expire after

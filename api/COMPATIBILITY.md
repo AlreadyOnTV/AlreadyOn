@@ -18,13 +18,13 @@ Use the tune endpoint to obtain an authorized session, then follow playback stat
 
 A per-channel commercial setting of `enabled: null` inherits the server default. An empty folder selection means all configured commercial folders. Clients must preserve these distinctions rather than substituting convenient defaults.
 
-Server details expose authenticated installation identity and version information. Removed or deprecated routes must not silently return unrelated data. Check OpenAPI before depending on historical endpoints.
+Server details expose authenticated server identity and version. Removed routes must not return unrelated data. Check OpenAPI for historical endpoints.
 
 ## Changes
 
-Update the schema, implementation, consumer and focused compatibility tests together. Record user-facing changes in the relevant guide; keep private build transcripts outside the repository. Never copy real API keys into examples.
+Update schema, implementation, consumers and tests together. Document visible changes; never include credentials or private transcripts.
 
-Swagger uses a short overview; operation-level role declarations remain in OpenAPI for clients and tooling.
+OpenAPI declares operation roles.
 
 Channel filters accept `excludedGenres` (exclusions win) and `requireKnownYear`. These optional fields default to no exclusions and allowing unknown years. Restricted built-in defaults enable known-year filtering.
 
@@ -33,3 +33,5 @@ Native account PIN sign-in now requires both `username` and `pin` in `POST /api/
 Native PIN sign-in now issues a persistent, revocable session; browser expiry settings still apply to browser sign-in. Valid native sessions migrate to persistence; expired/revoked sessions are never restored. Auth status refreshes migrated native cookies.
 
 The temporary `DELETE /api/testing/commercial` operation has been removed. Playback no longer offers deletion of commercial library files.
+
+Authenticated owner and viewer accounts can read `/api/server/details`, `/api/server/activity` and `/api/server/metrics` for native Dashboards. Management writes remain owner-only. Server details add `serverName`; the existing `appVersion` JSON field continues to identify the server build for compatibility, while UI labels call it Server Version. Activity is server-wide, including other profiles, source IPs and background filenames.
