@@ -13,11 +13,11 @@ Comparable unsigned APKs with identical version/toolchain inputs:
 | Phone | 10,912,462 bytes | 2,077,077 bytes | 81.0% |
 | TV | 2,492,033 bytes | 2,078,457 bytes | 16.6% |
 
-Local sizes exclude signing overhead. Both retain four native libraries and launch on an isolated emulator. Physical playback/update acceptance remains a release gate.
+Sizes exclude signing. Both retain native libraries and passed emulator launch checks; physical acceptance remains required.
 
 ## Containers
 
-The runtime removes Ubuntu's unused Pebble orchestrator, curl and vainfo. AlreadyOn uses its own entrypoint, TLS health command and hardware probing. A final scratch stage copies the cleaned filesystem, removing deleted upstream bytes from downloadable layers while retaining Ubuntu libraries, package metadata, CA certificates and time zones.
+The runtime removes unused Pebble, curl and vainfo. A final scratch stage copies the cleaned filesystem, retaining Ubuntu libraries, package metadata, certificates and time zones. AlreadyOn supplies its own TLS health command and hardware probing.
 
 The server and local administration commands share one executable through filename aliases, avoiding duplicate Go/SQLite runtime copies. Standalone developer commands remain available. Password-reset regression tests exercise the packaged dispatch against temporary accounts.
 
@@ -35,6 +35,8 @@ Runtime scan counts fell from 3 High/42 Medium/7 Low/9 Unknown to 0 High/37 Medi
 
 ## Evidence and publication
 
-Exact artifact hashes and scan timestamps stay in private evidence. Media-stack and disposable-runtime checks are required before delivery.
+Retain private hashes/timestamps and validate media and the disposable runtime before delivery.
 
 Public inventory SBOMs are approved for release attachments. Generate them separately from private vulnerability/secret reports, bind them to image digests or APK checksums, and retain the same SBOM bytes when promoting tested artifacts. See [scanning](VULNERABILITY_SCANNING.md) and [release gates](CI_CD.md).
+
+CI now pins npm 11.21.0 with locked patched dependencies. Its rescan found zero Critical/High/secret matches, with 43 Medium and 10 Low remaining. Public SBOMs use allowlisted inventories bound through release provenance.

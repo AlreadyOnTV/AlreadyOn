@@ -40,7 +40,8 @@ class AndroidReleaseTests(unittest.TestCase):
                 release.verify_assets(directory)
 
     def test_download_includes_both_apks_and_provenance(self):
-        with patch.object(release, "run") as command:
+        with patch.object(release, "run") as command, \
+                patch.object(release, "releases", return_value=[{"tag_name": "2026-10-09-alpha1", "assets": []}]):
             release.download("owner/repo", "2026-10-09-alpha1", Path("assets"))
             arguments = command.call_args.args
             for asset in release.ASSETS:

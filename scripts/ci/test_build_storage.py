@@ -82,13 +82,18 @@ class BuildStoragePolicy(unittest.TestCase):
             root = pathlib.Path(directory)
             names = ['deploy/base.Dockerfile', 'deploy/check-media-stack.sh',
                      'deploy/patches/ffmpeg-readrate-initial-burst.patch',
-                     'deploy/ci-base.Dockerfile', 'web/package.json', 'web/package-lock.json']
+                     'deploy/ci-base.Dockerfile', 'deploy/npm-tooling/package.json',
+                     'deploy/npm-tooling/package-lock.json', 'web/package.json', 'web/package-lock.json']
             for name in names:
                 path = root / name
                 path.parent.mkdir(parents=True, exist_ok=True)
                 path.write_text(name)
             runtime, ci = keys.recipe_key(root, 'runtime'), keys.recipe_key(root, 'ci')
             (root / 'web/package-lock.json').write_text('browser update')
+            self.assertEqual(runtime, keys.recipe_key(root, 'runtime'))
+            self.assertNotEqual(ci, keys.recipe_key(root, 'ci'))
+            ci = keys.recipe_key(root, 'ci')
+            (root / 'deploy/npm-tooling/package-lock.json').write_text('npm security update')
             self.assertEqual(runtime, keys.recipe_key(root, 'runtime'))
             self.assertNotEqual(ci, keys.recipe_key(root, 'ci'))
             ci = keys.recipe_key(root, 'ci')

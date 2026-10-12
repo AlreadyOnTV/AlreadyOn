@@ -71,3 +71,4 @@ jobs:
       - uses: ./.github/actions/security-scan
         with:
           image: alreadyon-ci:candidate
+          ci-image: alreadyon-validation:ci

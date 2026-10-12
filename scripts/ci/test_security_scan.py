@@ -2,6 +2,7 @@
 import importlib.util
 from pathlib import Path
 import unittest
+from datetime import date
 
 spec = importlib.util.spec_from_file_location('security_scan', Path(__file__).parents[1] / 'security/scan.py')
 scan = importlib.util.module_from_spec(spec)
@@ -24,6 +25,25 @@ class SecurityScanTest(unittest.TestCase):
                                                   {'Severity': 'UNKNOWN'}, {'Severity': 'HIGH'}],
                                'Secrets': [{'Match': 'sensitive'}]}, {}]}
         self.assertEqual(scan.counts(report), ({'HIGH': 2, 'UNKNOWN': 1}, 1))
+
+    def test_release_gate_blocks_unfixed_high_and_secret_matches(self):
+        reports = {'image': {'Results': [{'Vulnerabilities': [{'Severity': 'HIGH'}]}]}}
+        self.assertFalse(scan.evaluate_policy(reports, 'release')['passed'])
+        self.assertTrue(scan.evaluate_policy(reports, 'report-only')['passed'])
+        self.assertFalse(scan.evaluate_policy({'source': {'Results': [{'Secrets': [{'Match': 'private'}]}]}}, 'release')['passed'])
+        self.assertTrue(scan.evaluate_policy({'source': {'Results': [{'Vulnerabilities': [{'Severity': 'MEDIUM'}]}]}}, 'release')['passed'])
+
+    def test_exceptions_are_exact_scoped_and_time_limited(self):
+        exception = {'scope': 'image', 'id': 'CVE-TEST', 'package': 'synthetic', 'version': '1',
+                     'owner': 'maintainer', 'rationale': 'Synthetic fixture', 'tracking_issue': 'test', 'expires': '2026-10-20'}
+        finding = {'Severity': 'HIGH', 'VulnerabilityID': 'CVE-TEST', 'PkgName': 'synthetic', 'InstalledVersion': '1'}
+        reports = {'image': {'Results': [{'Vulnerabilities': [finding]}]}}
+        self.assertTrue(scan.evaluate_policy(reports, 'release', [exception], date(2026, 10, 12))['passed'])
+        self.assertFalse(scan.evaluate_policy({'source': reports['image']}, 'release', [exception], date(2026, 10, 12))['passed'])
+        with self.assertRaisesRegex(ValueError, 'expire'):
+            scan.evaluate_policy(reports, 'release', [exception], date(2026, 10, 21))
+        with self.assertRaisesRegex(ValueError, 'Incomplete'):
+            scan.evaluate_policy(reports, 'release', [{'expires': '2026-10-20'}])
 
 
 if __name__ == '__main__':

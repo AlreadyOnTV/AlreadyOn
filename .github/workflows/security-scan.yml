@@ -36,11 +36,13 @@ jobs:
         run: |
           set -euo pipefail
           python3 scripts/security/install-trivy.py "$RUNNER_TEMP/security-tools"
+          result=0
           printf '%s' "$GH_TOKEN" | python3 scripts/security/scan.py \
             --trivy "$RUNNER_TEMP/security-tools/trivy" --registry-user "$REGISTRY_USER" \
-            --image "$SCAN_IMAGE" --output "$RUNNER_TEMP/security-report"
+            --image "$SCAN_IMAGE" --output "$RUNNER_TEMP/security-report" || result=$?
           {
-            printf '\n### Vulnerability reassessment (report-only)\n\n```json\n'
-            cat "$RUNNER_TEMP/security-report/summary.json"
+            printf '\n### Vulnerability reassessment (release policy)\n\n```json\n'
+            if [ -f "$RUNNER_TEMP/security-report/summary.json" ]; then cat "$RUNNER_TEMP/security-report/summary.json"; fi
             printf '\n```\nRaw reports are not uploaded from public workflows.\n'
           } >> "$GITHUB_STEP_SUMMARY"
+          exit "$result"

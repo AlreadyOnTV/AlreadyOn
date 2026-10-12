@@ -138,6 +138,7 @@ jobs:
       - uses: ./.github/actions/security-scan
         with:
           image: alreadyon-ci:candidate
+          ci-image: ${{ needs.bases.outputs.ci }}
       - name: Refuse publication from an outdated dev tip
         env:
           GH_TOKEN: ${{ github.token }}
@@ -176,6 +177,7 @@ jobs:
     needs: [select, quality, tests, publish]
     permissions:
       contents: write
+      packages: read
       pull-requests: read
     uses: ./.github/workflows/android-release.yml
     with:

@@ -1,6 +1,7 @@
 #!/usr/bin/env python3
 """Publish signed Android candidates and copy tested assets for stable promotion."""
 import argparse
+import sys
 from datetime import date, datetime
 import hashlib
 import json
@@ -11,6 +12,10 @@ import subprocess
 import tempfile
 import time
 from zoneinfo import ZoneInfo
+sys.path.insert(0, str(Path(__file__).parents[1] / 'security'))
+from public_inventory import NAMES as SBOM_NAMES, verify_bundle
+SBOM_ASSETS = (*SBOM_NAMES, 'sbom-manifest.json')
+
 from release_notes import changelog, changelog_since, published_changelog, release_body
 
 # New lifecycle: alphaN on dev, RCN on test, Stable on main. Accept old tags for history.
@@ -119,6 +124,13 @@ def digest(path):
     return hashlib.sha256(path.read_bytes()).hexdigest()
 
 
+def release_assets(directory):
+    present = {name for name in SBOM_ASSETS if (directory / name).exists()}
+    if present and present != set(SBOM_ASSETS):
+        raise ValueError('Incomplete release SBOM assets')
+    return (*ASSETS, *SBOM_ASSETS) if present else ASSETS
+
+
 def verify_assets(directory, source=None):
     manifest = json.loads((directory / "android-release.json").read_text())
     if manifest.get("package") != "io.github.alreadyonapp.alreadyon":
@@ -137,6 +149,14 @@ def verify_assets(directory, source=None):
         for target, name in (("phone", ASSETS[0]), ("tv", ASSETS[3])):
             if manifest["artifacts"].get(target) != {"file": name, "sha256": digest(directory / name)}:
                 raise ValueError("APK target metadata does not match release provenance")
+    assets = release_assets(directory)
+    if manifest.get('inventory') is not None:
+        expected_inventory = {'file': 'sbom-manifest.json', 'sha256': digest(directory / 'sbom-manifest.json')}
+        if manifest['inventory'] != expected_inventory or len(assets) == len(ASSETS):
+            raise ValueError('SBOM manifest provenance mismatch')
+        verify_bundle(directory, manifest['source_sha'], phone=directory / ASSETS[0], tv=directory / ASSETS[3])
+    elif len(assets) != len(ASSETS):
+        raise ValueError('SBOM bundle missing release provenance')
     sums = (directory / "SHA256SUMS").read_text()
     required = "".join(f"{digest(directory / name)}  {name}\n"
                        for name in (ASSETS[0], ASSETS[2], ASSETS[3]))
@@ -148,9 +168,19 @@ def verify_assets(directory, source=None):
 def download(repo, tag, directory):
     run("gh", "release", "download", tag, "--repo", repo, "--dir", str(directory),
         *(argument for name in ASSETS for argument in ("--pattern", name)))
+    entry = next((r for r in releases(repo) if r['tag_name'] == tag), None)
+    if entry is None:
+        raise ValueError('Release disappeared while downloading verified assets')
+    names = {a['name'] for a in entry.get('assets', [])}
+    if names & set(SBOM_ASSETS):
+        if not set(SBOM_ASSETS) <= names:
+            raise ValueError('Incomplete remote SBOM assets')
+        run('gh', 'release', 'download', tag, '--repo', repo, '--dir', str(directory),
+            *(argument for name in SBOM_ASSETS for argument in ('--pattern', name)))
 
 
 def publish(repo, tag, sha, directory, notes, prerelease, publish_now=True):
+    assets = release_assets(directory)
     existing = [r for r in releases(repo) if r["tag_name"] == tag]
     if existing:
         # GitHub may defer creating a draft's tag until publication.
@@ -163,7 +193,7 @@ def publish(repo, tag, sha, directory, notes, prerelease, publish_now=True):
         with tempfile.TemporaryDirectory() as temp:
             remote = Path(temp)
             download(repo, tag, remote)
-            if any(digest(remote / name) != digest(directory / name) for name in ASSETS):
+            if any(digest(remote / name) != digest(directory / name) for name in assets):
                 raise ValueError("Published release differs; refusing to overwrite it")
         return
     with tempfile.TemporaryDirectory() as temp:
@@ -175,12 +205,12 @@ def publish(repo, tag, sha, directory, notes, prerelease, publish_now=True):
             run("gh", "release", "create", tag, "--repo", repo, "--target", sha,
                 "--title", f"AlreadyOn {tag}", "--notes-file", str(body), "--draft")
         run("gh", "release", "upload", tag, "--repo", repo,
-            *(str(directory / name) for name in ASSETS), "--clobber")
+            *(str(directory / name) for name in assets), "--clobber")
         # Verify uploaded bytes before exposing the draft as a public release.
         remote = Path(temp) / "verify"
         remote.mkdir()
         download(repo, tag, remote)
-        if any(digest(remote / name) != digest(directory / name) for name in ASSETS):
+        if any(digest(remote / name) != digest(directory / name) for name in assets):
             raise ValueError("Uploaded release assets did not match local bytes")
         if not publish_now:
             return
@@ -252,6 +282,9 @@ def candidate(repo, tag, sha, code, directory):
                 "artifacts": {
                     "phone": {"file": ASSETS[0], "sha256": digest(directory / ASSETS[0])},
                     "tv": {"file": ASSETS[3], "sha256": digest(directory / ASSETS[3])}}}
+    if len(release_assets(directory)) > len(ASSETS):
+        verify_bundle(directory, sha, phone=directory / ASSETS[0], tv=directory / ASSETS[3])
+        manifest['inventory'] = {'file': 'sbom-manifest.json', 'sha256': digest(directory / 'sbom-manifest.json')}
     (directory / ASSETS[2]).write_text(json.dumps(manifest, indent=2) + "\n")
     (directory / ASSETS[1]).write_text("".join(
         f"{digest(directory / name)}  {name}\n" for name in (ASSETS[0], ASSETS[2], ASSETS[3])))
@@ -382,7 +415,10 @@ def main():
     parser.add_argument("--tag")
     parser.add_argument("--version-code", type=int)
     parser.add_argument("--directory", type=Path)
+    parser.add_argument("--require-inventory", action="store_true")
     args = parser.parse_args()
+    if args.require_inventory and not (args.directory / "sbom-manifest.json").exists():
+        parser.error("New candidates require public inventory SBOMs")
     if not args.repo:
         parser.error("--repo or GITHUB_REPOSITORY is required")
     if args.operation == "plan":
