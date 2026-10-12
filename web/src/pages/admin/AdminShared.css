@@ -1300,15 +1300,6 @@ button.admin-badge:disabled {
   }
 
   .metrics-grid .metric-panel {
-    width: min(100%, 600px);
-    justify-self: center;
-  }
-}
-
-/* A landscape touch screen has room for a full-width graph, but remains in
-   the one-graph-per-row layout used by tablets and split-screen windows. */
-@media (max-width: 1200px) and (orientation: landscape) and (hover: none) and (pointer: coarse) {
-  .metrics-grid .metric-panel {
     width: 100%;
   }
 }

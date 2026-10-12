@@ -2579,6 +2579,12 @@ const noWorkers = async (unreleased = () => 0) => {
       "Split-screen metrics stack on one aligned column: " +
         JSON.stringify(graphLayout),
     );
+    const chartWidths = await page.locator(".metrics-grid").evaluate(grid => ({
+      available: grid.getBoundingClientRect().width,
+      panels: [...grid.querySelectorAll(".metric-panel")].map(panel => panel.getBoundingClientRect().width),
+    }));
+    assert(chartWidths.panels.every(width => Math.abs(width - chartWidths.available) < 2),
+      "Split-screen charts fill the available card width: " + JSON.stringify(chartWidths));
     await page.setViewportSize({ width: 1280, height: 800 });
     await page.goto(url + "/admin/channels");
     await page
