@@ -140,7 +140,8 @@ def main():
                 'image': args.image, 'policy': args.policy, 'reports': {}, 'coverage': []}
     base = [args.trivy, '--quiet']
     with tempfile.TemporaryDirectory(prefix='alreadyon-security-') as temporary:
-        staging = Path(temporary)
+        staging = Path(temporary) / "source"
+        staging.mkdir()
         if not args.image_only:
             # Only tracked files enter the source scan. No live DB, ignored notes or credentials.
             paths = subprocess.check_output(['git', 'ls-files', '-z'], cwd=ROOT).split(b'\0')
@@ -157,7 +158,7 @@ def main():
                     target.write_bytes(data)
                     tree.update(raw + b'\0' + hashlib.sha256(data).digest())
             manifest['tracked_tree_sha256'] = tree.hexdigest()
-            tool_environment = dict(environment, GOBIN=str(staging / 'tools'))
+            tool_environment = dict(environment, GOBIN=str(staging.parent / 'tools'))
             with (output / 'govulncheck-install.log').open('w') as log:
                 installed = subprocess.run(['go', 'install', 'golang.org/x/vuln/cmd/govulncheck@' + GOVULNCHECK_VERSION],
                                            cwd=ROOT / 'server', env=tool_environment, stdout=log, stderr=log,
@@ -165,7 +166,7 @@ def main():
             if installed.returncode:
                 raise RuntimeError('Go scanner installation failed; inspect the private log')
             with (output / 'govulncheck.json').open('w') as report, (output / 'govulncheck.log').open('w') as log:
-                result = subprocess.run([str(staging / 'tools/govulncheck'), '-json', './...'],
+                result = subprocess.run([str(staging.parent / 'tools/govulncheck'), '-json', './...'],
                                         cwd=staging / 'server', env=environment, stdout=report, stderr=log,
                                         stdin=subprocess.DEVNULL)
             if result.returncode not in (0, 3):
