@@ -201,8 +201,8 @@ internal fun ProfileMenu(state: PhoneState, model: PhoneModel, modifier: Modifie
         TextButton(onClick = { open = true }, modifier = modifier) { ProfileName(state.profile!!, model) }
         DropdownMenu(expanded = open, onDismissRequest = { open = false; onMenuDismiss() }) {
             DropdownMenuItem(text = { Text("Dashboard") }, modifier = Modifier.focusRequester(dashboardFocus).tvFocusOutline(), onClick = { open = false; model.openSettings("dashboard") })
-            DropdownMenuItem(text = { Text("Switch Profile") }, modifier = Modifier.tvFocusOutline(), onClick = { open = false; model.changeProfile() })
             DropdownMenuItem(text = { Text("Profile Settings") }, modifier = Modifier.tvFocusOutline(), onClick = { open = false; model.openSettings("profile") })
+            DropdownMenuItem(text = { Text("Switch Profile") }, modifier = Modifier.tvFocusOutline(), onClick = { open = false; model.changeProfile() })
             DropdownMenuItem(text = { Text("Sign Out") }, onClick = { open = false; model.logout() })
         }
     }

@@ -50,7 +50,7 @@ def main():
     key(4)
     assert focused(snapshot()) in ('Pause', 'Play')
     key(19)
-    assert focused(snapshot()) == 'Switch Profile'
+    assert focused(snapshot()) == 'Dashboard'
     key(20)
     assert focused(snapshot()) == 'Profile Settings'
     key(23)
