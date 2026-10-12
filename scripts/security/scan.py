@@ -13,6 +13,7 @@ import sys
 
 ROOT = Path(__file__).resolve().parents[2]
 VERSION = '0.75.0'
+GOVULNCHECK_VERSION = 'v1.9.0'
 
 
 def counts(report):
@@ -28,6 +29,25 @@ def validate_image(image):
     if not re.fullmatch(r'[a-zA-Z0-9./:_-]+@sha256:[0-9a-f]{64}', image):
         raise ValueError('Published image must use an immutable sha256 digest')
     return image
+
+
+def govuln_summary(path):
+    """Keep symbol-level findings private and export only coverage and counts."""
+    text = path.read_text()
+    decoder = json.JSONDecoder()
+    config, findings, called = None, 0, 0
+    while text.strip():
+        record, end = decoder.raw_decode(text.lstrip())
+        text = text.lstrip()[end:]
+        if 'config' in record:
+            config = record['config']
+        if 'finding' in record:
+            findings += 1
+            called += any(frame.get('function') for frame in record['finding'].get('trace', []))
+    if not config or config.get('scanner_version') != GOVULNCHECK_VERSION or config.get('scan_level') != 'symbol':
+        raise ValueError('Missing reviewed Go symbol scan coverage')
+    return {'version': GOVULNCHECK_VERSION, 'database_updated_at': config.get('db_last_modified'),
+            'findings': findings, 'called_function_findings': called}
 
 
 def evaluate_policy(reports, policy, exceptions=(), today=None):
@@ -137,6 +157,21 @@ def main():
                     target.write_bytes(data)
                     tree.update(raw + b'\0' + hashlib.sha256(data).digest())
             manifest['tracked_tree_sha256'] = tree.hexdigest()
+            tool_environment = dict(environment, GOBIN=str(staging / 'tools'))
+            with (output / 'govulncheck-install.log').open('w') as log:
+                installed = subprocess.run(['go', 'install', 'golang.org/x/vuln/cmd/govulncheck@' + GOVULNCHECK_VERSION],
+                                           cwd=ROOT / 'server', env=tool_environment, stdout=log, stderr=log,
+                                           stdin=subprocess.DEVNULL)
+            if installed.returncode:
+                raise RuntimeError('Go scanner installation failed; inspect the private log')
+            with (output / 'govulncheck.json').open('w') as report, (output / 'govulncheck.log').open('w') as log:
+                result = subprocess.run([str(staging / 'tools/govulncheck'), '-json', './...'],
+                                        cwd=staging / 'server', env=environment, stdout=report, stderr=log,
+                                        stdin=subprocess.DEVNULL)
+            if result.returncode not in (0, 3):
+                raise RuntimeError('Go symbol scan failed; inspect the private log')
+            manifest['govulncheck'] = govuln_summary(output / 'govulncheck.json')
+            manifest['coverage'].append('Go server packages: pinned govulncheck symbol analysis; findings are not severity waivers')
             inventory = staging / 'android-dependencies'
             run([str(ROOT / 'apps/android/gradlew'), '-p', str(ROOT / 'apps/android'), '--console=plain',
                  '-I', str(ROOT / 'scripts/security/android-inventory.gradle'),
@@ -193,7 +228,7 @@ def main():
     (output / 'manifest.json').write_text(json.dumps(manifest, indent=2) + '\n')
     summary = {'source_revision': revision, 'source_dirty': manifest['source_dirty'], 'image': args.image,
                'image_archive_sha256': manifest.get('image_archive_sha256'),
-               'ci_image': manifest.get('ci_image'), 'ci_image_archive_sha256': manifest.get('ci_image_archive_sha256'), 'policy': args.policy, 'assessment': assessment,
+               'govulncheck': manifest.get('govulncheck'), 'ci_image': manifest.get('ci_image'), 'ci_image_archive_sha256': manifest.get('ci_image_archive_sha256'), 'policy': args.policy, 'assessment': assessment,
                'reports': {k: {key: value[key] for key in ('vulnerabilities', 'secret_matches')} for k, value in manifest['reports'].items()}}
     (output / 'summary.json').write_text(json.dumps(summary, indent=2) + '\n')
     print(json.dumps(summary, indent=2))

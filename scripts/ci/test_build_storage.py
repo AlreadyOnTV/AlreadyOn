@@ -82,7 +82,7 @@ class BuildStoragePolicy(unittest.TestCase):
             root = pathlib.Path(directory)
             names = ['deploy/base.Dockerfile', 'deploy/check-media-stack.sh',
                      'deploy/patches/ffmpeg-readrate-initial-burst.patch',
-                     'deploy/ci-base.Dockerfile', 'deploy/npm-tooling/package.json',
+                     'deploy/ci-base.Dockerfile', 'deploy/check-npm-tooling.js', 'deploy/npm-tooling/package.json',
                      'deploy/npm-tooling/package-lock.json', 'web/package.json', 'web/package-lock.json']
             for name in names:
                 path = root / name

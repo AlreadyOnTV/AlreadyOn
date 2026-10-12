@@ -11,6 +11,10 @@ inputs:
 runs:
   using: composite
   steps:
+    - uses: actions/setup-go@v7
+      with:
+        go-version-file: server/go.mod
+        cache-dependency-path: server/go.sum
     - uses: actions/setup-java@v6
       with:
         distribution: temurin

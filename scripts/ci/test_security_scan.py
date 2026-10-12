@@ -2,6 +2,8 @@
 import importlib.util
 from pathlib import Path
 import unittest
+import json
+import tempfile
 from datetime import date
 
 spec = importlib.util.spec_from_file_location('security_scan', Path(__file__).parents[1] / 'security/scan.py')
@@ -25,6 +27,22 @@ class SecurityScanTest(unittest.TestCase):
                                                   {'Severity': 'UNKNOWN'}, {'Severity': 'HIGH'}],
                                'Secrets': [{'Match': 'sensitive'}]}, {}]}
         self.assertEqual(scan.counts(report), ({'HIGH': 2, 'UNKNOWN': 1}, 1))
+
+    def test_go_symbol_summary_excludes_advisory_details(self):
+        with tempfile.TemporaryDirectory() as tmp:
+            path = Path(tmp) / 'go.json'
+            path.write_text('\n'.join(json.dumps(r) for r in [
+                {'config': {'scanner_version': 'v1.9.0', 'scan_level': 'symbol'}},
+                {'osv': {'details': 'private advisory'}},
+                {'finding': {'trace': [{'module': 'synthetic'}]}},
+                {'finding': {'trace': [{'function': 'syntheticFunction'}]}}]))
+            summary = scan.govuln_summary(path)
+            self.assertEqual(summary['findings'], 2)
+            self.assertEqual(summary['called_function_findings'], 1)
+            self.assertNotIn('private', json.dumps(summary))
+            path.write_text('{}')
+            with self.assertRaises(ValueError):
+                scan.govuln_summary(path)
 
     def test_release_gate_blocks_unfixed_high_and_secret_matches(self):
         reports = {'image': {'Results': [{'Vulnerabilities': [{'Severity': 'HIGH'}]}]}}
