@@ -249,26 +249,27 @@ private fun DashboardMetric(key: String, history: JSONObject?, minutes: Int, lat
     val end = maxOf(Instant.now().epochSecond, current.optLong("at"))
     val start = end - minutes * 60L
     val timeFormat = DateTimeFormatter.ofPattern("HH:mm", Locale.US).withZone(ZoneId.systemDefault())
+    val metricStyle = MaterialTheme.typography.bodySmall
     DashboardCard(if (key == "cpu" || key == "ram") key.uppercase(Locale.US) else if (key == "disk") "Disk" else "Bandwidth · ${current.text("networkInterface", "")}", modifier) {
         when (key) {
-            "cpu" -> Text("Load: ${number(current.number("cpuLoad"), "")} · Pressure: ${number(current.number("cpuPressure"))} · Utilization: ${number(current.number("cpu"))}")
-            "ram" -> Text("Usage: ${capacity(current, "memoryUsedBytes", "memoryLimitBytes")} · Utilization: ${number(current.number("ram"))}")
+            "cpu" -> Text("Load: ${number(current.number("cpuLoad"), "")} · Pressure: ${number(current.number("cpuPressure"))} · Utilization: ${number(current.number("cpu"))}", style = metricStyle)
+            "ram" -> Text("Usage: ${capacity(current, "memoryUsedBytes", "memoryLimitBytes")} · Utilization: ${number(current.number("ram"))}", style = metricStyle)
             "disk" -> {
                 Row(Modifier.fillMaxWidth(), horizontalArrangement = Arrangement.spacedBy(12.dp)) {
                     Column(Modifier.weight(1f), verticalArrangement = Arrangement.spacedBy(4.dp)) {
-                        Text("Utilization: ${number(current.number("disk"))}", style = MaterialTheme.typography.labelSmall)
-                        Text("Config: ${capacity(current, "diskUsedBytes", "diskTotalBytes")}", style = MaterialTheme.typography.labelSmall)
-                        Text("Media: ${capacity(current, "mediaUsedBytes", "mediaTotalBytes")}", style = MaterialTheme.typography.labelSmall)
+                        Text("Utilization: ${number(current.number("disk"))}", style = metricStyle)
+                        Text("Config: ${capacity(current, "diskUsedBytes", "diskTotalBytes")}", style = metricStyle)
+                        Text("Media: ${capacity(current, "mediaUsedBytes", "mediaTotalBytes")}", style = metricStyle)
                     }
                     Column(Modifier.weight(1f), verticalArrangement = Arrangement.spacedBy(4.dp)) {
-                        lines.forEach { line -> Text("${line.label}: ${number(line.read(current), if (line.percent) "%" else " MB/s")}", color = line.color, style = MaterialTheme.typography.labelSmall) }
+                        lines.forEach { line -> Text("${line.label}: ${number(line.read(current), if (line.percent) "%" else " MB/s")}", color = line.color, style = metricStyle) }
                     }
                 }
             }
-            else -> Text("Latency: ${number(latency, " ms")}")
+            else -> Text("Latency: ${number(latency, " ms")}", style = metricStyle)
         }
         if (key != "cpu" && key != "disk") lines.forEach { line ->
-            Text("${line.label}: ${number(line.read(current), if (line.percent) "%" else " Mbps")}", color = line.color)
+            Text("${line.label}: ${number(line.read(current), if (line.percent) "%" else " Mbps")}", color = line.color, style = metricStyle)
         }
         val gridColor = phonePalette.muted.copy(alpha = 0.3f)
         val labelColor = phonePalette.muted
@@ -324,6 +325,6 @@ private fun DashboardMetric(key: String, history: JSONObject?, minutes: Int, lat
                 drawPath(path, line.color, style = Stroke(2.dp.toPx()))
             }
         }
-        Text("${history?.optInt("intervalSeconds") ?: 15} second averages", style = MaterialTheme.typography.labelSmall)
+        Text("${history?.optInt("intervalSeconds") ?: 15} second averages", style = metricStyle)
     }
 }
