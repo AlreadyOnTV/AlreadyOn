@@ -14,13 +14,13 @@ The runtime uses HTTPS port 19900 for UI, API and media. Port 19902 is reserved 
 
 Native clients discover servers by scanning the current IPv4 LAN's published HTTPS port 19900 for up to 30 seconds. Standard Docker bridge networking is supported; host mode, multicast and an extra discovery port are unnecessary. Publish 19900 on a LAN-reachable host address. Guest isolation and firewalls can prevent discovery. Port 19901 is unused.
 
-For direct public access, map host port 443 to container HTTPS port 19900 and forward WAN TCP/443 to host TCP/443. If AlreadyOn manages certificates with HTTP-01, map host port 80 to container challenge port 19902 and forward WAN TCP/80 to host TCP/80. External port 80 is required for HTTP-01. The challenge listener serves only ACME validation requests, not application traffic or general redirects. Native LAN pairing connects directly to 19900. A reverse proxy is optional; preserve the application certificate with TLS passthrough when AlreadyOn owns TLS.
+For direct public access, map host port 443 to container HTTPS port 19900 and forward WAN TCP/443 to host TCP/443. If AlreadyOn manages certificates with HTTP-01, map host port 80 to container challenge port 19902 and forward WAN TCP/80 to host TCP/80. External port 80 is required for HTTP-01. The challenge listener serves only ACME validation requests, not application traffic or general redirects. Native LAN pairing connects directly to 19900. AlreadyOn can run as a single Compose service on the default bridge without Traefik, a tunnel or an external Docker network. A reverse proxy is optional; preserve the application certificate with TLS passthrough when AlreadyOn owns TLS.
 
 The example documents supported identity/timezone/port settings. Keep tokens, custom domains and private host configuration in local files excluded from Git. Do not add undocumented environment variables.
 
 ## Validate and update
 
-Inspect Compose configuration, then start the existing service. Verify image digest/revision, health, UI, mounts and relevant codec behavior. Preserve live data during updates. Use one service per installation; do not leave duplicate instances running accidentally.
+Inspect Compose configuration, then start the existing service. Verify image digest/revision, health, UI, mounts and relevant codec behavior. For compose-only validation, use `docker compose config --quiet` followed by `docker compose up -d --force-recreate --pull never alreadyon` to retain the installed image. Verify public and LAN HTTPS, container health and restart count before accepting the new configuration. Preserve live data during updates. Use one service per installation; do not leave duplicate instances running accidentally.
 
 For development builds, `make image` builds locally and `make test-container` validates a disposable runtime. Full release checks and maintainer-controlled publication are described in [delivery](../docs/CI_CD.md). Automatic update scripts are optional; review their timing and target before enabling them.
 
