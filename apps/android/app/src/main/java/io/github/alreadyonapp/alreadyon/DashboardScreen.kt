@@ -15,6 +15,8 @@ import androidx.compose.ui.focus.focusRequester
 import androidx.compose.ui.geometry.Offset
 import androidx.compose.ui.graphics.Color
 import androidx.compose.ui.graphics.Path
+import androidx.compose.ui.graphics.nativeCanvas
+import androidx.compose.ui.graphics.toArgb
 import androidx.compose.ui.graphics.drawscope.Stroke
 import androidx.compose.ui.unit.dp
 import androidx.compose.ui.semantics.contentDescription
@@ -103,7 +105,7 @@ internal fun DashboardScreen(state: PhoneState, model: PhoneModel, modifier: Mod
         }
     }
     BoxWithConstraints(modifier.fillMaxWidth()) {
-        val columns = if (maxWidth >= 700.dp) 2 else 1
+        val columns = if (!BuildConfig.IS_TV && maxWidth >= 700.dp) 2 else 1
         LazyColumn(verticalArrangement = Arrangement.spacedBy(12.dp), contentPadding = PaddingValues(bottom = 12.dp)) {
             item {
                 Row(Modifier.fillMaxWidth(), horizontalArrangement = Arrangement.SpaceBetween) {
@@ -162,7 +164,11 @@ internal fun DashboardScreen(state: PhoneState, model: PhoneModel, modifier: Mod
                 }
             }
             item {
+                Spacer(Modifier.height(16.dp))
+                HorizontalDivider(color = phonePalette.muted.copy(alpha = 0.3f))
+                Spacer(Modifier.height(12.dp))
                 Text("Server Metrics", style = MaterialTheme.typography.titleLarge)
+                Spacer(Modifier.height(8.dp))
                 Row(Modifier.fillMaxWidth(), horizontalArrangement = Arrangement.spacedBy(12.dp)) {
                     DashboardChoice("Refresh", refresh, listOf(1, 5, 10, 30, 60, 120, 300), { "${it}s" }, Modifier.weight(1f)) { refresh = it }
                     DashboardChoice("History", minutes, listOf(15, 30, 60, 120, 240, 720), { "${it}min" }, Modifier.weight(1f)) { minutes = it }
@@ -248,19 +254,59 @@ private fun DashboardMetric(key: String, history: JSONObject?, minutes: Int, lat
             "cpu" -> Text("Load: ${number(current.number("cpuLoad"), "")} · Pressure: ${number(current.number("cpuPressure"))} · Utilization: ${number(current.number("cpu"))}")
             "ram" -> Text("Usage: ${capacity(current, "memoryUsedBytes", "memoryLimitBytes")} · Utilization: ${number(current.number("ram"))}")
             "disk" -> {
-                Text("Utilization: ${number(current.number("disk"))}")
-                Text("Config: ${capacity(current, "diskUsedBytes", "diskTotalBytes")}")
-                Text("Media: ${capacity(current, "mediaUsedBytes", "mediaTotalBytes")}")
+                Row(Modifier.fillMaxWidth(), horizontalArrangement = Arrangement.spacedBy(12.dp)) {
+                    Column(Modifier.weight(1f), verticalArrangement = Arrangement.spacedBy(4.dp)) {
+                        Text("Utilization: ${number(current.number("disk"))}", style = MaterialTheme.typography.labelSmall)
+                        Text("Config: ${capacity(current, "diskUsedBytes", "diskTotalBytes")}", style = MaterialTheme.typography.labelSmall)
+                        Text("Media: ${capacity(current, "mediaUsedBytes", "mediaTotalBytes")}", style = MaterialTheme.typography.labelSmall)
+                    }
+                    Column(Modifier.weight(1f), verticalArrangement = Arrangement.spacedBy(4.dp)) {
+                        lines.forEach { line -> Text("${line.label}: ${number(line.read(current), if (line.percent) "%" else " MB/s")}", color = line.color, style = MaterialTheme.typography.labelSmall) }
+                    }
+                }
             }
             else -> Text("Latency: ${number(latency, " ms")}")
         }
-        // Keep high-core-count hosts compact, as the WebUI plots cores without a long legend.
-        if (key == "cpu" && cores.isNotEmpty()) Text("${cores.size} logical CPUs · one colored line per CPU")
-        else lines.forEach { line -> Text("${line.label}: ${number(line.read(current), if (line.percent) "%" else if (key == "disk") " MB/s" else " Mbps")}", color = line.color) }
-        Text("Scale: 0–${number(ceiling, if (key == "cpu" || key == "ram") "%" else if (key == "disk") " MB/s; IO pressure 0–100%" else " Mbps")}", style = MaterialTheme.typography.labelSmall)
+        if (key != "cpu" && key != "disk") lines.forEach { line ->
+            Text("${line.label}: ${number(line.read(current), if (line.percent) "%" else " Mbps")}", color = line.color)
+        }
         val gridColor = phonePalette.muted.copy(alpha = 0.3f)
-        Canvas(Modifier.fillMaxWidth().height(if (BuildConfig.IS_TV) 180.dp else 150.dp).semantics { contentDescription = "$key performance history" }) {
-            repeat(5) { index -> val y = size.height * index / 4; drawLine(gridColor, Offset(0f, y), Offset(size.width, y)) }
+        val labelColor = phonePalette.muted
+        Canvas(Modifier.fillMaxWidth().height(if (BuildConfig.IS_TV) 210.dp else 180.dp).semantics { contentDescription = "$key performance history" }) {
+            // Reserve space for real axes; all series share the same timestamp coordinates.
+            val left = 54.dp.toPx()
+            val right = size.width - if (key == "disk") 44.dp.toPx() else 6.dp.toPx()
+            val top = 10.dp.toPx()
+            val bottom = size.height - 24.dp.toPx()
+            val paint = android.graphics.Paint(android.graphics.Paint.ANTI_ALIAS_FLAG).apply {
+                color = labelColor.toArgb()
+                textSize = 10.dp.toPx()
+            }
+            repeat(5) { index ->
+                val fraction = index / 4.0
+                val y = top + (bottom - top) * index / 4
+                drawLine(gridColor, Offset(left, y), Offset(right, y))
+                paint.textAlign = android.graphics.Paint.Align.RIGHT
+                val value = ceiling * (1 - fraction)
+                val label = if (key == "cpu" || key == "ram") "${value.toInt()}%" else String.format(Locale.US, "%.1f", value)
+                drawContext.canvas.nativeCanvas.drawText(label, left - 6.dp.toPx(), y + 3.dp.toPx(), paint)
+                if (key == "disk") {
+                    paint.textAlign = android.graphics.Paint.Align.LEFT
+                    drawContext.canvas.nativeCanvas.drawText("${((1 - fraction) * 100).toInt()}%", right + 4.dp.toPx(), y + 3.dp.toPx(), paint)
+                }
+            }
+            if (key == "disk" || key == "bandwidth") {
+                paint.textAlign = android.graphics.Paint.Align.LEFT
+                drawContext.canvas.nativeCanvas.drawText(if (key == "disk") "MB/s" else "Mbps", 0f, size.height - 2.dp.toPx(), paint)
+            }
+            drawLine(gridColor, Offset(left, top), Offset(left, bottom))
+            drawLine(gridColor, Offset(left, bottom), Offset(right, bottom))
+            repeat(4) { index ->
+                val x = left + (right - left) * index / 3
+                val at = start + (end - start) * index / 3
+                paint.textAlign = when (index) { 0 -> android.graphics.Paint.Align.LEFT; 3 -> android.graphics.Paint.Align.RIGHT; else -> android.graphics.Paint.Align.CENTER }
+                drawContext.canvas.nativeCanvas.drawText(timeFormat.format(Instant.ofEpochSecond(at)), x, size.height - 3.dp.toPx(), paint)
+            }
             lines.forEach { line ->
                 val path = Path()
                 var connected = false
@@ -269,18 +315,14 @@ private fun DashboardMetric(key: String, history: JSONObject?, minutes: Int, lat
                     val at = point.optLong("at")
                     if (value == null || at !in start..end) connected = false
                     else {
-                        val x = ((at - start).toDouble() / (end - start) * size.width).toFloat()
-                        val y = (size.height * (1 - (value / if (line.percent) 100.0 else ceiling).coerceIn(0.0, 1.0))).toFloat()
+                        val x = left + ((at - start).toDouble() / (end - start) * (right - left)).toFloat()
+                        val y = top + ((bottom - top) * (1 - (value / if (line.percent) 100.0 else ceiling).coerceIn(0.0, 1.0))).toFloat()
                         if (connected) path.lineTo(x, y) else path.moveTo(x, y)
                         connected = true
                     }
                 }
                 drawPath(path, line.color, style = Stroke(2.dp.toPx()))
             }
-        }
-        Row(Modifier.fillMaxWidth(), horizontalArrangement = Arrangement.SpaceBetween) {
-            Text(timeFormat.format(Instant.ofEpochSecond(start)), style = MaterialTheme.typography.labelSmall)
-            Text(timeFormat.format(Instant.ofEpochSecond(end)), style = MaterialTheme.typography.labelSmall)
         }
         Text("${history?.optInt("intervalSeconds") ?: 15} second averages", style = MaterialTheme.typography.labelSmall)
     }

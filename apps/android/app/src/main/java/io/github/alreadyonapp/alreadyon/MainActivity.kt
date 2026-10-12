@@ -359,7 +359,7 @@ internal fun ChannelGuide(state: PhoneState, model: PhoneModel, palette: PhonePa
                                             .then(if (current && channel.id == focusChannel?.id) Modifier.border(2.dp, Color.Red, MaterialTheme.shapes.small) else Modifier),
                                         color = if (current) palette.now else palette.surface, shape = MaterialTheme.shapes.small) {
                                         Column(Modifier.padding(4.dp), verticalArrangement = Arrangement.spacedBy(4.dp)) {
-                                            Text(if (current) "Now · ${format.format(Instant.ofEpochMilli(end))}" else format.format(Instant.ofEpochMilli(begin)),
+                                            Text("${format.format(Instant.ofEpochMilli(begin))} - ${format.format(Instant.ofEpochMilli(end))}",
                                                 color = if (current) palette.nowText else palette.muted, style = MaterialTheme.typography.labelSmall, maxLines = 1)
                                             Text(program.title, color = if (current) palette.nowText else palette.text, maxLines = 2, overflow = androidx.compose.ui.text.style.TextOverflow.Ellipsis, style = MaterialTheme.typography.bodyMedium)
                                         }
