@@ -23,7 +23,7 @@ Run `make lint`, `python3 scripts/ci/check-documentation.py` and `python3 script
 4. Full synthetic browser suite (`make test-e2e`).
 5. Disposable packaged-runtime checks (`make test-container`).
 
-Go tests use temporary storage; live data remains intact.
+Go tests use temporary storage.
 
 Resolve failures before promotion. Record the commit, image ID/digest and actual results. Live checks are non-destructive; synthetic suites use isolated data.
 
@@ -33,13 +33,13 @@ Before image builds, `scripts/local-bases.py` checks base recipes, parent and ag
 
 On approval, deploy the exact tested image and verify revision, health, service count, mounts and relevant playback. `scripts/deploy-production.sh <ssh-host> [compose-directory]` transfers it with the updater paused. Preserve live data.
 
-After alpha approval run `python3 scripts/promote.py test YYYY-MM-DD`; after RC approval run `python3 scripts/promote.py main`. These create fast-forward or exact-tree merge commits only, require image/APK provenance, and reuse artifacts without e2e reruns. Conflicts must be resolved on dev; never bypass branch protection.
+After alpha approval run `python3 scripts/promote.py test YYYY-MM-DD`; after RC approval run `python3 scripts/promote.py main`. These create fast-forward or exact-tree merge commits only, require image/APK provenance, and reuse artifacts without e2e reruns. Resolve conflicts on dev; preserve branch protection.
 
-Dev image builds run after validated date PR merges. Test/main image promotions run after the guarded source merge. See [retention](IMAGE_RETENTION.md) and [deployment](../deploy/README.md).
+Dev builds follow validated PR merges; guarded test/main merges promote existing images. See [retention](IMAGE_RETENTION.md) and [deployment](../deploy/README.md).
 
 ## Public automation
 
-PR validation builds patched runtime/CI images and scans the exact candidate with read-only credentials; publication credentials remain unavailable. Vulnerability counts are report-only; scanner failures block the gate.
+PR validation builds patched runtime/CI images and scans the exact candidate with read-only credentials; publication credentials remain unavailable. Critical/High findings block publication; secret matches require private review. Scanner failures block the gate. Runtime and CI images are scanned; see [policy](VULNERABILITY_SCANNING.md).
 
 CodeQL analyzes Go/TypeScript on dev/test/main; Pages publishes from main. Android automation builds alpha on dev, RC on test and Stable from RC artifacts on main; see [Android policy](ANDROID_RELEASES.md).
 

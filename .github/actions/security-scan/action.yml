@@ -5,9 +5,16 @@ inputs:
   image:
     description: Local candidate image name
     required: true
+  ci-image:
+    description: Exact CI image used by this build
+    required: true
 runs:
   using: composite
   steps:
+    - uses: actions/setup-go@v7
+      with:
+        go-version-file: server/go.mod
+        cache-dependency-path: server/go.sum
     - uses: actions/setup-java@v6
       with:
         distribution: temurin
@@ -21,12 +28,17 @@ runs:
         set -euo pipefail
         python3 scripts/security/install-trivy.py "$RUNNER_TEMP/security-tools"
         docker save "$SCAN_IMAGE" -o "$RUNNER_TEMP/security-candidate.tar"
+        if ! docker image inspect "$SCAN_CI_IMAGE" >/dev/null 2>&1; then docker pull "$SCAN_CI_IMAGE"; fi
+        docker save "$SCAN_CI_IMAGE" -o "$RUNNER_TEMP/security-ci.tar"
+        result=0
         python3 scripts/security/scan.py --trivy "$RUNNER_TEMP/security-tools/trivy" \
-          --image-archive "$RUNNER_TEMP/security-candidate.tar" --output "$RUNNER_TEMP/security-report"
+          --image-archive "$RUNNER_TEMP/security-candidate.tar" --ci-image-archive "$RUNNER_TEMP/security-ci.tar" --output "$RUNNER_TEMP/security-report" || result=$?
         {
-          printf '\n### Vulnerability scan (report-only)\n\n```json\n'
-          cat "$RUNNER_TEMP/security-report/summary.json"
+          printf '\n### Vulnerability scan (release gate)\n\n```json\n'
+          if [ -f "$RUNNER_TEMP/security-report/summary.json" ]; then cat "$RUNNER_TEMP/security-report/summary.json"; fi
           printf '\n```\nRaw reports are not uploaded from public workflows.\n'
         } >> "$GITHUB_STEP_SUMMARY"
+        exit "$result"
       env:
         SCAN_IMAGE: ${{ inputs.image }}
+        SCAN_CI_IMAGE: ${{ inputs.ci-image }}

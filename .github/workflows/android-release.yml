@@ -45,6 +45,7 @@ jobs:
     timeout-minutes: 30
     permissions:
       contents: write
+      packages: read
       pull-requests: read
     outputs:
       tag: ${{ steps.version.outputs.tag }}
@@ -122,6 +123,20 @@ jobs:
               --out "$RUNNER_TEMP/android-assets/$asset" "$RUNNER_TEMP/android-aligned.apk"
             "$tools/apksigner" verify --verbose --print-certs "$RUNNER_TEMP/android-assets/$asset"
           done
+      - name: Generate artifact-bound public inventory SBOMs
+        if: steps.version.outputs.existing != 'true'
+        env:
+          GH_TOKEN: ${{ github.token }}
+          SOURCE_SHA: ${{ inputs.source_sha || github.sha }}
+          REGISTRY_USER: ${{ github.actor }}
+        run: |
+          python3 scripts/security/install-trivy.py "$RUNNER_TEMP/security-tools"
+          image=$(PYTHONPATH=scripts/ci python3 -c 'import os; from image_registry import release_source; print(release_source(os.environ["GITHUB_REPOSITORY"], os.environ["SOURCE_SHA"]))')
+          printf '%s' "$GH_TOKEN" | python3 scripts/security/public_inventory.py \
+            --trivy "$RUNNER_TEMP/security-tools/trivy" --registry-user "$REGISTRY_USER" \
+            --image "$image" --revision "$SOURCE_SHA" \
+            --phone "$RUNNER_TEMP/android-assets/alreadyon-android.apk" \
+            --tv "$RUNNER_TEMP/android-assets/alreadyon-tv.apk" --output "$RUNNER_TEMP/android-assets"
       - name: Publish verified APK and provenance as a prerelease
         if: steps.version.outputs.existing != 'true'
         env:
@@ -131,7 +146,7 @@ jobs:
           VERSION_CODE: ${{ steps.version.outputs.version_code }}
         run: |
           python3 scripts/ci/android-release.py candidate --sha "$SOURCE_SHA" \
-            --tag "$VERSION_NAME" --version-code "$VERSION_CODE" --directory "$RUNNER_TEMP/android-assets"
+            --tag "$VERSION_NAME" --version-code "$VERSION_CODE" --directory "$RUNNER_TEMP/android-assets" --require-inventory
       - name: Summarize alpha or draft RC
         env:
           CANDIDATE_TAG: ${{ steps.version.outputs.tag }}
@@ -164,7 +179,7 @@ jobs:
           RELEASE_DATE: ${{ inputs.release_date }}
         run: |
           if [ "$GITHUB_EVENT_NAME" = push ]; then
-            python3 scripts/ci/branch-policy.py --delivery >> "$GITHUB_OUTPUT"
+            python3 scripts/ci/branch-policy.py --delivery
             source=$(sed -n 's/^selected=//p' "$GITHUB_OUTPUT" | tail -1)
           else
             source="$SOURCE_SHA"
@@ -200,7 +215,7 @@ jobs:
           RELEASE_DATE: ${{ inputs.release_date }}
         run: |
           if [ "$GITHUB_EVENT_NAME" = push ]; then
-            python3 scripts/ci/branch-policy.py --delivery >> "$GITHUB_OUTPUT"
+            python3 scripts/ci/branch-policy.py --delivery
             SOURCE_SHA=$(sed -n 's/^selected=//p' "$GITHUB_OUTPUT" | tail -1)
           fi
           if [ -n "$RELEASE_DATE" ]; then

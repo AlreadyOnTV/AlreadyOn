@@ -12,8 +12,17 @@ COPY --from=node-toolchain /usr/local/ /usr/local/
 COPY --from=go-toolchain /usr/local/go /usr/local/go
 ENV PATH=/usr/local/go/bin:/home/ubuntu/go/bin:$PATH \
     PLAYWRIGHT_BROWSERS_PATH=/opt/playwright
+# Pin refreshed npm tooling independently of Node; do not patch nested dependencies by hand.
 # Only npm is used by the checked-in build; remove unused package-manager shims.
-RUN rm -rf /usr/local/lib/node_modules/corepack \
+COPY deploy/npm-tooling/package.json deploy/npm-tooling/package-lock.json /tmp/npm-tooling/
+COPY deploy/check-npm-tooling.js /tmp/check-npm-tooling.js
+RUN npm install --global npm@11.21.0 \
+    && npm ci --prefix /tmp/npm-tooling --ignore-scripts --no-audit --no-fund \
+    && rm -rf /usr/local/lib/node_modules/npm/node_modules \
+    && mv /tmp/npm-tooling/node_modules /usr/local/lib/node_modules/npm/node_modules \
+    && node /tmp/check-npm-tooling.js /tmp/npm-tooling/package.json \
+    && rm -rf /tmp/npm-tooling /tmp/check-npm-tooling.js \
+    && rm -rf /usr/local/lib/node_modules/corepack \
     && rm -f /usr/local/bin/corepack /usr/local/bin/pnpm /usr/local/bin/pnpx /usr/local/bin/yarn /usr/local/bin/yarnpkg \
     && apt-get update && apt-get install -y --no-install-recommends \
     make python3 python3-yaml sqlite3 procps xvfb xauth \

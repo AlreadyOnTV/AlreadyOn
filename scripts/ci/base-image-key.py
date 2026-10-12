@@ -9,7 +9,8 @@ def recipe_key(root, kind):
     """Frontend dependency updates invalidate CI tooling, not the media runtime."""
     inputs = (['deploy/base.Dockerfile', 'deploy/check-media-stack.sh',
                'deploy/patches/ffmpeg-readrate-initial-burst.patch'] if kind == 'runtime'
-              else ['deploy/ci-base.Dockerfile', 'web/package.json', 'web/package-lock.json'])
+              else ['deploy/ci-base.Dockerfile', 'deploy/check-npm-tooling.js', 'deploy/npm-tooling/package.json',
+                    'deploy/npm-tooling/package-lock.json', 'web/package.json', 'web/package-lock.json'])
     digest = hashlib.sha256()
     for name in inputs:
         digest.update(name.encode() + b'\0')
