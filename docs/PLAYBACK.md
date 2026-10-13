@@ -20,6 +20,6 @@ Media paths must stay within configured roots. Serve only authorized resources a
 
 Browser sign-in checks identify setup and login by the dialog’s accessible name so branded layouts do not require a heading. Admin layout checks include account TV PIN management before profiles and browser sessions. Use synthetic fixtures for channel changes, seeking, program transitions, session expiry, concurrent viewers and failure recovery. Check direct, remux and transcode paths separately. Hardware and physical-device compatibility need their own evidence; browser automation cannot certify every GPU or television.
 
-The temporary commercial-deletion tool is not a normal playback contract and must be removed before public release (tracking issue #199). See [scheduling](SCHEDULING.md), [TLS](TLS.md) and [runtime tests](../tests/integration/README.md).
+See [scheduling](SCHEDULING.md), [TLS](TLS.md) and [runtime tests](../tests/integration/README.md).
 
 Browser settings checks verify friendly server-name persistence through the settings API. Direct HTTPS API tests cover native discovery; proxied requests remain outside the LAN pairing boundary.

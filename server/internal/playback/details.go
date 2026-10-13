@@ -5,7 +5,7 @@ import (
 	"path/filepath"
 	"strings"
 
-	"github.com/lynchbros/alreadyon/server/internal/library"
+	"github.com/alreadyonapp/alreadyon/server/internal/library"
 )
 
 // VideoDetails and AudioDetails describe one side (source or output) of a

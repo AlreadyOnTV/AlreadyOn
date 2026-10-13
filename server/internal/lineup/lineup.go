@@ -12,8 +12,8 @@ import (
 	"fmt"
 	"sort"
 
-	"github.com/lynchbros/alreadyon/server/internal/channel"
-	"github.com/lynchbros/alreadyon/server/internal/metadata"
+	"github.com/alreadyonapp/alreadyon/server/internal/channel"
+	"github.com/alreadyonapp/alreadyon/server/internal/metadata"
 )
 
 // targetSeconds is the aspirational amount of content a well-stocked

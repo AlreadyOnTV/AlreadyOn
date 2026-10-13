@@ -6,10 +6,10 @@ plugins {
     id("org.jetbrains.kotlin.plugin.compose")
 }
 android {
-    namespace = "io.github.lynchbros.alreadyon"
+    namespace = "io.github.alreadyonapp.alreadyon"
     compileSdk = 36
     defaultConfig {
-        applicationId = "io.github.lynchbros.alreadyon"
+        applicationId = "io.github.alreadyonapp.alreadyon"
         minSdk = 26
         targetSdk = 36
         testInstrumentationRunner = "androidx.test.runner.AndroidJUnitRunner"
@@ -18,10 +18,11 @@ android {
         buildConfigField("boolean", "IS_TV", "true")
     }
     buildTypes {
-        debug { applicationIdSuffix = ".tv.debug" }
+        debug { applicationIdSuffix = providers.gradleProperty("androidDebugSuffix").orNull ?: ".tv.debug" }
         release {
             // Ship the same optimization measured on physical TVs with limited CPU and memory.
             isMinifyEnabled = true
+            isShrinkResources = true
             proguardFiles(getDefaultProguardFile("proguard-android-optimize.txt"))
         }
         // Same debug identity/key preserves device sessions while measuring optimized, non-debuggable code.
@@ -36,7 +37,11 @@ android {
     }
     // Shared model, playback controls, guide and brand; TV owns its shell and launcher.
     sourceSets["main"].java.srcDir("../app/src/main/java")
+    sourceSets["androidTest"].java.srcDir("../app/src/androidTest/java")
     sourceSets["main"].res.srcDir("../app/src/main/res")
+    providers.gradleProperty("androidUpdateTestAssetsDirectory").orNull?.let {
+        sourceSets["androidTest"].assets.srcDir(it)
+    }
     compileOptions {
         sourceCompatibility = JavaVersion.VERSION_17
         targetCompatibility = JavaVersion.VERSION_17

@@ -8,8 +8,8 @@ import (
 	"testing"
 	"time"
 
-	"github.com/lynchbros/alreadyon/server/internal/channel"
-	"github.com/lynchbros/alreadyon/server/internal/storage"
+	"github.com/alreadyonapp/alreadyon/server/internal/channel"
+	"github.com/alreadyonapp/alreadyon/server/internal/storage"
 )
 
 var testPathCounter int64

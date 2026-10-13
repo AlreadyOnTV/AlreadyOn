@@ -8,10 +8,10 @@ import (
 	"strings"
 	"testing"
 
-	"github.com/lynchbros/alreadyon/server/internal/auth"
-	"github.com/lynchbros/alreadyon/server/internal/channel"
-	"github.com/lynchbros/alreadyon/server/internal/commercial"
-	"github.com/lynchbros/alreadyon/server/internal/library"
+	"github.com/alreadyonapp/alreadyon/server/internal/auth"
+	"github.com/alreadyonapp/alreadyon/server/internal/channel"
+	"github.com/alreadyonapp/alreadyon/server/internal/commercial"
+	"github.com/alreadyonapp/alreadyon/server/internal/library"
 )
 
 // Validate authorization, strict input, persistence, reset and channel isolation

@@ -2,6 +2,7 @@
 """Enforce work-branch names, dev-containing PR branches and exact, ancestry-preserving promotion snapshots."""
 import argparse
 import base64
+from datetime import datetime
 import json
 import os
 from pathlib import Path
@@ -73,8 +74,14 @@ def promotion_source(result, upstream):
 
 def validate_work_branch(name, files):
     """Accept isolated assistant branches while keeping human docs branches separate."""
-    if not re.fullmatch(r'(feature|bugfix|docs|codex|copilot)/[A-Za-z0-9][A-Za-z0-9._/-]*', name):
-        raise ValueError('Issue branches must use feature/, bugfix/, docs/, codex/ or copilot/')
+    release_branch = re.fullmatch(r'\d{4}-\d{2}-\d{2}', name)
+    if release_branch:
+        try:
+            datetime.strptime(name, '%Y-%m-%d')
+        except ValueError as error:
+            raise ValueError('Release branches must use a valid YYYY-MM-DD date') from error
+    elif not re.fullmatch(r'(feature|bugfix|docs|codex|copilot)/[A-Za-z0-9][A-Za-z0-9._/-]*', name):
+        raise ValueError('Issue branches must use YYYY-MM-DD, feature/, bugfix/, docs/, codex/ or copilot/')
     assistant = name.startswith(('codex/', 'copilot/'))
     if assistant and not re.fullmatch(r'(codex|copilot)/[a-z0-9]+(?:-[a-z0-9]+){1,2}', name):
         raise ValueError('Assistant branch descriptions must contain two or three lowercase hyphenated words')
@@ -82,8 +89,8 @@ def validate_work_branch(name, files):
                                    or (p.startswith('docs/') and Path(p).suffix.lower() in
                                        {'.png', '.jpg', '.jpeg', '.svg', '.webp'}) for p in files)
     legacy_build = bool(re.fullmatch(r'feature/build-[0-9]+', name))
-    if docs_only and not (name.startswith('docs/') or assistant or legacy_build):
-        raise ValueError('Use docs/, codex/ or copilot/ for documentation-only changes')
+    if docs_only and not (release_branch or name.startswith('docs/') or assistant or legacy_build):
+        raise ValueError('Use YYYY-MM-DD, docs/, codex/ or copilot/ for documentation-only changes')
     if not docs_only and name.startswith('docs/'):
         raise ValueError('Use feature/, bugfix/, codex/ or copilot/ for code changes')
 
@@ -114,7 +121,7 @@ def main():
         if pr['head']['repo']['full_name'] != os.environ['GITHUB_REPOSITORY']:
             raise ValueError('Promotions must originate in this repository')
         if not pr['head']['ref'].startswith('promotion/' + branch + '-'):
-            raise ValueError('Use scripts/promote.py to select a promotion snapshot')
+            raise ValueError('Promotions use the approved fast-forward workflow, not a pull request')
     if branch in {'test', 'main'}:
         upstream = remote_head('dev' if branch == 'test' else 'test')
         if kind != 'pull_request':

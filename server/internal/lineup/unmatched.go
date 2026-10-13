@@ -7,9 +7,9 @@ import (
 	"fmt"
 	"strings"
 
-	"github.com/lynchbros/alreadyon/server/internal/channel"
+	"github.com/alreadyonapp/alreadyon/server/internal/channel"
 
-	"github.com/lynchbros/alreadyon/server/internal/metadata"
+	"github.com/alreadyonapp/alreadyon/server/internal/metadata"
 )
 
 // UnmatchedItem is a library file that isn't on any channel, with a

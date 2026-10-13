@@ -1,4 +1,4 @@
-module github.com/lynchbros/alreadyon/server
+module github.com/alreadyonapp/alreadyon/server
 
 // Keep this language baseline aligned with deploy recipes and docs/TOOLCHAIN.md.
 go 1.27

@@ -7,7 +7,7 @@ import (
 	"path/filepath"
 	"testing"
 
-	"github.com/lynchbros/alreadyon/server/internal/auth"
+	"github.com/alreadyonapp/alreadyon/server/internal/auth"
 )
 
 func TestUserManagementLifecycle(t *testing.T) {

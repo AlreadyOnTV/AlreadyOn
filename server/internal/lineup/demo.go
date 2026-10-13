@@ -7,8 +7,8 @@ import (
 	"sort"
 	"strings"
 
-	"github.com/lynchbros/alreadyon/server/internal/governor"
-	"github.com/lynchbros/alreadyon/server/internal/metadata"
+	"github.com/alreadyonapp/alreadyon/server/internal/governor"
+	"github.com/alreadyonapp/alreadyon/server/internal/metadata"
 )
 
 // demoChannelSpec describes one fallback demo channel (#111). Numbers sit

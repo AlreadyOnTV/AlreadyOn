@@ -6,7 +6,7 @@ import (
 	"encoding/json"
 	"strconv"
 
-	"github.com/lynchbros/alreadyon/server/internal/metadata"
+	"github.com/alreadyonapp/alreadyon/server/internal/metadata"
 )
 
 // LookupTMDb replaces the selected movie's identity or the selected show's

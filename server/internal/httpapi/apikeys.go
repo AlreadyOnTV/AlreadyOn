@@ -8,7 +8,7 @@ import (
 	"strconv"
 	"time"
 
-	"github.com/lynchbros/alreadyon/server/internal/auth"
+	"github.com/alreadyonapp/alreadyon/server/internal/auth"
 )
 
 // apiKeyResponse never carries the raw or hashed key value — only what

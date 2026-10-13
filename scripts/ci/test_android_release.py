@@ -3,6 +3,7 @@ import importlib.util
 import json
 from datetime import datetime
 from pathlib import Path
+import subprocess
 import tempfile
 import unittest
 from unittest.mock import patch
@@ -13,16 +14,35 @@ SPEC.loader.exec_module(release)
 
 
 class AndroidReleaseTests(unittest.TestCase):
-    def fixture(self, directory, tag="2026-10-09-beta2"):
+    def fixture(self, directory, tag="2026-10-09-alpha1"):
         (directory / release.ASSETS[0]).write_bytes(b"synthetic signed APK")
         (directory / release.ASSETS[3]).write_bytes(b"synthetic signed TV APK")
         with patch.object(release, "publish"), patch.object(release, "releases", return_value=[]), \
                 patch.object(release, "changelog", return_value="## Features\n\n- Synthetic feature."):
             release.candidate("owner/repo", tag, "a" * 40, 200000000, directory)
 
+    def test_candidate_identifies_phone_and_tv_update_assets(self):
+        with tempfile.TemporaryDirectory() as temp:
+            directory = Path(temp)
+            self.fixture(directory)
+            manifest = release.verify_assets(directory)
+            self.assertEqual(manifest["artifacts"]["phone"], {"file": release.ASSETS[0], "sha256": release.digest(directory / release.ASSETS[0])})
+            self.assertEqual(manifest["artifacts"]["tv"], {"file": release.ASSETS[3], "sha256": release.digest(directory / release.ASSETS[3])})
+
+    def test_cross_target_metadata_cannot_be_promoted(self):
+        with tempfile.TemporaryDirectory() as temp:
+            directory = Path(temp)
+            self.fixture(directory)
+            manifest = json.loads((directory / "android-release.json").read_text())
+            manifest["artifacts"]["tv"] = manifest["artifacts"]["phone"]
+            (directory / "android-release.json").write_text(json.dumps(manifest))
+            with self.assertRaisesRegex(ValueError, "target metadata"):
+                release.verify_assets(directory)
+
     def test_download_includes_both_apks_and_provenance(self):
-        with patch.object(release, "run") as command:
-            release.download("owner/repo", "2026-10-09-beta1", Path("assets"))
+        with patch.object(release, "run") as command, \
+                patch.object(release, "releases", return_value=[{"tag_name": "2026-10-09-alpha1", "assets": []}]):
+            release.download("owner/repo", "2026-10-09-alpha1", Path("assets"))
             arguments = command.call_args.args
             for asset in release.ASSETS:
                 self.assertIn(asset, arguments)
@@ -35,11 +55,32 @@ class AndroidReleaseTests(unittest.TestCase):
             with self.assertRaisesRegex(ValueError, "TV APK checksum"):
                 release.verify_assets(directory)
 
-    def test_candidate_uses_one_unnumbered_beta_per_date(self):
-        self.assertEqual(release.daily_beta_tag("2026-10-10"), "2026-10-10-beta")
-        self.assertIsNotNone(release.CANDIDATE.fullmatch("2026-10-10-beta"))
-        self.assertIsNotNone(release.CANDIDATE.fullmatch("2026-10-10-beta2"))
-        self.assertIsNotNone(release.CANDIDATE.fullmatch("2026-10-09-rc3"))
+    def test_dev_stage_allocates_alpha_then_rc_and_stable_closes_date(self):
+        self.assertEqual(release.next_dev_tag([], "2026-10-10"), "2026-10-10-alpha1")
+        entries = [
+            {"tag_name": "2026-10-10-beta", "draft": False},
+            {"tag_name": "2026-10-10-beta1", "draft": False},
+            {"tag_name": "2026-10-10-alpha1", "draft": False},
+        ]
+        self.assertEqual(release.next_dev_tag(entries, "2026-10-10"), "2026-10-10-alpha2")
+        entries.append({"tag_name": "2026-10-10-RC1", "draft": False})
+        self.assertEqual(release.next_dev_tag(entries, "2026-10-10"), "2026-10-10-RC2")
+        entries.append({"tag_name": "2026-10-10-RC2", "draft": True})
+        self.assertEqual(release.next_dev_tag(entries, "2026-10-10"), "2026-10-10-RC2")
+        entries.append({"tag_name": "2026-10-10-Stable", "draft": False})
+        with self.assertRaisesRegex(ValueError, "is stable"):
+            release.next_dev_tag(entries, "2026-10-10")
+
+    def test_cleanup_removes_only_legacy_betas_for_same_date(self):
+        entries = [{"tag_name": "2026-10-10-beta", "draft": False},
+                   {"tag_name": "2026-10-10-beta2", "draft": False},
+                   {"tag_name": "2026-10-09-rc3", "draft": False},
+                   {"tag_name": "2026-10-09-beta1", "draft": False}]
+        with patch.object(release, "releases", return_value=entries), \
+                patch.object(release, "run") as command:
+            removed = release.cleanup_legacy_betas("owner/repo", "2026-10-10")
+        self.assertEqual(removed, ["2026-10-10-beta", "2026-10-10-beta2"])
+        self.assertEqual(command.call_count, 2)
 
     def test_previous_release_uses_latest_candidate_from_prior_date(self):
         entries = [
@@ -63,33 +104,39 @@ class AndroidReleaseTests(unittest.TestCase):
                     patch.object(release, "api", return_value={"sha": "b" * 40}), \
                     patch.object(release, "changelog_since", return_value="## Features\n\n- Enter a server address immediately.") as notes, \
                     patch.object(release, "publish") as published:
-                release.candidate("owner/repo", "2026-10-10-beta", "a" * 40, 200000000, directory)
+                release.candidate("owner/repo", "2026-10-10-alpha1", "a" * 40, 200000000, directory)
                 notes.assert_called_once_with("a" * 40, "b" * 40)
                 self.assertIn("Changelog baseline: `2026-10-09-rc3`", published.call_args.args[4])
 
-    def test_new_plan_selects_unnumbered_beta(self):
+    def test_new_plan_selects_alpha1_even_with_legacy_betas(self):
         class FixedDateTime:
             @classmethod
             def now(cls, tz):
                 return datetime(2026, 10, 10, tzinfo=tz)
         with patch.object(release, "datetime", FixedDateTime), \
-                patch.object(release, "releases", return_value=[]), \
+                patch.object(release, "releases", return_value=[
+                    {"tag_name": "2026-10-10-beta", "draft": False},
+                    {"tag_name": "2026-10-10-beta1", "draft": False},
+                ]), \
                 patch.object(release, "run", return_value=""), \
                 patch("builtins.print") as output:
             release.plan("owner/repo", "a" * 40)
-            output.assert_any_call("tag=2026-10-10-beta")
+            output.assert_any_call("tag=2026-10-10-alpha1")
+            output.assert_any_call("stage=alpha")
 
-    def test_plan_refuses_to_overwrite_existing_daily_beta(self):
+    def test_plan_increments_alpha_without_overwriting_published_assets(self):
         class FixedDateTime:
             @classmethod
             def now(cls, tz):
                 return datetime(2026, 10, 10, tzinfo=tz)
-        entry = {"tag_name": "2026-10-10-beta", "draft": False,
+        entry = {"tag_name": "2026-10-10-alpha1", "draft": False,
                  "body": f"Source commit: `{'b' * 40}`"}
         with patch.object(release, "datetime", FixedDateTime), \
-                patch.object(release, "releases", return_value=[entry]):
-            with self.assertRaisesRegex(ValueError, "delete the release and tag"):
-                release.plan("owner/repo", "a" * 40)
+                patch.object(release, "releases", return_value=[entry]), \
+                patch.object(release, "run", return_value=""), \
+                patch("builtins.print") as output:
+            release.plan("owner/repo", "a" * 40)
+            output.assert_any_call("tag=2026-10-10-alpha2")
 
     def test_legacy_rc_assets_remain_verifiable(self):
         with tempfile.TemporaryDirectory() as temp:
@@ -124,30 +171,76 @@ class AndroidReleaseTests(unittest.TestCase):
             with self.assertRaisesRegex(ValueError, "revision"):
                 release.verify_assets(directory, "b" * 40)
 
+    def test_stable_cannot_be_built_as_a_candidate(self):
+        with tempfile.TemporaryDirectory() as temp:
+            directory = Path(temp)
+            (directory / release.ASSETS[0]).write_bytes(b"synthetic APK")
+            (directory / release.ASSETS[3]).write_bytes(b"synthetic TV APK")
+            with patch.object(release, "publish") as publish:
+                with self.assertRaisesRegex(ValueError, "Invalid Android release"):
+                    release.candidate("owner/repo", "2026-10-10-Stable", "a" * 40, 1, directory)
+                publish.assert_not_called()
+
     def test_stable_reuses_exact_candidate_bytes_and_commit(self):
         def download(repo, tag, directory):
             self.fixture(directory)
         def publish(repo, tag, sha, directory, notes, prerelease):
-            self.assertEqual(tag, "2026-10-09-stable")
+            self.assertEqual(tag, "2026-10-09-Stable")
             self.assertEqual(sha, "a" * 40)
             self.assertFalse(prerelease)
             self.assertIn("- Tested feature.", notes)
             self.assertEqual((directory / release.ASSETS[0]).read_bytes(), b"synthetic signed APK")
-            self.assertEqual(release.verify_assets(directory)["version_name"], "2026-10-09-beta2")
-        with patch.object(release, "api", return_value={"draft": False, "prerelease": True, "body": "<!-- end-user-changelog:start -->\n## Features\n\n- Tested feature.\n<!-- end-user-changelog:end -->"}), \
-                patch.object(release, "run", return_value="a" * 40), \
-                patch.object(release.subprocess, "run") as git, \
+            self.assertEqual(release.verify_assets(directory)["version_name"], "2026-10-09-alpha1")
+        rc = {"tag_name": "2026-10-09-RC1", "draft": False,
+              "body": "Source commit: `" + "a" * 40 + "`\n<!-- end-user-changelog:start -->\n## Features\n\n- Tested feature.\n<!-- end-user-changelog:end -->"}
+        with patch.object(release, "releases", return_value=[rc]), \
+                patch.object(release.subprocess, "run",
+                         return_value=subprocess.CompletedProcess(["git"], 0)) as git, \
                 patch.object(release, "download", side_effect=download), \
                 patch.object(release, "publish", side_effect=publish) as published:
-            release.promote("owner/repo", "2026-10-09-beta2")
+            release.promote_stable("owner/repo", "2026-10-09", "a" * 40)
             published.assert_called_once()
-            git.assert_called_once_with(["git", "merge-base", "--is-ancestor", "a" * 40, "origin/main"], check=True)
+            git.assert_called_once_with(["git", "merge-base", "--is-ancestor", "a" * 40, "a" * 40], check=False)
+
+    def test_test_promotion_copies_alpha_assets_to_rc1(self):
+        sha = "a" * 40
+        alpha = {"tag_name": "2026-10-10-alpha1", "draft": False,
+                 "body": f"Source commit: `{sha}`\n<!-- end-user-changelog:start -->\n## Features\n\n- Tested feature.\n<!-- end-user-changelog:end -->"}
+        def download(repo, tag, directory):
+            self.assertEqual(tag, "2026-10-10-alpha1")
+            self.fixture(directory, "2026-10-10-alpha1")
+        def publish(repo, tag, source, directory, notes, prerelease):
+            self.assertEqual(tag, "2026-10-10-RC1")
+            self.assertEqual(source, sha)
+            self.assertTrue(prerelease)
+            self.assertIn("- Tested feature.", notes)
+            self.assertEqual((directory / release.ASSETS[0]).read_bytes(), b"synthetic signed APK")
+        with patch.object(release, "releases", return_value=[alpha]), \
+                patch.object(release, "download", side_effect=download), \
+                patch.object(release, "publish", side_effect=publish) as published:
+            self.assertEqual(release.promote_test("owner/repo", "2026-10-10", sha), "2026-10-10-RC1")
+            published.assert_called_once()
+
+    def test_test_promotion_publishes_matching_rc_draft_without_rebuild(self):
+        sha = "a" * 40
+        entries = [
+            {"tag_name": "2026-10-10-RC1", "draft": False, "body": f"Source commit: `{'b' * 40}`"},
+            {"tag_name": "2026-10-10-RC2", "draft": True, "body": f"Source commit: `{sha}`"},
+        ]
+        with patch.object(release, "releases", return_value=entries), \
+                patch.object(release, "download"), patch.object(release, "verify_assets"), \
+                patch.object(release, "run") as command, patch.object(release, "publish") as publish:
+            result = release.promote_test("owner/repo", "2026-10-10", sha)
+        self.assertEqual(result, "2026-10-10-RC2")
+        command.assert_called_once_with("gh", "release", "edit", "2026-10-10-RC2", "--repo", "owner/repo",
+                                        "--draft=false", "--prerelease=true", "--latest=false")
+        publish.assert_not_called()
 
     def test_stable_rejects_drafts_and_non_candidates(self):
         for data in ({"draft": True, "prerelease": True}, {"draft": False, "prerelease": False}):
             with patch.object(release, "api", return_value=data), patch.object(release, "publish") as published:
                 with self.assertRaises(ValueError):
-                    release.promote("owner/repo", "2026-10-09-beta1")
+                    release.promote("owner/repo", "2026-10-09-alpha1")
                 published.assert_not_called()
         with self.assertRaises(ValueError):
             release.promote("owner/repo", "main")
@@ -159,17 +252,17 @@ class AndroidReleaseTests(unittest.TestCase):
             def download(repo, tag, remote):
                 self.fixture(remote)
                 (remote / release.ASSETS[0]).write_bytes(b"previous APK")
-            with patch.object(release, "releases", return_value=[{"tag_name": "2026-10-09-beta2", "draft": False}]), \
+            with patch.object(release, "releases", return_value=[{"tag_name": "2026-10-09-alpha1", "draft": False}]), \
                     patch.object(release, "api", return_value={"sha": "a" * 40}), \
                     patch.object(release, "download", side_effect=download), \
                     patch.object(release, "run") as command:
                 with self.assertRaisesRegex(ValueError, "overwrite"):
-                    release.publish("owner/repo", "2026-10-09-beta2", "a" * 40, directory, "notes", True)
+                    release.publish("owner/repo", "2026-10-09-alpha1", "a" * 40, directory, "notes", True)
                 command.assert_not_called()
 
     def test_completed_rerun_verifies_and_reuses_candidate(self):
         sha = "a" * 40
-        entry = {"tag_name": "2026-10-09-beta2", "draft": False,
+        entry = {"tag_name": "2026-10-09-alpha1", "draft": False,
                  "body": f"Source commit: `{sha}`"}
         def download(repo, tag, directory):
             self.fixture(directory)
@@ -179,24 +272,24 @@ class AndroidReleaseTests(unittest.TestCase):
                 patch("builtins.print") as output:
             release.plan("owner/repo", sha)
             output.assert_any_call("existing=true")
-            output.assert_any_call("tag=2026-10-09-beta2")
+            output.assert_any_call("tag=2026-10-09-alpha1")
 
     def test_failed_draft_reuses_original_android_version_code(self):
         sha = "a" * 40
-        entry = {"tag_name": "2026-10-09-beta2", "draft": True, "target_commitish": sha,
+        entry = {"tag_name": "2026-10-09-alpha1", "draft": True, "target_commitish": sha,
                  "body": f"Source commit: `{sha}`\nAndroid versionCode: `200000000`"}
         with patch.object(release, "releases", return_value=[entry]), \
                 patch.object(release, "api", return_value={"sha": sha}), \
                 patch("builtins.print") as output:
-            release.plan("owner/repo", sha)
+            release.plan("owner/repo", sha, "2026-10-09")
             output.assert_any_call("existing=false")
             output.assert_any_call("version_code=200000000")
 
     def test_existing_tag_must_match_commit(self):
-        with patch.object(release, "releases", return_value=[{"tag_name": "2026-10-09-stable", "draft": True}]), \
+        with patch.object(release, "releases", return_value=[{"tag_name": "2026-10-09-Stable", "draft": True}]), \
                 patch.object(release, "api", return_value={"sha": "b" * 40}):
             with self.assertRaisesRegex(ValueError, "different source"):
-                release.publish("owner/repo", "2026-10-09-stable", "a" * 40, Path("unused"), "notes", False)
+                release.publish("owner/repo", "2026-10-09-Stable", "a" * 40, Path("unused"), "notes", False)
 
 
 if __name__ == "__main__":

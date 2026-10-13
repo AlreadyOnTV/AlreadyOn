@@ -7,7 +7,7 @@ import (
 	"testing"
 	"time"
 
-	"github.com/lynchbros/alreadyon/server/internal/status"
+	"github.com/alreadyonapp/alreadyon/server/internal/status"
 )
 
 func getStartupStatus(t *testing.T, handler http.Handler) startupStatusResponse {

@@ -9,10 +9,10 @@ import (
 	"testing"
 	"time"
 
-	"github.com/lynchbros/alreadyon/server/internal/channel"
-	"github.com/lynchbros/alreadyon/server/internal/library"
-	"github.com/lynchbros/alreadyon/server/internal/status"
-	"github.com/lynchbros/alreadyon/server/internal/storage"
+	"github.com/alreadyonapp/alreadyon/server/internal/channel"
+	"github.com/alreadyonapp/alreadyon/server/internal/library"
+	"github.com/alreadyonapp/alreadyon/server/internal/status"
+	"github.com/alreadyonapp/alreadyon/server/internal/storage"
 )
 
 func TestRun_ReturnsErrBusyWhileExclusiveHeld(t *testing.T) {

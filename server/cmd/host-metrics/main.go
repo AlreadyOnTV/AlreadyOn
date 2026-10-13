@@ -7,7 +7,7 @@ import (
 	"encoding/json"
 	"flag"
 	"fmt"
-	"github.com/lynchbros/alreadyon/server/internal/metrics"
+	"github.com/alreadyonapp/alreadyon/server/internal/metrics"
 	"os"
 	"os/signal"
 	"path/filepath"

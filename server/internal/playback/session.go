@@ -10,7 +10,7 @@ import (
 	"sync"
 	"time"
 
-	"github.com/lynchbros/alreadyon/server/internal/schedule"
+	"github.com/alreadyonapp/alreadyon/server/internal/schedule"
 )
 
 const SessionTTL = 5 * time.Minute

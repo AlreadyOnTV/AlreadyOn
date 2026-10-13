@@ -10,7 +10,7 @@ import (
 	"testing"
 	"time"
 
-	"github.com/lynchbros/alreadyon/server/internal/storage"
+	"github.com/alreadyonapp/alreadyon/server/internal/storage"
 )
 
 // These isolated databases never use an agent preview or production identity.

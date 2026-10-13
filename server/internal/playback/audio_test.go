@@ -11,7 +11,7 @@ import (
 	"testing"
 	"time"
 
-	"github.com/lynchbros/alreadyon/server/internal/loudness"
+	"github.com/alreadyonapp/alreadyon/server/internal/loudness"
 )
 
 func TestSelectAudioLanguageAndExplicitTrack(t *testing.T) {

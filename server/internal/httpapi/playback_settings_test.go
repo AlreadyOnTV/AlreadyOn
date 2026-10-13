@@ -5,7 +5,7 @@ import (
 	"net/http"
 	"testing"
 
-	"github.com/lynchbros/alreadyon/server/internal/playback"
+	"github.com/alreadyonapp/alreadyon/server/internal/playback"
 )
 
 func TestPlaybackSettingsAPI(t *testing.T) {

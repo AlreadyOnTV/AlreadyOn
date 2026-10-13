@@ -4,7 +4,7 @@ import (
 	"reflect"
 	"testing"
 
-	"github.com/lynchbros/alreadyon/server/internal/metadata"
+	"github.com/alreadyonapp/alreadyon/server/internal/metadata"
 )
 
 func series(mediaFileIDs ...int64) contentSeries {

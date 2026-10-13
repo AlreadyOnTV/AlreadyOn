@@ -15,7 +15,7 @@ In repository **Settings → Secrets and variables → Actions**, add:
 
 Base64 is transport encoding, not encryption; treat it as private key material. Use GitHub's secret UI or `gh secret set` with file/stdin input; never paste keys into issues, logs or source. The workflow decodes the keystore into runner temporary storage, passes passwords through process environment references to `apksigner`, verifies the signature, and removes the decoded file. Missing secrets fail publication clearly. The job's GitHub token needs `contents: write`; no personal token is required.
 
-The signed release uses `io.github.lynchbros.alreadyon`. The current developer app uses `io.github.lynchbros.alreadyon.debug`, so its data and signing identity are separate; installing the release creates a separate app. Back up the permanent key before distributing the first release.
+The signed release uses `io.github.alreadyonapp.alreadyon`. The current developer app uses `io.github.alreadyonapp.alreadyon.debug`, so its data and signing identity are separate; installing the release creates a separate app. Back up the permanent key before distributing the first release.
 
 ## Google Play
 

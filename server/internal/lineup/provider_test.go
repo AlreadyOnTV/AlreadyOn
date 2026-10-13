@@ -5,8 +5,8 @@ import (
 	"fmt"
 	"testing"
 
-	"github.com/lynchbros/alreadyon/server/internal/channel"
-	"github.com/lynchbros/alreadyon/server/internal/eligibility"
+	"github.com/alreadyonapp/alreadyon/server/internal/channel"
+	"github.com/alreadyonapp/alreadyon/server/internal/eligibility"
 )
 
 // Mode transitions use synthetic metadata only: no provider, live media or

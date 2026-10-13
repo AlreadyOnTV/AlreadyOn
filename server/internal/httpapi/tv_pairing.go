@@ -3,8 +3,8 @@ package httpapi
 import (
 	"database/sql"
 	"errors"
-	"github.com/lynchbros/alreadyon/server/internal/auth"
-	"github.com/lynchbros/alreadyon/server/internal/serversettings"
+	"github.com/alreadyonapp/alreadyon/server/internal/auth"
+	"github.com/alreadyonapp/alreadyon/server/internal/serversettings"
 	"net"
 	"net/http"
 	"strconv"

@@ -17,7 +17,7 @@ import (
 	"unicode"
 	"unicode/utf8"
 
-	"github.com/lynchbros/alreadyon/server/internal/jsonopt"
+	"github.com/alreadyonapp/alreadyon/server/internal/jsonopt"
 )
 
 const (

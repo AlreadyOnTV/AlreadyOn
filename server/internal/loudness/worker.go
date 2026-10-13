@@ -16,11 +16,11 @@ import (
 	"sync/atomic"
 	"time"
 
-	"github.com/lynchbros/alreadyon/server/internal/activity"
-	"github.com/lynchbros/alreadyon/server/internal/config"
-	"github.com/lynchbros/alreadyon/server/internal/governor"
-	"github.com/lynchbros/alreadyon/server/internal/library"
-	"github.com/lynchbros/alreadyon/server/internal/logging"
+	"github.com/alreadyonapp/alreadyon/server/internal/activity"
+	"github.com/alreadyonapp/alreadyon/server/internal/config"
+	"github.com/alreadyonapp/alreadyon/server/internal/governor"
+	"github.com/alreadyonapp/alreadyon/server/internal/library"
+	"github.com/alreadyonapp/alreadyon/server/internal/logging"
 )
 
 type tailBuffer struct{ data []byte }

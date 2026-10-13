@@ -6,7 +6,7 @@ import (
 	"testing"
 	"time"
 
-	"github.com/lynchbros/alreadyon/server/internal/eligibility"
+	"github.com/alreadyonapp/alreadyon/server/internal/eligibility"
 )
 
 // insertRatedMovie inserts a movie with certification attached to

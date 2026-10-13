@@ -9,7 +9,7 @@ import (
 	"testing"
 	"time"
 
-	"github.com/lynchbros/alreadyon/server/internal/library"
+	"github.com/alreadyonapp/alreadyon/server/internal/library"
 )
 
 func TestSubtitleTracksListsOnlyTextFormats(t *testing.T) {

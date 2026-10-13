@@ -2,12 +2,12 @@ package playback
 
 import (
 	"errors"
-	"github.com/lynchbros/alreadyon/server/internal/loudness"
+	"github.com/alreadyonapp/alreadyon/server/internal/loudness"
 	"math"
 	"slices"
 	"strings"
 
-	"github.com/lynchbros/alreadyon/server/internal/library"
+	"github.com/alreadyonapp/alreadyon/server/internal/library"
 )
 
 // Capabilities is a snapshot collected at client startup, not at each tune.

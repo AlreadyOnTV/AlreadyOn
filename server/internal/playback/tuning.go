@@ -11,10 +11,10 @@ import (
 	"sync"
 	"time"
 
-	"github.com/lynchbros/alreadyon/server/internal/activity"
-	"github.com/lynchbros/alreadyon/server/internal/governor"
-	"github.com/lynchbros/alreadyon/server/internal/library"
-	"github.com/lynchbros/alreadyon/server/internal/logging"
+	"github.com/alreadyonapp/alreadyon/server/internal/activity"
+	"github.com/alreadyonapp/alreadyon/server/internal/governor"
+	"github.com/alreadyonapp/alreadyon/server/internal/library"
+	"github.com/alreadyonapp/alreadyon/server/internal/logging"
 )
 
 // DefaultThreads is the CPU thread count for decoding when nothing has been measured.

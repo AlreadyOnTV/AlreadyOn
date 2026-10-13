@@ -9,10 +9,10 @@ import (
 	"strings"
 	"time"
 
-	"github.com/lynchbros/alreadyon/server/internal/activity"
-	"github.com/lynchbros/alreadyon/server/internal/auth"
-	"github.com/lynchbros/alreadyon/server/internal/playback"
-	"github.com/lynchbros/alreadyon/server/internal/status"
+	"github.com/alreadyonapp/alreadyon/server/internal/activity"
+	"github.com/alreadyonapp/alreadyon/server/internal/auth"
+	"github.com/alreadyonapp/alreadyon/server/internal/playback"
+	"github.com/alreadyonapp/alreadyon/server/internal/status"
 )
 
 const activityTTL = 35 * time.Second

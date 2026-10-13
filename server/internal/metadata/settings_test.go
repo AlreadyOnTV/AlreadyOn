@@ -5,7 +5,7 @@ import (
 	"database/sql"
 	"testing"
 
-	"github.com/lynchbros/alreadyon/server/internal/storage"
+	"github.com/alreadyonapp/alreadyon/server/internal/storage"
 )
 
 func openSettingsTestDB(t *testing.T) *sql.DB {

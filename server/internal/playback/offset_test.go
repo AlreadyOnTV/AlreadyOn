@@ -7,8 +7,8 @@ import (
 	"testing"
 	"time"
 
-	"github.com/lynchbros/alreadyon/server/internal/library"
-	"github.com/lynchbros/alreadyon/server/internal/schedule"
+	"github.com/alreadyonapp/alreadyon/server/internal/library"
+	"github.com/alreadyonapp/alreadyon/server/internal/schedule"
 )
 
 // Each source frame's luminance encodes its ordinal (four luma units per

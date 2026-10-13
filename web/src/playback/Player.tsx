@@ -26,7 +26,6 @@ import {
   writeQuality,
 } from "../users/deviceStorage";
 import { useUsers } from "../users/UsersContext";
-import { useAccount } from "../users/AccountContext";
 import type { AudioTrack, PlaybackSession } from "./types";
 import "./Player.css";
 
@@ -344,41 +343,7 @@ export function Player({
   const [caption, setCaption] = useState("");
   const freezeRef = useRef<HTMLCanvasElement>(null);
   // The quality ceiling belongs to the profile on this device and applies to every channel.
-  const { currentUserId, currentUser, isAdmin } = useUsers();
-  const { isOwner } = useAccount();
-  const [deletingCommercial, setDeletingCommercial] = useState(false);
-  const [deletedCommercial, setDeletedCommercial] = useState<number | null>(
-    null,
-  );
-  // TEMPORARY testing control: bind removal to this exact presented commercial.
-  const deleteCommercial = async () => {
-    if (!session || session.kind !== "commercial" || deletingCommercial) return;
-    const target = session;
-    setDeletingCommercial(true);
-    try {
-      const response = await apiFetch("/api/testing/commercial", {
-        method: "DELETE",
-        headers: { "Content-Type": "application/json" },
-        body: JSON.stringify({
-          channelId: target.channelId,
-          mediaFileId: target.mediaFileId,
-          entryStartsAt: target.entryStartsAt,
-        }),
-      });
-      if (!response.ok)
-        throw new Error(
-          (await response.json()).error || "Could not delete commercial",
-        );
-      setDeletedCommercial(target.mediaFileId);
-      showNotice("Commercial deleted from the server");
-    } catch (error) {
-      showNotice(
-        error instanceof Error ? error.message : "Could not delete commercial",
-      );
-    } finally {
-      setDeletingCommercial(false);
-    }
-  };
+  const { currentUserId, currentUser } = useUsers();
   const audioRef = useRef<{
     audioLanguage: string;
     audioTrackIndex?: number;
@@ -1517,18 +1482,6 @@ export function Player({
           {notice}
         </div>
       )}
-      {isAdmin && isOwner &&
-        session?.kind === "commercial" &&
-        session.channelId === channelId &&
-        deletedCommercial !== session.mediaFileId && (
-          <button
-            className="playback-delete-commercial"
-            disabled={deletingCommercial}
-            onClick={() => void deleteCommercial()}
-          >
-            {deletingCommercial ? "Deleting…" : "Delete Commercial"}
-          </button>
-        )}
       {showDetails && channelId && session && (
         <PlaybackDetails
           session={session}

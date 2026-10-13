@@ -8,8 +8,8 @@ import (
 	"strings"
 	"testing"
 
-	"github.com/lynchbros/alreadyon/server/internal/auth"
-	"github.com/lynchbros/alreadyon/server/internal/instancetls"
+	"github.com/alreadyonapp/alreadyon/server/internal/auth"
+	"github.com/alreadyonapp/alreadyon/server/internal/instancetls"
 )
 
 // TLS management shares the existing authentication and CSRF boundary; public

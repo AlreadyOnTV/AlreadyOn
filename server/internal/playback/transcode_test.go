@@ -3,7 +3,7 @@ package playback
 import (
 	"context"
 	"errors"
-	"github.com/lynchbros/alreadyon/server/internal/loudness"
+	"github.com/alreadyonapp/alreadyon/server/internal/loudness"
 	"math"
 	"os"
 	"os/exec"
@@ -12,7 +12,7 @@ import (
 	"testing"
 	"time"
 
-	"github.com/lynchbros/alreadyon/server/internal/library"
+	"github.com/alreadyonapp/alreadyon/server/internal/library"
 )
 
 func fixture(t *testing.T) Job {

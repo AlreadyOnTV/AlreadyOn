@@ -3,8 +3,8 @@ package library
 import (
 	"context"
 	"fmt"
-	"github.com/lynchbros/alreadyon/server/internal/metadata"
-	"github.com/lynchbros/alreadyon/server/internal/storage"
+	"github.com/alreadyonapp/alreadyon/server/internal/metadata"
+	"github.com/alreadyonapp/alreadyon/server/internal/storage"
 	"net/http"
 	"net/http/httptest"
 	"testing"

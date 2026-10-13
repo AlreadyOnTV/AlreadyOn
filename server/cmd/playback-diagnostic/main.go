@@ -13,8 +13,8 @@ import (
 	"strings"
 	"time"
 
-	"github.com/lynchbros/alreadyon/server/internal/library"
-	"github.com/lynchbros/alreadyon/server/internal/playback"
+	"github.com/alreadyonapp/alreadyon/server/internal/library"
+	"github.com/alreadyonapp/alreadyon/server/internal/playback"
 )
 
 func main() {

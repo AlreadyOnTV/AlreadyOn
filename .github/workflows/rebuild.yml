@@ -1,13 +1,18 @@
-# Dev merges and the 06:00 New York schedule build fresh, independently validated releases.
-name: OnDemand Build Release Image
+# A dev merge builds and publishes the exact date-scoped release after full validation.
+name: Build Date Release Image
 on:
-  # Publication is manual after deployment validation; no push/scheduled release.
+  push:
+    branches: [dev]
   workflow_dispatch:
     inputs:
       revision:
         description: Optional dev merge commit; empty selects the current dev head
         type: string
         default: ''
+      release_date:
+        description: Optional YYYY-MM-DD release branch date; push runs derive it from the merged PR
+        type: string
+        required: false
 permissions:
   contents: read
 env:
@@ -17,10 +22,14 @@ concurrency:
   cancel-in-progress: false
 jobs:
   select:
-    if: ${{ github.event_name == 'schedule' || github.ref_name == 'dev' }}
+    if: ${{ github.ref_name == 'dev' }}
     runs-on: ubuntu-26.04
     outputs:
       revision: ${{ steps.source.outputs.revision }}
+      release_date: ${{ steps.source.outputs.release_date }}
+    permissions:
+      contents: read
+      pull-requests: read
     steps:
       - uses: actions/checkout@v7
         with:
@@ -30,11 +39,18 @@ jobs:
         id: source
         env:
           GH_TOKEN: ${{ github.token }}
+          RELEASE_DATE: ${{ inputs.release_date }}
         run: |
           revision=$(git rev-parse HEAD)
           current=$(gh api "repos/$GITHUB_REPOSITORY/git/ref/heads/dev" --jq .object.sha)
           test "$revision" = "$current"
+          if [ -n "$RELEASE_DATE" ]; then
+            release_date=$(python3 scripts/ci/release-context.py date --sha "$revision" --date "$RELEASE_DATE")
+          else
+            release_date=$(python3 scripts/ci/release-context.py date --sha "$revision")
+          fi
           echo "revision=$revision" >> "$GITHUB_OUTPUT"
+          echo "release_date=$release_date" >> "$GITHUB_OUTPUT"
   quality:
     needs: select
     uses: ./.github/workflows/quality.yml
@@ -98,7 +114,7 @@ jobs:
       group: application-images
       cancel-in-progress: false
     permissions:
-      contents: read
+      contents: write
       packages: write
       statuses: write
       pull-requests: read
@@ -119,6 +135,10 @@ jobs:
           revision: ${{ needs.select.outputs.revision }}
           ci-base: ${{ needs.bases.outputs.ci }}
           runtime-base: ${{ needs.bases.outputs.runtime }}
+      - uses: ./.github/actions/security-scan
+        with:
+          image: alreadyon-ci:candidate
+          ci-image: ${{ needs.bases.outputs.ci }}
       - name: Refuse publication from an outdated dev tip
         env:
           GH_TOKEN: ${{ github.token }}
@@ -130,12 +150,38 @@ jobs:
         env:
           GH_TOKEN: ${{ github.token }}
           CI_REVISION: ${{ needs.select.outputs.revision }}
+          CI_RELEASE_DATE: ${{ needs.select.outputs.release_date }}
           SOURCE_IMAGE: alreadyon-ci:candidate
         run: |
           IMAGE_TAGS=$(CI_SOURCE_BRANCH=dev python3 scripts/ci/image-tags.py | sed -n 's/^tags=//p')
           export IMAGE_TAGS
           python3 scripts/ci/publish-image.py --local
+      - name: Create or advance the release date tag
+        env:
+          GH_TOKEN: ${{ github.token }}
+          CI_REVISION: ${{ needs.select.outputs.revision }}
+          RELEASE_DATE: ${{ needs.select.outputs.release_date }}
+        run: python3 scripts/ci/release-context.py tag --sha "$CI_REVISION" --date "$RELEASE_DATE"
+      - name: Delete the merged date branch after successful release
+        env:
+          GH_TOKEN: ${{ github.token }}
+          CI_REVISION: ${{ needs.select.outputs.revision }}
+          RELEASE_DATE: ${{ needs.select.outputs.release_date }}
+        run: python3 scripts/ci/release-context.py cleanup-branch --sha "$CI_REVISION" --date "$RELEASE_DATE"
       - name: Remove overwritten untagged versions, not closed PR tags
         env:
           GH_TOKEN: ${{ github.token }}
         run: python3 scripts/ci/clean-images.py --apply --only-untagged
+  android:
+    name: Build and publish Android alpha after full validation
+    needs: [select, quality, tests, publish]
+    permissions:
+      contents: write
+      packages: read
+      pull-requests: read
+    uses: ./.github/workflows/android-release.yml
+    with:
+      operation: candidate
+      release_date: ${{ needs.select.outputs.release_date }}
+      source_sha: ${{ needs.select.outputs.revision }}
+    secrets: inherit

@@ -3,7 +3,7 @@ package schedule
 import (
 	"testing"
 
-	"github.com/lynchbros/alreadyon/server/internal/commercial"
+	"github.com/alreadyonapp/alreadyon/server/internal/commercial"
 )
 
 func program(id int64, seconds float64) lineupItem {

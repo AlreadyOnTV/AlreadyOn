@@ -4,11 +4,11 @@
 
 Registry tags identify approved image digests; they are separate from GitHub release tags:
 
-- `nightly` and `YYYY-MM-DD`: development releases.
+- `nightly` and `YYYY-MM-DD`: the active date release from `dev`; validated hotfixes move the date digest until Stable.
 - `latest`: an approved test promotion.
 - `stable`: an approved main promotion.
 
-Ordinary dev/test builds create no GitHub releases or Git tags. Approved releases identify a selected source SHA: test promotion creates `YYYY-MM-DD-rcN`, main promotion uses the same date with `-beta`, and later stable approval uses `-stable`. Only RC tags increment; see [release policy](ANDROID_RELEASES.md).
+Every merged date PR builds and validates a fresh dev image, publishing `nightly` and `YYYY-MM-DD`. Test/main promotions merge the tested tree and retag the same recorded digest as `latest`/`stable`; they do not rebuild. See [release policy](ANDROID_RELEASES.md).
 
 Promotion reuses the tested image; it does not rebuild source under a new tag. Record the source commit and immutable digest before publishing. Mutable tags alone are insufficient to identify a deployed artifact.
 

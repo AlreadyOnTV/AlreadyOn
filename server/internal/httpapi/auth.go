@@ -3,14 +3,14 @@ package httpapi
 import (
 	"database/sql"
 	"errors"
-	"github.com/lynchbros/alreadyon/server/internal/serversettings"
+	"github.com/alreadyonapp/alreadyon/server/internal/serversettings"
 	"net/http"
 	"strconv"
 	"strings"
 	"time"
 
-	"github.com/lynchbros/alreadyon/server/internal/auth"
-	"github.com/lynchbros/alreadyon/server/internal/logging"
+	"github.com/alreadyonapp/alreadyon/server/internal/auth"
+	"github.com/alreadyonapp/alreadyon/server/internal/logging"
 )
 
 type authStatusResponse struct {

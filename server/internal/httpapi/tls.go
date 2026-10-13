@@ -5,7 +5,7 @@ import (
 	"io"
 	"net/http"
 
-	"github.com/lynchbros/alreadyon/server/internal/instancetls"
+	"github.com/alreadyonapp/alreadyon/server/internal/instancetls"
 )
 
 // RegisterTLS exposes public trust metadata/download and administrator SAN

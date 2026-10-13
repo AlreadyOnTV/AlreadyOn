@@ -10,10 +10,10 @@ import (
 	"testing"
 	"time"
 
-	"github.com/lynchbros/alreadyon/server/internal/activity"
-	"github.com/lynchbros/alreadyon/server/internal/config"
-	"github.com/lynchbros/alreadyon/server/internal/governor"
-	"github.com/lynchbros/alreadyon/server/internal/storage"
+	"github.com/alreadyonapp/alreadyon/server/internal/activity"
+	"github.com/alreadyonapp/alreadyon/server/internal/config"
+	"github.com/alreadyonapp/alreadyon/server/internal/governor"
+	"github.com/alreadyonapp/alreadyon/server/internal/storage"
 )
 
 func TestScanWaitsForAnalysisBudgetWithoutMarkingFileCorrupt(t *testing.T) {

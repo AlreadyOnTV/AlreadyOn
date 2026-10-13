@@ -6,7 +6,7 @@ import (
 	"errors"
 	"net/http"
 
-	"github.com/lynchbros/alreadyon/server/internal/library"
+	"github.com/alreadyonapp/alreadyon/server/internal/library"
 )
 
 type mediaSettingsResponse struct {

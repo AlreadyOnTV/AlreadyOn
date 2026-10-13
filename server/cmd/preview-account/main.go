@@ -11,9 +11,9 @@ import (
 	"os"
 	"strings"
 
-	"github.com/lynchbros/alreadyon/server/internal/auth"
-	"github.com/lynchbros/alreadyon/server/internal/playback"
-	"github.com/lynchbros/alreadyon/server/internal/storage"
+	"github.com/alreadyonapp/alreadyon/server/internal/auth"
+	"github.com/alreadyonapp/alreadyon/server/internal/playback"
+	"github.com/alreadyonapp/alreadyon/server/internal/storage"
 )
 
 func main() {
@@ -38,7 +38,7 @@ func provision(reset bool, credentialsPath string) error {
 	// Require the server directory in a source checkout. Production /config is
 	// never a target, including when this utility is invoked from the wrong cwd.
 	module, err := os.ReadFile("go.mod")
-	if err != nil || !strings.Contains(string(module), "module github.com/lynchbros/alreadyon/server\n") {
+	if err != nil || !strings.Contains(string(module), "module github.com/alreadyonapp/alreadyon/server\n") {
 		return errors.New("run from the checkout's server directory")
 	}
 	if _, err := os.Stat("../scripts/preview.sh"); err != nil {

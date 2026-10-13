@@ -9,8 +9,8 @@ import (
 	"testing"
 	"time"
 
-	"github.com/lynchbros/alreadyon/server/internal/metadata"
-	"github.com/lynchbros/alreadyon/server/internal/storage"
+	"github.com/alreadyonapp/alreadyon/server/internal/metadata"
+	"github.com/alreadyonapp/alreadyon/server/internal/storage"
 )
 
 func openClassifyTestDB(t *testing.T) *sql.DB {

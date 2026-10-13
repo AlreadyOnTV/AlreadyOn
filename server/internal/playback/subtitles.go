@@ -13,7 +13,7 @@ import (
 	"sync"
 	"time"
 
-	"github.com/lynchbros/alreadyon/server/internal/library"
+	"github.com/alreadyonapp/alreadyon/server/internal/library"
 )
 
 // SubtitleTrack is a text subtitle stream the browser can show. Bitmap formats

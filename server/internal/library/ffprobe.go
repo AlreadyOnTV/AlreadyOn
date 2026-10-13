@@ -5,7 +5,7 @@ import (
 	"context"
 	"encoding/json"
 	"fmt"
-	"github.com/lynchbros/alreadyon/server/internal/governor"
+	"github.com/alreadyonapp/alreadyon/server/internal/governor"
 	"os/exec"
 	"strconv"
 	"strings"

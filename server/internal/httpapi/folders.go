@@ -11,9 +11,9 @@ import (
 	"reflect"
 	"strings"
 
-	"github.com/lynchbros/alreadyon/server/internal/config"
-	"github.com/lynchbros/alreadyon/server/internal/library"
-	"github.com/lynchbros/alreadyon/server/internal/refresh"
+	"github.com/alreadyonapp/alreadyon/server/internal/config"
+	"github.com/alreadyonapp/alreadyon/server/internal/library"
+	"github.com/alreadyonapp/alreadyon/server/internal/refresh"
 )
 
 type folderPathStatus struct {

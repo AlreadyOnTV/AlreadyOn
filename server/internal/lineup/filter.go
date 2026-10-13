@@ -10,10 +10,10 @@ import (
 	"slices"
 	"strings"
 
-	"github.com/lynchbros/alreadyon/server/internal/activity"
-	"github.com/lynchbros/alreadyon/server/internal/channel"
-	"github.com/lynchbros/alreadyon/server/internal/eligibility"
-	"github.com/lynchbros/alreadyon/server/internal/governor"
+	"github.com/alreadyonapp/alreadyon/server/internal/activity"
+	"github.com/alreadyonapp/alreadyon/server/internal/channel"
+	"github.com/alreadyonapp/alreadyon/server/internal/eligibility"
+	"github.com/alreadyonapp/alreadyon/server/internal/governor"
 )
 
 // ErrNoFilter is returned when asked to build a channel that has no filter.

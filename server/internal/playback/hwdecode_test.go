@@ -8,7 +8,7 @@ import (
 	"testing"
 	"time"
 
-	"github.com/lynchbros/alreadyon/server/internal/library"
+	"github.com/alreadyonapp/alreadyon/server/internal/library"
 )
 
 func hdrJob(t *testing.T, encoder string, hwDecode, hwToneMap bool) Job {

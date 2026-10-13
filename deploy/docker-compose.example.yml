@@ -9,7 +9,8 @@ services:
     restart: unless-stopped
     ports:
       - '19900:19900' # Native clients scan this published HTTPS port on the LAN.
-      - '19902:19902' # Optional HTTP-01: forward public TCP/80 here for certificate validation.
+      - '443:19900' # Public HTTPS: forward WAN TCP/443 to this host port.
+      - '80:19902' # HTTP-01: forward WAN TCP/80 to this host port.
     devices:
       - /dev/dri:/dev/dri
     # Optional for hardware transcoding when running as a non-root `user:`.

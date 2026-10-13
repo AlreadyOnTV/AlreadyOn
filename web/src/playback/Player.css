@@ -44,21 +44,6 @@
 @container (max-width: 560px) { .playback-details { font-size: 9px; padding: 4px 6px; } .playback-details dl > div { grid-template-columns: 8em 1fr; gap: 4px; } }
 .playback-player.is-idle:not(.is-paused) { cursor: none; }
 
-/* Temporary commercial cleanup stays reachable in normal and fullscreen playback. */
-.playback-delete-commercial {
-  position: absolute;
-  top: 12px;
-  right: 12px;
-  z-index: 15;
-  padding: 8px 12px;
-  border: 1px solid #fff;
-  border-radius: 5px;
-  background: #8c2020;
-  color: #fff;
-  cursor: pointer;
-}
-.playback-delete-commercial:disabled { opacity: .6; cursor: wait; }
-
 .playback-control-bar { display: flex; align-items: center; gap: 6px; width: 100%; }
 .playback-program { display: none; width: 100%; align-items: stretch; gap: 14px; text-shadow: 0 1px 3px #000; }
 .playback-player.is-large .playback-program, .playback-player:fullscreen .playback-program { display: flex; }

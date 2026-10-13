@@ -6,9 +6,9 @@ import (
 	"errors"
 	"net/http"
 
-	"github.com/lynchbros/alreadyon/server/internal/commercial"
-	"github.com/lynchbros/alreadyon/server/internal/logging"
-	"github.com/lynchbros/alreadyon/server/internal/refresh"
+	"github.com/alreadyonapp/alreadyon/server/internal/commercial"
+	"github.com/alreadyonapp/alreadyon/server/internal/logging"
+	"github.com/alreadyonapp/alreadyon/server/internal/refresh"
 )
 
 type commercialSettingsResponse struct {

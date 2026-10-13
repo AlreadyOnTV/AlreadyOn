@@ -12,7 +12,7 @@ import (
 	"testing"
 	"time"
 
-	"github.com/lynchbros/alreadyon/server/internal/storage"
+	"github.com/alreadyonapp/alreadyon/server/internal/storage"
 )
 
 func openTestDB(t *testing.T) *sql.DB {

@@ -1,0 +1,52 @@
+# Reassess immutable artifacts with read-only credentials; never rebuild or publish.
+name: Reassess exact published image
+on:
+  workflow_dispatch:
+    inputs:
+      image:
+        description: Published image using repository@sha256:digest
+        required: true
+        type: string
+permissions:
+  contents: read
+  packages: read
+concurrency:
+  group: security-reassessment
+  cancel-in-progress: false
+jobs:
+  scan:
+    runs-on: ubuntu-26.04
+    timeout-minutes: 30
+    steps:
+      - uses: actions/checkout@v7
+        with:
+          persist-credentials: false
+      - uses: actions/setup-go@v7
+        with:
+          go-version-file: server/go.mod
+          cache-dependency-path: server/go.sum
+      - uses: actions/setup-java@v6
+        with:
+          distribution: temurin
+          java-version: '17'
+      - uses: android-actions/setup-android@v3
+        with:
+          packages: 'platform-tools platforms;android-36 build-tools;35.0.0'
+      - name: Reassess without rebuilding or retagging
+        env:
+          SCAN_IMAGE: ${{ inputs.image }}
+          GH_TOKEN: ${{ github.token }}
+          REGISTRY_USER: ${{ github.actor }}
+        run: |
+          set -euo pipefail
+          python3 scripts/security/install-trivy.py "$RUNNER_TEMP/security-tools"
+          result=0
+          printf '%s' "$GH_TOKEN" | python3 scripts/security/scan.py \
+            --trivy "$RUNNER_TEMP/security-tools/trivy" --registry-user "$REGISTRY_USER" \
+            --image "$SCAN_IMAGE" --output "$RUNNER_TEMP/security-report" || result=$?
+          {
+            printf '\n### Vulnerability reassessment (release policy)\n\n```json\n'
+            if [ -f "$RUNNER_TEMP/security-report/summary.json" ]; then cat "$RUNNER_TEMP/security-report/summary.json"; fi
+            printf '\n```\nRaw reports are not uploaded from public workflows.\n'
+          } >> "$GITHUB_STEP_SUMMARY"
+          exit "$result"

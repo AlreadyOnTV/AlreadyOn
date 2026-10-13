@@ -3,7 +3,7 @@ package metrics
 import (
 	"context"
 	"fmt"
-	"github.com/lynchbros/alreadyon/server/internal/storage"
+	"github.com/alreadyonapp/alreadyon/server/internal/storage"
 	"testing"
 	"time"
 )

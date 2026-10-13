@@ -1,28 +1,35 @@
-name: Publish Android Release
+name: Android Alpha, RC and Stable
 on:
   push:
-    branches: [main]
-    paths:
-      - 'apps/android/app/src/**'
-      - 'apps/android/tv/src/main/**'
-      - 'apps/android/**/*.gradle.kts'
-      - 'apps/android/gradle.properties'
-      - 'apps/android/gradle/**'
-      - 'apps/android/gradlew*'
-      - '.github/workflows/android-release.yml'
-      - 'scripts/ci/android-release.py'
-      - 'scripts/ci/release_notes.py'
-      - 'docs/release-notes/**'
+    branches: [test, main]
+  workflow_call:
+    inputs:
+      operation:
+        description: Build an alpha/draft RC or promote exact tested APK artifacts
+        type: string
+        required: true
+      release_date:
+        description: Release date in YYYY-MM-DD
+        type: string
+        required: true
+      source_sha:
+        description: Exact validated source commit
+        type: string
+        required: true
   workflow_dispatch:
     inputs:
       operation:
-        description: Publish a main candidate or promote a tested candidate without rebuilding
+        description: Build an alpha on dev or promote exact tested APK artifacts
         type: choice
-        options: [candidate, stable]
-        default: candidate
+        options: [candidate, promote-test, stable]
+        default: promote-test
         required: true
-      candidate_tag:
-        description: For stable only, exact tested YYYY-MM-DD-beta tag (legacy numbered beta/rc accepted)
+      release_date:
+        description: Optional YYYY-MM-DD release date; otherwise derive from source/tag
+        type: string
+        required: false
+      source_sha:
+        description: Optional exact source SHA for a manual operation
         type: string
         required: false
 permissions:
@@ -33,11 +40,18 @@ concurrency:
   cancel-in-progress: false
 jobs:
   candidate:
-    if: github.ref == 'refs/heads/main' && (github.event_name == 'push' || inputs.operation == 'candidate')
+    if: inputs.operation == 'candidate' && github.ref == 'refs/heads/dev'
     runs-on: ubuntu-24.04
     timeout-minutes: 30
     permissions:
       contents: write
+      packages: read
+      pull-requests: read
+    outputs:
+      tag: ${{ steps.version.outputs.tag }}
+      stage: ${{ steps.version.outputs.stage }}
+      release_date: ${{ steps.version.outputs.release_date }}
+      source_sha: ${{ inputs.source_sha || github.sha }}
     steps:
       - uses: actions/checkout@v7
         with:
@@ -49,8 +63,12 @@ jobs:
         id: version
         env:
           GH_TOKEN: ${{ github.token }}
-          SOURCE_SHA: ${{ github.sha }}
-        run: python3 scripts/ci/android-release.py plan --sha "$SOURCE_SHA" >> "$GITHUB_OUTPUT"
+          SOURCE_SHA: ${{ inputs.source_sha || github.sha }}
+          RELEASE_DATE: ${{ inputs.release_date }}
+        run: |
+          day=$(python3 scripts/ci/release-context.py date --sha "$SOURCE_SHA" --date "$RELEASE_DATE")
+          echo "release_date=$day" >> "$GITHUB_OUTPUT"
+          python3 scripts/ci/android-release.py plan --sha "$SOURCE_SHA" --day "$day" >> "$GITHUB_OUTPUT"
       - name: Require permanent maintainer signing credentials
         if: steps.version.outputs.existing != 'true'
         env:
@@ -105,23 +123,82 @@ jobs:
               --out "$RUNNER_TEMP/android-assets/$asset" "$RUNNER_TEMP/android-aligned.apk"
             "$tools/apksigner" verify --verbose --print-certs "$RUNNER_TEMP/android-assets/$asset"
           done
+      - name: Generate artifact-bound public inventory SBOMs
+        if: steps.version.outputs.existing != 'true'
+        env:
+          GH_TOKEN: ${{ github.token }}
+          SOURCE_SHA: ${{ inputs.source_sha || github.sha }}
+          REGISTRY_USER: ${{ github.actor }}
+        run: |
+          python3 scripts/security/install-trivy.py "$RUNNER_TEMP/security-tools"
+          image=$(PYTHONPATH=scripts/ci python3 -c 'import os; from image_registry import release_source; print(release_source(os.environ["GITHUB_REPOSITORY"], os.environ["SOURCE_SHA"]))')
+          printf '%s' "$GH_TOKEN" | python3 scripts/security/public_inventory.py \
+            --trivy "$RUNNER_TEMP/security-tools/trivy" --registry-user "$REGISTRY_USER" \
+            --image "$image" --revision "$SOURCE_SHA" \
+            --phone "$RUNNER_TEMP/android-assets/alreadyon-android.apk" \
+            --tv "$RUNNER_TEMP/android-assets/alreadyon-tv.apk" --output "$RUNNER_TEMP/android-assets"
       - name: Publish verified APK and provenance as a prerelease
         if: steps.version.outputs.existing != 'true'
         env:
           GH_TOKEN: ${{ github.token }}
-          SOURCE_SHA: ${{ github.sha }}
+          SOURCE_SHA: ${{ inputs.source_sha || github.sha }}
           VERSION_NAME: ${{ steps.version.outputs.tag }}
           VERSION_CODE: ${{ steps.version.outputs.version_code }}
         run: |
           python3 scripts/ci/android-release.py candidate --sha "$SOURCE_SHA" \
-            --tag "$VERSION_NAME" --version-code "$VERSION_CODE" --directory "$RUNNER_TEMP/android-assets"
-      - name: Summarize candidate
+            --tag "$VERSION_NAME" --version-code "$VERSION_CODE" --directory "$RUNNER_TEMP/android-assets" --require-inventory
+      - name: Summarize alpha or draft RC
         env:
           CANDIDATE_TAG: ${{ steps.version.outputs.tag }}
+          RELEASE_STAGE: ${{ steps.version.outputs.stage }}
           REPOSITORY: ${{ github.repository }}
-        run: echo "Android candidate [$CANDIDATE_TAG](https://github.com/$REPOSITORY/releases/tag/$CANDIDATE_TAG)" >> "$GITHUB_STEP_SUMMARY"
+        run: echo "Android $RELEASE_STAGE [$CANDIDATE_TAG](https://github.com/$REPOSITORY/releases/tag/$CANDIDATE_TAG)" >> "$GITHUB_STEP_SUMMARY"
+      - name: Remove superseded same-day beta releases after alpha verifies
+        if: steps.version.outputs.stage == 'alpha'
+        env:
+          GH_TOKEN: ${{ github.token }}
+          RELEASE_DATE: ${{ steps.version.outputs.release_date }}
+        run: python3 scripts/ci/android-release.py cleanup-legacy --repo "$GITHUB_REPOSITORY" --day "$RELEASE_DATE"
+  promote_test:
+    if: (github.event_name == 'push' && github.ref == 'refs/heads/test') || (github.event_name == 'workflow_dispatch' && github.ref == 'refs/heads/test' && inputs.operation == 'promote-test')
+    runs-on: ubuntu-24.04
+    timeout-minutes: 10
+    permissions:
+      contents: write
+      pull-requests: read
+    steps:
+      - uses: actions/checkout@v7
+        with:
+          fetch-depth: 0
+          persist-credentials: false
+      - name: Select tested source and release date
+        id: source
+        env:
+          GH_TOKEN: ${{ github.token }}
+          SOURCE_SHA: ${{ inputs.source_sha || github.sha }}
+          RELEASE_DATE: ${{ inputs.release_date }}
+        run: |
+          if [ "$GITHUB_EVENT_NAME" = push ]; then
+            python3 scripts/ci/branch-policy.py --delivery
+            source=$(sed -n 's/^selected=//p' "$GITHUB_OUTPUT" | tail -1)
+          else
+            source="$SOURCE_SHA"
+            echo "selected=$source" >> "$GITHUB_OUTPUT"
+          fi
+          if [ -n "$RELEASE_DATE" ]; then
+            day=$(python3 scripts/ci/release-context.py date --sha "$source" --date "$RELEASE_DATE")
+          else
+            day=$(python3 scripts/ci/release-context.py date-for-source --sha "$source")
+          fi
+          echo "release_date=$day" >> "$GITHUB_OUTPUT"
+      - name: Publish the next RC using exact tested APK bytes
+        env:
+          GH_TOKEN: ${{ github.token }}
+          SOURCE_SHA: ${{ steps.source.outputs.selected }}
+          RELEASE_DATE: ${{ steps.source.outputs.release_date }}
+        run: python3 scripts/ci/android-release.py promote-test --sha "$SOURCE_SHA" --day "$RELEASE_DATE" | tee -a "$GITHUB_STEP_SUMMARY"
   stable:
-    if: github.ref == 'refs/heads/main' && github.event_name == 'workflow_dispatch' && inputs.operation == 'stable'
+    if: (github.event_name == 'push' && github.ref == 'refs/heads/main') || (github.event_name == 'workflow_dispatch' && github.ref == 'refs/heads/main' && inputs.operation == 'stable')
     runs-on: ubuntu-24.04
     timeout-minutes: 10
     permissions:
@@ -134,6 +211,16 @@ jobs:
       - name: Promote the selected tested candidate without rebuilding
         env:
           GH_TOKEN: ${{ github.token }}
-          CANDIDATE_TAG: ${{ inputs.candidate_tag }}
+          SOURCE_SHA: ${{ inputs.source_sha || github.sha }}
+          RELEASE_DATE: ${{ inputs.release_date }}
         run: |
-          python3 scripts/ci/android-release.py promote --tag "$CANDIDATE_TAG" | tee -a "$GITHUB_STEP_SUMMARY"
+          if [ "$GITHUB_EVENT_NAME" = push ]; then
+            python3 scripts/ci/branch-policy.py --delivery
+            SOURCE_SHA=$(sed -n 's/^selected=//p' "$GITHUB_OUTPUT" | tail -1)
+          fi
+          if [ -n "$RELEASE_DATE" ]; then
+            day=$(python3 scripts/ci/release-context.py date --sha "$SOURCE_SHA" --date "$RELEASE_DATE")
+          else
+            day=$(python3 scripts/ci/release-context.py date-for-source --sha "$SOURCE_SHA")
+          fi
+          python3 scripts/ci/android-release.py promote-stable --sha "$SOURCE_SHA" --day "$day" | tee -a "$GITHUB_STEP_SUMMARY"

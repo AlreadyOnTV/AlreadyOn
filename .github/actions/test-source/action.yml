@@ -1,14 +1,18 @@
 # Run source tests in the prebuilt CI base; test results are never cached.
 name: Test application source
-description: Run Go and Chromium suites against the selected CI base image
+description: Run Go and full Chromium e2e suites against the selected CI base image
 inputs:
   ci-base:
     description: Immutable CI base image reference
     required: true
+  pull-base:
+    description: Pull ci-base from its registry before testing
+    default: "true"
 runs:
   using: composite
   steps:
     - name: Pull the selected CI base
+      if: inputs.pull-base == 'true'
       shell: bash
       run: docker pull '${{ inputs.ci-base }}'
     - name: Go tests and Chromium playback tests

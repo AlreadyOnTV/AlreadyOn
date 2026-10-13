@@ -5,8 +5,8 @@ import (
 	"math"
 	"time"
 
-	"github.com/lynchbros/alreadyon/server/internal/library"
-	"github.com/lynchbros/alreadyon/server/internal/schedule"
+	"github.com/alreadyonapp/alreadyon/server/internal/library"
+	"github.com/alreadyonapp/alreadyon/server/internal/schedule"
 )
 
 // ScheduledJob prepares the current entry using the server clock. It includes

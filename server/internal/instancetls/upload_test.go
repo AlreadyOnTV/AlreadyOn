@@ -9,7 +9,7 @@ import (
 	"testing"
 	"time"
 
-	"github.com/lynchbros/alreadyon/server/internal/storage"
+	"github.com/alreadyonapp/alreadyon/server/internal/storage"
 )
 
 // Upload fixtures live in isolated databases and never touch preview trust.

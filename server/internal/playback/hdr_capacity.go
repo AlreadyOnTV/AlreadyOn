@@ -7,9 +7,9 @@ import (
 	"path/filepath"
 	"time"
 
-	"github.com/lynchbros/alreadyon/server/internal/governor"
-	"github.com/lynchbros/alreadyon/server/internal/library"
-	"github.com/lynchbros/alreadyon/server/internal/logging"
+	"github.com/alreadyonapp/alreadyon/server/internal/governor"
+	"github.com/alreadyonapp/alreadyon/server/internal/library"
+	"github.com/alreadyonapp/alreadyon/server/internal/logging"
 )
 
 // HDRCapacity describes a measured complete HDR pipeline, not encoder throughput.

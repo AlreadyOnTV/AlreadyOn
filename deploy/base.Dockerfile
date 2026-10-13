@@ -36,17 +36,27 @@ RUN apt-get update && apt-get source ffmpeg \
     | xargs -r readlink -f | xargs -r dpkg-query -S | cut -d: -f1 | sort -u \
     > /opt/ffmpeg/share/build/runtime-packages.txt
 
-FROM ubuntu:${UBUNTU_VERSION} AS runtime-base
+FROM ubuntu:${UBUNTU_VERSION} AS runtime-rootfs
 ENV NVIDIA_DRIVER_CAPABILITIES=compute,video,utility
 # This stage contains runtime libraries and dynamically loaded GPU drivers only;
 # compilers, package indexes and dependency caches remain in earlier stages.
 COPY --from=ffmpeg-build /opt/ffmpeg/share/build/runtime-packages.txt /tmp/runtime-packages.txt
 RUN apt-get update \
-    && apt-get install -y --no-install-recommends ca-certificates tzdata util-linux curl \
+    && apt-get install -y --no-install-recommends ca-certificates tzdata util-linux \
     intel-media-va-driver-non-free i965-va-driver-shaders libmfx-gen1.2 libvpl2 \
-    mesa-libgallium vainfo $(cat /tmp/runtime-packages.txt) \
+    mesa-libgallium $(cat /tmp/runtime-packages.txt) \
     && rm -rf /var/lib/apt/lists/* /tmp/runtime-packages.txt
 COPY --from=ffmpeg-build /opt/ffmpeg/bin/ffmpeg /opt/ffmpeg/bin/ffprobe /usr/local/bin/
 COPY --from=ffmpeg-build /opt/ffmpeg/share/build /usr/local/share/alreadyon/ffmpeg-build
 COPY deploy/check-media-stack.sh /usr/local/bin/alreadyon-check-media-stack
 RUN chmod 0755 /usr/local/bin/alreadyon-check-media-stack && alreadyon-check-media-stack
+
+# Ubuntu includes Pebble for container orchestration; AlreadyOn owns its entrypoint.
+# Flatten the cleaned rootfs so removed upstream files do not remain in image layers.
+# Retain package copyright notices and FFmpeg build/license metadata for redistribution.
+RUN rm -f /usr/bin/pebble \
+    && rm -rf /usr/share/man /usr/share/info \
+    && find /usr/share/doc -type f ! -name copyright -delete
+FROM scratch AS runtime-base
+COPY --from=runtime-rootfs / /
+ENV NVIDIA_DRIVER_CAPABILITIES=compute,video,utility

@@ -5,7 +5,7 @@ import (
 	"slices"
 	"strings"
 
-	"github.com/lynchbros/alreadyon/server/internal/library"
+	"github.com/alreadyonapp/alreadyon/server/internal/library"
 )
 
 // AudioTrack describes every selectable source audio stream, including alternate

@@ -10,7 +10,7 @@ import (
 	"strings"
 	"unicode"
 
-	"github.com/lynchbros/alreadyon/server/internal/eligibility"
+	"github.com/alreadyonapp/alreadyon/server/internal/eligibility"
 )
 
 type FilterExtra struct {

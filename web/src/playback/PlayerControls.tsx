@@ -216,8 +216,8 @@ export function PlayerControls(p: ControlsProps) {
           )}
         </Icon>
       </button>
+      {/* Range dragging needs its native mouse default; noFocus is buttons-only. */}
       <input
-        {...noFocus}
         className="playback-volume"
         type="range"
         min={0}

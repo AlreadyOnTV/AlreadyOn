@@ -6,7 +6,7 @@ import (
 	"strings"
 	"testing"
 
-	"github.com/lynchbros/alreadyon/server/internal/library"
+	"github.com/alreadyonapp/alreadyon/server/internal/library"
 )
 
 func detailsFixture() (library.ProbeResult, Capabilities) {

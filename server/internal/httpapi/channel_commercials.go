@@ -7,10 +7,10 @@ import (
 	"strconv"
 	"time"
 
-	"github.com/lynchbros/alreadyon/server/internal/channel"
-	"github.com/lynchbros/alreadyon/server/internal/commercial"
-	"github.com/lynchbros/alreadyon/server/internal/refresh"
-	"github.com/lynchbros/alreadyon/server/internal/schedule"
+	"github.com/alreadyonapp/alreadyon/server/internal/channel"
+	"github.com/alreadyonapp/alreadyon/server/internal/commercial"
+	"github.com/alreadyonapp/alreadyon/server/internal/refresh"
+	"github.com/alreadyonapp/alreadyon/server/internal/schedule"
 )
 
 // handleChannelCommercials reads/replaces only this channel's override and

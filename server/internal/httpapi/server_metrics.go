@@ -2,7 +2,7 @@ package httpapi
 
 import (
 	"database/sql"
-	"github.com/lynchbros/alreadyon/server/internal/metrics"
+	"github.com/alreadyonapp/alreadyon/server/internal/metrics"
 	"net/http"
 	"strconv"
 	"time"

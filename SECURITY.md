@@ -9,3 +9,5 @@ Include affected versions, a sanitized reproduction, expected/actual behavior an
 This project is actively developing; no independent security certification or formal support window is claimed. Use trusted TLS, minimum necessary access and read-only media mounts. Keep credentials and application data outside Git.
 
 Security fixes should include focused regression tests and a review of related entry points. Dependency, authorization, path confinement and media-processing boundaries require ongoing maintenance.
+
+See [vulnerability scanning](docs/VULNERABILITY_SCANNING.md) for private reports, exact-image scans, coverage limits and proposed triage policy.

@@ -6,7 +6,7 @@ import (
 	"encoding/json"
 	"errors"
 	"fmt"
-	"github.com/lynchbros/alreadyon/server/internal/logging"
+	"github.com/alreadyonapp/alreadyon/server/internal/logging"
 	"io"
 	"net/http"
 	"net/netip"

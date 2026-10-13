@@ -12,7 +12,7 @@ import (
 	"syscall"
 	"time"
 
-	"github.com/lynchbros/alreadyon/server/internal/metrics"
+	"github.com/alreadyonapp/alreadyon/server/internal/metrics"
 )
 
 var resourceReader struct {

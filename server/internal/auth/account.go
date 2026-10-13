@@ -7,7 +7,7 @@ import (
 	"database/sql"
 	"errors"
 	"fmt"
-	"github.com/lynchbros/alreadyon/server/internal/serversettings"
+	"github.com/alreadyonapp/alreadyon/server/internal/serversettings"
 	"strings"
 	"unicode"
 	"unicode/utf8"

@@ -7,10 +7,10 @@ import (
 	"strconv"
 	"time"
 
-	"github.com/lynchbros/alreadyon/server/internal/channel"
-	"github.com/lynchbros/alreadyon/server/internal/eligibility"
-	"github.com/lynchbros/alreadyon/server/internal/guide"
-	"github.com/lynchbros/alreadyon/server/internal/schedule"
+	"github.com/alreadyonapp/alreadyon/server/internal/channel"
+	"github.com/alreadyonapp/alreadyon/server/internal/eligibility"
+	"github.com/alreadyonapp/alreadyon/server/internal/guide"
+	"github.com/alreadyonapp/alreadyon/server/internal/schedule"
 )
 
 // defaultGuideWindowHours is how far ahead the guide looks (the web UI always

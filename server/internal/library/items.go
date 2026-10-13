@@ -10,9 +10,9 @@ import (
 	"strings"
 	"unicode/utf8"
 
-	"github.com/lynchbros/alreadyon/server/internal/eligibility"
-	"github.com/lynchbros/alreadyon/server/internal/jsonopt"
-	"github.com/lynchbros/alreadyon/server/internal/metadata"
+	"github.com/alreadyonapp/alreadyon/server/internal/eligibility"
+	"github.com/alreadyonapp/alreadyon/server/internal/jsonopt"
+	"github.com/alreadyonapp/alreadyon/server/internal/metadata"
 )
 
 // ItemPatch is a manual correction to identified library content (#103).

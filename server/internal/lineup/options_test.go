@@ -3,8 +3,8 @@ package lineup
 
 import (
 	"context"
-	"github.com/lynchbros/alreadyon/server/internal/channel"
-	"github.com/lynchbros/alreadyon/server/internal/metadata"
+	"github.com/alreadyonapp/alreadyon/server/internal/channel"
+	"github.com/alreadyonapp/alreadyon/server/internal/metadata"
 	"testing"
 )
 

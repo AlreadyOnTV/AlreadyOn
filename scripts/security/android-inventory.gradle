@@ -1,0 +1,18 @@
+// Export resolved release dependencies without changing build dependency locks.
+gradle.projectsEvaluated {
+    rootProject.tasks.register('securityInventory') {
+        doLast {
+            def output = new File(rootProject.property('securityInventoryDirectory').toString())
+            output.mkdirs()
+            ['app', 'tv'].each { name ->
+                def configuration = rootProject.project(":" + name).configurations.getByName('releaseRuntimeClasspath')
+                def modules = configuration.incoming.resolutionResult.allComponents
+                    .findAll { it.id instanceof org.gradle.api.artifacts.component.ModuleComponentIdentifier }
+                    .collect { it.moduleVersion }
+                    .findAll { it != null }.collect { "${it.group}:${it.name}:${it.version}=releaseRuntimeClasspath" }.unique().sort()
+                if (modules.isEmpty()) throw new GradleException("No release dependencies resolved for " + name)
+                new File(output, name + '-gradle.lockfile').text = modules.join('\n') + '\nempty=\n'
+            }
+        }
+    }
+}

@@ -4,7 +4,7 @@ import (
 	"testing"
 	"time"
 
-	"github.com/lynchbros/alreadyon/server/internal/library"
+	"github.com/alreadyonapp/alreadyon/server/internal/library"
 )
 
 func TestCopyNeedsKnownKeyframesThatFitThePresentationDelay(t *testing.T) {

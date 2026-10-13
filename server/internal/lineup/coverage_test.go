@@ -3,7 +3,7 @@ package lineup
 import (
 	"context"
 	"fmt"
-	"github.com/lynchbros/alreadyon/server/internal/channel"
+	"github.com/alreadyonapp/alreadyon/server/internal/channel"
 	"strings"
 	"testing"
 )

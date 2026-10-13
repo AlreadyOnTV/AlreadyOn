@@ -5,7 +5,7 @@ import (
 	"errors"
 	"net/http"
 
-	"github.com/lynchbros/alreadyon/server/internal/serversettings"
+	"github.com/alreadyonapp/alreadyon/server/internal/serversettings"
 )
 
 type serverSettingsResponse struct {

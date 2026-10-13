@@ -14,6 +14,6 @@ Direct-playback responses explicitly use `application/octet-stream` with `nosnif
 
 Memory counters are checked before unsigned-to-signed conversions and multiplication. Invalid host readings are unavailable, invalid cgroup readings fall back to host readings, and cache subtraction cannot wrap. Sample rates are parsed at the target architecture's integer width; negative or overflowing values mean unknown.
 
-CodeQL runs on pushes and pull requests to dev, test and main, as well as the legacy build branch. A local regression pass does not prove alerts have disappeared: verify the hosted analysis for the reviewed commit before closing findings. Owner-controlled root selection and generic response wrappers need contextual review when the scanner reports them.
+CodeQL runs on dev PRs and pushes to dev, test and main. A local regression pass does not prove alerts have disappeared: verify hosted analysis on reviewed commits. Owner-controlled root selection and generic response wrappers need contextual review when reported.
 
 Redirect coverage runs with `cd web && npm run test:security`. Go regressions use temporary databases and synthetic files. Follow [the security policy](../SECURITY.md) when reporting vulnerabilities.

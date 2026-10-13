@@ -23,7 +23,20 @@ def needs_documentation(name):
             or name.startswith(('.github/workflows/', '.github/actions/')))
 
 
-def check_changes(changes, read_text):
+def namespace_only(name, lines):
+    """Recognize package/import path edits that do not alter executable logic."""
+    suffix = pathlib.PurePosixPath(name).suffix
+    if suffix == '.go':
+        declaration = re.compile(r'(?:package\s+[A-Za-z_]\w*|(?:[A-Za-z_]\w*\s+)?"[^"\n]+")\Z')
+    elif suffix == '.kt':
+        declaration = re.compile(r'(?:package|import)\s+[\w.*]+(?:\s+as\s+\w+)?\Z')
+    else:
+        return False
+    changed = [line.strip() for line in lines if line.strip()]
+    return bool(changed) and all(declaration.fullmatch(line) for line in changed)
+
+
+def check_changes(changes, read_text, read_diff=None):
     """Return actionable failures; deletions still require a documentation update."""
     sources = [(status, name) for status, name in changes if needs_documentation(name)]
     errors = []
@@ -31,8 +44,18 @@ def check_changes(changes, read_text):
         errors.append('Code/infrastructure changed: update a relevant Markdown document in this diff.')
     for status, name in sources:
         if status != 'D' and not COMMENT.search(read_text(name)):
+            if read_diff is not None and namespace_only(name, read_diff(name)):
+                continue
             errors.append(f'{name}: add an explanatory source comment or module docstring (at least 13 characters).')
     return errors
+
+
+def changed_lines(base, name):
+    """Return added and removed source lines for one path relative to base."""
+    diff = subprocess.check_output(
+        ['git', 'diff', '--no-ext-diff', '--unified=0', base, '--', name], text=True)
+    return [line[1:] for line in diff.splitlines()
+            if line.startswith(('+', '-')) and not line.startswith(('+++', '---'))]
 
 
 def changed_files(base):
@@ -57,7 +80,8 @@ if __name__ == '__main__':
                                 capture_output=True, text=True)
         base = result.stdout.strip() if result.returncode == 0 else subprocess.check_output(
             ['git', 'hash-object', '-t', 'tree', '--stdin'], input='', text=True).strip()
-    errors = check_changes(changed_files(base), lambda name: pathlib.Path(name).read_text())
+    errors = check_changes(changed_files(base), lambda name: pathlib.Path(name).read_text(),
+                           lambda name: changed_lines(base, name))
     for error in errors:
         print(error, file=sys.stderr)
     if errors:

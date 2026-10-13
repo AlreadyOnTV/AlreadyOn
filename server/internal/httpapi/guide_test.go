@@ -10,7 +10,7 @@ import (
 	"testing"
 	"time"
 
-	"github.com/lynchbros/alreadyon/server/internal/schedule"
+	"github.com/alreadyonapp/alreadyon/server/internal/schedule"
 )
 
 // insertTestMediaFile inserts a media_files row plus a classified (movie)

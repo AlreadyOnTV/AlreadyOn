@@ -8,10 +8,10 @@ import (
 	"net/http"
 	"time"
 
-	"github.com/lynchbros/alreadyon/server/internal/logging"
-	"github.com/lynchbros/alreadyon/server/internal/profile"
-	"github.com/lynchbros/alreadyon/server/internal/refresh"
-	"github.com/lynchbros/alreadyon/server/internal/refreshlog"
+	"github.com/alreadyonapp/alreadyon/server/internal/logging"
+	"github.com/alreadyonapp/alreadyon/server/internal/profile"
+	"github.com/alreadyonapp/alreadyon/server/internal/refresh"
+	"github.com/alreadyonapp/alreadyon/server/internal/refreshlog"
 )
 
 type refreshScheduleResponse struct {

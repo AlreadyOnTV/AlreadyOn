@@ -88,8 +88,9 @@ def published_changelog(body):
 
 def release_body(repo, tag, sha, code, changes, candidate_tag=None, changelog_baseline=None):
     """Keep downloads and product changes prominent, with provenance collapsed below."""
-    introduction = ('Preview release for phones, tablets and Google TV. Please test it before relying on it for everyday viewing.'
-                    if candidate_tag is None else 'Stable release for phones, tablets and Google TV.')
+    stable = tag.endswith('-Stable') or tag.endswith('-stable')
+    introduction = ('Stable release for phones, tablets and Google TV.' if stable else
+                    'Preview release for phones, tablets and Google TV. Please test it before relying on it for everyday viewing.')
     url = f'https://github.com/{repo}/releases/download/{tag}'
     technical = f'Source commit: `{sha}`\n\nAndroid versionCode: `{code}`'
     if changelog_baseline:

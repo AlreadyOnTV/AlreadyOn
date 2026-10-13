@@ -8,8 +8,8 @@ import (
 	"strconv"
 	"strings"
 
-	"github.com/lynchbros/alreadyon/server/internal/channel"
-	"github.com/lynchbros/alreadyon/server/internal/metadata"
+	"github.com/alreadyonapp/alreadyon/server/internal/channel"
+	"github.com/alreadyonapp/alreadyon/server/internal/metadata"
 )
 
 // bestEffortChannels reserve twelve broad themes instead of reusing the richer

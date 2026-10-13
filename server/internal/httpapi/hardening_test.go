@@ -6,7 +6,7 @@ import (
 	"strings"
 	"testing"
 
-	"github.com/lynchbros/alreadyon/server/internal/auth"
+	"github.com/alreadyonapp/alreadyon/server/internal/auth"
 )
 
 // TestViewerCannotReachOtherAccountsOrOutliveItsAccess covers the boundaries a

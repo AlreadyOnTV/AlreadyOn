@@ -17,11 +17,12 @@ func TestServerDetailsCachesFFmpegVersion(t *testing.T) {
 	}
 	t.Setenv("PATH", dir)
 	t.Setenv("TZ", "America/New_York")
-	handler := handleServerDetails()
+	handler := handleServerDetails(openTestDB(t))
 	for i := 0; i < 2; i++ {
 		response := httptest.NewRecorder()
 		handler(response, httptest.NewRequest("GET", "/api/server/details", nil))
 		var details struct {
+			ServerName    string `json:"serverName"`
 			UptimeSeconds int64  `json:"uptimeSeconds"`
 			AppVersion    string `json:"appVersion"`
 			TimeZone      string `json:"timeZone"`
@@ -30,7 +31,7 @@ func TestServerDetailsCachesFFmpegVersion(t *testing.T) {
 		if err := json.Unmarshal(response.Body.Bytes(), &details); err != nil {
 			t.Fatal(err)
 		}
-		if response.Code != 200 || details.UptimeSeconds < 0 || details.AppVersion == "" || details.TimeZone != "America/New_York" || details.FFmpegVersion != "test-7" {
+		if response.Code != 200 || details.UptimeSeconds < 0 || details.ServerName == "" || details.AppVersion == "" || details.TimeZone != "America/New_York" || details.FFmpegVersion != "test-7" {
 			t.Fatalf("unexpected details: %+v", details)
 		}
 		if response.Header().Get("Cache-Control") != "no-store" {
@@ -57,7 +58,7 @@ func TestAppVersionNativeBuildStamp(t *testing.T) {
 func TestServerDetailsWithoutFFmpeg(t *testing.T) {
 	t.Setenv("PATH", t.TempDir())
 	response := httptest.NewRecorder()
-	handleServerDetails()(response, httptest.NewRequest("GET", "/api/server/details", nil))
+	handleServerDetails(openTestDB(t))(response, httptest.NewRequest("GET", "/api/server/details", nil))
 	var details map[string]any
 	if err := json.Unmarshal(response.Body.Bytes(), &details); err != nil {
 		t.Fatal(err)

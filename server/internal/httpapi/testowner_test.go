@@ -6,7 +6,7 @@ import (
 	"errors"
 	"testing"
 
-	"github.com/lynchbros/alreadyon/server/internal/auth"
+	"github.com/alreadyonapp/alreadyon/server/internal/auth"
 )
 
 // testOwnerID returns the database's first owner, creating a synthetic one

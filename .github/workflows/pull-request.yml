@@ -1,10 +1,10 @@
-# Untrusted changes receive a read-only token and no publishing credentials.
-name: Source Validation
+# Date-release dev PRs run full source and browser e2e validation.
+name: Date Release PR Validation
 on:
   push:
-    branches: [build, dev, test, main]
+    branches: [dev]
   pull_request:
-    branches: [build, dev, test, main]
+    branches: [dev]
   workflow_dispatch:
 permissions:
   contents: read
@@ -16,7 +16,7 @@ jobs:
     uses: ./.github/workflows/quality.yml
   tests:
     runs-on: ubuntu-26.04
-    timeout-minutes: 60
+    timeout-minutes: 90
     steps:
       - uses: actions/checkout@v7
         with:
@@ -43,5 +43,32 @@ jobs:
             FFMPEG_BUILD_JOBS=2
           cache-from: type=gha,scope=source-validation-runtime
           cache-to: type=gha,mode=max,scope=source-validation-runtime
-      - name: Server regression tests with production media runtime
-        run: CONTAINER_ENGINE=docker scripts/test-go-runtime.sh alreadyon-validation:runtime
+      - name: Build local CI tooling image on the patched runtime
+        run: |
+          docker build --builder default \
+            --file deploy/ci-base.Dockerfile \
+            --target ci-base \
+            --build-arg RUNTIME_BASE=alreadyon-validation:runtime \
+            --tag alreadyon-validation:ci .
+      - name: Go regressions and full browser e2e tests
+        uses: ./.github/actions/test-source
+        with:
+          ci-base: alreadyon-validation:ci
+          pull-base: 'false'
+      - name: Build the exact PR runtime candidate
+        run: |
+          docker build --builder default \
+            --file deploy/Dockerfile --target runtime \
+            --build-arg CI_BASE=alreadyon-validation:ci \
+            --build-arg RUNTIME_BASE=alreadyon-validation:runtime \
+            --build-arg VCS_REF="$(git rev-parse HEAD)" \
+            --build-arg BUILD_TIMESTAMP="$GITHUB_RUN_ID-$GITHUB_RUN_ATTEMPT" \
+            --tag alreadyon-ci:candidate .
+      - name: Validate packaged runtime with disposable fixtures
+        run: python3 tests/integration/container.py
+        env:
+          CONTAINER_IMAGE: alreadyon-ci:candidate
+      - uses: ./.github/actions/security-scan
+        with:
+          image: alreadyon-ci:candidate
+          ci-image: alreadyon-validation:ci

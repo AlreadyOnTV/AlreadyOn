@@ -1005,6 +1005,25 @@ const noWorkers = async (unreleased = () => 0) => {
     await playing(page);
     await page.waitForFunction(() => window.__wakeLocks.held === 1);
     await page.locator(".playback-player").hover();
+    // Use actual mouse dragging: assigning input.value would miss canceled defaults.
+    const dragVolume = async () => {
+      await page.locator(".playback-player").hover();
+      const slider = page.getByRole("slider", { name: "Volume", exact: true });
+      const box = await slider.boundingBox();
+      await page.mouse.move(box.x + box.width - 7, box.y + box.height / 2);
+      await page.mouse.down();
+      await page.mouse.move(box.x + 7 + (box.width - 14) * 0.3, box.y + box.height / 2, { steps: 8 });
+      await page.mouse.up();
+      const value = Number(await slider.inputValue());
+      assert(value > 0 && value < 0.6, "Mouse dragging changes the volume slider");
+      await page.waitForFunction(v => {
+        const video = document.querySelector("video");
+        return Math.abs(video.volume - v) < 0.01 && !video.muted;
+      }, value);
+      // Return focus to the guide so fullscreen and guide shortcuts keep working.
+      await page.locator(".playback-time").click();
+    };
+    await dragVolume();
     const total = (await page.locator(".playback-time").textContent())
       .split("/")[1]
       .trim();
@@ -1092,6 +1111,7 @@ const noWorkers = async (unreleased = () => 0) => {
       { timeout: 5000 },
     );
     await delay(400);
+    await dragVolume();
     const largeBox = await wrap.boundingBox();
     assert(
       await page.locator(".playback-program").isVisible(),
@@ -1165,6 +1185,7 @@ const noWorkers = async (unreleased = () => 0) => {
     );
     await page.keyboard.press("f");
     await page.waitForFunction(() => document.fullscreenElement !== null);
+    await dragVolume();
     assert(
       await page.evaluate(() => window.__wakeLocks.held === 1),
       "Fullscreen player must retain the screen wake lock",
@@ -1417,7 +1438,7 @@ const noWorkers = async (unreleased = () => 0) => {
     }
 
     await page.setViewportSize({ width: 390, height: 844 });
-    await page.goto(url + "/admin/dashboard");
+    await page.goto(url + "/admin/accounts");
     const navToggle = page.getByRole("button", {
       name: "Server Settings Navigation",
     });
@@ -2456,6 +2477,41 @@ const noWorkers = async (unreleased = () => 0) => {
     );
   }
 
+  // Browser fixtures verify visibility without changing any persistent profile.
+  async function profileMenuRoles() {
+    for (const accountRole of ["owner", "viewer"]) {
+      for (const profileRole of ["admin", "viewer"]) {
+        const context = await browser.newContext();
+        const page = await context.newPage();
+        await login(page);
+        const profiles = await (await page.request.get(url + "/api/profiles")).json();
+        const profile = { ...profiles[0], role: profileRole };
+        await page.addInitScript(id => localStorage.setItem("alreadyon.currentUserId", String(id)), profile.id);
+        await page.route("**/api/auth/status", route => route.fulfill({json: {
+          setupRequired: false, authenticated: true, role: accountRole,
+          username: "menu-fixture", mustChangePassword: false,
+        }}));
+        await page.route("**/api/profiles", route => route.fulfill({json: [profile]}));
+        await page.goto(url);
+        await page.locator(".page-header-control-avatar").click();
+        const actual = (await page.locator(".profile-menu-item").allTextContents()).map(s => s.trim());
+        const expected = ["Dashboard", "Profile Settings", "Switch Profile",
+          ...(profileRole === "admin" ? ["Admin Settings"] : []),
+          ...(accountRole === "owner" ? ["Server Settings"] : []), "Sign Out"];
+        assert(JSON.stringify(actual) === JSON.stringify(expected), `${accountRole}/${profileRole} menu: ${actual}`);
+        await page.getByRole("button", {name: "Dashboard", exact: true}).click();
+        await page.getByRole("heading", {name: "Server Metrics", exact: true}).waitFor();
+        assert(await page.locator(".admin-tabs").count() === 0, "Dashboard has no settings tabs");
+        if (accountRole === "viewer") {
+          await page.goto(url + "/admin/accounts");
+          await page.waitForURL(url + "/");
+        }
+        await context.close();
+      }
+    }
+    console.log("PASS: profile menu order and Dashboard navigation across account/profile roles");
+  }
+
   // Admin: activity cards precede server performance and the settings grid.
   async function adminTabs() {
     const context = await browser.newContext();
@@ -2490,13 +2546,15 @@ const noWorkers = async (unreleased = () => 0) => {
       "Current session should report its last activity",
     );
     await page.goto(url + "/admin");
-    await page.waitForURL("**/admin/dashboard");
+    await page.waitForURL("**/admin/accounts");
     const tabs = await page.locator(".admin-tab").allTextContents();
     assert(
       tabs.join(",") ===
-        "Dashboard,Accounts,Media,Commercials,Channels,Server,Logs,API",
+        "Accounts,Media,Commercials,Channels,Server,Logs,API",
       "Settings tab order: " + tabs,
     );
+    await page.goto(url + "/dashboard");
+    await page.getByRole("heading", { name: "Server Metrics", exact: true }).waitFor();
     assert(
       (
         await page.locator(".admin-card h2, .admin-card h3").allTextContents()
@@ -2505,12 +2563,8 @@ const noWorkers = async (unreleased = () => 0) => {
       "Dashboard card order",
     );
     await page.setViewportSize({ width: 1100, height: 800 });
-    assert(
-      (await page
-        .getByRole("button", { name: "Server Settings Navigation" })
-        .isVisible()) && !(await page.locator(".admin-tabs").isVisible()),
-      "Split-screen Server Settings uses the hamburger menu",
-    );
+    assert(await page.locator(".admin-tabs").count() === 0,
+      "Dashboard is independent of Server Settings navigation");
     const graphLayout = await page
       .locator(".metrics-grid .metric-panel")
       .evaluateAll((panels) =>
@@ -2525,6 +2579,12 @@ const noWorkers = async (unreleased = () => 0) => {
       "Split-screen metrics stack on one aligned column: " +
         JSON.stringify(graphLayout),
     );
+    const chartWidths = await page.locator(".metrics-grid").evaluate(grid => ({
+      available: grid.getBoundingClientRect().width,
+      panels: [...grid.querySelectorAll(".metric-panel")].map(panel => panel.getBoundingClientRect().width),
+    }));
+    assert(chartWidths.panels.every(width => Math.abs(width - chartWidths.available) < 2),
+      "Split-screen charts fill the available card width: " + JSON.stringify(chartWidths));
     await page.setViewportSize({ width: 1280, height: 800 });
     await page.goto(url + "/admin/channels");
     await page
@@ -2756,7 +2816,7 @@ const noWorkers = async (unreleased = () => 0) => {
       (await page.locator(".admin-card").count()) === 2,
       "Server should show build details and settings",
     );
-    await page.getByText("App Version", { exact: true }).waitFor();
+    await page.getByText("Server Version", { exact: true }).waitFor();
     const details = await (
       await page.request.get(url + "/api/server/details")
     ).json();
@@ -3339,7 +3399,7 @@ const noWorkers = async (unreleased = () => 0) => {
         !accountText.includes("keep the expiry"),
       "The two explanatory paragraphs should be gone",
     );
-    await page.goto(url + "/admin/dashboard");
+    await page.goto(url + "/admin/accounts");
     await page.locator(".admin-tab").first().waitFor();
     const tops = await page
       .locator(".admin-tab")
@@ -3347,7 +3407,7 @@ const noWorkers = async (unreleased = () => 0) => {
         els.map((e) => Math.round(e.getBoundingClientRect().top)),
       );
     assert(
-      tops.length === 8 && tops.every((top, index) => index === 0 || top > tops[index - 1]),
+      tops.length === 7 && tops.every((top, index) => index === 0 || top > tops[index - 1]),
       "Desktop Server Settings uses an ordered vertical sidebar: " + tops.join(","),
     );
 
@@ -3534,64 +3594,6 @@ const noWorkers = async (unreleased = () => 0) => {
     );
   }
 
-  async function deleteCommercialUi() {
-    seed();
-    const file = path.join(root, "media", "delete-test.mp4");
-    fs.copyFileSync(path.join(root, "media", "program.mp4"), file);
-    cp.execFileSync("python3", [
-      "-c",
-      `
-import sqlite3,sys,json,time
-c=sqlite3.connect(sys.argv[1]); now=int(time.time())
-c.execute("UPDATE folder_settings SET commercial_paths=?",(json.dumps([sys.argv[3]]),))
-c.execute("INSERT INTO media_files(id,root_kind,path,size_bytes,modified_unix,first_seen_unix,last_seen_unix,duration_seconds,status) VALUES(992,'commercial',?,1,0,0,0,120,'ok')",(sys.argv[2],))
-c.execute("DELETE FROM schedule_entries WHERE channel_id=999")
-c.execute("INSERT INTO schedule_entries(channel_id,media_file_id,kind,source_offset_seconds,duration_seconds,starts_at_unix,ends_at_unix) VALUES(999,992,'commercial',0,90,?,?)",(now-10,now+80))
-c.execute("INSERT INTO schedule_entries(channel_id,media_file_id,kind,source_offset_seconds,duration_seconds,starts_at_unix,ends_at_unix) VALUES(999,999,'program',0,90,?,?)",(now+80,now+170))
-c.commit()
-`,
-      path.join(root, "data/alreadyon.db"),
-      file,
-      path.dirname(file),
-    ]);
-    const context = await browser.newContext();
-    const page = await context.newPage();
-    page.on("pageerror", (e) => errors.push(e.message));
-    await login(page);
-    await page.goto(url + "/?channel=999");
-    const button = page.getByRole("button", {
-      name: "Delete Commercial",
-      exact: true,
-    });
-    await button.waitFor();
-    await playing(page);
-    const response = page.waitForResponse((r) =>
-      r.url().endsWith("/api/testing/commercial"),
-    );
-    await button.click();
-    assert(
-      (await response).status() === 204,
-      "Delete commercial API succeeded",
-    );
-    assert(
-      !fs.existsSync(file),
-      "The synthetic commercial file was physically removed",
-    );
-    await button.waitFor({ state: "detached" });
-    await page.goto(url + "/?channel=998");
-    await playing(page);
-    assert(
-      (await button.count()) === 0,
-      "Delete control is absent during programs",
-    );
-    await leave(page);
-    await context.close();
-    seed();
-    console.log(
-      "PASS: commercial-only player control permanently removes its synthetic file",
-    );
-  }
-
   async function advancedCapabilities() {
     // Verify negotiation and fail-closed behavior, not physical HDR/AVR output.
     for (const scenario of [
@@ -3678,7 +3680,6 @@ c.commit()
         seed,
       });
     // Run permanent deletion before folder-setting scenarios trigger asynchronous rescans.
-    if (!only || only.includes("delete-commercial")) await deleteCommercialUi();
     if (!only || only.includes("capabilities")) await advancedCapabilities();
     if (!only || only.includes("codec-help"))
       await require("./codec-help.cjs")({ browser, login, assert });
@@ -3698,6 +3699,7 @@ c.commit()
     if (!only || only.includes("subtitles")) await subtitleDefaults();
     if (!only || only.includes("pause")) await pausedBoundary();
     if (!only || only.includes("alignment")) await guideAlignment();
+    if (!only || only.includes("profile-menu")) await profileMenuRoles();
     if (!only || only.includes("admin")) await adminTabs();
     if (!only || only.includes("admin-metrics-logs"))
       await require("./admin-metrics-logs.cjs")({

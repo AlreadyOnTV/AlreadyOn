@@ -6,7 +6,7 @@ import (
 	"testing"
 	"time"
 
-	"github.com/lynchbros/alreadyon/server/internal/storage"
+	"github.com/alreadyonapp/alreadyon/server/internal/storage"
 )
 
 func insertTestMediaFile(t *testing.T, db *sql.DB, path string) int64 {

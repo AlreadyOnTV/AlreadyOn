@@ -7,7 +7,7 @@ import (
 	"strings"
 	"testing"
 
-	"github.com/lynchbros/alreadyon/server/internal/refresh"
+	"github.com/alreadyonapp/alreadyon/server/internal/refresh"
 )
 
 func foldersRequest(t *testing.T, router http.Handler, method, body string) (int, folderSettingsResponse) {

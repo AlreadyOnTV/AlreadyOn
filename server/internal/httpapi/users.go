@@ -7,9 +7,9 @@ import (
 	"strconv"
 	"strings"
 
-	"github.com/lynchbros/alreadyon/server/internal/auth"
-	"github.com/lynchbros/alreadyon/server/internal/logging"
-	"github.com/lynchbros/alreadyon/server/internal/profile"
+	"github.com/alreadyonapp/alreadyon/server/internal/auth"
+	"github.com/alreadyonapp/alreadyon/server/internal/logging"
+	"github.com/alreadyonapp/alreadyon/server/internal/profile"
 )
 
 // userResponse is an account as /api/users reports it. It never carries a

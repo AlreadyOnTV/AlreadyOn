@@ -7,8 +7,8 @@ import (
 	"testing"
 	"time"
 
-	"github.com/lynchbros/alreadyon/server/internal/channel"
-	"github.com/lynchbros/alreadyon/server/internal/eligibility"
+	"github.com/alreadyonapp/alreadyon/server/internal/channel"
+	"github.com/alreadyonapp/alreadyon/server/internal/eligibility"
 )
 
 func putOnChannel(t *testing.T, db *sql.DB, channelID, mediaFileID int64) {

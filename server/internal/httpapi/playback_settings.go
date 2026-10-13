@@ -4,7 +4,7 @@ import (
 	"database/sql"
 	"net/http"
 
-	"github.com/lynchbros/alreadyon/server/internal/playback"
+	"github.com/alreadyonapp/alreadyon/server/internal/playback"
 )
 
 func handleGetPlaybackSettings(db *sql.DB) http.HandlerFunc {

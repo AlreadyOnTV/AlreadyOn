@@ -7,9 +7,9 @@ import (
 	"net/http"
 	"strconv"
 
-	"github.com/lynchbros/alreadyon/server/internal/eligibility"
-	"github.com/lynchbros/alreadyon/server/internal/library"
-	"github.com/lynchbros/alreadyon/server/internal/lineup"
+	"github.com/alreadyonapp/alreadyon/server/internal/eligibility"
+	"github.com/alreadyonapp/alreadyon/server/internal/library"
+	"github.com/alreadyonapp/alreadyon/server/internal/lineup"
 )
 
 const (

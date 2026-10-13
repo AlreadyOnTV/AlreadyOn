@@ -4,7 +4,7 @@ import (
 	"errors"
 	"net/http"
 
-	"github.com/lynchbros/alreadyon/server/internal/ddns"
+	"github.com/alreadyonapp/alreadyon/server/internal/ddns"
 )
 
 // RegisterDDNS is mounted behind management authentication/CSRF. Provider

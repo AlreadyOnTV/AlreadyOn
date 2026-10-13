@@ -23,9 +23,9 @@ let server, browser;
       'build',
       '-tags=e2e',
       '-ldflags',
-      '-X github.com/lynchbros/alreadyon/server/internal/config.dataDir=' +
+      '-X github.com/alreadyonapp/alreadyon/server/internal/config.dataDir=' +
         root +
-        '/data -X github.com/lynchbros/alreadyon/server/internal/config.webDir=' +
+        '/data -X github.com/alreadyonapp/alreadyon/server/internal/config.webDir=' +
         repo +
         '/web/dist',
       '-o',

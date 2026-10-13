@@ -4,7 +4,7 @@ import (
 	"slices"
 	"testing"
 
-	"github.com/lynchbros/alreadyon/server/internal/library"
+	"github.com/alreadyonapp/alreadyon/server/internal/library"
 )
 
 const sampleCodecList = `Codecs:

@@ -1,8 +1,5 @@
-// Guide avatar menu, in this order: Switch Profile and Profile Settings (every
-// profile), Admin Settings (admin profiles: the account and its profiles),
-// Server Settings (Owner accounts on an admin profile, web UI only) and Sign
-// Out. The TV/phone apps mirror it without Server Settings. Switching to a
-// PIN-protected profile requires entering that profile's PIN first.
+// Dashboard, profile settings and switching are available to every profile.
+// Web-only administration follows, then Sign Out on every device.
 import { startTransition, useEffect, useRef, useState } from 'react';
 import { useNavigate } from 'react-router-dom';
 import { useUsers, roleLabel } from '../users/UsersContext';
@@ -110,19 +107,22 @@ export default function ProfileMenu() {
         <div className={'profile-menu-panel' + (view !== 'root' ? ' profile-menu-expanded' : '')}>
           {view === 'root' && (
             <>
-              <button className="profile-menu-item" onClick={() => setView('switch')}>
-                Switch Profile
+              <button className="profile-menu-item" onClick={() => go('/dashboard')}>
+                Dashboard
               </button>
               <button className="profile-menu-item" onClick={() => go('/profile')}>
                 Profile Settings
+              </button>
+              <button className="profile-menu-item" onClick={() => setView('switch')}>
+                Switch Profile
               </button>
               {isAdmin && (
                 <button className="profile-menu-item" onClick={() => go('/account')}>
                   Admin Settings
                 </button>
               )}
-              {isOwner && isAdmin && (
-                <button className="profile-menu-item" onClick={() => go('/admin/dashboard')}>
+              {isOwner && (
+                <button className="profile-menu-item" onClick={() => go('/admin/accounts')}>
                   Server Settings
                 </button>
               )}

@@ -11,10 +11,10 @@ import (
 	"sync/atomic"
 	"time"
 
-	"github.com/lynchbros/alreadyon/server/internal/governor"
-	"github.com/lynchbros/alreadyon/server/internal/library"
-	"github.com/lynchbros/alreadyon/server/internal/logging"
-	"github.com/lynchbros/alreadyon/server/internal/playback"
+	"github.com/alreadyonapp/alreadyon/server/internal/governor"
+	"github.com/alreadyonapp/alreadyon/server/internal/library"
+	"github.com/alreadyonapp/alreadyon/server/internal/logging"
+	"github.com/alreadyonapp/alreadyon/server/internal/playback"
 )
 
 // MaxWorkers caps the scan: keyframe reads are bound by the disk, so more than a

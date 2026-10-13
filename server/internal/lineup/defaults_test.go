@@ -5,8 +5,8 @@ import (
 	"slices"
 	"testing"
 
-	"github.com/lynchbros/alreadyon/server/internal/channel"
-	"github.com/lynchbros/alreadyon/server/internal/metadata"
+	"github.com/alreadyonapp/alreadyon/server/internal/channel"
+	"github.com/alreadyonapp/alreadyon/server/internal/metadata"
 )
 
 // Default filters are the public age/era contract used by both startup and previews.

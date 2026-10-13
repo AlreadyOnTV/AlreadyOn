@@ -15,8 +15,8 @@ import (
 	"sync"
 	"time"
 
-	"github.com/lynchbros/alreadyon/server/internal/library"
-	"github.com/lynchbros/alreadyon/server/internal/logging"
+	"github.com/alreadyonapp/alreadyon/server/internal/library"
+	"github.com/alreadyonapp/alreadyon/server/internal/logging"
 )
 
 // The hardware choices of the Transcoding setting. The administrator picks one

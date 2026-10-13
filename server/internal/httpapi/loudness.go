@@ -2,7 +2,7 @@ package httpapi
 
 import (
 	"database/sql"
-	"github.com/lynchbros/alreadyon/server/internal/loudness"
+	"github.com/alreadyonapp/alreadyon/server/internal/loudness"
 	"net/http"
 )
 

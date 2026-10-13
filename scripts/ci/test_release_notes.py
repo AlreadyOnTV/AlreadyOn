@@ -23,8 +23,13 @@ class ReleaseNotesTests(unittest.TestCase):
     def test_stable_preserves_tested_notes(self):
         changes = '## Features\n\n- Watch on TV.'
         candidate = release_body('owner/repo', '2026-10-09-rc3', 'a' * 40, 123, changes)
+        self.assertTrue(candidate.startswith('Preview release'))
+        promoted_rc = release_body('owner/repo', '2026-10-10-RC1', 'b' * 40, 123,
+                       changes, candidate_tag='2026-10-10-alpha1')
+        self.assertTrue(promoted_rc.startswith('Preview release'))
         stable = release_body('owner/repo', '2026-10-09-stable', 'a' * 40, 123,
                               published_changelog(candidate), '2026-10-09-rc3')
+        self.assertTrue(stable.startswith('Stable release'))
         self.assertEqual(published_changelog(stable), changes)
         self.assertIn('/2026-10-09-stable/alreadyon-tv.apk', stable)
         self.assertIn('Source commit: `' + 'a' * 40 + '`', stable)

@@ -6,7 +6,7 @@ import (
 	"errors"
 	"time"
 
-	"github.com/lynchbros/alreadyon/server/internal/schedule"
+	"github.com/alreadyonapp/alreadyon/server/internal/schedule"
 )
 
 // PresentationDelay is how far behind the server clock every client presents

@@ -26,7 +26,7 @@ with socket.socket() as a:
 PY
 )
 (cd web && npm run build)
-(cd server && go build -tags=e2e -ldflags "-X github.com/lynchbros/alreadyon/server/internal/config.dataDir=$playback_tmp/data -X github.com/lynchbros/alreadyon/server/internal/config.webDir=$repo_root/web/dist" -o "$playback_tmp/server" ./cmd/server)
+(cd server && go build -tags=e2e -ldflags "-X github.com/alreadyonapp/alreadyon/server/internal/config.dataDir=$playback_tmp/data -X github.com/alreadyonapp/alreadyon/server/internal/config.webDir=$repo_root/web/dist" -o "$playback_tmp/server" ./cmd/server)
 # Two top-left blocks encode the source second (base 12, 18 luma units per digit)
 # so the browser test can check decoded content independently of its diagnostics.
 clock="if(lt(X,20),20+18*floor(floor(T+0.0001)/12),20+18*mod(floor(T+0.0001),12))"

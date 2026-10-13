@@ -8,7 +8,7 @@ import (
 	"testing"
 	"time"
 
-	"github.com/lynchbros/alreadyon/server/internal/logging"
+	"github.com/alreadyonapp/alreadyon/server/internal/logging"
 )
 
 // Recovery must allow small hosts to progress without resuming on one idle blip.

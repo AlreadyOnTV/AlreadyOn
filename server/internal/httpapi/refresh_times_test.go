@@ -7,8 +7,8 @@ import (
 	"testing"
 	"time"
 
-	"github.com/lynchbros/alreadyon/server/internal/library"
-	"github.com/lynchbros/alreadyon/server/internal/schedule"
+	"github.com/alreadyonapp/alreadyon/server/internal/library"
+	"github.com/alreadyonapp/alreadyon/server/internal/schedule"
 )
 
 func TestRefreshTimes_FillInWhenTheLibraryIsScannedAndSchedulesRegenerated(t *testing.T) {

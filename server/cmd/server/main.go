@@ -15,29 +15,50 @@ import (
 	"syscall"
 	"time"
 
-	"github.com/lynchbros/alreadyon/server/internal/auth"
-	"github.com/lynchbros/alreadyon/server/internal/channel"
-	"github.com/lynchbros/alreadyon/server/internal/config"
-	"github.com/lynchbros/alreadyon/server/internal/ddns"
-	"github.com/lynchbros/alreadyon/server/internal/governor"
-	"github.com/lynchbros/alreadyon/server/internal/httpapi"
-	"github.com/lynchbros/alreadyon/server/internal/instancetls"
-	"github.com/lynchbros/alreadyon/server/internal/keyframes"
-	"github.com/lynchbros/alreadyon/server/internal/library"
-	"github.com/lynchbros/alreadyon/server/internal/lineup"
-	"github.com/lynchbros/alreadyon/server/internal/logging"
-	"github.com/lynchbros/alreadyon/server/internal/loudness"
-	"github.com/lynchbros/alreadyon/server/internal/metadata"
-	"github.com/lynchbros/alreadyon/server/internal/metrics"
-	"github.com/lynchbros/alreadyon/server/internal/playback"
-	"github.com/lynchbros/alreadyon/server/internal/refresh"
-	"github.com/lynchbros/alreadyon/server/internal/schedule"
-	"github.com/lynchbros/alreadyon/server/internal/serversettings"
-	"github.com/lynchbros/alreadyon/server/internal/status"
-	"github.com/lynchbros/alreadyon/server/internal/storage"
+	"github.com/alreadyonapp/alreadyon/server/internal/admincli/accesskey"
+	"github.com/alreadyonapp/alreadyon/server/internal/admincli/clearsessions"
+	"github.com/alreadyonapp/alreadyon/server/internal/admincli/resetpassword"
+	"github.com/alreadyonapp/alreadyon/server/internal/admincli/tlscli"
+	"github.com/alreadyonapp/alreadyon/server/internal/auth"
+	"github.com/alreadyonapp/alreadyon/server/internal/channel"
+	"github.com/alreadyonapp/alreadyon/server/internal/config"
+	"github.com/alreadyonapp/alreadyon/server/internal/ddns"
+	"github.com/alreadyonapp/alreadyon/server/internal/governor"
+	"github.com/alreadyonapp/alreadyon/server/internal/httpapi"
+	"github.com/alreadyonapp/alreadyon/server/internal/instancetls"
+	"github.com/alreadyonapp/alreadyon/server/internal/keyframes"
+	"github.com/alreadyonapp/alreadyon/server/internal/library"
+	"github.com/alreadyonapp/alreadyon/server/internal/lineup"
+	"github.com/alreadyonapp/alreadyon/server/internal/logging"
+	"github.com/alreadyonapp/alreadyon/server/internal/loudness"
+	"github.com/alreadyonapp/alreadyon/server/internal/metadata"
+	"github.com/alreadyonapp/alreadyon/server/internal/metrics"
+	"github.com/alreadyonapp/alreadyon/server/internal/playback"
+	"github.com/alreadyonapp/alreadyon/server/internal/refresh"
+	"github.com/alreadyonapp/alreadyon/server/internal/schedule"
+	"github.com/alreadyonapp/alreadyon/server/internal/serversettings"
+	"github.com/alreadyonapp/alreadyon/server/internal/status"
+	"github.com/alreadyonapp/alreadyon/server/internal/storage"
 )
 
 func main() {
+	// Container aliases share one executable instead of duplicating Go/SQLite runtimes.
+	// Dispatch before server configuration or startup; standalone developer commands remain.
+	switch filepath.Base(os.Args[0]) {
+	case "alreadyon-access-key":
+		accesskey.Run()
+		return
+	case "alreadyon-clear-browser-sessions":
+		clearsessions.Run()
+		return
+	case "alreadyon-reset-password":
+		resetpassword.Run()
+		return
+	case "alreadyon-tls":
+		tlscli.Run()
+		return
+	}
+
 	if run() {
 		// Started again in place (same process ID, so a container keeps running).
 		exe, err := os.Executable()

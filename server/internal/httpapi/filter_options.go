@@ -8,10 +8,10 @@ import (
 	"net/http"
 	"time"
 
-	"github.com/lynchbros/alreadyon/server/internal/channel"
-	"github.com/lynchbros/alreadyon/server/internal/lineup"
-	"github.com/lynchbros/alreadyon/server/internal/refresh"
-	"github.com/lynchbros/alreadyon/server/internal/schedule"
+	"github.com/alreadyonapp/alreadyon/server/internal/channel"
+	"github.com/alreadyonapp/alreadyon/server/internal/lineup"
+	"github.com/alreadyonapp/alreadyon/server/internal/refresh"
+	"github.com/alreadyonapp/alreadyon/server/internal/schedule"
 )
 
 func handleFilterOptions(db *sql.DB) http.HandlerFunc {

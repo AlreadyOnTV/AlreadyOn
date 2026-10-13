@@ -17,8 +17,8 @@ import (
 	"strings"
 	"time"
 
-	"github.com/lynchbros/alreadyon/server/internal/activity"
-	"github.com/lynchbros/alreadyon/server/internal/governor"
+	"github.com/alreadyonapp/alreadyon/server/internal/activity"
+	"github.com/alreadyonapp/alreadyon/server/internal/governor"
 )
 
 // Version is bumped when the way gaps are measured changes, so old rows are

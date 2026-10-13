@@ -1,7 +1,8 @@
-# A promotion merge retags an image that already passed the PR gate; nothing is rebuilt or retested here.
-name: OnDemand Promote Release Image
+# A guarded test/main fast-forward retags an image that already passed the dev PR gate.
+name: Promote Tested Release Image
 on:
-  # Publication is manual after deployment validation; no push/scheduled release.
+  push:
+    branches: [test, main]
   workflow_dispatch:
 permissions:
   contents: read

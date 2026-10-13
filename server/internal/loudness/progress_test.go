@@ -4,7 +4,7 @@ import (
 	"testing"
 	"time"
 
-	"github.com/lynchbros/alreadyon/server/internal/activity"
+	"github.com/alreadyonapp/alreadyon/server/internal/activity"
 )
 
 func TestAnalysisProgressCountsAudioTimeAcrossWrites(t *testing.T) {

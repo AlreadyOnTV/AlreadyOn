@@ -29,7 +29,7 @@ check-web-storage:
 	@scripts/check-web-storage.sh
 
 build:
-	@cd server && go build -ldflags "-X github.com/lynchbros/alreadyon/server/internal/httpapi.nativeBuildVersion=$$(TZ=America/New_York date +%y.%m.%d)_$$(git rev-parse --short=7 HEAD)" -o alreadyon-server ./cmd/server
+	@cd server && go build -ldflags "-X github.com/alreadyonapp/alreadyon/server/internal/httpapi.nativeBuildVersion=$$(TZ=America/New_York date +%y.%m.%d)_$$(git rev-parse --short=7 HEAD)" -o alreadyon-server ./cmd/server
 	@cd web && npm run build
 
 check-toolchain:
@@ -73,7 +73,7 @@ test-container:
 # Checkout preview services outlive agent turns and retain the existing local DB.
 .PHONY: preview preview-status preview-stop preview-build preview-login
 preview-build:
-	@cd server && go build -tags=preview -ldflags "-X github.com/lynchbros/alreadyon/server/internal/httpapi.nativeBuildVersion=$$(TZ=America/New_York date +%y.%m.%d)_$$(git rev-parse --short=7 HEAD)" -o alreadyon-server ./cmd/server
+	@cd server && go build -tags=preview -ldflags "-X github.com/alreadyonapp/alreadyon/server/internal/httpapi.nativeBuildVersion=$$(TZ=America/New_York date +%y.%m.%d)_$$(git rev-parse --short=7 HEAD)" -o alreadyon-server ./cmd/server
 	@cd web && npm run build
 preview-login:
 	@cd server && go run ./cmd/preview-account --reset

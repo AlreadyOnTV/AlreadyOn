@@ -7,9 +7,9 @@ import (
 	"testing"
 	"time"
 
-	"github.com/lynchbros/alreadyon/server/internal/commercial"
-	"github.com/lynchbros/alreadyon/server/internal/schedule"
-	"github.com/lynchbros/alreadyon/server/internal/storage"
+	"github.com/alreadyonapp/alreadyon/server/internal/commercial"
+	"github.com/alreadyonapp/alreadyon/server/internal/schedule"
+	"github.com/alreadyonapp/alreadyon/server/internal/storage"
 )
 
 func openTestDB(t *testing.T) *sql.DB {

@@ -13,7 +13,7 @@ const url = `http://localhost:${ports[0]}`;
 let server, browser;
 (async () => {
   for (const name of ['TV Shows', 'Movies', 'Commercials']) fs.mkdirSync(path.join(root, 'media', name), { recursive: true });
-  cp.execFileSync('go', ['build', '-tags=e2e', '-ldflags', `-X github.com/lynchbros/alreadyon/server/internal/config.dataDir=${root}/data -X github.com/lynchbros/alreadyon/server/internal/config.webDir=${repo}/web/dist`, '-o', `${root}/server`, './cmd/server'], { cwd: `${repo}/server` });
+  cp.execFileSync('go', ['build', '-tags=e2e', '-ldflags', `-X github.com/alreadyonapp/alreadyon/server/internal/config.dataDir=${root}/data -X github.com/alreadyonapp/alreadyon/server/internal/config.webDir=${repo}/web/dist`, '-o', `${root}/server`, './cmd/server'], { cwd: `${repo}/server` });
   server = cp.spawn(`${root}/server`, [], { env: { ...process.env, ALREADYON_WEB_PORT: ports[0] }, stdio: 'ignore' });
   for (let i = 0; i < 100; i++) { try { if ((await fetch(url + '/healthz')).ok) break; } catch {} await new Promise(r => setTimeout(r, 100)); }
   browser = await chromium.launch({ headless: true });

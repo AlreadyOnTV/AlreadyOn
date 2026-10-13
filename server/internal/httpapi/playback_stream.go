@@ -18,19 +18,19 @@ import (
 	"strings"
 	"time"
 
-	"github.com/lynchbros/alreadyon/server/internal/loudness"
+	"github.com/alreadyonapp/alreadyon/server/internal/loudness"
 
-	"github.com/lynchbros/alreadyon/server/internal/auth"
-	"github.com/lynchbros/alreadyon/server/internal/channel"
-	"github.com/lynchbros/alreadyon/server/internal/commercial"
-	"github.com/lynchbros/alreadyon/server/internal/guide"
-	"github.com/lynchbros/alreadyon/server/internal/keyframes"
-	"github.com/lynchbros/alreadyon/server/internal/library"
-	"github.com/lynchbros/alreadyon/server/internal/logging"
-	"github.com/lynchbros/alreadyon/server/internal/playback"
-	"github.com/lynchbros/alreadyon/server/internal/profile"
-	"github.com/lynchbros/alreadyon/server/internal/schedule"
-	"github.com/lynchbros/alreadyon/server/internal/serversettings"
+	"github.com/alreadyonapp/alreadyon/server/internal/auth"
+	"github.com/alreadyonapp/alreadyon/server/internal/channel"
+	"github.com/alreadyonapp/alreadyon/server/internal/commercial"
+	"github.com/alreadyonapp/alreadyon/server/internal/guide"
+	"github.com/alreadyonapp/alreadyon/server/internal/keyframes"
+	"github.com/alreadyonapp/alreadyon/server/internal/library"
+	"github.com/alreadyonapp/alreadyon/server/internal/logging"
+	"github.com/alreadyonapp/alreadyon/server/internal/playback"
+	"github.com/alreadyonapp/alreadyon/server/internal/profile"
+	"github.com/alreadyonapp/alreadyon/server/internal/schedule"
+	"github.com/alreadyonapp/alreadyon/server/internal/serversettings"
 )
 
 type tuneResponse struct {

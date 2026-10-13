@@ -13,11 +13,11 @@ import (
 	"sync"
 	"time"
 
-	"github.com/lynchbros/alreadyon/server/internal/auth"
-	"github.com/lynchbros/alreadyon/server/internal/logging"
-	"github.com/lynchbros/alreadyon/server/internal/playback"
-	"github.com/lynchbros/alreadyon/server/internal/schedule"
-	"github.com/lynchbros/alreadyon/server/internal/serversettings"
+	"github.com/alreadyonapp/alreadyon/server/internal/auth"
+	"github.com/alreadyonapp/alreadyon/server/internal/logging"
+	"github.com/alreadyonapp/alreadyon/server/internal/playback"
+	"github.com/alreadyonapp/alreadyon/server/internal/schedule"
+	"github.com/alreadyonapp/alreadyon/server/internal/serversettings"
 )
 
 // PlaybackHTTP keeps session issuance and scoped media authorization separate
@@ -50,7 +50,6 @@ func NewPlaybackHTTP(db *sql.DB, sessions *playback.Sessions, manager *playback.
 }
 
 func (p *PlaybackHTTP) register(mux *http.ServeMux) {
-	mux.HandleFunc("DELETE /api/testing/commercial", p.deleteCommercial)
 	mux.HandleFunc("POST /api/playback/activity", p.reportActivity)
 	mux.HandleFunc("DELETE /api/playback/activity", p.endActivity)
 	mux.HandleFunc("GET /api/server/activity", p.serverActivity)

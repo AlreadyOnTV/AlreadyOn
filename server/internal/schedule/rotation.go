@@ -12,7 +12,7 @@ import (
 	"strings"
 	"time"
 
-	"github.com/lynchbros/alreadyon/server/internal/commercial"
+	"github.com/alreadyonapp/alreadyon/server/internal/commercial"
 )
 
 type rotationSeries struct {

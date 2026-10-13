@@ -6,7 +6,7 @@ import (
 	"net/http"
 	"time"
 
-	"github.com/lynchbros/alreadyon/server/internal/status"
+	"github.com/alreadyonapp/alreadyon/server/internal/status"
 )
 
 type libraryCounts struct {

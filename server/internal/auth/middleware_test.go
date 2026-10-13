@@ -11,7 +11,7 @@ import (
 	"testing"
 	"time"
 
-	"github.com/lynchbros/alreadyon/server/internal/storage"
+	"github.com/alreadyonapp/alreadyon/server/internal/storage"
 )
 
 func TestManagementAuthentication(t *testing.T) {
@@ -223,13 +223,16 @@ func TestRoleAndPasswordChangeGates(t *testing.T) {
 		{"GET", "/api/docs/swagger-ui.css"}, {"GET", "/api/openapi.yaml"},
 		{"POST", "/api/auth/password"}, {"GET", "/api/auth/sessions"},
 		{"HEAD", "/api/guide"},
+		{"GET", "/api/server/details"}, {"GET", "/api/server/metrics"}, {"GET", "/api/server/activity"},
 	}
 	refused := [][2]string{
 		{"GET", "/api/users"}, {"POST", "/api/users"}, {"GET", "/api/admin/api-keys"},
 		{"POST", "/api/admin/api-keys"}, {"GET", "/api/channels"}, {"POST", "/api/channels"},
 		{"GET", "/api/settings"}, {"POST", "/api/library/scan"},
 		{"GET", "/api/settings/folders/browse"}, {"GET", "/api/settings/folders"}, {"PUT", "/api/settings/folders"},
-		{"DELETE", "/api/testing/commercial"}, {"GET", "/api/channels/5/preview"},
+		{"GET", "/api/channels/5/preview"},
+		{"POST", "/api/server/restart"}, {"PUT", "/api/settings/server"},
+		{"POST", "/api/server/metrics"}, {"DELETE", "/api/server/activity"},
 		{"GET", "/api/some-future-route"}, {"PUT", "/api/guide"},
 	}
 	for _, c := range allowed {

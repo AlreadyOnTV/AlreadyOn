@@ -1,7 +1,7 @@
 package schedule
 
 import (
-	"github.com/lynchbros/alreadyon/server/internal/commercial"
+	"github.com/alreadyonapp/alreadyon/server/internal/commercial"
 )
 
 // Kind distinguishes a program from an inserted commercial break within

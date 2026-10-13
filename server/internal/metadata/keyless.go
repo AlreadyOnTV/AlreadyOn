@@ -11,7 +11,7 @@ import (
 	"sync"
 	"time"
 
-	"github.com/lynchbros/alreadyon/server/internal/governor"
+	"github.com/alreadyonapp/alreadyon/server/internal/governor"
 )
 
 // KeylessClient classifies content using providers that need no account

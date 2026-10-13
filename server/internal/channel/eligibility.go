@@ -5,7 +5,7 @@ import (
 	"database/sql"
 	"fmt"
 
-	"github.com/lynchbros/alreadyon/server/internal/eligibility"
+	"github.com/alreadyonapp/alreadyon/server/internal/eligibility"
 )
 
 // Unidentified playable files also require the adult tier; a missing identity

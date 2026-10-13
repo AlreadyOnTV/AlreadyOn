@@ -5,8 +5,8 @@ import (
 	"encoding/json"
 	"net/http"
 
-	"github.com/lynchbros/alreadyon/server/internal/metadata"
-	"github.com/lynchbros/alreadyon/server/internal/refresh"
+	"github.com/alreadyonapp/alreadyon/server/internal/metadata"
+	"github.com/alreadyonapp/alreadyon/server/internal/refresh"
 )
 
 // metadataSettingsResponse never carries the actual credential value —

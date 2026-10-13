@@ -9,10 +9,10 @@ import (
 	"strings"
 	"testing"
 
-	"github.com/lynchbros/alreadyon/server/internal/logging"
-	"github.com/lynchbros/alreadyon/server/internal/metadata"
-	"github.com/lynchbros/alreadyon/server/internal/profile"
-	"github.com/lynchbros/alreadyon/server/internal/refresh"
+	"github.com/alreadyonapp/alreadyon/server/internal/logging"
+	"github.com/alreadyonapp/alreadyon/server/internal/metadata"
+	"github.com/alreadyonapp/alreadyon/server/internal/profile"
+	"github.com/alreadyonapp/alreadyon/server/internal/refresh"
 )
 
 // TestRefreshScheduleAPI_NoProviderKeysConfigured_StillRefreshesChannels

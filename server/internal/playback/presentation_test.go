@@ -8,9 +8,9 @@ import (
 	"testing"
 	"time"
 
-	"github.com/lynchbros/alreadyon/server/internal/library"
-	"github.com/lynchbros/alreadyon/server/internal/schedule"
-	"github.com/lynchbros/alreadyon/server/internal/storage"
+	"github.com/alreadyonapp/alreadyon/server/internal/library"
+	"github.com/alreadyonapp/alreadyon/server/internal/schedule"
+	"github.com/alreadyonapp/alreadyon/server/internal/storage"
 )
 
 // Clients present a channel PresentationDelay behind the server clock. Entry

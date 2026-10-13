@@ -10,7 +10,7 @@ import (
 	"testing"
 	"time"
 
-	"github.com/lynchbros/alreadyon/server/internal/playback"
+	"github.com/alreadyonapp/alreadyon/server/internal/playback"
 )
 
 func TestTranscodingTestEndpoint(t *testing.T) {

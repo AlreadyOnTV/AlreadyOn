@@ -3,7 +3,7 @@ package httpapi
 
 import (
 	"crypto/tls"
-	"github.com/lynchbros/alreadyon/server/internal/auth"
+	"github.com/alreadyonapp/alreadyon/server/internal/auth"
 	"net/http/httptest"
 	"strings"
 	"testing"

@@ -4,6 +4,7 @@ Read [the project brief](docs/PROJECT_BRIEF.md), [contributing](CONTRIBUTING.md)
 
 ## Work safely
 
+- Use only the primary repository checkout; do not create or maintain parallel worktrees. Start/resume the local `build` branch with `python3 scripts/work.py start build` and publish tested work through `python3 scripts/work.py publish [YYYY-MM-DD]`.
 - Follow the maintainer's current checkout and branch instructions. Preserve unrelated changes and coordinate shared Git operations.
 - Commit completed work with clear messages. Push only when authorized by the active workflow.
 - Update the development preview when requested. Run relevant checks; full release suites require the maintainer's release approval.

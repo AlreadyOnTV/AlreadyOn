@@ -5,8 +5,8 @@ package main
 import (
 	"path/filepath"
 
-	"github.com/lynchbros/alreadyon/server/internal/config"
-	"github.com/lynchbros/alreadyon/server/internal/library"
+	"github.com/alreadyonapp/alreadyon/server/internal/config"
+	"github.com/alreadyonapp/alreadyon/server/internal/library"
 )
 
 // Synthetic browser fixtures explicitly seed schedules and run real startup

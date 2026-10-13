@@ -5,7 +5,7 @@ import (
 	"database/sql"
 	"fmt"
 
-	"github.com/lynchbros/alreadyon/server/internal/channel"
+	"github.com/alreadyonapp/alreadyon/server/internal/channel"
 )
 
 // defaultFilterFor supplies the approved age, genre and era rules.

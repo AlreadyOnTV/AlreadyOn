@@ -9,7 +9,7 @@ import (
 	"testing"
 	"time"
 
-	"github.com/lynchbros/alreadyon/server/internal/lineup"
+	"github.com/alreadyonapp/alreadyon/server/internal/lineup"
 )
 
 // addItem inserts a probed library file and its identified item, returning

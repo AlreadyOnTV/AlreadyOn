@@ -6,7 +6,7 @@ import (
 	"slices"
 	"strconv"
 
-	"github.com/lynchbros/alreadyon/server/internal/library"
+	"github.com/alreadyonapp/alreadyon/server/internal/library"
 )
 
 // GPUCanDecode says whether a GPU can plausibly decode the video. It is a

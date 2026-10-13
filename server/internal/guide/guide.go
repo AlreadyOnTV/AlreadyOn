@@ -12,7 +12,7 @@ import (
 	"strings"
 	"time"
 
-	"github.com/lynchbros/alreadyon/server/internal/schedule"
+	"github.com/alreadyonapp/alreadyon/server/internal/schedule"
 )
 
 // Program is one schedule.Entry, resolved to display metadata.

@@ -15,16 +15,12 @@ RUN --mount=type=cache,target=/go/pkg/mod go mod download
 COPY server/ .
 # Runtime paths are fixed at link time; -s -w removes linker/debug tables that
 # the application does not read while retaining normal Go panic stack traces.
-ARG LDFLAGS="-X github.com/lynchbros/alreadyon/server/internal/config.dataDir=/config \
-    -X github.com/lynchbros/alreadyon/server/internal/config.webDir=/usr/local/share/alreadyon/web \
-    -X github.com/lynchbros/alreadyon/server/internal/httpapi.openAPISpecPath=/usr/local/share/alreadyon/openapi.yaml"
+ARG LDFLAGS="-X github.com/alreadyonapp/alreadyon/server/internal/config.dataDir=/config \
+    -X github.com/alreadyonapp/alreadyon/server/internal/config.webDir=/usr/local/share/alreadyon/web \
+    -X github.com/alreadyonapp/alreadyon/server/internal/httpapi.openAPISpecPath=/usr/local/share/alreadyon/openapi.yaml"
 ENV CGO_ENABLED=0 GOAMD64=v1
 RUN --mount=type=cache,target=/go/pkg/mod --mount=type=cache,target=/root/.cache/go-build \
-    go build -trimpath -ldflags "$LDFLAGS -s -w" -o /out/alreadyon-server ./cmd/server \
-    && go build -trimpath -ldflags "$LDFLAGS -s -w" -o /out/alreadyon-access-key ./cmd/access-key \
-    && go build -trimpath -ldflags "$LDFLAGS -s -w" -o /out/alreadyon-clear-browser-sessions ./cmd/clear-browser-sessions \
-    && go build -trimpath -ldflags "$LDFLAGS -s -w" -o /out/alreadyon-reset-password ./cmd/reset-password \
-    && go build -trimpath -ldflags "$LDFLAGS -s -w" -o /out/alreadyon-tls ./cmd/tls
+    go build -trimpath -ldflags "$LDFLAGS -s -w" -o /out/alreadyon-server ./cmd/server
 
 FROM ci-base AS web-build
 USER root
@@ -35,8 +31,9 @@ COPY web/ .
 RUN npm run build
 
 FROM ${RUNTIME_BASE} AS runtime
-COPY --from=server-build /out/alreadyon-server /out/alreadyon-access-key /out/alreadyon-clear-browser-sessions /out/alreadyon-reset-password /usr/local/bin/
-COPY --from=server-build /out/alreadyon-tls /usr/local/bin/
+COPY --from=server-build /out/alreadyon-server /usr/local/bin/
+RUN for command in access-key clear-browser-sessions reset-password tls; do \
+    ln -s alreadyon-server "/usr/local/bin/alreadyon-$command"; done
 # Built-in web assets and API documentation are immutable image content. Only
 # the SQLite database and uploaded profile icons live in the /config volume.
 COPY --from=web-build /src/web/dist /usr/local/share/alreadyon/web

@@ -14,7 +14,9 @@ for name in sorted(set(paths)):
         continue  # A tracked removal is absent before the commit.
     text = path.read_text()
     words = len(text.split())
-    if words > 400:
+    # Preserve the standard governance policy; it is not a short contributor guide.
+    # Its links still receive the same validation as other Markdown files.
+    if words > 400 and name != 'CODE_OF_CONDUCT.md':
         errors.append(f'{name}: {words} words; keep each guide within 400 words (~2 minutes).')
     for target in re.findall(r'\]\(([^)]+)\)', text):
         target = target.split('#', 1)[0]

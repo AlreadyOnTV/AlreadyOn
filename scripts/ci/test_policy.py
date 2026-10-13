@@ -61,6 +61,15 @@ class PublicationPolicy(unittest.TestCase):
         self.assertTrue(output[0].startswith('tags=ghcr.io/owner/repo:nightly ghcr.io/owner/repo:'))
         self.assertEqual(output[1], 'source=ghcr.io/owner/repo:pr-123')
 
+    def test_full_e2e_is_required_for_dev_prs_not_test_main_pushes(self):
+        root = pathlib.Path(__file__).resolve().parents[2]
+        validation = (root / '.github/workflows/pull-request.yml').read_text()
+        test_action = (root / '.github/actions/test-source/action.yml').read_text()
+        self.assertIn('pull_request:\n    branches: [dev]', validation)
+        self.assertIn('pull-base: \'false\'', validation)
+        self.assertIn('make test-e2e', test_action)
+        self.assertNotIn('branches: [build, dev, test, main]', validation)
+
 
 class RetentionPolicy(unittest.TestCase):
     """Deletion boundaries are tested without accessing the real package."""
@@ -149,6 +158,13 @@ class RetentionPolicy(unittest.TestCase):
                          ('2026-11-01T06:00:00+00:00', '2026-11-01')]:
             self.assertTrue(tags('owner/repo', 'dev', SHA, datetime.datetime.fromisoformat(utc))[1].endswith(day))
 
+    def test_dev_date_tag_uses_explicit_pr_release_date(self):
+        instant = datetime.datetime(2026, 10, 11, 12, tzinfo=datetime.timezone.utc)
+        result = tags('owner/repo', 'dev', SHA, instant, release_date='2026-10-10')
+        self.assertEqual(result[1], 'ghcr.io/owner/repo:2026-10-10')
+        with self.assertRaisesRegex(ValueError, 'valid YYYY-MM-DD'):
+            tags('owner/repo', 'dev', SHA, instant, release_date='2026-02-30')
+
     def test_daily_tags_are_shared_and_replaceable(self):
         instant = datetime.datetime(2026, 10, 1, 12, tzinfo=datetime.timezone.utc)
         self.assertEqual(tags('o/r', 'dev', SHA, instant), tags('o/r', 'dev', SHA, instant.replace(hour=13)))
@@ -199,7 +215,7 @@ class RetentionPolicy(unittest.TestCase):
                              ['tag', 'push', 'tag', 'push'])
             record.assert_called_once_with('owner/repo', SHA, digest)
 
-    def test_cleanup_has_no_event_trigger_and_build_has_new_york_schedule(self):
+    def test_cleanup_has_no_event_trigger_and_dev_build_runs_on_merges(self):
         root = pathlib.Path(__file__).resolve().parents[2]
         cleanup = (root / '.github/workflows/image-retention.yml').read_text()
         self.assertNotIn('pull_request_target:', cleanup)
@@ -207,7 +223,8 @@ class RetentionPolicy(unittest.TestCase):
         build = (root / '.github/workflows/rebuild.yml').read_text()
         self.assertIn('workflow_dispatch:', build)
         self.assertNotIn('  schedule:', build)
-        self.assertNotIn('  push:', build)
+        self.assertIn('  push:', build)
+        self.assertIn('branches: [dev]', build)
 
 
 class WorkBranchPolicy(unittest.TestCase):
@@ -281,6 +298,16 @@ class DocumentationPolicy(unittest.TestCase):
         changes = [('M', 'web/a.ts'), ('M', 'docs/API.md')]
         self.assertEqual(docs(changes, lambda _: '// Explain the public contract here.\nexport const x = 1;'), [])
         self.assertEqual(len(docs(changes, lambda _: '// TODO\nexport const x = 1;')), 1)
+
+    def test_namespace_only_changes_do_not_require_source_comments(self):
+        changes = [('M', 'server/a.go'), ('M', 'apps/android/Main.kt'), ('M', 'docs/API.md')]
+        read_text = lambda _: 'package alreadyon\n'
+        read_diff = lambda name: (['"old/module/pkg"', '"new/module/pkg"'] if name.endswith('.go')
+                                  else ['package io.github.alreadyonapp.alreadyon',
+                                        'package io.github.alreadyonapp.alreadyon'])
+        self.assertEqual(docs(changes, read_text, read_diff), [])
+        read_diff = lambda _: ['"old/module/pkg"', '"new/module/pkg"', 'func changed() {}']
+        self.assertEqual(len(docs(changes[:1] + changes[2:], read_text, read_diff)), 1)
 
     def test_deleted_code_requires_docs_but_is_not_read(self):
         def unreadable(_):

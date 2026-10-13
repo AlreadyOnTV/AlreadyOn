@@ -7,8 +7,8 @@ Requires=docker.service
 [Service]
 Type=oneshot
 ExecStart=/usr/local/bin/alreadyon-nightly-sync
-User=lynchbros
-Group=lynchbros
+User=alreadyonapp
+Group=alreadyonapp
 # The docker group is root-equivalent; it is required to replace the container.
 SupplementaryGroups=docker
 TimeoutStartSec=30min

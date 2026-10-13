@@ -9,7 +9,7 @@ import (
 	"path/filepath"
 	"strings"
 
-	"github.com/lynchbros/alreadyon/server/internal/config"
+	"github.com/alreadyonapp/alreadyon/server/internal/config"
 )
 
 // Built-in defaults for the content folders and scan exclusions, used

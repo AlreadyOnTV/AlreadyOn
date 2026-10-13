@@ -18,7 +18,7 @@ import (
 	"net/http"
 	"time"
 
-	"github.com/lynchbros/alreadyon/server/internal/governor"
+	"github.com/alreadyonapp/alreadyon/server/internal/governor"
 )
 
 // Tag is AlreadyOn's own small genre taxonomy, independent of any one

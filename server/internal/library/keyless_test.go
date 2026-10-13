@@ -8,7 +8,7 @@ import (
 	"testing"
 	"time"
 
-	"github.com/lynchbros/alreadyon/server/internal/metadata"
+	"github.com/alreadyonapp/alreadyon/server/internal/metadata"
 )
 
 func mockKeylessClient(t *testing.T, tvmazeBody string, tvmazeCalls *int32) *metadata.KeylessClient {

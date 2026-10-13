@@ -8,7 +8,7 @@ import (
 	"sync"
 	"time"
 
-	"github.com/lynchbros/alreadyon/server/internal/library"
+	"github.com/alreadyonapp/alreadyon/server/internal/library"
 )
 
 // Distribution FFmpeg builds differ: Fedora's ffmpeg-free, for one, has no
