@@ -6,11 +6,11 @@
 
 Use the active dated branch in one checkout; see [development setup](DEVELOPMENT.md). Test at <https://localhost:5173> and open its dev PR only when validation is approved.
 
-| Promotion | Release tag | Publication |
-| --- | --- | --- |
-| Merged date PR into `dev` | `YYYY-MM-DD-alphaN` | Fresh signed APKs and image tagged `nightly` plus `YYYY-MM-DD` |
-| Merge tested date commit from `dev` to `test` | `YYYY-MM-DD-RCN` | Retag image `latest`; publish/copy tested APK bytes |
-| Merge current `test` release into `main` | `YYYY-MM-DD-Stable` | Retag image `stable`; publish the latest RC APK bytes |
+| Promotion | Artifact tag | Release title | Publication |
+| --- | --- | --- | --- |
+| Merged date PR into `dev` | `YYYY-MM-DD-alphaN` | `YYYY-MM-DD-alphaN` | Fresh signed APKs and image tagged `nightly` plus `YYYY-MM-DD` |
+| Merge tested date commit from `dev` to `test` | `YYYY-MM-DD-RCN` | `YYYY-MM-DD-rcN` | Retag image `latest`; publish/copy tested APK bytes |
+| Merge current `test` release into `main` | `YYYY-MM-DD-Stable` | `YYYY-MM-DD-stable` | Retag image `stable`; publish the latest RC APK bytes |
 
 RC1 reuses alpha APK bytes. Later dev hotfixes build a draft for the next RC; test promotion publishes it. RC drafts include product notes since the prior stage; identical-artifact promotions add no new changes and retain known issues. Stable reuses the latest RC APKs and locks the date.
 
@@ -18,13 +18,13 @@ The date tag advances after dev validation. Alpha changelogs include all product
 
 Each new release attaches both APKs, `SHA256SUMS`, `android-release.json`, three inventory-only CycloneDX SBOMs and `sbom-manifest.json`. Inventories bind the runtime digest and signed APK hashes to the source; Android provenance binds their manifest. Promotions preserve these bytes. Older releases without inventories remain compatible. Promotions retain the APK `versionName`/`versionCode`; titles do not rename tags.
 
-Manual candidates require a recorded image digest for their exact source.
+Approved active-date dispatches validate/publish alpha without merging or deleting the branch; see [identity/cycle](ORGANIZATION.md).
 
 ## Automation and gates
 
-Review the [Stable readiness checklist](STABLE_READINESS.md) before requesting main promotion.
+Review [Stable readiness](STABLE_READINESS.md) before main promotion.
 
-Date PRs run quality, CodeQL and full Go/browser e2e. Dev merge validation publishes the date image and alpha APKs, advances the date tag, then removes the merged date branch. `python3 scripts/promote.py test YYYY-MM-DD` verifies image/alpha APK provenance before merging to test; `python3 scripts/promote.py main` verifies an RC before merging to main. The helpers create exact-tree merge commits when branches have diverged, reuse tested artifacts and skip duplicate e2e. Conflicts stop for resolution on dev. If branch protection rejects a push, stop; never bypass it.
+Date PRs run quality, CodeQL and full Go/browser e2e. Dev merge validation publishes the date image and alpha APKs, advances the date tag, then removes the merged date branch. `python3 scripts/promote.py test YYYY-MM-DD` verifies image/alpha APK provenance before merging to test; `python3 scripts/promote.py main` verifies an RC before merging to main. Helpers reuse tested artifacts and allow exact-tree merges. Resolve conflicts on dev; never bypass branch protection.
 
 ## Signing and scope
 
@@ -32,4 +32,4 @@ Phone/tablet and [TV](GOOGLE_TV.md) APKs share signing credentials and provenanc
 
 ## Application identity
 
-The organization-owned application ID differs from older previews, which cannot update in place. Uninstall the earlier preview before installing this version; app-local settings are not transferred.
+The AlreadyOn TV rename preserves application IDs and signing. Older apps may need one manual signed APK update over the existing installation; preserve data. See [identity](ORGANIZATION.md).

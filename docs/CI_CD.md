@@ -2,15 +2,15 @@
 
 [![AlreadyOn](../web/public/branding/header-doc.svg)](../README.md)
 
-Maintainers control releases. Keep credentials private.
+Maintainers control releases; keep credentials private. [Release notes](RELEASE_NOTES.md) define date/stage-only titles, three product sections and predecessor-tag comparisons. Titles do not rename artifact tags.
 
 ## Development and releases
 
-`release-date.txt` pins the active cycle to `2026-10-18`, superseding older previews. Reuse until Stable on main; afterward a new cycle begins.
+`release-date.txt` pins the active cycle to `2026-10-18`. Reuse until Stable on main, then begin a new cycle.
 
 Use the primary checkout, `2026-10-18`, and HTTPS preview on port 5173. Dated dev PRs run full quality, source/browser/runtime and security gates. Explicit active-date dispatches run these gates and publish alpha artifacts without merging or deleting the branch. Dev merges republish date/`nightly` images and Android candidates, advance the date tag and delete the merged branch. Hotfixes repeat the gates.
 
-Local checks: `make lint`, `python3 scripts/ci/check-documentation.py`, `python3 scripts/ci/check-syntax.py`.
+Local checks: `make lint`, documentation and syntax checks.
 
 
 ## Approved release validation
@@ -35,7 +35,7 @@ On approval, deploy the exact tested image and verify revision, health, service 
 
 After alpha approval run `python3 scripts/promote.py test YYYY-MM-DD`; after RC approval run `python3 scripts/promote.py main`. These create fast-forward or exact-tree merge commits only, require image/APK provenance, and reuse artifacts without e2e reruns. Resolve conflicts on dev; preserve branch protection.
 
-Dev builds follow validated PR merges; guarded test/main merges promote existing images. See [retention](IMAGE_RETENTION.md) and [deployment](../deploy/README.md).
+Dev builds follow validated PR merges; guarded test/main merges promote existing images. See [retention](IMAGE_RETENTION.md).
 
 ## Public automation
 
@@ -43,4 +43,4 @@ PR validation scans the exact patched candidate with read-only credentials; publ
 
 CodeQL analyzes Go/TypeScript on dev/test/main; Pages uses its independent organization-site workflow. Android automation builds alpha on dev, RC on test and Stable from RC artifacts on main; see [Android policy](ANDROID_RELEASES.md).
 
-New images use `ghcr.io/alreadyontv/alreadyon`. Go module and Android package identities stay compatible. Stable is intended for October 18, 2026, after alpha/RC acceptance; no automatic deployment is scheduled. **Refresh Base Images** rebuilds shared bases on the selected branch; CI bases pin their runtime digest. Hosted application builds resolve both digests without rebuilding during promotion.
+New images use `ghcr.io/alreadyontv/alreadyon`. Go module and Android package identities stay compatible. Stable is intended for October 18, 2026, after alpha/RC acceptance; no automatic deployment is scheduled. **Refresh Base Images** rebuilds shared bases; CI bases pin their runtime digest. Promotions reuse digests.

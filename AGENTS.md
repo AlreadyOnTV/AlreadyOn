@@ -4,7 +4,7 @@ Read [the project brief](docs/PROJECT_BRIEF.md), [contributing](CONTRIBUTING.md)
 
 ## Work safely
 
-- Use only the primary repository checkout; do not create or maintain parallel worktrees. Start/resume the local `build` branch with `python3 scripts/work.py start build` and publish tested work through `python3 scripts/work.py publish [YYYY-MM-DD]`.
+- Use only the primary repository checkout; do not create or maintain parallel worktrees. Use the active dated branch in [development setup](docs/DEVELOPMENT.md). `build` and its legacy `work.py` workflow are retired for this cycle.
 - Follow the maintainer's current checkout and branch instructions. Preserve unrelated changes and coordinate shared Git operations.
 - Commit completed work with clear messages. Push only when authorized by the active workflow.
 - Update the development preview when requested. Run relevant checks; full release suites require the maintainer's release approval.
@@ -24,3 +24,7 @@ If present, read ignored `.private/AGENTS.md` for checkout ownership, local cred
 ## Review and delivery
 
 Use the repository PR template. Preserve the exact tested image during promotion; do not rebuild it under a release tag. Keep releases traceable to a commit and digest. Remove obsolete branches only after verifying their work is merged, they are unused, and deletion is authorized.
+
+## Release descriptions
+
+Follow [release notes](docs/RELEASE_NOTES.md): titles are only `YYYY-MM-DD-alphaN`, `YYYY-MM-DD-rcN` or `YYYY-MM-DD-stable`. Render `# New Features`, `# Bugfixes` and `# Known Issues`, including empty-section messages. Link issue titles for fixes and prioritized remaining bugs; maintain `docs/release-known-issues.md`. Compare product changes against the predecessor tag. Omit introductions and visible build details; preserve hidden provenance and exact artifacts. Display titles never rename tags or installed APK versions.
