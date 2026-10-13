@@ -2294,7 +2294,7 @@ const noWorkers = async (unreleased = () => 0) => {
     await caption("E2E SUBTITLE ONE");
     await page.keyboard.press("c");
     await caption("");
-    // The profile's Subtitles box sets enabled + German.
+    // Select the language and mode by their public labels, independent of order.
     await page.goto(url + "/profile");
     assert(
       (await page.getByText("Time Span Shown").count()) === 0,
@@ -2303,8 +2303,8 @@ const noWorkers = async (unreleased = () => 0) => {
     const card = page.locator(".admin-card", {
       has: page.getByRole("heading", { name: "Subtitles", exact: true }),
     });
-    await card.locator("select").nth(0).selectOption("on");
-    await card.locator("select").nth(1).selectOption("de");
+    await card.getByLabel("Subtitle language", { exact: true }).selectOption("de");
+    await card.getByLabel("Subtitles", { exact: true }).selectOption("always");
     await page.getByRole("button", { name: "Save Changes" }).click();
     await page.locator(".guide-slot-box").first().waitFor();
     await playing(page);
