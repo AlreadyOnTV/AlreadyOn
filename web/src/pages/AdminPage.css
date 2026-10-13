@@ -241,9 +241,9 @@
 
 /* Shared settings typography: one-point steps, respecting the user's text scale. */
 .admin-page {
-  --admin-title-size: calc(12pt * var(--font-scale));
-  --admin-control-size: calc(11pt * var(--font-scale));
-  --admin-body-size: calc(10pt * var(--font-scale));
+  --admin-title-size: 12pt;
+  --admin-control-size: 11pt;
+  --admin-body-size: 10pt;
   font-size: var(--admin-body-size);
 }
 .admin-page :is(h1, h2, h3, h4, h5, h6) {

@@ -4191,10 +4191,12 @@ components:
             A preset id (fox, cat, dog, lion, panda, koala, owl, frog,
             monkey, rabbit), or the URL of an uploaded image, or null.
         fontLevel:
+          deprecated: true
           type: [integer, 'null']
           minimum: 0
           maximum: 3
         brightnessLevel:
+          deprecated: true
           type: [integer, 'null']
           minimum: 0
           maximum: 3
@@ -4253,10 +4255,12 @@ components:
           type: [string, 'null']
           description: A preset id, or null to remove the icon.
         fontLevel:
+          deprecated: true
           type: [integer, 'null']
           minimum: 0
           maximum: 3
         brightnessLevel:
+          deprecated: true
           type: [integer, 'null']
           minimum: 0
           maximum: 3

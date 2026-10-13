@@ -15,7 +15,6 @@ import { useSearchParams } from 'react-router-dom';
 import { mediaTitle } from './mediaTitle';
 import { getGuide, getProfile, type GuideChannel, type GuideProgram } from '../api/client';
 import { useGuideSettings, type TimeFormat } from '../settings/GuideSettingsContext';
-import { useDisplaySettings, FONT_LEVELS, BRIGHTNESS_LEVELS } from '../settings/DisplaySettingsContext';
 import { formatClock, formatRange } from '../settings/formatTime';
 import { useUsers } from '../users/UsersContext';
 import { isBusy, useStartupStatus } from '../status/useStartupStatus';
@@ -151,7 +150,7 @@ function currentProgramStartsAt(programs: GuideProgram[], nowMs: number): string
 // enough to never crop any of them). Captured once, from real hidden
 // DOM elements sharing the exact same classes as a visible box's lines
 // (see GuidePage's metrics spans) — that guarantees this matches actual
-// rendering exactly, including font-scale effects, without having
+// rendering exactly with the current typography, without having
 // to duplicate that CSS's logic here.
 interface RowMetrics {
   titleFont: string;
@@ -218,7 +217,6 @@ function reconcileSelection(sel: Selected | null, channels: GuideChannel[], nowM
 
 export default function GuidePage() {
   const { timeFormat } = useGuideSettings();
-  const { fontLevel, setFontLevel, brightnessLevel, setBrightnessLevel } = useDisplaySettings();
   const { currentUser } = useUsers();
   const audienceTier = currentUser.audienceTier;
   // The channel picture in the first column is the profile's choice (shown unless turned off).
@@ -418,7 +416,7 @@ export default function GuidePage() {
       episodeHeight: episodeEl.getBoundingClientRect().height,
       timeHeight: timeEl.getBoundingClientRect().height,
     });
-  }, [fontLevel]);
+  }, []);
 
   // Every row needs to be at least tall enough for its 3 stacked lines
   // at the viewer's current font metrics — content-independent (unlike
@@ -672,25 +670,6 @@ export default function GuidePage() {
       <div className="page-header" ref={pageHeaderRef}>
         <div className="page-header-brand"><Brand /></div>
         <div className="page-header-actions">
-          <button
-            className="page-header-control instant-tooltip"
-            onClick={() => setFontLevel((fontLevel + 1) % FONT_LEVELS.length)}
-            aria-label={`Text size: ${FONT_LEVELS[fontLevel].name} (click to cycle)`}
-            data-tooltip={`Text size: ${FONT_LEVELS[fontLevel].name}`}
-          >
-            <span className="icon-aa">
-              <span className="icon-aa-big">A</span>
-              <span className="icon-aa-small">a</span>
-            </span>
-          </button>
-          <button
-            className="page-header-control instant-tooltip"
-            onClick={() => setBrightnessLevel((brightnessLevel + 1) % BRIGHTNESS_LEVELS.length)}
-            aria-label={`Brightness: ${BRIGHTNESS_LEVELS[brightnessLevel].name} (click to cycle)`}
-            data-tooltip={`Brightness: ${BRIGHTNESS_LEVELS[brightnessLevel].name}`}
-          >
-            <SunIcon />
-          </button>
           <ProfileMenu />
         </div>
       </div>
@@ -903,21 +882,5 @@ function GuideChannelRow({
         })()}
       </div>
     </div>
-  );
-}
-
-function SunIcon() {
-  return (
-    <svg width="16" height="16" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2" strokeLinecap="round">
-      <circle cx="12" cy="12" r="4" />
-      <line x1="12" y1="2" x2="12" y2="4" />
-      <line x1="12" y1="20" x2="12" y2="22" />
-      <line x1="2" y1="12" x2="4" y2="12" />
-      <line x1="20" y1="12" x2="22" y2="12" />
-      <line x1="4.9" y1="4.9" x2="6.3" y2="6.3" />
-      <line x1="17.7" y1="17.7" x2="19.1" y2="19.1" />
-      <line x1="4.9" y1="19.1" x2="6.3" y2="17.7" />
-      <line x1="17.7" y1="6.3" x2="19.1" y2="4.9" />
-    </svg>
   );
 }

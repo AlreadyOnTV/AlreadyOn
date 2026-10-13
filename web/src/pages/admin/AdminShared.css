@@ -1,8 +1,8 @@
 /* Shared defaults also cover settings components rendered outside AdminPage. */
 :root {
-  --admin-title-size: calc(12pt * var(--font-scale));
-  --admin-control-size: calc(11pt * var(--font-scale));
-  --admin-body-size: calc(10pt * var(--font-scale));
+  --admin-title-size: 12pt;
+  --admin-control-size: 11pt;
+  --admin-body-size: 10pt;
 }
 .admin-section h2 {
   font-size: var(--admin-body-size);
@@ -1001,7 +1001,7 @@ button.admin-badge:disabled {
   font-size: var(--admin-body-size);
 }
 .channel-bulk-heading .text-action {
-  font-size: calc(9pt * var(--font-scale));
+  font-size: 9pt;
 }
 
 .configured-channels-table tbody .admin-section-hint {

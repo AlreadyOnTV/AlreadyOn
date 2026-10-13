@@ -12,19 +12,19 @@
   color: var(--text);
   text-transform: var(--heading-transform);
   letter-spacing: var(--letter-spacing);
-  font-size: calc(22px * var(--font-scale));
+  font-size: 22px;
   line-height: 1.2;
 }
 
 .startup-notice-detail {
   margin-top: 6px;
-  font-size: calc(16px * var(--font-scale));
+  font-size: 16px;
 }
 
 .startup-notice-hint {
   margin-top: 8px;
   color: var(--text-muted);
-  font-size: calc(14px * var(--font-scale));
+  font-size: 14px;
 }
 
 /* Fills the guide section (which is position: relative) on first run. */
@@ -52,12 +52,12 @@
 }
 
 .startup-notice-banner .startup-notice-title {
-  font-size: calc(15px * var(--font-scale));
+  font-size: 15px;
 }
 
 .startup-notice-banner .startup-notice-detail {
   margin-top: 2px;
-  font-size: calc(14px * var(--font-scale));
+  font-size: 14px;
 }
 
 .startup-notice-banner .startup-notice-hint {
