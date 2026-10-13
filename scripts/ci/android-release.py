@@ -16,7 +16,7 @@ sys.path.insert(0, str(Path(__file__).parents[1] / 'security'))
 from public_inventory import NAMES as SBOM_NAMES, verify_bundle
 SBOM_ASSETS = (*SBOM_NAMES, 'sbom-manifest.json')
 
-from release_notes import changelog, changelog_since, published_changelog, release_body
+from release_notes import changelog, changelog_since, promotion_changes, release_body
 
 # New lifecycle: alphaN on dev, RCN on test, Stable on main. Accept old tags for history.
 ALPHA = re.compile(r"(\d{4}-\d{2}-\d{2})-alpha([1-9]\d*)\Z")
@@ -200,10 +200,10 @@ def publish(repo, tag, sha, directory, notes, prerelease, publish_now=True):
         body = Path(temp) / "notes.md"
         body.write_text(notes)
         if existing:
-            run("gh", "release", "edit", tag, "--repo", repo, "--notes-file", str(body))
+            run("gh", "release", "edit", tag, "--repo", repo, "--title", tag.lower(), "--notes-file", str(body))
         else:
             run("gh", "release", "create", tag, "--repo", repo, "--target", sha,
-                "--title", f"AlreadyOn {tag}", "--notes-file", str(body), "--draft")
+                "--title", tag.lower(), "--notes-file", str(body), "--draft")
         run("gh", "release", "upload", tag, "--repo", repo,
             *(str(directory / name) for name in assets), "--clobber")
         # Verify uploaded bytes before exposing the draft as a public release.
@@ -349,7 +349,7 @@ def promote_test(repo, day, sha):
         download(repo, alpha_tag, directory)
         manifest = verify_assets(directory, sha)
         notes = release_body(repo, tag, sha, manifest["version_code"],
-                             published_changelog(alpha.get("body") or ""),
+                             promotion_changes(alpha.get("body") or ""),
                              candidate_tag=alpha_tag)
         publish(repo, tag, sha, directory, notes, True)
     print(f"Published {tag} from {alpha_tag} using the same signed APK bytes")
@@ -378,7 +378,7 @@ def promote_stable(repo, day, selected_sha):
         download(repo, candidate["tag_name"], directory)
         manifest = verify_assets(directory, artifact_sha)
         notes = release_body(repo, stable, selected_sha, manifest["version_code"],
-                             published_changelog(candidate.get("body") or ""),
+                             promotion_changes(candidate.get("body") or ""),
                              candidate_tag=candidate["tag_name"])
         publish(repo, stable, selected_sha, directory, notes, False)
     print(f"Published {stable} from {candidate['tag_name']} without rebuilding APKs")

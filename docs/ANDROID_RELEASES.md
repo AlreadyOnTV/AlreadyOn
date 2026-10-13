@@ -12,9 +12,9 @@ Use the active dated branch in one checkout; see [development setup](DEVELOPMENT
 | Merge tested date commit from `dev` to `test` | `YYYY-MM-DD-RCN` | Retag image `latest`; publish/copy tested APK bytes |
 | Merge current `test` release into `main` | `YYYY-MM-DD-Stable` | Retag image `stable`; publish the latest RC APK bytes |
 
-RC1 reuses alpha APK bytes. Later dev hotfixes build a draft for the next RC; test promotion publishes it. RC changelogs include only marked app notes since the prior stage. Stable reuses the latest RC APKs and locks the date.
+RC1 reuses alpha APK bytes. Later dev hotfixes build a draft for the next RC; test promotion publishes it. RC drafts include product notes since the prior stage; identical-artifact promotions add no new changes and retain reviewed known issues. Stable reuses the latest RC APKs and locks the date.
 
-The date tag advances after dev validation. Alpha changelogs include marked Android/TV notes since the latest earlier-date Android release, excluding server-only notes. Promotions reuse the tested image digest and signed APKs; no rebuild/re-sign occurs.
+The date tag advances after dev validation. Alpha changelogs include all product notes since the previous published release tag, including server and WebUI changes. Promotions reuse the tested image digest and signed APKs; no rebuild/re-sign occurs.
 
 Each new release attaches both APKs, `SHA256SUMS`, `android-release.json`, three inventory-only CycloneDX SBOMs and `sbom-manifest.json`. Inventories bind the runtime digest and signed APK hashes to the source; Android provenance binds their manifest. Promotions preserve these bytes. Older releases without inventories remain compatible. Promotions retain the APK `versionName`/`versionCode`; titles do not rename tags.
 

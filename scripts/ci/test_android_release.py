@@ -188,7 +188,8 @@ class AndroidReleaseTests(unittest.TestCase):
             self.assertEqual(tag, "2026-10-09-Stable")
             self.assertEqual(sha, "a" * 40)
             self.assertFalse(prerelease)
-            self.assertIn("- Tested feature.", notes)
+            self.assertNotIn("- Tested feature.", notes)
+            self.assertIn("No new features in this release.", notes)
             self.assertEqual((directory / release.ASSETS[0]).read_bytes(), b"synthetic signed APK")
             self.assertEqual(release.verify_assets(directory)["version_name"], "2026-10-09-alpha1")
         rc = {"tag_name": "2026-10-09-RC1", "draft": False,
@@ -213,7 +214,8 @@ class AndroidReleaseTests(unittest.TestCase):
             self.assertEqual(tag, "2026-10-10-RC1")
             self.assertEqual(source, sha)
             self.assertTrue(prerelease)
-            self.assertIn("- Tested feature.", notes)
+            self.assertNotIn("- Tested feature.", notes)
+            self.assertIn("No new features in this release.", notes)
             self.assertEqual((directory / release.ASSETS[0]).read_bytes(), b"synthetic signed APK")
         with patch.object(release, "releases", return_value=[alpha]), \
                 patch.object(release, "download", side_effect=download), \
@@ -263,7 +265,7 @@ class AndroidReleaseTests(unittest.TestCase):
     def test_completed_rerun_verifies_and_reuses_candidate(self):
         sha = "a" * 40
         entry = {"tag_name": "2026-10-09-alpha1", "draft": False,
-                 "body": f"Source commit: `{sha}`"}
+                 "body": release.release_body("owner/repo", "2026-10-09-alpha1", sha, 200000000, "# New Features\n\n- Feature.")}
         def download(repo, tag, directory):
             self.fixture(directory)
         with patch.object(release, "releases", return_value=[entry]), \
@@ -277,7 +279,7 @@ class AndroidReleaseTests(unittest.TestCase):
     def test_failed_draft_reuses_original_android_version_code(self):
         sha = "a" * 40
         entry = {"tag_name": "2026-10-09-alpha1", "draft": True, "target_commitish": sha,
-                 "body": f"Source commit: `{sha}`\nAndroid versionCode: `200000000`"}
+                 "body": release.release_body("owner/repo", "2026-10-09-alpha1", sha, 200000000, "# New Features\n\n- Feature.")}
         with patch.object(release, "releases", return_value=[entry]), \
                 patch.object(release, "api", return_value={"sha": sha}), \
                 patch("builtins.print") as output:
