@@ -118,8 +118,9 @@ internal fun TvGuide(state: PhoneState, palette: PhonePalette, modifier: Modifie
                                 else {
                                     if (event.type == KeyEventType.KeyDown) {
                                         if (event.key == Key.DirectionUp || event.key == Key.DirectionDown) {
-                                            val next = index + if (event.key == Key.DirectionDown) 1 else -1
-                                            if (next !in channels.indices) return@onPreviewKeyEvent false
+                                            val neighbour = nextPlayableChannel(channels, channel.id, if (event.key == Key.DirectionDown) 1 else -1)
+                                                ?: return@onPreviewKeyEvent true
+                                            val next = channels.indexOfFirst { it.id == neighbour.id }
                                             if (!movingRow) scope.launch {
                                                 movingRow = true
                                                 try {
@@ -132,7 +133,9 @@ internal fun TvGuide(state: PhoneState, palette: PhonePalette, modifier: Modifie
                                                     } else if (target.offset < layout.viewportStartOffset) {
                                                         (target.offset - layout.viewportStartOffset).toFloat()
                                                     } else (target.offset + target.size - layout.viewportEndOffset).coerceAtLeast(0).toFloat()
-                                                    if (distance != 0f) rows.animateScrollBy(distance, tween(140))
+                                                    // Wrapped/skipped targets may not be composed; attach them before requesting focus.
+                                                    if (kotlin.math.abs(next - index) > 1) rows.scrollToItem(next)
+                                                    else if (distance != 0f) rows.animateScrollBy(distance, tween(140))
                                                     withFrameNanos { }
                                                     targets[channels[next].id]?.requestFocus()
                                                 } finally { movingRow = false }

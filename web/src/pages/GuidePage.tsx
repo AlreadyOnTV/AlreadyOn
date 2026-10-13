@@ -1,4 +1,5 @@
 import Brand from '../components/Brand';
+import { circularChannelIndex } from '../playback/channelNavigation';
 // Full-screen home page: a 1990s/2000s US cable TV guide, backed by the
 // real /api/guide endpoint (see server/internal/guide, #25) — channels
 // with no configured/classified content yet just render with an empty
@@ -573,14 +574,13 @@ export default function GuidePage() {
         e.preventDefault();
         // The ref, not state, so a burst of key presses keeps stepping.
         const from = sorted.findIndex((c) => c.number === (tunedNow.current ?? focused).channelNumber);
-        for (let i = from + step; i >= 0 && i < sorted.length; i += step) {
-          if (sorted[i].programs.length === 0) continue;
+        const i = circularChannelIndex(sorted, from, step);
+        if (i !== null) {
           const startsAt = currentProgramStartsAt(sorted[i].programs, Date.now());
           tunedNow.current = { channelNumber: sorted[i].number, programStartsAt: startsAt };
           urlWantedRef.current = null;
           setTuned(tunedNow.current);
           setFocused(tunedNow.current);
-          break;
         }
         return;
       }
@@ -621,15 +621,8 @@ export default function GuidePage() {
 
         // Skip channels with nothing scheduled — there's no program to
         // land the cursor on there.
-        let nextIdx = channelIdx;
-        const step = e.key === 'ArrowDown' ? 1 : -1;
-        for (let i = channelIdx + step; i >= 0 && i < sorted.length; i += step) {
-          if (sorted[i].programs.length > 0) {
-            nextIdx = i;
-            break;
-          }
-        }
-        if (nextIdx === channelIdx) return prev;
+        const nextIdx = circularChannelIndex(sorted, channelIdx, e.key === 'ArrowDown' ? 1 : -1);
+        if (nextIdx === null) return prev;
 
         const nextChannel = sorted[nextIdx];
         const currentStart = currentProgram ? new Date(currentProgram.startsAt).getTime() : 0;

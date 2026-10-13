@@ -1,3 +1,4 @@
+// Subtitle policy follows the playing audio language rather than available alternatives.
 import assert from 'node:assert/strict';
 import { test } from 'node:test';
 import { preferredSubtitleLanguage, pickTrack } from '../src/playback/subtitles.ts';

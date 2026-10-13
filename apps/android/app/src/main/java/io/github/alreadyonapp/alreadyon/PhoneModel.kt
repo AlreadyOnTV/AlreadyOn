@@ -313,13 +313,10 @@ internal class PhoneModel(application: Application) : AndroidViewModel(applicati
         update { it.copy(subtitleIndex = index, subtitleFileId = it.playback?.mediaFileId) }
     }
 
-    /** Numeric neighbours in the available guide; never wrap or alter presentation/settings. */
+    /** Circular neighbours follow visible guide order without changing player settings. */
     fun stepChannel(direction: Int) {
         val current = state.value.channel ?: return
-        val available = state.value.channels.filter { it.programs.isNotEmpty() }
-        val next = if (direction > 0) available.filter { it.number > current.number }.minByOrNull { it.number }
-            else available.filter { it.number < current.number }.maxByOrNull { it.number }
-        next?.let { watch(it, restart = true) }
+        nextPlayableChannel(state.value.channels, current.id, direction)?.let { watch(it, restart = true) }
     }
 
     private fun selectedSubtitle(media: PhonePlayback, profile: ViewerProfile): Int? {

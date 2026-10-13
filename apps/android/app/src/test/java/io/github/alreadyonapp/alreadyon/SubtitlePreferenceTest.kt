@@ -1,3 +1,4 @@
+// Shared caption policy compares active and preferred audio while preserving explicit modes.
 package io.github.alreadyonapp.alreadyon
 
 import org.junit.Assert.*
