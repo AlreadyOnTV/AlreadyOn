@@ -1,3 +1,7 @@
+// Preserve existing bookmarks while displaying the homepage directory URL.
+if (location.pathname.endsWith('/index.html')) {
+  history.replaceState(history.state, '', location.pathname.slice(0, -10) + location.search + location.hash);
+}
 // Keep screenshots and navigation usable without any external dependencies.
 const tabs = [...document.querySelectorAll('[role="tab"]')];
 function selectTab(tab) {

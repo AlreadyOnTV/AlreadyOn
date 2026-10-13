@@ -63,6 +63,8 @@ def main():
             if url.scheme or url.netloc:
                 continue
             target = (page.parent / unquote(url.path)).resolve() if url.path else page
+            if target.is_dir():
+                target = target / 'index.html'
             if not target.is_relative_to(OUTPUT):
                 failures.append(f'{page.name}: reference escapes site: {link}')
             elif not target.is_file():
