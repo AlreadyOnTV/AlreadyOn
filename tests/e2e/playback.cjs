@@ -2485,20 +2485,46 @@ const noWorkers = async (unreleased = () => 0) => {
         const page = await context.newPage();
         await login(page);
         const profiles = await (await page.request.get(url + "/api/profiles")).json();
-        const profile = { ...profiles[0], role: profileRole };
+        const profile = { ...profiles[0], name: "A deliberately long household profile name for header layout", role: profileRole };
         await page.addInitScript(id => localStorage.setItem("alreadyon.currentUserId", String(id)), profile.id);
         await page.route("**/api/auth/status", route => route.fulfill({json: {
           setupRequired: false, authenticated: true, role: accountRole,
           username: "menu-fixture", mustChangePassword: false,
         }}));
         await page.route("**/api/profiles", route => route.fulfill({json: [profile]}));
-        await page.goto(url);
-        await page.locator(".page-header-control-avatar").click();
-        const actual = (await page.locator(".profile-menu-item").allTextContents()).map(s => s.trim());
         const expected = ["Dashboard", "Profile Settings", "Switch Profile",
           ...(profileRole === "admin" ? ["Admin Settings"] : []),
           ...(accountRole === "owner" ? ["Server Settings"] : []), "Sign Out"];
-        assert(JSON.stringify(actual) === JSON.stringify(expected), `${accountRole}/${profileRole} menu: ${actual}`);
+        const routes = ["/", "/dashboard", "/profile",
+          ...(profileRole === "admin" ? ["/account"] : []),
+          ...(accountRole === "owner" ? ["/admin/accounts"] : [])];
+        // Check real navigation, both hit targets, keyboard access and long-name
+        // containment. Fixtures change browser responses, never stored profiles.
+        for (const width of [1280, 360]) {
+          await page.setViewportSize({width, height: 900});
+          for (const route of routes) {
+            await page.goto(url + route);
+            const trigger = page.locator(".profile-menu-trigger");
+            await trigger.waitFor();
+            assert(await trigger.count() === 1, "One profile trigger per page");
+            assert(await trigger.locator(".profile-menu-trigger-name").textContent() === profile.name, "Selected name remains visible");
+            await trigger.locator("span").first().click();
+            const actual = (await page.locator(".profile-menu-item").allTextContents()).map(s => s.trim());
+            assert(JSON.stringify(actual) === JSON.stringify(expected), `${accountRole}/${profileRole} ${route} menu: ${actual}`);
+            await page.keyboard.press("Escape");
+            await trigger.locator(".profile-menu-trigger-name").click();
+            await page.locator(".profile-menu-panel").waitFor();
+            await page.keyboard.press("Escape");
+            await trigger.focus();
+            await trigger.press("Enter");
+            await page.locator(".profile-menu-panel").waitFor();
+            assert(await trigger.getAttribute("aria-expanded") === "true", "Keyboard opens profile menu");
+            assert(await page.evaluate(() => document.documentElement.scrollWidth <= innerWidth + 1), "Long-name header remains viewport-bound");
+            await page.keyboard.press("Escape");
+          }
+        }
+        await page.goto(url);
+        await page.locator(".profile-menu-trigger").click();
         await page.getByRole("button", {name: "Dashboard", exact: true}).click();
         await page.getByRole("heading", {name: "Server Metrics", exact: true}).waitFor();
         assert(await page.locator(".admin-tabs").count() === 0, "Dashboard has no settings tabs");

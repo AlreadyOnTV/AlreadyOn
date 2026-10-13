@@ -1,4 +1,5 @@
 import Brand from '../components/Brand';
+import ProfileMenu from './ProfileMenu';
 import { useEffect, useRef, useState } from 'react';
 import { useNavigate, useParams } from 'react-router-dom';
 import ChannelsPage from './admin/ChannelsPage';
@@ -148,6 +149,7 @@ export default function AdminPage() {
           <button className="admin-back" onClick={() => navigate('/')}>
             ← Back To Guide
           </button>
+          <ProfileMenu />
         </div>
       </div>
       <div className="admin-layout">

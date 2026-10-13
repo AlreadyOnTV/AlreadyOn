@@ -1,4 +1,5 @@
 import Brand from '../components/Brand';
+import ProfileMenu from './ProfileMenu';
 // Self-service settings for the *current* profile (name, PIN, icon, guide
 // display), saved to the server. Admin-only actions on OTHER users (like
 // resetting a forgotten PIN) live in Admin > User instead — see
@@ -188,6 +189,7 @@ export default function ProfileSettingsPage() {
       <div className="admin-topbar">
         <div className="admin-topbar-inner">
           <Brand />
+          <ProfileMenu />
         </div>
       </div>
       <div className="admin-content">

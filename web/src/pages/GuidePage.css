@@ -52,12 +52,6 @@
   box-shadow: var(--shadow);
 }
 
-/* The profile menu's trigger shows just the user's icon, so it needs
-   tighter padding than the text controls to stay visually circular. */
-.page-header-control-avatar {
-  padding: 0 4px;
-}
-
 /* Native <option> styling is inconsistent across browsers, but this
    covers Firefox/Chromium (native select controls). */
 .page-header-control option {

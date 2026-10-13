@@ -1,6 +1,6 @@
 // Dashboard, profile settings and switching are available to every profile.
 // Web-only administration follows, then Sign Out on every device.
-import { startTransition, useEffect, useRef, useState } from 'react';
+import { startTransition, useEffect, useId, useRef, useState } from 'react';
 import { useNavigate } from 'react-router-dom';
 import { useUsers, roleLabel } from '../users/UsersContext';
 import { useAccount } from '../users/AccountContext';
@@ -15,6 +15,7 @@ export default function ProfileMenu() {
   const { users, currentUser, isAdmin, setCurrentUserId, verifyPin } = useUsers();
   const { isOwner } = useAccount();
   const navigate = useNavigate();
+  const panelId = useId();
   const [open, setOpen] = useState(false);
   const [view, setView] = useState<MenuView>('root');
   const [pendingUserId, setPendingUserId] = useState<number | null>(null);
@@ -95,16 +96,19 @@ export default function ProfileMenu() {
   return (
     <div className="profile-menu" ref={containerRef}>
       <button
-        className="page-header-control page-header-control-avatar instant-tooltip"
+        className="page-header-control page-header-control-avatar profile-menu-trigger instant-tooltip"
         onClick={toggle}
         aria-label={`Profile: ${currentUser.name}`}
+        aria-expanded={open}
+        aria-controls={open ? panelId : undefined}
         data-tooltip={currentUser.name}
       >
         <UserAvatar name={currentUser.name} icon={currentUser.icon} size={28} />
+        <span className="profile-menu-trigger-name">{currentUser.name}</span>
       </button>
 
       {open && (
-        <div className={'profile-menu-panel' + (view !== 'root' ? ' profile-menu-expanded' : '')}>
+        <div id={panelId} className={'profile-menu-panel' + (view !== 'root' ? ' profile-menu-expanded' : '')}>
           {view === 'root' && (
             <>
               <button className="profile-menu-item" onClick={() => go('/dashboard')}>

@@ -26,4 +26,4 @@ Store machine-specific notes in ignored `.private/`. Do not commit home paths, h
 
 Run `make lint` and relevant Go tests. Use isolated [browser tests](../tests/e2e/README.md) and [runtime tests](../tests/integration/README.md) when requested. [Delivery](CI_CD.md) describes release checks. Never point destructive tests at your preview or a live server.
 
-The guide profile menu lists Dashboard, Profile Settings, Switch Profile, then Sign Out on every device. WebUI inserts Admin Settings for profile admins and Server Settings for server owners before Sign Out. Dashboard is a read-only page for every signed-in profile; it is no longer a Server Settings tab.
+The [WebUI profile menu](PROFILE_MENU.md) lists Dashboard, Profile Settings, Switch Profile, then Sign Out on every device. WebUI inserts Admin Settings for profile admins and Server Settings for server owners before Sign Out. Dashboard is a read-only page for every signed-in profile; it is no longer a Server Settings tab.
