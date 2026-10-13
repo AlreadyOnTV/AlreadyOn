@@ -4,7 +4,7 @@
 
 ## Release lifecycle
 
-Use one checkout: `python3 scripts/work.py start build` refreshes local `build` from `dev` without losing unique commits. Test at <https://localhost:5173>; then `python3 scripts/work.py publish [YYYY-MM-DD]` pushes the date branch/tag and opens its dev PR.
+Use the active dated branch in one checkout; see [development setup](DEVELOPMENT.md). Test at <https://localhost:5173> and open its dev PR only when validation is approved.
 
 | Promotion | Release tag | Publication |
 | --- | --- | --- |
@@ -21,6 +21,8 @@ Each new release attaches both APKs, `SHA256SUMS`, `android-release.json`, three
 Manual candidates require a recorded image digest for their exact source.
 
 ## Automation and gates
+
+Review the [Stable readiness checklist](STABLE_READINESS.md) before requesting main promotion.
 
 Date PRs run quality, CodeQL and full Go/browser e2e. Dev merge validation publishes the date image and alpha APKs, advances the date tag, then removes the merged date branch. `python3 scripts/promote.py test YYYY-MM-DD` verifies image/alpha APK provenance before merging to test; `python3 scripts/promote.py main` verifies an RC before merging to main. The helpers create exact-tree merge commits when branches have diverged, reuse tested artifacts and skip duplicate e2e. Conflicts stop for resolution on dev. If branch protection rejects a push, stop; never bypass it.
 
