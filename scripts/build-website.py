@@ -2,6 +2,7 @@
 """Build the dependency-free product site and verify its local links."""
 
 from html.parser import HTMLParser
+import hashlib
 from pathlib import Path
 import shutil
 from urllib.parse import unquote, urlsplit
@@ -38,6 +39,18 @@ def main():
     for asset in ('header-doc.svg', 'icon.svg'):
         shutil.copy2(ROOT / 'web' / 'public' / 'branding' / asset, branding / asset)
     (OUTPUT / '.nojekyll').touch()
+    # Content-addressed screenshot URLs prevent stale browser/CDN captures after updates.
+    replacements = {}
+    for screenshot in (OUTPUT / 'assets' / 'screenshots').glob('*.png'):
+        digest = hashlib.sha256(screenshot.read_bytes()).hexdigest()[:16]
+        versioned = screenshot.with_name(f'{screenshot.stem}.{digest}{screenshot.suffix}')
+        replacements[screenshot.relative_to(OUTPUT).as_posix()] = versioned.relative_to(OUTPUT).as_posix()
+        screenshot.rename(versioned)
+    for page in OUTPUT.rglob('*.html'):
+        content = page.read_text()
+        for original, versioned in replacements.items():
+            content = content.replace(original, versioned)
+        page.write_text(content)
     pages = {}
     for page in OUTPUT.rglob('*.html'):
         parser = Links()

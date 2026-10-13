@@ -2,7 +2,7 @@
 
 The [GitHub Pages website](https://alreadyonapp.github.io/AlreadyOn/) introduces AlreadyOn to homelab testers and provides installation, usage, hosting and public-feedback guides. Its source lives in `website/`. It is a companion to the application, with no accounts, analytics, remote fonts or application API access.
 
-Run `python3 scripts/build-website.py` to produce `_site/`. The build checks local pages, asset references and anchor targets. Preview that generated folder with a temporary static HTTP server. Paths are relative so the site works under GitHub Pages’ `/AlreadyOn/` prefix. The build uses only Python’s standard library.
+Run `python3 scripts/build-website.py` to produce `_site/`. The build checks local pages, asset references and anchor targets. Preview that generated folder with a temporary static HTTP server. Paths are relative so the site works under GitHub Pages’ `/AlreadyOn/` prefix. The build uses only Python’s standard library. Screenshot filenames include a content hash; replacing a capture changes its published URL, avoiding stale browser/CDN images. Both inline images and enlarged dialogs use the versioned URL.
 
 The Pages workflow normally publishes website changes pushed to `main`; `workflow_dispatch` can publish an explicitly approved revision. The `github-pages` deployment environment must allow that branch. Website publication does not authorize application promotion, image publication or live-server deployment. The October 18 release branch is permitted for the maintainer-authorized website delivery while application promotion is held.
 
