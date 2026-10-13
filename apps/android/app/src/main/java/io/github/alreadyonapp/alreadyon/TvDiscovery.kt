@@ -55,7 +55,7 @@ internal class TvDiscovery(context: Context, private val found: (TvServer) -> Un
                                 for (address in queue) {
                                     val origin = "https://$address:19900"
                                     val base = origin.toHttpUrl()
-                                    val client = baseClient.newBuilder().serverTls(base, true).build()
+                                    val client = baseClient.newBuilder().bootstrapTls(base).build()
                                     val server = try { probeDiscovery(client, origin) }
                                         finally { client.connectionPool.evictAll() }
                                     if (server != null && isActive) withContext(Dispatchers.Main.immediate) { found(server) }

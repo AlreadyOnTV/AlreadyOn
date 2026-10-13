@@ -73,7 +73,7 @@ private fun NativeVideo(playback: PhonePlayback, model: PhoneModel, modifier: Mo
         val mediaPrefix = authorized.encodedPath.substringBeforeLast('/') + "/"
         val token = authorized.queryParameter("token") ?: throw IOException("Media authorization is missing.")
         // Check every manifest/segment request; never follow redirects or send credentials to another host.
-        val http = OkHttpClient.Builder().serverTls(authorized, playback.bypassTls, playback.trustedCa).followRedirects(false).followSslRedirects(false)
+        val http = OkHttpClient.Builder().serverTls(authorized, playback.trustedCa).followRedirects(false).followSslRedirects(false)
             .addInterceptor { chain ->
                 val original = chain.request()
                 val url = original.url
@@ -119,7 +119,7 @@ private fun NativeVideo(playback: PhonePlayback, model: PhoneModel, modifier: Mo
                         }
                     }
                 }
-                override fun onPlayerError(error: PlaybackException) { model.playerFailed(playback.revision) }
+                override fun onPlayerError(error: PlaybackException) { model.playerFailed(playback.revision, error) }
             })
             // HLS positions are relative to its sliding window; align by date after the first timeline is ready.
             setMediaItem(MediaItem.fromUri(playback.url), if (playback.hlsTargetMs != null) C.TIME_UNSET else playback.startMs)

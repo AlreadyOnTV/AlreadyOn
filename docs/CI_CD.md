@@ -2,13 +2,13 @@
 
 [![AlreadyOn](../web/public/branding/header-doc.svg)](../README.md)
 
-Maintainers control releases. Checkout ownership and deployment credentials belong in ignored `.private/AGENTS.md`.
+Maintainers control releases; private credentials belong in ignored `.private/AGENTS.md`.
 
 ## Development and releases
 
-`release-date.txt` pins the active cycle to `2026-10-11`, superseding older previews. Publishing reuses it until Stable on main; afterward a new date can begin.
+`release-date.txt` pins the active cycle to `2026-10-18`, superseding older previews. Publishing reuses it until Stable on main; afterward a new date can begin.
 
-Use one checkout, local `build`, and preview at `https://localhost:5173`. A dated dev PR runs quality, CodeQL, Go/browser e2e, disposable runtime checks and source/image scanning. After merge, release validation republishes the date image/`nightly`, advances the date tag, builds Android alpha artifacts, and deletes the merged date branch. Hotfixes reuse that date and repeat the PR gates.
+Use one checkout, active maintainer branch `2026-10-18`, and preview at `https://localhost:5173`. A dated dev PR runs quality, CodeQL, Go/browser e2e, disposable runtime checks and source/image scanning. After merge, release validation republishes the date image/`nightly`, advances the date tag, builds Android alpha artifacts, and deletes the merged date branch. Hotfixes reuse that date and repeat the PR gates.
 
 Run `make lint`, `python3 scripts/ci/check-documentation.py` and `python3 scripts/ci/check-syntax.py` locally. Lint includes public-guide length and link checks.
 

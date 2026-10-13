@@ -314,3 +314,31 @@ func TestProtectedRequestBodiesAreCapped(t *testing.T) {
 type zeroReader struct{}
 
 func (zeroReader) Read(p []byte) (int, error) { clear(p); return len(p), nil }
+
+// Supported reverse proxies preserve Host and re-encrypt; they never supply identity.
+func TestReverseProxyHeadersCannotChangePeerOrOrigin(t *testing.T) {
+	for _, peer := range []string{"192.0.2.10:4567", "[2001:db8::10]:4567"} {
+		r := httptest.NewRequest("POST", "https://tv.example/api/auth/logout", nil)
+		r.RemoteAddr = peer
+		r.Header.Set("Origin", "https://tv.example")
+		r.Header.Set("Forwarded", "for=127.0.0.1;host=evil.example;proto=http")
+		r.Header.Set("X-Forwarded-For", "127.0.0.1")
+		r.Header.Set("X-Real-IP", "127.0.0.1")
+		r.Header.Set("X-Forwarded-Host", "evil.example")
+		r.Header.Set("X-Forwarded-Proto", "http")
+		want := "192.0.2.10"
+		if strings.HasPrefix(peer, "[") {
+			want = "2001:db8::10"
+		}
+		if got := ClientAddress(r); got != want {
+			t.Fatalf("forwarded identity accepted: %s", got)
+		}
+		if !sameOrigin(r) {
+			t.Fatal("valid preserved Host/HTTPS rejected")
+		}
+		r.Header.Set("Origin", "http://evil.example")
+		if sameOrigin(r) {
+			t.Fatal("forged forwarded origin accepted")
+		}
+	}
+}

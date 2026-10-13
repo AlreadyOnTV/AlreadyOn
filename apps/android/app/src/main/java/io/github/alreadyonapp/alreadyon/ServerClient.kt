@@ -51,10 +51,10 @@ internal fun sameOrigin(a: HttpUrl, b: HttpUrl): Boolean =
     a.scheme == b.scheme && a.host == b.host && a.port == b.port
 
 /** HTTPS API client using server sessions and the existing same-origin write contract. */
-internal class ServerClient(val origin: String, store: SessionStore, bypassTls: Boolean = false, trustedCa: String? = null) {
+internal class ServerClient(val origin: String, store: SessionStore, trustedCa: String? = null) {
     private val base = origin.toHttpUrl()
     private val cookies = SessionCookies(base, store)
-    private val http = OkHttpClient.Builder().serverTls(base, bypassTls, trustedCa).cookieJar(cookies)
+    private val http = OkHttpClient.Builder().serverTls(base, trustedCa).cookieJar(cookies)
         .followRedirects(false).followSslRedirects(false)
         .connectTimeout(15, TimeUnit.SECONDS).readTimeout(90, TimeUnit.SECONDS)
         .callTimeout(120, TimeUnit.SECONDS).build()

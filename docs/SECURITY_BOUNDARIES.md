@@ -1,12 +1,14 @@
 # Security boundaries
 
-Owners select and browse library roots using the server process's filesystem permissions, intentionally reaching outside existing roots. Viewers cannot browse or change these settings. Browsing returns directory names and paths, never file contents. Playback separately confines file opens to configured roots, including symlink checks. Give the server only necessary filesystem access.
+Owners browse library roots using server filesystem permissions. Viewers cannot browse or change these settings. Browsing returns directory names and paths, never file contents. Playback separately confines file opens to configured roots, including symlink checks. Limit server filesystem access.
 
 Web assets are opened inside the installed web directory with `os.OpenInRoot`. Traversal and escaping symlinks cannot expose outside files. Relative symlinks within the directory work; absolute symlinks are refused. Client routes retain the application-shell fallback and hashed assets retain immutable caching.
 
 Sign-in return URLs are parsed using the browser URL parser and compared with the current origin before navigation. Checking a raw string prefix alone is insufficient because URL parsing normalizes control characters.
 
-Generated management keys contain 256 random bits and retain indexed SHA-256 verification. Chosen local testing keys use salted Argon2id and the bounded password-hashing pool. Verification examines only testing records. Keep their number small; use generated keys on deployed servers. Legacy local test-key hashes do not authenticate; local reprovisioning removes those obsolete rows, so old test keys must be provisioned again. No default key exists. Revocation and enabled-owner checks apply to both types.
+Passwords and account PINs use Argon2id (19 MiB, two passes, one lane, 16-byte random salt, 32-byte output). Four concurrent hashes bound memory use; parameters are stored in each hash.
+
+Generated management keys contain 256 random bits and retain indexed SHA-256 verification. Chosen local testing keys use salted Argon2id and the bounded password-hashing pool. Verification examines only testing records. Keep their number small; use generated keys on deployed servers. Legacy local test-key hashes do not authenticate; local reprovisioning removes those obsolete rows, so old test keys must be provisioned again. No default keys. Revocation and enabled-owner checks apply to both types.
 
 The existing key table stores generated-key SHA-256 and testing-key Argon2id hashes without a schema migration. Older binaries cannot authenticate newly provisioned Argon2id testing keys; generated keys remain compatible. Legacy testing hashes fail closed and are removed on local reprovisioning.
 

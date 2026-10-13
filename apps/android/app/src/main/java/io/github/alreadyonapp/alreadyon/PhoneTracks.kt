@@ -34,7 +34,7 @@ internal suspend fun subtitleCues(playback: PhonePlayback, channel: Long, index:
     require(base.encodedPath.startsWith("/media/$channel/"))
     val url = base.newBuilder().encodedPath("/media/$channel/subtitles/$index").query(null)
         .addQueryParameter("token", base.queryParameter("token") ?: throw IOException("Missing media token")).build()
-    val http = OkHttpClient.Builder().serverTls(base, playback.bypassTls, playback.trustedCa).followRedirects(false).followSslRedirects(false).callTimeout(10, TimeUnit.SECONDS).build()
+    val http = OkHttpClient.Builder().serverTls(base, playback.trustedCa).followRedirects(false).followSslRedirects(false).callTimeout(10, TimeUnit.SECONDS).build()
     repeat(90) {
         val cues = http.newCall(Request.Builder().url(url).build()).execute().use { response ->
             if (response.code == 202) return@use null

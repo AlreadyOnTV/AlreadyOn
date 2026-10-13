@@ -48,7 +48,7 @@ private data class TvTrust(val certificate: String, val name: String)
 /** Only public bootstrap metadata uses an untrusted TLS connection; PINs never do. */
 private suspend fun probe(server: TvServer): TvTrust = withContext(Dispatchers.IO) {
     val base = server.origin.toHttpUrl()
-    val http = OkHttpClient.Builder().serverTls(base, true).connectTimeout(5, TimeUnit.SECONDS)
+    val http = OkHttpClient.Builder().bootstrapTls(base).connectTimeout(5, TimeUnit.SECONDS)
         .callTimeout(10, TimeUnit.SECONDS).build()
     fun get(path: String): JSONObject = http.newCall(Request.Builder().url(base.resolve(path)!!).build()).execute().use { response ->
         if (!response.isSuccessful) throw IOException("Server is not available for local TV pairing.")
@@ -60,7 +60,8 @@ private suspend fun probe(server: TvServer): TvTrust = withContext(Dispatchers.I
     if (info.optInt("protocol") != 1 || !info.optBoolean("pairingEnabled")) throw IOException("Set your TV PIN in this server’s Admin Settings first.")
     val data = get("/api/tv/trust")
     val pem = data.getString("certificate")
-    CertificateFactory.getInstance("X.509").generateCertificate(ByteArrayInputStream(pem.toByteArray()))
+    val certificate = CertificateFactory.getInstance("X.509").generateCertificate(ByteArrayInputStream(pem.toByteArray())) as java.security.cert.X509Certificate
+    certificate.checkValidity()
     return@withContext TvTrust(pem, info.getString("name"))
 
 }
@@ -149,6 +150,12 @@ internal fun ServerConnectScreen(state: PhoneState, model: PhoneModel, modifier:
             Text("${selected!!.name} · ${selected!!.origin.removePrefix("https://")}", style = MaterialTheme.typography.headlineSmall)
             if (checking) Text("Checking server…")
             if (trust != null) {
+                val changedCa = state.origin == selected!!.origin && state.trustedCa != null && state.trustedCa != trust!!.certificate
+                if (changedCa) {
+                    Text("The server CA has changed. Only accept it if you expected this change; another device may be impersonating your server.", color = MaterialTheme.colorScheme.error)
+                    Button(onClick = { model.acceptServerTrust(trust!!.certificate) }, enabled = !state.busy) { Text("Accept New CA") }
+                }
+
                 OutlinedTextField(username, { username = it }, label = { Text("Username") },
                     singleLine = true,
                     keyboardOptions = KeyboardOptions(imeAction = if (BuildConfig.IS_TV) ImeAction.Next else ImeAction.Default),
@@ -171,7 +178,7 @@ internal fun ServerConnectScreen(state: PhoneState, model: PhoneModel, modifier:
                         if (it.isFocused) { keyboard?.hide(); pinKeypad = true }
                     }, enabled = !state.busy)
                 Button(modifier = Modifier.focusRequester(connectFocus).tvFocusOutline(), onClick = { model.signInWithPIN(selected!!.origin, username, pin, trust!!.certificate, trust!!.name); pin = ""; pinVisible = false },
-                    enabled = username.isNotBlank() && pin.length in 6..12 && !state.busy) { Text("Connect") }
+                    enabled = !changedCa && username.isNotBlank() && pin.length in 6..12 && !state.busy) { Text("Connect") }
             }
             Button(modifier = Modifier.tvFocusOutline(), onClick = { selected = null; trust = null; pin = ""; pinVisible = false; error = null; model.dismissError() }, enabled = !checking && !state.busy) { Text("Choose Another Server") }
         }
@@ -222,4 +229,14 @@ private fun PinVisibilityButton(visible: Boolean, enabled: Boolean, toggle: () -
     IconButton(onClick = toggle, enabled = enabled) {
         Icon(vector, contentDescription = if (visible) "Hide PIN" else "Show PIN")
     }
+}
+
+@Composable
+internal fun ServerTrustAlert(state: PhoneState, model: PhoneModel) {
+    if (!state.trustIssue) return
+    AlertDialog(onDismissRequest = model::dismissTrustIssue,
+        title = { Text("Server certificate trust failed") },
+        text = { Text("The server no longer validates against its saved CA, or its certificate has expired. Connections are blocked. Review the server and accept a new CA only if you expected a change.") },
+        confirmButton = { TextButton(onClick = model::reviewServerTrust) { Text("Review Server CA") } },
+        dismissButton = { TextButton(onClick = model::dismissTrustIssue) { Text("Cancel") } })
 }

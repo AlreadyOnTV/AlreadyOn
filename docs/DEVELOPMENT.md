@@ -12,7 +12,7 @@ Use `make preview-status` and `make preview-stop` to inspect or stop this checko
 
 ## Single-checkout release work
 
-Use the primary repository checkout; do not create parallel worktrees. Begin with `python3 scripts/work.py start build`, which refreshes the local release branch from current `dev` only when its existing commits are already merged. Test locally at <https://localhost:5173>. When ready, run `python3 scripts/work.py publish [YYYY-MM-DD]` to push the date branch/tag and open the dev PR. Do not start another release date while one lacks Stable.
+Use the primary repository checkout; do not create parallel worktrees. The active maintainer cycle uses local and remote branch `2026-10-18`, based on `dev`; commit and push cycle work there. The maintainer explicitly retired `build` for this cycle. Test locally at <https://localhost:5173>. When ready for approved validation, open a PR from `2026-10-18` to `dev`; the legacy `work.py` helper requires `build` and is not used for this cycle. Do not start another release date while one lacks Stable.
 
 Trust this instance's local certificate only on your development machine. Do not weaken remote TLS validation. Local data lives under ignored `server/data/`; keep it across restarts.
 

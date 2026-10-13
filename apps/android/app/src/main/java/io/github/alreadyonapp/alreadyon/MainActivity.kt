@@ -160,6 +160,7 @@ class MainActivity : ComponentActivity() {
                                 }
                                 if (state.busy) LinearProgressIndicator(Modifier.fillMaxWidth())
                             }
+                            ServerTrustAlert(state, model)
                             when {
                                 !state.signedIn -> ServerConnectScreen(state, model, Modifier.weight(1f))
                                 state.mustChangePassword -> AccountScreen(state, model, forced = true)
