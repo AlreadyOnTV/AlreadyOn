@@ -1,8 +1,9 @@
-name: Publish documentation site
+# Website-only delivery stays independent of application release promotion.
+name: Publish product website
 on:
   push:
     branches: [main]
-    paths: [README.md, 'web/public/branding/**', '.github/workflows/pages.yml']
+    paths: ['website/**', 'scripts/build-website.py', 'web/public/branding/**', '.github/workflows/pages.yml']
   workflow_dispatch:
 permissions:
   contents: read
@@ -13,13 +14,8 @@ jobs:
       - uses: actions/checkout@v7
         with:
           persist-credentials: false
-      - name: Prepare project landing page
-        run: |
-          mkdir -p _site
-          cp web/public/branding/banner.svg _site/banner.svg
-          cat > _site/index.html <<'HTML'
-          <!doctype html><html lang="en"><meta charset="utf-8"><meta name="viewport" content="width=device-width,initial-scale=1"><title>AlreadyOn</title><style>body{background:#12141a;color:#dfe3ea;font:18px system-ui;max-width:800px;margin:3rem auto;padding:1rem}img{width:100%}a{color:#77a7ff}</style><img src="banner.svg" alt="AlreadyOn — Your library, tuned to you"><h1>AlreadyOn</h1><p>Scheduled television-style playback from your own media library.</p><a href="https://github.com/AlreadyOnApp/AlreadyOn#readme">Documentation and source</a></html>
-          HTML
+      - name: Build and validate product website
+        run: python3 scripts/build-website.py
       - uses: actions/upload-pages-artifact@v4
         with:
           path: _site

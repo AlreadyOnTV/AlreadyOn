@@ -45,3 +45,6 @@ apps/android/**/build/
 *.aab
 *.jks
 *.keystore
+
+# Generated GitHub Pages product website.
+/_site/
