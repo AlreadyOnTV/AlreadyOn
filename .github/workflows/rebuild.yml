@@ -52,6 +52,15 @@ jobs:
     uses: ./.github/workflows/quality.yml
     with:
       revision: ${{ needs.select.outputs.revision }}
+  # Dated alpha dispatches must pass semantic analysis before artifact publication.
+  codeql:
+    needs: select
+    permissions:
+      contents: read
+      security-events: write
+    uses: ./.github/workflows/codeql.yml
+    with:
+      revision: ${{ needs.select.outputs.revision }}
   bases:
     needs: select
     runs-on: ubuntu-26.04
@@ -103,7 +112,7 @@ jobs:
           ci-base: ${{ needs.bases.outputs.ci }}
   publish:
     name: Build, validate and publish fresh dev release
-    needs: [select, bases, quality, tests]
+    needs: [select, bases, quality, codeql, tests]
     runs-on: ubuntu-26.04
     timeout-minutes: 120
     concurrency:

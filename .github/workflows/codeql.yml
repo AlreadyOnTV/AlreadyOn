@@ -8,6 +8,12 @@ on:
   schedule:
     - cron: '17 5 * * 1'
   workflow_dispatch:
+  workflow_call:
+    inputs:
+      revision:
+        description: Exact release source to analyze before publication
+        required: true
+        type: string
 permissions:
   contents: read
 jobs:
@@ -27,6 +33,7 @@ jobs:
     steps:
       - uses: actions/checkout@v7
         with:
+          ref: ${{ inputs.revision || github.sha }}
           persist-credentials: false
       - uses: actions/setup-go@v7
         if: matrix.language == 'go'
