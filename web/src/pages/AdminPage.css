@@ -21,6 +21,11 @@
   margin: 0 auto;
 }
 
+.admin-topbar-inner > .profile-menu {
+  flex: 0 0 auto;
+  margin-left: auto;
+}
+
 .admin-back {
   background: var(--surface);
   color: var(--text);
@@ -185,6 +190,19 @@
 @media (max-width: 700px) {
   .admin-topbar {
     padding: 10px 12px;
+  }
+
+  .admin-topbar-inner {
+    position: relative;
+    min-height: 44px;
+    padding-right: 56px;
+  }
+
+  .admin-topbar-inner > .profile-menu {
+    position: absolute;
+    top: 0;
+    right: 0;
+    margin-left: 0;
   }
 
   .admin-content {

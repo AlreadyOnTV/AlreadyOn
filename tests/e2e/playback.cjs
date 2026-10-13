@@ -3076,6 +3076,65 @@ const noWorkers = async (unreleased = () => 0) => {
     const page = await context.newPage();
     page.on("pageerror", (e) => errors.push(e.message));
     await login(page);
+    const assertSettingsHeaders = async (width) => {
+      await page.setViewportSize({ width, height: 844 });
+      for (const route of [
+        "/admin/accounts",
+        "/admin/media",
+        "/admin/commercials",
+        "/admin/channels",
+        "/admin/server",
+        "/admin/logs",
+        "/admin/api",
+        "/account",
+        "/profile",
+      ]) {
+        await page.goto(url + route);
+        const menu = page.locator(".admin-topbar-inner > .profile-menu");
+        await menu.waitFor();
+        const trigger = menu.getByRole("button");
+        assert(await trigger.isVisible(), `${route} profile menu trigger is visible`);
+        const contentBefore = await page.locator(".admin-content").boundingBox();
+        await trigger.click();
+        const panel = page.locator(".profile-menu-panel");
+        await panel.waitFor();
+        const alignment = await page.evaluate(() => {
+          const header = document.querySelector(".admin-topbar-inner");
+          const menu = header.querySelector(":scope > .profile-menu");
+          const panel = menu.querySelector(".profile-menu-panel");
+          const menuBox = menu.getBoundingClientRect();
+          const panelBox = panel.getBoundingClientRect();
+          const headerBox = header.getBoundingClientRect();
+          const contentBox = document.querySelector(".admin-content").getBoundingClientRect();
+          return {
+            menuRight: menuBox.right,
+            headerRight: headerBox.right,
+            panelLeft: panelBox.left,
+            panelRight: panelBox.right,
+            contentTop: contentBox.top,
+            contentWidth: contentBox.width,
+            viewport: document.documentElement.clientWidth,
+            scrollWidth: document.documentElement.scrollWidth,
+          };
+        });
+        assert(
+          Math.abs(alignment.menuRight - alignment.headerRight) < 2 &&
+            alignment.panelLeft >= 0 &&
+            alignment.panelRight <= alignment.viewport + 1 &&
+            Math.abs(alignment.contentTop - contentBefore.y) < 1 &&
+            Math.abs(alignment.contentWidth - contentBefore.width) < 1 &&
+            alignment.menuRight <= alignment.viewport + 1 &&
+            alignment.scrollWidth <= alignment.viewport + 1,
+          `${route} profile menu stays aligned and in the ${width}px viewport: ` +
+            JSON.stringify(alignment),
+        );
+      }
+    };
+    await assertSettingsHeaders(320);
+    await assertSettingsHeaders(390);
+    await assertSettingsHeaders(768);
+    await assertSettingsHeaders(1280);
+    await page.setViewportSize({ width: 1280, height: 720 });
     await page.locator(".guide-slot-box").first().waitFor();
     assert(
       (await page.locator(".page-header select").count()) === 0,

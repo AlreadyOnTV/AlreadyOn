@@ -7,6 +7,7 @@ import ProfileMenu from './ProfileMenu';
 import { useEffect } from 'react';
 import { Navigate, useNavigate } from 'react-router-dom';
 import UsersPage from './admin/UsersPage';
+import ProfileMenu from './ProfileMenu';
 import { useUsers } from '../users/UsersContext';
 import './AdminPage.css';
 

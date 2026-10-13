@@ -13,6 +13,7 @@ import { useAccount } from '../users/AccountContext';
 import { useUsers } from '../users/UsersContext';
 import StartupNotice from '../status/StartupNotice';
 import { useStartupStatus } from '../status/useStartupStatus';
+import ProfileMenu from './ProfileMenu';
 import './AdminPage.css';
 
 type AdminTab = 'accounts' | 'channels' | 'commercials' | 'media' | 'server' | 'logs' | 'api';

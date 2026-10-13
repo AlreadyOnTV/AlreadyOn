@@ -8,6 +8,7 @@ import { useEffect, useRef, useState, type ChangeEvent } from 'react';
 import { useNavigate } from 'react-router-dom';
 import { useUsers } from '../users/UsersContext';
 import { PasswordInput } from '../components/PasswordInput';
+import ProfileMenu from './ProfileMenu';
 import type { ProfilePatch } from '../api/client';
 import { PRESET_ICONS, UserAvatar } from '../users/avatars';
 import { DEFAULT_SUBTITLE_LANGUAGE, SUBTITLE_LANGUAGES, languageLabel } from '../playback/subtitles';
