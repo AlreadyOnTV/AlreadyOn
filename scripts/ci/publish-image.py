@@ -28,8 +28,16 @@ if __name__ == '__main__':
     else:
         run('docker', 'buildx', 'imagetools', 'create', '--prefer-index=false',
             *[arg for tag in tags for arg in ('-t', tag)], source)
-    output = subprocess.check_output(['docker', 'buildx', 'imagetools', 'inspect', tags[0]], text=True)
-    digest = next(line.split()[1] for line in output.splitlines() if line.startswith('Digest:'))
+    digests = []
+    for tag in tags:
+        output = subprocess.check_output(['docker', 'buildx', 'imagetools', 'inspect', tag], text=True)
+        value = next(line.split()[1] for line in output.splitlines() if line.startswith('Digest:'))
+        if not re.fullmatch(r'sha256:[0-9a-f]{64}', value):
+            raise ValueError('Invalid published digest')
+        digests.append(value)
+    if len(set(digests)) != 1 or ('@sha256:' in source and digests[0] != source.rsplit('@', 1)[1]):
+        raise ValueError('Published channel digests do not match the tested source')
+    digest = digests[0]
     record(os.environ['GITHUB_REPOSITORY'], revision, digest)
     selected = os.environ.get('CI_SELECTED_SHA')
     if selected and selected != revision:

@@ -191,7 +191,7 @@ def main():
             if args.image_archive:
                 with args.image_archive.open('rb') as archive:
                     manifest['image_archive_sha256'] = hashlib.file_digest(archive, 'sha256').hexdigest()
-            run([*base, 'image', '--scanners', 'vuln,secret', '--ignorefile', '', '--format', 'json',
+            run([*base, 'image', '--scanners', 'vuln,secret', '--list-all-pkgs', '--ignorefile', '', '--format', 'json',
                  '--output', str(output / 'image.json'), *image_args], 'image', registry_input=bool(args.registry_user))
             manifest['coverage'].append('exact image: OS packages, detected bundled libraries/binaries, secrets')
         if args.ci_image or args.ci_image_archive:
@@ -202,7 +202,7 @@ def main():
                 with args.ci_image_archive.open('rb') as archive:
                     manifest['ci_image_archive_sha256'] = hashlib.file_digest(archive, 'sha256').hexdigest()
             manifest['ci_image'] = args.ci_image
-            run([*base, 'image', '--scanners', 'vuln,secret', '--ignorefile', '', '--format', 'json',
+            run([*base, 'image', '--scanners', 'vuln,secret', '--list-all-pkgs', '--ignorefile', '', '--format', 'json',
                  '--output', str(output / 'ci-image.json'), *ci_args], 'ci-image', registry_input=bool(args.registry_user))
             manifest['coverage'].append('exact CI image: OS packages, compiler and npm tooling, secrets')
         for kind in ('source', 'image', 'ci-image'):

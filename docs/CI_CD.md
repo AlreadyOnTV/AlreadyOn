@@ -6,7 +6,7 @@ Maintainers control releases; private credentials belong in ignored `.private/AG
 
 ## Development and releases
 
-`release-date.txt` pins the active cycle to `2026-10-18`, superseding older previews. Publishing reuses it until Stable on main; afterward a new date can begin.
+`release-date.txt` pins the active cycle to `2026-10-18`, superseding older previews. Reuse until Stable on main; afterward a new cycle begins.
 
 Use one checkout, active maintainer branch `2026-10-18`, and preview at `https://localhost:5173`. A dated dev PR runs quality, CodeQL, Go/browser e2e, disposable runtime checks and source/image scanning. After merge, release validation republishes the date image/`nightly`, advances the date tag, builds Android alpha artifacts, and deletes the merged date branch. Hotfixes reuse that date and repeat the PR gates.
 
@@ -39,7 +39,7 @@ Dev builds follow validated PR merges; guarded test/main merges promote existing
 
 ## Public automation
 
-PR validation builds patched runtime/CI images and scans the exact candidate with read-only credentials; publication credentials remain unavailable. Critical/High findings block publication; secret matches require private review. Scanner failures block the gate. Runtime and CI images are scanned; see [policy](VULNERABILITY_SCANNING.md).
+PR validation scans the exact patched candidate with read-only credentials; publication credentials are unavailable. Critical/High findings block publication; secret matches require private review. Scanner failures block the gate. Runtime/CI images are scanned. New cycles require [signed image evidence](ARTIFACT_PROVENANCE.md); [weekly dependency review](DEPENDENCY_MAINTENANCE.md) never publishes.
 
 CodeQL analyzes Go/TypeScript on dev/test/main; Pages publishes from main. Android automation builds alpha on dev, RC on test and Stable from RC artifacts on main; see [Android policy](ANDROID_RELEASES.md).
 

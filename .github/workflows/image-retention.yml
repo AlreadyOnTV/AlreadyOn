@@ -19,6 +19,21 @@ concurrency:
   group: application-images
   cancel-in-progress: false
 jobs:
+  maintenance-health:
+    # Independent daily read-only watchdog; failure is visible even if cleanup succeeds.
+    permissions:
+      contents: read
+      actions: read
+    runs-on: ubuntu-26.04
+    steps:
+      - uses: actions/checkout@v7
+        with:
+          ref: dev
+          persist-credentials: false
+      - name: Detect a missed or failing weekly review
+        env:
+          GH_TOKEN: ${{ github.token }}
+        run: python3 scripts/ci/maintenance-health.py
   cleanup:
     concurrency:
       group: base-images

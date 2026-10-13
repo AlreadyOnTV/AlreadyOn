@@ -1,0 +1,60 @@
+# Read-only weekly discovery. Updates/republication use the reviewed date-release pipeline.
+name: Weekly Dependency Review
+on:
+  schedule:
+    - cron: '17 3 * * 1'
+      timezone: America/New_York
+  workflow_dispatch:
+permissions:
+  contents: read
+  packages: read
+env:
+  TZ: America/New_York
+concurrency:
+  group: weekly-dependency-review
+  cancel-in-progress: false
+jobs:
+  review:
+    runs-on: ubuntu-26.04
+    timeout-minutes: 90
+    steps:
+      - uses: actions/checkout@v7
+        with:
+          ref: dev
+          persist-credentials: false
+      - uses: docker/login-action@v4
+        with:
+          registry: ghcr.io
+          username: ${{ github.actor }}
+          password: ${{ secrets.GITHUB_TOKEN }}
+      - name: Resolve published runtime and matching CI baseline
+        id: baseline
+        run: |
+          docker pull ghcr.io/alreadyonapp/alreadyon:nightly
+          source=$(docker inspect ghcr.io/alreadyonapp/alreadyon:nightly --format '{{index .RepoDigests 0}}')
+          docker tag "$source" alreadyon-maintenance:runtime
+          echo "runtime=alreadyon-maintenance:runtime" >> "$GITHUB_OUTPUT"
+          docker pull ghcr.io/alreadyonapp/alreadyon-base:base-ci
+          ci=$(docker inspect ghcr.io/alreadyonapp/alreadyon-base:base-ci --format '{{index .RepoDigests 0}}')
+          docker tag "$ci" alreadyon-maintenance:ci
+          echo "ci=alreadyon-maintenance:ci" >> "$GITHUB_OUTPUT"
+          {
+            echo '### Reviewed dependency baseline'
+            echo "Runtime: \`$source\`"
+            echo "CI: \`$ci\`"
+            git rev-parse HEAD
+            sha256sum server/go.sum web/package-lock.json deploy/npm-tooling/package-lock.json apps/android/app/build.gradle.kts apps/android/tv/build.gradle.kts apps/android/build.gradle.kts
+            docker run --rm --entrypoint sh "$source" -c 'cat /etc/os-release; ffmpeg -version; ffprobe -version'
+          } > "$RUNNER_TEMP/dependency-baseline.txt"
+          cat "$RUNNER_TEMP/dependency-baseline.txt" >> "$GITHUB_STEP_SUMMARY"
+      - uses: ./.github/actions/security-scan
+        with:
+          image: ${{ steps.baseline.outputs.runtime }}
+          ci-image: ${{ steps.baseline.outputs.ci }}
+      - uses: actions/upload-artifact@v7
+        if: ${{ !cancelled() && steps.baseline.outcome == 'success' }}
+        with:
+          name: dependency-baseline-${{ github.run_id }}
+          path: ${{ runner.temp }}/dependency-baseline.txt
+          retention-days: 90
+          if-no-files-found: error

@@ -119,6 +119,9 @@ jobs:
       statuses: write
       pull-requests: read
       actions: read
+      id-token: write
+      attestations: write
+      artifact-metadata: write
     steps:
       - uses: actions/checkout@v7
         with:
@@ -146,16 +149,52 @@ jobs:
         run: |
           current=$(gh api "repos/$GITHUB_REPOSITORY/git/ref/heads/dev" --jq .object.sha)
           test "$current" = "$CI_REVISION"
+      - name: Upload tested layers without changing release channels
+        id: staged
+        env:
+          SOURCE_IMAGE: alreadyon-ci:candidate
+        run: python3 scripts/ci/stage-image.py
+      - name: Export sanitized image inventory for the staged digest
+        env:
+          STAGED_IMAGE: ${{ steps.staged.outputs.source }}
+          CI_REVISION: ${{ needs.select.outputs.revision }}
+        run: |
+          python3 scripts/security/image-inventory.py --report "$RUNNER_TEMP/security-report/image.json" \
+            --image "$STAGED_IMAGE" --revision "$CI_REVISION" --output "$RUNNER_TEMP/image.cdx.json"
+      - name: Sign build provenance for the exact tested digest
+        uses: actions/attest@v4
+        with:
+          subject-name: ${{ steps.staged.outputs.name }}
+          subject-digest: ${{ steps.staged.outputs.digest }}
+      - name: Sign the image inventory for the same digest
+        uses: actions/attest@v4
+        with:
+          subject-name: ${{ steps.staged.outputs.name }}
+          subject-digest: ${{ steps.staged.outputs.digest }}
+          sbom-path: ${{ runner.temp }}/image.cdx.json
+      - name: Verify both signed statements before changing channels
+        env:
+          GH_TOKEN: ${{ github.token }}
+          STAGED_IMAGE: ${{ steps.staged.outputs.source }}
+        run: |
+          gh attestation verify "oci://$STAGED_IMAGE" --repo "$GITHUB_REPOSITORY" --signer-workflow "$GITHUB_REPOSITORY/.github/workflows/rebuild.yml" --source-digest "${{ needs.select.outputs.revision }}" --deny-self-hosted-runners
+          gh attestation verify "oci://$STAGED_IMAGE" --repo "$GITHUB_REPOSITORY" --signer-workflow "$GITHUB_REPOSITORY/.github/workflows/rebuild.yml" --source-digest "${{ needs.select.outputs.revision }}" --deny-self-hosted-runners --predicate-type https://cyclonedx.org/bom
+      - uses: actions/upload-artifact@v7
+        with:
+          name: image-inventory-${{ github.run_id }}-${{ github.run_attempt }}
+          path: ${{ runner.temp }}/image.cdx.json
+          if-no-files-found: error
+          retention-days: 90
       - name: Publish nightly and overwrite today's date tag
         env:
           GH_TOKEN: ${{ github.token }}
           CI_REVISION: ${{ needs.select.outputs.revision }}
           CI_RELEASE_DATE: ${{ needs.select.outputs.release_date }}
-          SOURCE_IMAGE: alreadyon-ci:candidate
+          SOURCE_IMAGE: ${{ steps.staged.outputs.source }}
         run: |
           IMAGE_TAGS=$(CI_SOURCE_BRANCH=dev python3 scripts/ci/image-tags.py | sed -n 's/^tags=//p')
           export IMAGE_TAGS
-          python3 scripts/ci/publish-image.py --local
+          python3 scripts/ci/publish-image.py
       - name: Create or advance the release date tag
         env:
           GH_TOKEN: ${{ github.token }}
