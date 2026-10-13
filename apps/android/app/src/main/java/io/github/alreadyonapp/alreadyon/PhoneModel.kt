@@ -299,6 +299,11 @@ internal class PhoneModel(application: Application) : AndroidViewModel(applicati
         state.value.channel?.let { watch(it, restart = true) }
     }
     fun setAudio(track: PhoneTrack) {
+        if (state.value.profile?.subtitleMode == "other_audio") {
+            subtitleOverride = false
+            preferredSubtitle = null
+            update { it.copy(subtitleFileId = null) }
+        }
         update { it.copy(audioIndex = track.index, audioFileId = it.playback?.mediaFileId) }
         state.value.channel?.let { watch(it, restart = true) }
     }
@@ -325,9 +330,7 @@ internal class PhoneModel(application: Application) : AndroidViewModel(applicati
             return (media.subtitleTracks.find { it.label == preferred.label }
                 ?: media.subtitleTracks.find { it.language == preferred.language && it.language != "und" })?.index
         }
-        return if (profile.subtitles) media.subtitleTracks.firstOrNull {
-            it.language == profile.subtitleLanguage || it.language == subtitleISO3(profile.subtitleLanguage)
-        }?.index else null
+        return profileSubtitle(media, profile)
     }
 
     fun refreshGuide() = perform {
@@ -543,4 +546,3 @@ internal fun safeError(e: Exception): String = when (e) {
 }
 
 /** Media track tags may use ISO 639-2 while profile preferences use ISO 639-1. */
-private fun subtitleISO3(code: String) = runCatching { java.util.Locale.forLanguageTag(code).isO3Language }.getOrDefault(code)

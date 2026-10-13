@@ -65,3 +65,13 @@ export function languageLabel(code: string): string {
   if (code === 'und') return 'Unknown language';
   try { return new Intl.DisplayNames(['en'], { type: 'language' }).of(code) ?? code; } catch { return code; }
 }
+
+// Compare actual audio, not merely available tracks. Unknown metadata must not
+// trigger captions; missing subtitles simply leave the picture uninterrupted.
+export function preferredSubtitleLanguage(audio: string | undefined, preferredAudio: string,
+  mode: 'always' | 'other_audio' | 'off', tracks: SubtitleTrack[], subtitleLanguage: string): string | null {
+  const canonical = (code: string) => canonicalLanguage(code.trim().replace('_', '-').split('-')[0]);
+  const language = canonical(audio ?? '');
+  const enabled = mode === 'always' || (mode === 'other_audio' && language !== '' && language !== 'und' && language !== canonical(preferredAudio));
+  return enabled && pickTrack(tracks, subtitleLanguage) ? subtitleLanguage : null;
+}

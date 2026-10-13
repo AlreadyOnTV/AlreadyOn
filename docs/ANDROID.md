@@ -18,7 +18,7 @@ Check sign-in, profile selection/PIN behavior, channel changes, transitions, tra
 
 See [emulator setup](ANDROID_EMULATOR.md), [playback](PLAYBACK.md) and [API compatibility](../api/COMPATIBILITY.md).
 
-The [Google TV target](GOOGLE_TV.md) shares this client infrastructure, with fixed TV presentation, remote navigation and local account PIN pairing.
+The [Google TV target](GOOGLE_TV.md) shares this infrastructure, with TV presentation, remote navigation and local account PIN pairing.
 
 See [physical TV review](TV_DEVICE_REVIEW.md) for safe remote-driven checks and release performance measurement.
 
@@ -29,3 +29,5 @@ Signed phone and TV apps check GitHub on startup without delaying viewing. **Upd
 Updates use the matching device APK and verify checksum, package, target and signing certificate before asking Android to install. Allow installs from AlreadyOn in Android settings when prompted. Approve the system installer; downloads show progress and can be cancelled. Existing login/settings remain intact. After installation the app attempts to reopen and removes its downloaded APK; if necessary select Open or launch it manually. Interrupted installs offer Continue Installation or Cancel on reopening.
 
 Install the first updater-enabled APK manually. Debug packages skip production update checks. See [updater behavior and tests](ANDROID_UPDATES.md). Missing metadata, network failures and older package identities never trigger an unsafe replacement.
+
+See [subtitle modes](SUBTITLES.md).

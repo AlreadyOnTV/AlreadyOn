@@ -563,6 +563,7 @@ export interface Profile {
   fontLevel: number | null;
   brightnessLevel: number | null;
   guideTimeFormat: string | null;
+  subtitleMode: 'always' | 'other_audio' | 'off' | null;
   subtitlesEnabled: boolean | null;
   audioLanguage: string | null;
   subtitleLanguage: string | null; // ISO 639-1, e.g. 'en'

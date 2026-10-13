@@ -270,3 +270,23 @@ func newProfileIconUploadRequest(t *testing.T, url string, filename string, cont
 	req.Header.Set("Content-Type", w.FormDataContentType())
 	return req
 }
+
+func TestProfiles_SubtitleModeAPI(t *testing.T) {
+	router := NewRouter(t.TempDir(), t.TempDir(), openTestDB(t))
+	for _, mode := range []string{"always", "other_audio", "off"} {
+		rec := doJSON(t, router, http.MethodPatch, "/api/profiles/1", `{"subtitleMode":"`+mode+`"}`)
+		if rec.Code != http.StatusOK {
+			t.Fatalf("patch %s: %d %s", mode, rec.Code, rec.Body.String())
+		}
+		saved := decodeProfile(t, doJSON(t, router, http.MethodGet, "/api/profiles/1", ""))
+		if saved.SubtitleMode == nil || *saved.SubtitleMode != mode {
+			t.Fatalf("mode round trip: %+v", saved)
+		}
+	}
+	for _, body := range []string{`{"subtitleMode":"bad"}`, `{"subtitleMode":true}`} {
+		rec := doJSON(t, router, http.MethodPatch, "/api/profiles/1", body)
+		if rec.Code != http.StatusBadRequest {
+			t.Fatalf("invalid mode: %d %s", rec.Code, rec.Body.String())
+		}
+	}
+}

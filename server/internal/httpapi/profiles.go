@@ -33,6 +33,7 @@ type profileResponse struct {
 	FontLevel            *int    `json:"fontLevel"`
 	BrightnessLevel      *int    `json:"brightnessLevel"`
 	GuideTimeFormat      *string `json:"guideTimeFormat"`
+	SubtitleMode         *string `json:"subtitleMode"`
 	SubtitlesEnabled     *bool   `json:"subtitlesEnabled"`
 	AudioLanguage        *string `json:"audioLanguage"`
 	SubtitleLanguage     *string `json:"subtitleLanguage"`
@@ -44,6 +45,7 @@ func toProfileResponse(p profile.Profile) profileResponse {
 		ID: p.ID, Name: p.Name, Role: p.Role, AudienceTier: p.AudienceTier, HasPin: p.HasPIN,
 		Icon: p.Icon, FontLevel: p.FontLevel, BrightnessLevel: p.BrightnessLevel,
 		GuideTimeFormat:  p.GuideTimeFormat,
+		SubtitleMode:     p.SubtitleMode,
 		SubtitlesEnabled: p.SubtitlesEnabled, SubtitleLanguage: p.SubtitleLanguage,
 		AudioLanguage:        p.AudioLanguage,
 		LastWatchedChannelID: p.LastWatchedChannelID,
@@ -59,7 +61,7 @@ func writeProfileError(w http.ResponseWriter, err error) {
 	case errors.Is(err, profile.ErrInvalidAudioLang), errors.Is(err, profile.ErrInvalidName), errors.Is(err, profile.ErrInvalidRole),
 		errors.Is(err, profile.ErrInvalidAudienceTier), errors.Is(err, profile.ErrInvalidIcon),
 		errors.Is(err, profile.ErrInvalidLevel),
-		errors.Is(err, profile.ErrInvalidTimeFormat), errors.Is(err, profile.ErrInvalidSubtitleLang),
+		errors.Is(err, profile.ErrInvalidTimeFormat), errors.Is(err, profile.ErrInvalidSubtitleLang), errors.Is(err, profile.ErrInvalidSubtitleMode),
 		errors.Is(err, profile.ErrInvalidPIN):
 		writeJSONError(w, http.StatusBadRequest, err.Error())
 	default:

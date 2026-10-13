@@ -74,11 +74,11 @@ export default function ProfileSettingsPage() {
   // committed together by Save, so the button's enabled state means the same
   // thing for all of them. PIN changes are separate and apply immediately.
   const [draftTimeFormat, setDraftTimeFormat] = useState(timeFormat);
-  const subtitlesEnabled = currentUser.subtitlesEnabled ?? false;
+  const subtitleMode = currentUser.subtitleMode ?? (currentUser.subtitlesEnabled ? 'always' : 'off');
+  const [draftSubtitleMode, setDraftSubtitleMode] = useState(subtitleMode);
   const audioLanguage = currentUser.audioLanguage ?? 'en';
   const [draftAudioLanguage, setDraftAudioLanguage] = useState(audioLanguage);
   const subtitleLanguage = currentUser.subtitleLanguage ?? DEFAULT_SUBTITLE_LANGUAGE;
-  const [draftSubtitlesEnabled, setDraftSubtitlesEnabled] = useState(subtitlesEnabled);
   const [draftSubtitleLanguage, setDraftSubtitleLanguage] = useState(subtitleLanguage);
 
   const hasUnsavedChanges =
@@ -86,7 +86,7 @@ export default function ProfileSettingsPage() {
     iconBlob !== null ||
     draftIcon !== currentUser.icon ||
     draftTimeFormat !== timeFormat ||
-    draftSubtitlesEnabled !== subtitlesEnabled ||
+    draftSubtitleMode !== subtitleMode ||
     draftSubtitleLanguage !== subtitleLanguage ||
     draftAudioLanguage !== audioLanguage;
 
@@ -99,7 +99,7 @@ export default function ProfileSettingsPage() {
     if (name !== currentUser.name) patch.name = name;
     if (iconBlob === null && draftIcon !== currentUser.icon) patch.icon = draftIcon;
     if (draftTimeFormat !== timeFormat) patch.guideTimeFormat = draftTimeFormat;
-    if (draftSubtitlesEnabled !== subtitlesEnabled) patch.subtitlesEnabled = draftSubtitlesEnabled;
+    if (draftSubtitleMode !== subtitleMode) patch.subtitleMode = draftSubtitleMode;
     if (draftAudioLanguage !== audioLanguage) patch.audioLanguage = draftAudioLanguage;
     if (draftSubtitleLanguage !== subtitleLanguage) patch.subtitleLanguage = draftSubtitleLanguage;
 
@@ -317,20 +317,17 @@ export default function ProfileSettingsPage() {
           <div className="admin-card">
             <h3>Subtitles</h3>
             <div className="admin-field-row">
-              <label>Subtitles By Default</label>
-              <select value={draftSubtitlesEnabled ? 'on' : 'off'} onChange={(e) => setDraftSubtitlesEnabled(e.target.value === 'on')}>
-                <option value="off">Disabled</option>
-                <option value="on">Enabled</option>
+              <label htmlFor="subtitle-language">Subtitle language</label>
+              <select id="subtitle-language" value={draftSubtitleLanguage} onChange={(e) => setDraftSubtitleLanguage(e.target.value)}>
+                {SUBTITLE_LANGUAGES.map((code) => <option key={code} value={code}>{languageLabel(code)}</option>)}
               </select>
             </div>
             <div className="admin-field-row">
-              <label>Default Language</label>
-              <select value={draftSubtitleLanguage} onChange={(e) => setDraftSubtitleLanguage(e.target.value)}>
-                {SUBTITLE_LANGUAGES.map((code) => (
-                  <option key={code} value={code}>
-                    {languageLabel(code)}
-                  </option>
-                ))}
+              <label htmlFor="subtitle-mode">Subtitles</label>
+              <select id="subtitle-mode" value={draftSubtitleMode} onChange={(e) => setDraftSubtitleMode(e.target.value as typeof subtitleMode)}>
+                <option value="always">Always on</option>
+                <option value="other_audio">For other audio</option>
+                <option value="off">Off</option>
               </select>
             </div>
           </div>

@@ -17,6 +17,7 @@ import {
   languageLabel,
   loadCues,
   pickTrack,
+  preferredSubtitleLanguage,
   trackKey,
   type Cue,
 } from "./subtitles";
@@ -351,6 +352,7 @@ export function Player({
   }>({ audioLanguage: currentUser.audioLanguage ?? "en" });
   const chooseAudio = (track: AudioTrack) => {
     if (!session || track.index === session.plan.audioTrackIndex) return;
+    if (currentUser.subtitleMode === "other_audio") setSubtitleChoice(null);
     audioRef.current = {
       audioLanguage: track.language || currentUser.audioLanguage || "en",
       audioTrackIndex: track.index,
@@ -359,16 +361,21 @@ export function Player({
     void api.current?.requality();
   };
   useEffect(() => {
+    setSubtitleChoice(null);
     audioRef.current = { audioLanguage: currentUser.audioLanguage ?? "en" };
     void api.current?.requality();
   }, [currentUserId, currentUser.audioLanguage]);
   const profileLanguage =
     currentUser.subtitleLanguage ?? DEFAULT_SUBTITLE_LANGUAGE;
+  const selectedAudio = session?.audioTracks?.find(track => track.index === session.plan.audioTrackIndex);
+  const defaultLanguage = preferredSubtitleLanguage(selectedAudio?.language, currentUser.audioLanguage ?? "en",
+    currentUser.subtitleMode ?? (currentUser.subtitlesEnabled ? "always" : "off"),
+    session?.subtitles ?? [], profileLanguage);
   const wantedLanguage =
     subtitleChoice === false
       ? null
       : (subtitleChoice ??
-        (currentUser.subtitlesEnabled ? profileLanguage : null));
+        defaultLanguage);
   const activeTrack =
     session && wantedLanguage
       ? pickTrack(session.subtitles ?? [], wantedLanguage)

@@ -126,7 +126,7 @@ internal class ServerClient(val origin: String, store: SessionStore, trustedCa: 
                 p.optBoolean("hasPin"), p.optString("audioLanguage", "en").takeUnless { it == "null" } ?: "en",
                 p.optString("icon").takeUnless { it.isBlank() || it == "null" }, p.optString("role", "viewer"),
                 p.optLong("lastWatchedChannelId", -1), p.optString("guideTimeFormat", "12h").takeUnless { it == "null" } ?: "12h",
-                p.optBoolean("subtitlesEnabled"), p.optString("subtitleLanguage", "en").takeUnless { it == "null" } ?: "en")
+                p.optBoolean("subtitlesEnabled"), p.optString("subtitleLanguage", "en").takeUnless { it == "null" } ?: "en", p.optString("subtitleMode").takeUnless { it.isBlank() || it == "null" } ?: if (p.optBoolean("subtitlesEnabled")) "always" else "off")
         }
     }
 
@@ -185,7 +185,7 @@ internal class ServerClient(val origin: String, store: SessionStore, trustedCa: 
 }
 
 internal data class ViewerProfile(val id: Long, val name: String, val tier: String, val hasPin: Boolean, val language: String, val icon: String?, val role: String = "viewer",
-    val lastChannel: Long = -1, val timeFormat: String = "12h", val subtitles: Boolean = false, val subtitleLanguage: String = "en")
+    val lastChannel: Long = -1, val timeFormat: String = "12h", val subtitles: Boolean = false, val subtitleLanguage: String = "en", val subtitleMode: String = if (subtitles) "always" else "off")
 internal data class GuideProgram(val title: String, val startsAt: String, val endsAt: String,
     val episodeTitle: String = "", val seasonNumber: Int = 0, val episodeNumber: Int = 0,
     val overview: String = "", val year: Int = 0, val rating: String = "", val airDate: String = "",
