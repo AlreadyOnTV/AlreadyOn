@@ -6,11 +6,11 @@ Start with [the project brief](docs/PROJECT_BRIEF.md) and [development setup](do
 
 ## Make a change
 
-1. External contributors normally use a fork and a focused branch. Maintainers use one checkout and start/resume local release work with `python3 scripts/work.py start build`.
+1. External contributors normally use a fork and a focused branch. Maintainers use one checkout and the active cycle branch documented in [development setup](docs/DEVELOPMENT.md). The current branch is `2026-10-18`; `build` has been retired for this cycle.
 2. Implement one coherent change. Preserve existing behavior outside its scope.
 3. Update the relevant guide and [OpenAPI](api/openapi.yaml) when contracts change. Explain unusual logic in source comments. Include a [release-note entry](docs/RELEASE_NOTES.md) for user-facing features, improvements and bug fixes; omit internal maintenance.
 4. Run relevant checks and describe results in the PR. Include screenshots for visible interface changes and reproduction steps for fixes.
-5. For maintainer releases, test against the native preview, then run `python3 scripts/work.py publish [YYYY-MM-DD]` to open the dated PR to dev. The PR must pass code scanning and full e2e before merge; use the documented exact-artifact promotion commands afterward.
+5. For maintainer releases, test against the native preview, then open the active dated branch’s PR to dev when validation is approved. The PR must pass code scanning and full e2e before merge; use the documented exact-artifact promotion commands afterward.
 
 Use `make lint` and `python3 scripts/ci/check-documentation.py` for static checks. Go tests run through `make test`; browser and packaged-runtime tests are described in [delivery](docs/CI_CD.md). Never use live media or a production database as destructive fixtures.
 
