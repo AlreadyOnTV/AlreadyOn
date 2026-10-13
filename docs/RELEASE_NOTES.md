@@ -5,6 +5,11 @@ GitHub Release titles contain only `YYYY-MM-DD-alphaN`, `YYYY-MM-DD-rcN` or `YYY
 Each description always renders exactly these sections, in this order:
 
 ```markdown
+# Download Now
+
+- [Phone / tablet APK](https://github.com/AlreadyOnTV/AlreadyOn/releases/download/YYYY-MM-DD-alphaN/alreadyon-android.apk)
+- [Google TV APK](https://github.com/AlreadyOnTV/AlreadyOn/releases/download/YYYY-MM-DD-alphaN/alreadyon-tv.apk)
+
 # New Features
 
 - Connect to a nearby server without typing its address.
@@ -18,7 +23,7 @@ Each description always renders exactly these sections, in this order:
 No known issues are currently listed for this release.
 ```
 
-Empty sections say “No new features in this release.”, “No bugfixes in this release.” or the Known Issues sentence above. There are no introductory release sentences, Downloads heading or build-details block. GitHub provides the attached downloads in its asset list. Invisible source/version/baseline metadata supports safe reruns and promotions; signed asset provenance remains independently verified.
+Empty sections say “No new features in this release.”, “No bugfixes in this release.” or the Known Issues sentence above. Download Now links both APKs for that release’s exact tag. There are no introductory release sentences or visible build-details block. Invisible source/version/baseline metadata supports safe reruns and promotions; signed asset provenance remains independently verified.
 
 For user-facing changes, add a uniquely named Markdown file under `docs/release-notes/` in the same commit. Use `# New Features` for new capabilities and improvements, and `# Bugfixes` for addressed defects. Bugfix bullets must link the included GitHub issue and use its exact title. Historical Features, Improvements and Bug fixes fragment headings remain readable. Use single-line bullets, omit development-only maintenance, and leave published fragments intact.
 

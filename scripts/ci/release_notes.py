@@ -108,7 +108,7 @@ def published_changelog(body):
 
 
 def release_body(repo, tag, sha, code, changes, candidate_tag=None, changelog_baseline=None):
-    """Only product sections render; hidden metadata preserves rerun/promotion identity."""
+    """Link this release’s APKs; hidden metadata preserves rerun/promotion identity."""
     changes = render_fragments([changes])
     section = None
     for line in changes.splitlines():
@@ -124,4 +124,10 @@ def release_body(repo, tag, sha, code, changes, candidate_tag=None, changelog_ba
         metadata += f'\nChangelog baseline: `{changelog_baseline}`'
     if candidate_tag:
         metadata += f'\nPromoted from: `{candidate_tag}`'
-    return START + '\n' + changes + '\n' + END + '\n\n<!--\n' + metadata + '\n-->\n'
+    url = f'https://github.com/{repo}/releases/download/{tag}'
+    downloads = ('# Download Now\n\n'
+                 f'- [Phone / tablet APK]({url}/alreadyon-android.apk)\n'
+                 f'- [Google TV APK]({url}/alreadyon-tv.apk)\n\n')
+    # Keep downloads outside changelog markers so promotions generate links to
+    # their own tag rather than inheriting a candidate’s asset URLs.
+    return downloads + START + '\n' + changes + '\n' + END + '\n\n<!--\n' + metadata + '\n-->\n'

@@ -32,7 +32,13 @@ class ReleaseNotesTests(unittest.TestCase):
         self.assertNotIn('Stable release', stable)
         self.assertEqual(published_changelog(stable), render_fragments([changes]))
         self.assertNotIn('Build details and verification', stable)
-        self.assertNotIn('## Downloads', stable)
+        self.assertTrue(stable.startswith('# Download Now\n\n'))
+        self.assertIn('/2026-10-09-stable/alreadyon-android.apk', stable)
+        self.assertIn('/2026-10-09-stable/alreadyon-tv.apk', stable)
+        self.assertNotIn('/2026-10-09-rc3/', stable)
+        self.assertNotIn('Download Now', published_changelog(stable))
+        self.assertEqual([line for line in stable.splitlines() if line.startswith('# ')],
+                         ['# Download Now', '# New Features', '# Bugfixes', '# Known Issues'])
         self.assertIn('<!--\nSource commit:', stable)
         self.assertIn('Source commit: `' + 'a' * 40 + '`', stable)
         with self.assertRaises(ValueError):

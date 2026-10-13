@@ -2,11 +2,11 @@
 
 [![AlreadyOn](../web/public/branding/header-doc.svg)](../README.md)
 
-Maintainers control releases; keep credentials private. [Release notes](RELEASE_NOTES.md) define date/stage-only titles, three product sections and predecessor-tag comparisons. Titles do not rename artifact tags.
+Maintainers control releases; keep credentials private. [Release notes](RELEASE_NOTES.md) define date/stage-only titles, Download Now and three product sections and predecessor-tag comparisons. Titles preserve artifact tags.
 
 ## Development and releases
 
-`release-date.txt` pins the active cycle to `2026-10-18`. Reuse until Stable on main, then begin a new cycle.
+`release-date.txt` pins the active cycle to `2026-10-18`. Reuse until Stable on main, then begin another.
 
 Use the primary checkout, `2026-10-18`, and HTTPS preview on port 5173. Dated dev PRs run full quality, source/browser/runtime and security gates. Explicit active-date dispatches run these gates and publish alpha artifacts without merging or deleting the branch. Dev merges republish date/`nightly` images and Android candidates, advance the date tag and delete the merged branch. Hotfixes repeat the gates.
 
