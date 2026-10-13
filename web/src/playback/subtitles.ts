@@ -48,7 +48,9 @@ const LANGUAGES: string[][] = [
   ['zh', 'zho', 'chi'], ['ru', 'rus'], ['nl', 'nld', 'dut'], ['sv', 'swe'], ['da', 'dan'], ['no', 'nor', 'nob'], ['fi', 'fin'], ['pl', 'pol'],
   ['tr', 'tur'], ['ar', 'ara'], ['he', 'heb'], ['hi', 'hin'], ['cs', 'ces', 'cze'], ['el', 'ell', 'gre'], ['hu', 'hun'], ['th', 'tha'], ['uk', 'ukr'],
 ];
-export const SUBTITLE_LANGUAGES = LANGUAGES.map(l => l[0]);
+// Language selectors share display-name ordering, with English pinned first.
+export const SUBTITLE_LANGUAGES = LANGUAGES.map(l => l[0]).sort((a, b) =>
+  Number(b === 'en') - Number(a === 'en') || languageLabel(a).localeCompare(languageLabel(b), 'en'));
 export const DEFAULT_SUBTITLE_LANGUAGE = 'en';
 export function canonicalLanguage(code: string): string {
   const c = code.toLowerCase();

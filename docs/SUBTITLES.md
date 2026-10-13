@@ -10,6 +10,8 @@ For example, preferred English audio and English subtitles enable captions for a
 
 Unknown audio language metadata and missing matching subtitle tracks leave playback uninterrupted. Full subtitle tracks are preferred over forced/signs-only tracks. Explicit player subtitle choices remain available; choosing an audio track in For other audio mode returns to automatic selection.
 
+Audio and subtitle language selectors always list English first, then other languages alphabetically by displayed name. Reordering does not change saved language codes.
+
 Settings are saved per profile, shared across devices and retained across sessions. Save Changes commits the selected language/mode; Cancel discards the draft.
 
 ## API compatibility

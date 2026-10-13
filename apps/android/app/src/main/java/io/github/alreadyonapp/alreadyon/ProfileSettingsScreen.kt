@@ -246,5 +246,7 @@ private fun SettingsChoice(label: String, value: String, options: List<Pair<Stri
     }
 }
 
+// Phone and TV share alphabetical display names, with English always first.
 private val profileLanguages = listOf("en", "es", "fr", "de", "it", "pt", "ja", "ko", "zh", "ru", "nl", "sv", "da", "no", "fi", "pl", "tr", "ar", "he", "hi", "cs", "el", "hu", "th", "uk")
     .map { it to java.util.Locale.forLanguageTag(it).getDisplayLanguage(java.util.Locale.ENGLISH) }
+    .sortedWith(compareBy<Pair<String, String>> { it.first != "en" }.thenBy { it.second })
