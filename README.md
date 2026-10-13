@@ -12,7 +12,7 @@ The server uses Go and SQLite; the browser client uses React and TypeScript. And
 
 ## Try it
 
-Visit the [product website](https://alreadyonapp.github.io/AlreadyOn/) for an interface tour, beginner guides and tester support.
+Visit the [product website](https://alreadyonapp.github.io/) for an interface tour, beginner guides and tester support.
 
 Use [the container guide](deploy/README.md) for installation. Configure media folders, create the owner account through first-run setup, and scan the library. Mount media read-only unless you explicitly need file-management features.
 
