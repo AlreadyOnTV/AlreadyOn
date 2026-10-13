@@ -31,7 +31,7 @@ class DashboardTest {
             compose.waitForIdle()
             val origin = "https://10.0.2.2:$port"
             // Trust bootstrapping reads only public metadata; credentials use the pinned instance certificate.
-            val http = OkHttpClient.Builder().serverTls(origin.toHttpUrl(), true).build()
+            val http = OkHttpClient.Builder().bootstrapTls(origin.toHttpUrl()).build()
             val certificate = http.newCall(Request.Builder().url("$origin/api/tv/trust").build()).execute().use {
                 check(it.isSuccessful) { "Fixture trust request failed: ${it.code}" }
                 JSONObject(it.body!!.string()).getString("certificate")

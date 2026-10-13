@@ -57,16 +57,18 @@ class TvNavigationTest {
                 node.performClick()
             }
             if (manual) {
-                val addressField = hasSetTextAction() and hasText("HTTPS server address")
+                val addressField = hasSetTextAction() and hasText("Hostname / IP")
                 compose.onNode(addressField).assertExists()
-                compose.onNode(addressField).assertTextContains("https://")
+                compose.onNodeWithText("https://").assertExists()
                 compose.onNodeWithText("Searching for local servers…", substring = true).assertExists()
                 compose.waitUntil(15000) {
                     compose.onAllNodes(hasText("10.0.2.2:19900", substring = true)).fetchSemanticsNodes().isNotEmpty()
                 }
                 compose.onNode(addressField).assertExists()
                 compose.onNodeWithText("Searching for local servers…", substring = true).assertExists()
-                compose.onNode(addressField).performTextReplacement("127.0.0.1:${bridge.localPort}")
+                compose.onNode(addressField).performTextReplacement("127.0.0.1")
+                compose.onNode(hasSetTextAction() and hasText("Port")).assertTextContains("19900")
+                compose.onNode(hasSetTextAction() and hasText("Port")).performTextReplacement(bridge.localPort.toString())
                 compose.onNodeWithText("Searching for local servers…", substring = true).assertExists()
                 device.pressBack() // Dismiss the TV keyboard.
                 click("Check Server")
