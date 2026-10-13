@@ -74,7 +74,7 @@ def ensure(engine, refresh=False):
         current = inspect(engine, tag)
         force = refresh or (kind == 'ci' and refreshed_runtime)
         if not force and not matches(engine, current, recipe, runtime):
-            cached = f'ghcr.io/alreadyonapp/alreadyon-base:base-{kind}'
+            cached = f'ghcr.io/alreadyontv/alreadyon-base:base-{kind}'
             imported = inspect(engine, cached)
             if matches(engine, imported, recipe, runtime) and not expired(imported, now):
                 subprocess.run([engine, 'tag', imported['Id'], tag], check=True,

@@ -9,7 +9,7 @@ Promotion into `main` is the maintainer’s release decision and triggers Stable
 - [ ] Review migration/API compatibility and synthetic upgrade/restart evidence. Confirm accounts, settings, library and schedules persist as intended, with intentional session changes documented. Preserve live databases/media; never use production data as destructive fixtures.
 - [ ] Agree on recovery or fix-forward handling. Confirm any selected prior digest remains available and that database/schema compatibility permits the proposed recovery. Image retention is not a database recovery plan; do not assume downgrading a container safely downgrades its database. See [retention](IMAGE_RETENTION.md).
 - [ ] Ensure installation, license/attribution, release notes and support guidance match shipped behavior. Track unresolved redistribution review and supported-platform/minimum-resource documentation explicitly; a checklist or published Stable tag does not complete those tasks.
-- [ ] Route user feedback to [public issues](https://github.com/AlreadyOnApp/AlreadyOn/issues) and vulnerabilities through [private reporting](../SECURITY.md). Describe supported-version limits and known installation/security prompts.
+- [ ] Route user feedback to [public issues](https://github.com/AlreadyOnTV/AlreadyOn/issues) and vulnerabilities through [private reporting](../SECURITY.md). Describe supported-version limits and known installation/security prompts.
 - [ ] After authorized promotion, verify published channel digests and release assets against the accepted candidate. Record actual results; do not claim deployment or device verification from publication alone.
 
 See [delivery](CI_CD.md) and [Android releases](ANDROID_RELEASES.md).

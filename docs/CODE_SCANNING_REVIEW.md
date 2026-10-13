@@ -1,6 +1,6 @@
 # Code scanning review
 
-This review covers the 14 CodeQL findings reported against `7ae6fa8` in AlreadyOnApp/AlreadyOn. Dispositions summarize code changes and contextual review; GitHub is the source of truth for alert state. Read [security boundaries](SECURITY_BOUNDARIES.md) for compatibility and operational limits.
+This review covers the 14 CodeQL findings reported against `7ae6fa8` in AlreadyOnTV/AlreadyOn. Dispositions summarize code changes and contextual review; GitHub is the source of truth for alert state. Read [security boundaries](SECURITY_BOUNDARIES.md) for compatibility and operational limits.
 
 | Alerts | Finding | Response |
 | --- | --- | --- |

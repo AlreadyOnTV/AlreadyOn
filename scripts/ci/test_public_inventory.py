@@ -13,7 +13,7 @@ SPEC = importlib.util.spec_from_file_location('sbom_android_release', Path(__fil
 release = importlib.util.module_from_spec(SPEC)
 SPEC.loader.exec_module(release)
 SHA = 'a' * 40
-IMAGE = 'ghcr.io/alreadyonapp/alreadyon@sha256:' + 'b' * 64
+IMAGE = 'ghcr.io/alreadyontv/alreadyon@sha256:' + 'b' * 64
 
 
 class PublicInventory(unittest.TestCase):

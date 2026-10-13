@@ -1,3 +1,4 @@
+// Repository ownership changes do not change installed Android package identity.
 package io.github.alreadyonapp.alreadyon
 
 import org.junit.Assert.*
@@ -5,7 +6,7 @@ import org.junit.Test
 
 class UpdatePolicyTest {
     private val update = AppUpdate("2026-10-11-alpha1", "2026-10-11-alpha1", 24, "tv",
-        "https://github.com/AlreadyOnApp/AlreadyOn/releases/download/2026-10-11-alpha1/alreadyon-tv.apk", "a".repeat(64), 1024)
+        "https://github.com/AlreadyOnTV/AlreadyOn/releases/download/2026-10-11-alpha1/alreadyon-tv.apk", "a".repeat(64), 1024)
     @Test fun stableInstallsExcludePreviewsAndDrafts() {
         assertFalse(acceptsUpdateRelease("2026-10-10-Stable", "2026-10-11-alpha1", false, true))
         assertTrue(acceptsUpdateRelease("2026-10-10-Stable", "2026-10-11-Stable", false, false))
@@ -29,11 +30,11 @@ class UpdatePolicyTest {
         assertFalse(verifiedUpdateMetadata(update.copy(hash = "bad"), 23, "tv"))
     }
     @Test fun assetUrlsCannotEscapeRepositoryOrTls() {
-        for (url in listOf("http://github.com/AlreadyOnApp/AlreadyOn/releases/download/x/a.apk",
-            "https://github.com.evil.example/AlreadyOnApp/AlreadyOn/releases/download/x/a.apk",
+        for (url in listOf("http://github.com/AlreadyOnTV/AlreadyOn/releases/download/x/a.apk",
+            "https://github.com.evil.example/AlreadyOnTV/AlreadyOn/releases/download/x/a.apk",
             "https://github.com/other/repo/releases/download/x/a.apk",
-            "https://user@github.com/AlreadyOnApp/AlreadyOn/releases/download/x/a.apk",
-            "https://github.com/AlreadyOnApp/AlreadyOn/releases/download/../a.apk")) assertFalse(validUpdateAsset(url))
+            "https://user@github.com/AlreadyOnTV/AlreadyOn/releases/download/x/a.apk",
+            "https://github.com/AlreadyOnTV/AlreadyOn/releases/download/../a.apk")) assertFalse(validUpdateAsset(url))
         assertTrue(validUpdateAsset(update.url))
     }
 }

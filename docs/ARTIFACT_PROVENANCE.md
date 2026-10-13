@@ -9,9 +9,9 @@ Test/main verify the same signed image digest before retagging. Earlier cycles r
 Verify by immutable digest with:
 
 ```sh
-gh attestation verify oci://ghcr.io/alreadyonapp/alreadyon@sha256:DIGEST \
-  --repo AlreadyOnApp/AlreadyOn \
-  --signer-workflow AlreadyOnApp/AlreadyOn/.github/workflows/rebuild.yml \
+gh attestation verify oci://ghcr.io/alreadyontv/alreadyon@sha256:DIGEST \
+  --repo AlreadyOnTV/AlreadyOn \
+  --signer-workflow AlreadyOnTV/AlreadyOn/.github/workflows/rebuild.yml \
   --deny-self-hosted-runners
 ```
 

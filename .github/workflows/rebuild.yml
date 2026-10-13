@@ -1,4 +1,4 @@
-# A dev merge builds and publishes the exact date-scoped release after full validation.
+# Dev merges and explicit active-date dispatches publish only after full release validation.
 name: Build Date Release Image
 on:
   push:
@@ -6,7 +6,7 @@ on:
   workflow_dispatch:
     inputs:
       revision:
-        description: Optional dev merge commit; empty selects the current dev head
+        description: Optional exact commit; empty selects the dispatched dev or active dated branch
         type: string
         default: ''
       release_date:
@@ -22,7 +22,7 @@ concurrency:
   cancel-in-progress: false
 jobs:
   select:
-    if: ${{ github.ref_name == 'dev' }}
+    if: ${{ github.ref_name == 'dev' || github.event_name == 'workflow_dispatch' }}
     runs-on: ubuntu-26.04
     outputs:
       revision: ${{ steps.source.outputs.revision }}
@@ -33,22 +33,18 @@ jobs:
     steps:
       - uses: actions/checkout@v7
         with:
-          ref: ${{ inputs.revision || (github.event_name == 'push' && github.sha) || 'dev' }}
+          ref: ${{ inputs.revision || (github.event_name == 'push' && github.sha) || github.ref_name }}
           persist-credentials: false
-      - name: Select the exact dev commit for every validation job
+      - name: Select the exact source commit for every validation job
         id: source
         env:
           GH_TOKEN: ${{ github.token }}
           RELEASE_DATE: ${{ inputs.release_date }}
         run: |
           revision=$(git rev-parse HEAD)
-          current=$(gh api "repos/$GITHUB_REPOSITORY/git/ref/heads/dev" --jq .object.sha)
+          current=$(gh api "repos/$GITHUB_REPOSITORY/git/ref/heads/$GITHUB_REF_NAME" --jq .object.sha)
           test "$revision" = "$current"
-          if [ -n "$RELEASE_DATE" ]; then
-            release_date=$(python3 scripts/ci/release-context.py date --sha "$revision" --date "$RELEASE_DATE")
-          else
-            release_date=$(python3 scripts/ci/release-context.py date --sha "$revision")
-          fi
+          release_date=$(python3 scripts/ci/release-context.py build-date --sha "$revision" --date "$RELEASE_DATE")
           echo "revision=$revision" >> "$GITHUB_OUTPUT"
           echo "release_date=$release_date" >> "$GITHUB_OUTPUT"
   quality:
@@ -82,7 +78,7 @@ jobs:
       - uses: ./.github/actions/build-bases
         id: resolve
         with:
-          image: ghcr.io/alreadyonapp/alreadyon-base
+          image: ghcr.io/alreadyontv/alreadyon-base
           revision: ${{ needs.select.outputs.revision }}
   tests:
     name: Go and full browser e2e tests
@@ -142,12 +138,12 @@ jobs:
         with:
           image: alreadyon-ci:candidate
           ci-image: ${{ needs.bases.outputs.ci }}
-      - name: Refuse publication from an outdated dev tip
+      - name: Refuse publication from an outdated source branch tip
         env:
           GH_TOKEN: ${{ github.token }}
           CI_REVISION: ${{ needs.select.outputs.revision }}
         run: |
-          current=$(gh api "repos/$GITHUB_REPOSITORY/git/ref/heads/dev" --jq .object.sha)
+          current=$(gh api "repos/$GITHUB_REPOSITORY/git/ref/heads/$GITHUB_REF_NAME" --jq .object.sha)
           test "$current" = "$CI_REVISION"
       - name: Upload tested layers without changing release channels
         id: staged
@@ -202,6 +198,7 @@ jobs:
           RELEASE_DATE: ${{ needs.select.outputs.release_date }}
         run: python3 scripts/ci/release-context.py tag --sha "$CI_REVISION" --date "$RELEASE_DATE"
       - name: Delete the merged date branch after successful release
+        if: github.ref_name == 'dev'
         env:
           GH_TOKEN: ${{ github.token }}
           CI_REVISION: ${{ needs.select.outputs.revision }}

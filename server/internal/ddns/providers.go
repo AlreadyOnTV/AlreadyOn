@@ -40,7 +40,7 @@ func (m *Manager) request(ctx context.Context, method, endpoint string, c *Confi
 	if err != nil {
 		return nil, errors.New("could not prepare provider request")
 	}
-	r.Header.Set("User-Agent", "AlreadyOn DDNS/1.0 (+https://github.com/AlreadyOnApp/AlreadyOn)")
+	r.Header.Set("User-Agent", "AlreadyOn DDNS/1.0 (+https://github.com/AlreadyOnTV/AlreadyOn)")
 	// Cloudflare's JSON DoH endpoint requires this exact media type; a
 	// comma-separated Accept list is rejected with HTTP 400.
 	if r.URL.Host == "cloudflare-dns.com" {

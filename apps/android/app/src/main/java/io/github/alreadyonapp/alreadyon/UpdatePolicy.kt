@@ -1,9 +1,10 @@
+// Repository ownership changes do not change installed Android package identity.
 package io.github.alreadyonapp.alreadyon
 
 import java.net.URI
 
 internal const val UPDATE_PACKAGE = "io.github.alreadyonapp.alreadyon"
-internal const val UPDATE_REPOSITORY = "AlreadyOnApp/AlreadyOn"
+internal const val UPDATE_REPOSITORY = "AlreadyOnTV/AlreadyOn"
 internal const val MAX_UPDATE_BYTES = 256L * 1024 * 1024
 internal data class AppUpdate(val release: String, val version: String, val code: Long,
     val target: String, val url: String, val hash: String, val size: Long)
@@ -19,7 +20,7 @@ internal fun validUpdateAsset(url: String): Boolean {
     val uri = runCatching { URI(url) }.getOrNull() ?: return false
     return uri.scheme == "https" && uri.host == "github.com" && uri.userInfo == null &&
         uri.port == -1 && uri.rawQuery == null && uri.fragment == null &&
-        Regex("/AlreadyOnApp/AlreadyOn/releases/download/\\d{4}-\\d{2}-\\d{2}-(alpha\\d+|beta\\d*|rc\\d+|stable)/(android-release\\.json|alreadyon-android\\.apk|alreadyon-tv\\.apk)", RegexOption.IGNORE_CASE).matches(uri.rawPath)
+        Regex("/AlreadyOnTV/AlreadyOn/releases/download/\\d{4}-\\d{2}-\\d{2}-(alpha\\d+|beta\\d*|rc\\d+|stable)/(android-release\\.json|alreadyon-android\\.apk|alreadyon-tv\\.apk)", RegexOption.IGNORE_CASE).matches(uri.rawPath)
 }
 
 internal fun verifiedUpdateMetadata(update: AppUpdate, installedCode: Long, target: String): Boolean =

@@ -46,7 +46,7 @@ func NewKeylessClient() *KeylessClient {
 		HTTPClient:       &http.Client{Transport: governor.BackgroundTransport{}, Timeout: 20 * time.Second},
 		TVmazeBase:       "https://api.tvmaze.com",
 		WikidataEndpoint: "https://query.wikidata.org/sparql",
-		UserAgent:        "AlreadyOn (+https://github.com/AlreadyOnApp/AlreadyOn)",
+		UserAgent:        "AlreadyOn (+https://github.com/AlreadyOnTV/AlreadyOn)",
 		MinInterval: map[string]time.Duration{
 			providerTVmaze:   600 * time.Millisecond,
 			providerWikidata: 1500 * time.Millisecond,

@@ -2,7 +2,7 @@
 ARG GO_VERSION=1.27
 ARG NODE_VERSION=24
 ARG UBUNTU_VERSION=26.04
-ARG RUNTIME_BASE=ghcr.io/alreadyonapp/alreadyon-base:base-runtime
+ARG RUNTIME_BASE=ghcr.io/alreadyontv/alreadyon-base:base-runtime
 FROM golang:${GO_VERSION} AS go-toolchain
 FROM node:${NODE_VERSION} AS node-toolchain
 # The CI base adds only tools needed to compile the application and run the full

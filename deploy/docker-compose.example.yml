@@ -4,7 +4,7 @@ name: alreadyon
 services:
   alreadyon:
     # Published production channel; use nightly or latest for dev/test.
-    image: ghcr.io/alreadyonapp/alreadyon:stable
+    image: ghcr.io/alreadyontv/alreadyon:stable
     container_name: alreadyon
     restart: unless-stopped
     ports:

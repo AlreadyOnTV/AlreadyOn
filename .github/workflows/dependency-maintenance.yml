@@ -30,12 +30,12 @@ jobs:
       - name: Resolve published runtime and matching CI baseline
         id: baseline
         run: |
-          docker pull ghcr.io/alreadyonapp/alreadyon:nightly
-          source=$(docker inspect ghcr.io/alreadyonapp/alreadyon:nightly --format '{{index .RepoDigests 0}}')
+          docker pull ghcr.io/alreadyontv/alreadyon:nightly
+          source=$(docker inspect ghcr.io/alreadyontv/alreadyon:nightly --format '{{index .RepoDigests 0}}')
           docker tag "$source" alreadyon-maintenance:runtime
           echo "runtime=alreadyon-maintenance:runtime" >> "$GITHUB_OUTPUT"
-          docker pull ghcr.io/alreadyonapp/alreadyon-base:base-ci
-          ci=$(docker inspect ghcr.io/alreadyonapp/alreadyon-base:base-ci --format '{{index .RepoDigests 0}}')
+          docker pull ghcr.io/alreadyontv/alreadyon-base:base-ci
+          ci=$(docker inspect ghcr.io/alreadyontv/alreadyon-base:base-ci --format '{{index .RepoDigests 0}}')
           docker tag "$ci" alreadyon-maintenance:ci
           echo "ci=alreadyon-maintenance:ci" >> "$GITHUB_OUTPUT"
           {
