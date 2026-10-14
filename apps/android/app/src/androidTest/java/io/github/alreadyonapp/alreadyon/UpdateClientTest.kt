@@ -1,3 +1,4 @@
+// Exercise short release URLs while preserving signed historical package metadata.
 package io.github.alreadyonapp.alreadyon
 
 import androidx.test.ext.junit.runners.AndroidJUnit4
@@ -40,42 +41,42 @@ class UpdateClientTest {
 
     @Test fun paginatedReleasesChooseVersionCodeAndCorrectTarget() = runBlocking {
         val pageOne = JSONArray()
-        repeat(29) { pageOne.put(entry("2026-10-10-alpha1", 23, draft = true)) }
-        pageOne.put(entry("2026-10-12-alpha1", 24))
-        val pageTwo = JSONArray().put(entry("2026-10-11-alpha1", 25))
+        repeat(29) { pageOne.put(entry("26-10-10-alpha1", 23, draft = true)) }
+        pageOne.put(entry("26-10-12-alpha1", 24))
+        val pageTwo = JSONArray().put(entry("26-10-11-alpha1", 25))
         val checker = service { url -> when {
             url.contains("page=1") -> pageOne.toString()
             url.contains("page=2") -> pageTwo.toString()
-            url.contains("2026-10-12") -> manifest(24, "2026-10-12-alpha1").toString()
-            else -> manifest(25, "2026-10-11-alpha1").toString()
+            url.contains("26-10-12") -> manifest(24, "26-10-12-alpha1").toString()
+            else -> manifest(25, "26-10-11-alpha1").toString()
         } }
-        val tv = checker.check("2026-10-10-alpha1", 23, true)!!
+        val tv = checker.check("26-10-10-alpha1", 23, true)!!
         assertEquals(25L, tv.code); assertTrue(tv.url.endsWith("alreadyon-tv.apk"))
-        val phone = checker.check("2026-10-10-alpha1", 23, false)!!
+        val phone = checker.check("26-10-10-alpha1", 23, false)!!
         assertTrue(phone.url.endsWith("alreadyon-android.apk"))
-        assertNull(checker.check("2026-10-10-Stable", 23, true))
-        assertNull(checker.check("2026-10-11-alpha1", 25, true))
+        assertNull(checker.check("26-10-10-Stable", 23, true))
+        assertNull(checker.check("26-10-11-alpha1", 25, true))
     }
     @Test fun promotedAlphaBytesStayOnStableTrack() = runBlocking {
         val checker = service { url -> when {
-            url.contains("api.github.com") -> JSONArray().put(entry("2026-10-10-Stable", 23, preview = false))
-                .put(entry("2026-10-11-Stable", 24, preview = false)).put(entry("2026-10-12-alpha1", 25)).toString()
-            url.contains("2026-10-10") -> manifest(23, "2026-10-10-alpha1").toString()
-            else -> manifest(24, "2026-10-11-alpha1").toString()
+            url.contains("api.github.com") -> JSONArray().put(entry("26-10-10-Stable", 23, preview = false))
+                .put(entry("26-10-11-Stable", 24, preview = false)).put(entry("26-10-12-alpha1", 25)).toString()
+            url.contains("26-10-10") -> manifest(23, "26-10-10-alpha1").toString()
+            else -> manifest(24, "26-10-11-alpha1").toString()
         } }
-        assertEquals(24L, checker.check("2026-10-10-alpha1", 23, true)!!.code)
+        assertEquals(24L, checker.check("26-10-10-alpha1", 23, true)!!.code)
     }
     @Test fun missingTargetMetadataIsSkipped() = runBlocking {
-        val checker = service { url -> if (url.contains("api.github.com")) JSONArray().put(entry("2026-10-11-alpha1", 25)).toString()
-            else manifest(25, "2026-10-11-alpha1").apply { remove("artifacts") }.toString() }
-        assertNull(checker.check("2026-10-10-alpha1", 23, true))
+        val checker = service { url -> if (url.contains("api.github.com")) JSONArray().put(entry("26-10-11-alpha1", 25)).toString()
+            else manifest(25, "26-10-11-alpha1").apply { remove("artifacts") }.toString() }
+        assertNull(checker.check("26-10-10-alpha1", 23, true))
     }
     @Test fun corruptAndTruncatedDownloadsAreRemoved() = runBlocking {
         val checker = service { String(bytes) }
         val folder = File(context.cacheDir, "synthetic-update-test").apply { mkdirs() }
         val file = File(folder, "update.apk")
-        val update = AppUpdate("2026-10-11-alpha1", "2026-10-11-alpha1", 24, "tv",
-            "https://github.com/$UPDATE_REPOSITORY/releases/download/2026-10-11-alpha1/alreadyon-tv.apk", hash(bytes), bytes.size.toLong())
+        val update = AppUpdate("26-10-11-alpha1", "26-10-11-alpha1", 24, "tv",
+            "https://github.com/$UPDATE_REPOSITORY/releases/download/26-10-11-alpha1/alreadyon-tv.apk", hash(bytes), bytes.size.toLong())
         try {
             checker.download(update, file) { }
             assertArrayEquals(bytes, file.readBytes())

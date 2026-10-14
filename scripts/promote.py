@@ -103,7 +103,7 @@ def main():
     target_head = run('git', 'rev-parse', f'origin/{args.target}')
     upstream_head = run('git', 'rev-parse', f'origin/{upstream_name}')
     source_ref = args.commit or f'origin/{upstream_name}'
-    if args.target == 'test' and re.fullmatch(r'\d{4}-\d{2}-\d{2}', source_ref):
+    if args.target == 'test' and re.fullmatch(r'\d{2}-\d{2}-\d{2}', source_ref):
         source_ref = f'refs/tags/{source_ref}'
     selected = run('git', 'rev-parse', '--verify', source_ref + '^{commit}')
     if args.target == 'main' and selected != upstream_head:

@@ -8,6 +8,8 @@ import re
 import subprocess
 import sys
 from zoneinfo import ZoneInfo
+sys.path.insert(0, str(Path(__file__).resolve().parent / "ci"))
+from release_dates import release_day as canonical_day
 
 
 def git(*args):
@@ -19,14 +21,8 @@ def ancestor(older, newer):
 
 
 def release_day(value=None):
-    day = value or datetime.now(ZoneInfo('America/New_York')).date().isoformat()
-    if not re.fullmatch(r'\d{4}-\d{2}-\d{2}', day):
-        raise ValueError('Release branch must use YYYY-MM-DD')
-    try:
-        datetime.strptime(day, '%Y-%m-%d')
-    except ValueError as error:
-        raise ValueError('Release branch must use a valid YYYY-MM-DD date') from error
-    return day
+    day = value or datetime.now(ZoneInfo('America/New_York')).date().isoformat()[2:]
+    return canonical_day(day)
 
 
 def remote_ref_sha(ref, tags=False):
@@ -42,9 +38,9 @@ def remote_ref_sha(ref, tags=False):
 
 def active_release_day(remote_tags, baseline=None):
     dates = {match[0] for name in remote_tags
-             if (match := re.fullmatch(r'(\d{4}-\d{2}-\d{2})', name))}
+             if (match := re.fullmatch(r'(\d{2}-\d{2}-\d{2})', name))}
     stable = {match[1] for name in remote_tags
-              if (match := re.fullmatch(r'(\d{4}-\d{2}-\d{2})-(?:Stable|stable)', name))}
+              if (match := re.fullmatch(r'(\d{2}-\d{2}-\d{2})-(?:Stable|stable)', name))}
     # A maintainer can snap to a new cycle without deleting historical preview tags.
     if baseline:
         baseline = release_day(baseline)

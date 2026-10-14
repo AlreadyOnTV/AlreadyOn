@@ -9,7 +9,7 @@ on:
         type: string
         required: true
       release_date:
-        description: Release date in YYYY-MM-DD
+        description: Release date in YY-MM-DD
         type: string
         required: true
       source_sha:
@@ -25,7 +25,7 @@ on:
         default: promote-test
         required: true
       release_date:
-        description: Optional YYYY-MM-DD release date; otherwise derive from source/tag
+        description: Optional YY-MM-DD release date; otherwise derive from source/tag
         type: string
         required: false
       source_sha:

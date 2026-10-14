@@ -12,7 +12,7 @@ Use `make preview-status` and `make preview-stop` to inspect or stop this checko
 
 ## Single-checkout release work
 
-Use the primary repository checkout; do not create parallel worktrees. The active maintainer cycle uses local and remote branch `2026-10-18`, based on `dev`; commit and push cycle work there. The maintainer explicitly retired `build` for this cycle. Test locally at <https://localhost:5173>. When ready for approved validation, open a PR from `2026-10-18` to `dev`; the legacy `work.py` helper requires `build` and is not used for this cycle. Do not start another cycle before Stable. Approved alpha dispatches retain the dated branch; see [cycle instructions](ORGANIZATION.md). Follow [release-note conventions](RELEASE_NOTES.md) for titles, changes and known issues.
+Use the primary repository checkout; do not create parallel worktrees. The active maintainer cycle uses local and remote branch `26-10-18`, based on `dev`; commit and push cycle work there. The maintainer explicitly retired `build` for this cycle. Test locally at <https://localhost:5173>. When ready for approved validation, open a PR from `26-10-18` to `dev`; the legacy `work.py` helper requires `build` and is not used for this cycle. Do not start another cycle before Stable. Approved alpha dispatches retain the dated branch; see [cycle instructions](ORGANIZATION.md). Follow [release-note conventions](RELEASE_NOTES.md) for titles, changes and known issues.
 
 Trust this instance's local certificate only on your development machine. Do not weaken remote TLS validation. Local data lives under ignored `server/data/`; keep it across restarts.
 

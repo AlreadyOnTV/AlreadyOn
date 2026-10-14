@@ -4,6 +4,7 @@ import datetime
 import os
 import re
 from zoneinfo import ZoneInfo
+from release_dates import release_day
 
 SHA = re.compile(r'[0-9a-f]{40}')
 
@@ -26,13 +27,8 @@ def image_tags(repository, branch, revision, now=None, release_date=None):
     sha(revision)
     channel = {'dev': 'nightly', 'test': 'latest', 'main': 'stable'}[branch]
     now = now or datetime.datetime.now(datetime.timezone.utc)
-    day = release_date or now.astimezone(ZoneInfo('America/New_York')).strftime('%Y-%m-%d')
-    if not re.fullmatch(r'\d{4}-\d{2}-\d{2}', day):
-        raise ValueError('Release date must use YYYY-MM-DD')
-    try:
-        datetime.datetime.strptime(day, '%Y-%m-%d')
-    except ValueError as error:
-        raise ValueError('Release date must be a valid YYYY-MM-DD date') from error
+    day = release_date or now.astimezone(ZoneInfo('America/New_York')).strftime('%y-%m-%d')
+    day = release_day(day)
     image = 'ghcr.io/' + repository.lower()
     tags = [f'{image}:{channel}']
     if branch == 'dev':
