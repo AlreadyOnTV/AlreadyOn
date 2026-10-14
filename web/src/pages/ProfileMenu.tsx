@@ -8,6 +8,7 @@ import { PasswordInput } from '../components/PasswordInput';
 import { UserAvatar } from '../users/avatars';
 import { signOut } from '../api/access';
 import './ProfileMenu.css';
+import AddProfileModal from './AddProfileModal';
 
 type MenuView = 'root' | 'switch' | 'pin';
 
@@ -17,11 +18,20 @@ export default function ProfileMenu() {
   const navigate = useNavigate();
   const panelId = useId();
   const [open, setOpen] = useState(false);
+  const [adding, setAdding] = useState(false);
   const [view, setView] = useState<MenuView>('root');
   const [pendingUserId, setPendingUserId] = useState<number | null>(null);
   const [pinInput, setPinInput] = useState('');
   const [pinError, setPinError] = useState<string | null>(null);
   const containerRef = useRef<HTMLDivElement>(null);
+  // Pin the active profile first without mutating the account's shared list.
+  const switchUsers = [...users].sort((a, b) =>
+    Number(b.id === currentUser.id) - Number(a.id === currentUser.id) ||
+    a.name.localeCompare(b.name, undefined, { sensitivity: 'base' }) || a.id - b.id);
+  const closeCreation = () => {
+    setAdding(false);
+    containerRef.current?.querySelector<HTMLButtonElement>('.profile-menu-trigger')?.focus();
+  };
   const go = (path: string) => {
     setOpen(false);
     navigate(path);
@@ -135,10 +145,13 @@ export default function ProfileMenu() {
 
           {view === 'switch' && (
             <>
-              <button className="profile-menu-item profile-menu-back" onClick={() => setView('root')}>
-                ← Back
-              </button>
-              {users.map((u) => (
+              <div className="profile-menu-switch-header">
+                <button className="profile-menu-item profile-menu-back" onClick={() => setView('root')}>
+                  ← Back
+                </button>
+                {isAdmin && <button className="profile-menu-item profile-menu-add" onClick={() => { setOpen(false); setAdding(true); }}>Add Profile</button>}
+              </div>
+              {switchUsers.map((u) => (
                 <button
                   key={u.id}
                   className={'profile-menu-item profile-menu-profile' + (u.id === currentUser.id ? ' profile-menu-item-active' : '')}
@@ -190,6 +203,7 @@ export default function ProfileMenu() {
           )}
         </div>
       )}
+      {adding && isAdmin && <AddProfileModal onClose={closeCreation} />}
     </div>
   );
 }

@@ -69,11 +69,14 @@ export function UsersProvider({ children }: { children: ReactNode }) {
   // Saves in flight. A refetch that lands meanwhile would overwrite the
   // on-screen change with older server data, so it is skipped.
   const inflight = useRef(0);
+  // Also discard refreshes that finish after a creation they straddled.
+  const creationRevision = useRef(0);
 
   const load = useCallback(async (silent: boolean) => {
     try {
+      const revision = creationRevision.current;
       const list = await getProfiles();
-      if (inflight.current > 0) return;
+      if (inflight.current > 0 || revision !== creationRevision.current) return;
       setProfiles(list);
       setLoadError(null);
       clearLegacyStorage();
@@ -140,9 +143,17 @@ export function UsersProvider({ children }: { children: ReactNode }) {
   };
 
   const addUser = async (draft: ProfileDraft) => {
-    const created = await createProfile(draft);
-    setProfiles((prev) => [...(prev ?? []), created]);
-    return created;
+    // A focus refresh must not replace a just-created profile with a stale list.
+    inflight.current++;
+    creationRevision.current++;
+    try {
+      const created = await createProfile(draft);
+      setProfiles((prev) => [...(prev ?? []).filter(profile => profile.id !== created.id), created]);
+      return created;
+    } finally {
+      inflight.current--;
+      creationRevision.current++;
+    }
   };
 
   const deleteUser = async (id: number) => {

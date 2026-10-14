@@ -3800,6 +3800,7 @@ const noWorkers = async (unreleased = () => 0) => {
     if (!only || only.includes("alignment")) await guideAlignment();
     if (!only || only.includes("autofill-policy")) await require("./autofill-policy.cjs")({ browser, login, url, assert });
     if (!only || only.includes("credential-drafts")) await require("./credential-drafts.cjs")({ browser, login, url, assert });
+    if (!only || only.includes("profile-creation")) await require("./profile-creation.cjs")({ browser, login, url, assert });
     if (!only || only.includes("profile-menu")) await profileMenuRoles();
     if (!only || only.includes("admin")) await adminTabs();
     if (!only || only.includes("admin-metrics-logs"))

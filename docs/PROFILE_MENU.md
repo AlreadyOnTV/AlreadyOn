@@ -8,6 +8,8 @@ WebUI keyboard Enter/Space opens the menu; Escape or clicking outside closes it.
 
 Dashboard is the first/default tab inside Server, followed by Home Users, Media, Commercials, Channels, Server, Logs and API. The `/admin/accounts` bookmark still selects Home Users. `/dashboard` redirects to `/admin/dashboard`; viewers are redirected to the Guide by the existing Server owner gate. Monitoring APIs retain their existing authorization.
 
+See [profile creation](PROFILE_CREATION.md) for the WebUI Admin-only Add Profile shortcut and sorted switch list.
+
 ## Signed-in devices
 
 Settings shows Device, Type, IP Address, Last Active, Expires and Sign Out in the Signed-In Browsers table. The This Browser badge sits below the device name and sizes to its full text on one line. Wide tables scroll within a keyboard-accessible region at narrow widths.

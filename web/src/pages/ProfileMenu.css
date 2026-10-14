@@ -80,6 +80,10 @@
   overflow-y: auto;
 }
 
+/* Back and profile creation share the chooser's first row. */
+.profile-menu-switch-header { display: flex; justify-content: space-between; gap: 8px; }
+.profile-menu-switch-header .profile-menu-item { width: auto; white-space: nowrap; }
+
 .profile-menu-expanded .profile-menu-item {
   padding: 10px;
   font-size: 17px;
