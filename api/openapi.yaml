@@ -2888,7 +2888,7 @@ paths:
                   appVersion:
                     {
                       type: string,
-                      description: 'Build identity in America/New_York (YY.MM.DD_shortsha); Development_shortsha when native build metadata is unavailable. Release-cycle labels separately use YY-MM-DD',
+                      description: 'Build identity in America/New_York (YY.MM.DD_shortsha); Development_shortsha when native build metadata is unavailable. Release-cycle labels separately use YY.MM.DD',
                     }
                   timeZone: { type: string }
                   ffmpegVersion: { type: string, description: Installed FFmpeg version or Unavailable }

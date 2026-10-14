@@ -20,12 +20,12 @@ from release_dates import release_day
 from release_notes import changelog, changelog_since, promotion_changes, release_body
 
 # New lifecycle: alphaN on dev, RCN on test, Stable on main. Accept old tags for history.
-ALPHA = re.compile(r"((?:20)?\d{2}-\d{2}-\d{2})-alpha([1-9]\d*)\Z")
-RC = re.compile(r"((?:20)?\d{2}-\d{2}-\d{2})-RC([1-9]\d*)\Z")
-STABLE = re.compile(r"((?:20)?\d{2}-\d{2}-\d{2})-Stable\Z")
-LEGACY = re.compile(r"((?:20)?\d{2}-\d{2}-\d{2})-(beta|rc|stable)([1-9]\d*)?\Z")
-LEGACY_BETA = re.compile(r"((?:20)?\d{2}-\d{2}-\d{2})-beta([1-9]\d*)?\Z")
-CANDIDATE = re.compile(r"((?:20)?\d{2}-\d{2}-\d{2})-(?:alpha[1-9]\d*|RC[1-9]\d*|beta(?:[1-9]\d*)?|rc[1-9]\d*)\Z")
+ALPHA = re.compile(r"((?:\d{2}\.\d{2}\.\d{2}|(?:20)?\d{2}-\d{2}-\d{2}))-alpha([1-9]\d*)\Z")
+RC = re.compile(r"((?:\d{2}\.\d{2}\.\d{2}|(?:20)?\d{2}-\d{2}-\d{2}))-RC([1-9]\d*)\Z")
+STABLE = re.compile(r"((?:\d{2}\.\d{2}\.\d{2}|(?:20)?\d{2}-\d{2}-\d{2}))-Stable\Z")
+LEGACY = re.compile(r"((?:\d{2}\.\d{2}\.\d{2}|(?:20)?\d{2}-\d{2}-\d{2}))-(beta|rc|stable)([1-9]\d*)?\Z")
+LEGACY_BETA = re.compile(r"((?:\d{2}\.\d{2}\.\d{2}|(?:20)?\d{2}-\d{2}-\d{2}))-beta([1-9]\d*)?\Z")
+CANDIDATE = re.compile(r"((?:\d{2}\.\d{2}\.\d{2}|(?:20)?\d{2}-\d{2}-\d{2}))-(?:alpha[1-9]\d*|RC[1-9]\d*|beta(?:[1-9]\d*)?|rc[1-9]\d*)\Z")
 ASSETS = ("alreadyon-android.apk", "SHA256SUMS", "android-release.json", "alreadyon-tv.apk")
 
 
@@ -221,7 +221,7 @@ def publish(repo, tag, sha, directory, notes, prerelease, publish_now=True):
 
 
 def plan(repo, sha, day=None):
-    day = release_day(day or datetime.now(ZoneInfo("America/New_York")).date().isoformat()[2:])
+    day = release_day(day or datetime.now(ZoneInfo("America/New_York")).date().strftime('%y.%m.%d'))
     entries = releases(repo)
     marker = f"Source commit: `{sha}`"
     existing = next((entry for entry in entries
@@ -272,7 +272,7 @@ def plan(repo, sha, day=None):
 def candidate(repo, tag, sha, code, directory):
     parsed = stage_tag(tag)
     if parsed is not None and not tag.startswith(parsed[0] + "-"):
-        raise ValueError("New candidate tags must use YY-MM-DD")
+        raise ValueError("New candidate tags must use YY.MM.DD")
     if parsed is None or parsed[1] not in {"alpha", "rc", "beta"} or not 0 < code <= 2100000000:
         raise ValueError("Invalid Android release version")
     manifest = {"source_sha": sha, "version_name": tag, "version_code": code,

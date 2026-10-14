@@ -15,7 +15,7 @@ from image_registry import api
 from release_dates import parse_day
 
 CHANNELS = {'nightly', 'latest', 'stable'}
-DATE = re.compile(r'(?:20)?\d{2}-\d{2}-\d{2}')
+DATE = re.compile(r'(?:\d{2}\.\d{2}\.\d{2}|(?:20)?\d{2}-\d{2}-\d{2})')
 PR = re.compile(r'pr-(\d+)(?:-[0-9a-f]{40})?')
 REBUILD = re.compile(r'rebuild-(\d+)-\d+')
 

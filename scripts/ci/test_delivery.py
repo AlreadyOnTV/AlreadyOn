@@ -133,10 +133,10 @@ class PromotionGraphs(unittest.TestCase):
     def test_issue_branch_conventions(self):
         for name in ['feature/enable_tls_support', 'bugfix/h.265_encode_failure']:
             policy.validate_work_branch(name, ['server/main.go', 'README.md'])
-        policy.validate_work_branch('26-10-10', ['server/main.go', 'README.md'])
-        policy.validate_work_branch('26-10-10', ['docs/RELEASE_NOTES.md'])
-        with self.assertRaisesRegex(ValueError, 'valid YY-MM-DD'):
-            policy.validate_work_branch('26-02-30', ['server/main.go'])
+        policy.validate_work_branch('26.10.10', ['server/main.go', 'README.md'])
+        policy.validate_work_branch('26.10.10', ['docs/RELEASE_NOTES.md'])
+        with self.assertRaisesRegex(ValueError, 'valid YY.MM.DD'):
+            policy.validate_work_branch('26.02.30', ['server/main.go'])
         policy.validate_work_branch('docs/developer_howto', ['docs/DEVELOPMENT.md'])
         for name, files in [('fix/a', ['server/main.go']), ('docs/a', ['scripts/run.sh']),
                             ('feature/a', ['README.md'])]:

@@ -27,8 +27,8 @@ def versions():
 originals=[{'tags':x['metadata']['container']['tags'],'name':x['name']} for x in versions()]
 for original in originals:
     for old in original['tags']:
-        if not re.fullmatch(r'20\d{2}-\d{2}-\d{2}',old):continue
-        new=old[2:];digest=original['name']
+        if not re.fullmatch(r'(?:20)?\d{2}-\d{2}-\d{2}',old):continue
+        new=old[-8:].replace('-', '.');digest=original['name']
         if not args.apply:
             print('Would rename:',old,'->',new,digest,flush=True);continue
         raw,got=registry(digest)
@@ -74,5 +74,5 @@ if args.apply:
         if 'io.alreadyon.naming-migration' not in manifest.get('annotations',{}): continue
         if manifest.get('manifests') or manifest.get('layers'): continue
         subprocess.run(['gh','api','--method','DELETE',f"orgs/AlreadyOnTV/packages/container/alreadyon/versions/{version['id']}"],check=True,stdout=subprocess.DEVNULL)
-    assert not any(re.fullmatch(r'20\d{2}-\d{2}-\d{2}', tag) for v in versions() for tag in v['metadata']['container']['tags'])
-    print('All date aliases use YY-MM-DD; original digests preserved.')
+    assert not any(re.fullmatch(r'(?:20)?\d{2}-\d{2}-\d{2}', tag) for v in versions() for tag in v['metadata']['container']['tags'])
+    print('All date aliases use YY.MM.DD; original digests preserved.')

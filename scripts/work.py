@@ -21,7 +21,7 @@ def ancestor(older, newer):
 
 
 def release_day(value=None):
-    day = value or datetime.now(ZoneInfo('America/New_York')).date().isoformat()[2:]
+    day = value or datetime.now(ZoneInfo('America/New_York')).date().strftime('%y.%m.%d')
     return canonical_day(day)
 
 
@@ -38,9 +38,9 @@ def remote_ref_sha(ref, tags=False):
 
 def active_release_day(remote_tags, baseline=None):
     dates = {match[0] for name in remote_tags
-             if (match := re.fullmatch(r'(\d{2}-\d{2}-\d{2})', name))}
+             if (match := re.fullmatch(r'(\d{2}\.\d{2}\.\d{2})', name))}
     stable = {match[1] for name in remote_tags
-              if (match := re.fullmatch(r'(\d{2}-\d{2}-\d{2})-(?:Stable|stable)', name))}
+              if (match := re.fullmatch(r'(\d{2}\.\d{2}\.\d{2})-(?:Stable|stable)', name))}
     # A maintainer can snap to a new cycle without deleting historical preview tags.
     if baseline:
         baseline = release_day(baseline)

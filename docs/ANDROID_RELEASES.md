@@ -8,9 +8,9 @@ Use the active dated branch in one checkout; see [development setup](DEVELOPMENT
 
 | Promotion | Artifact tag | Release title | Publication |
 | --- | --- | --- | --- |
-| Merged date PR into `dev` | `YY-MM-DD-alphaN` | `YY-MM-DD-alphaN` | Fresh signed APKs and image tagged `nightly` plus `YY-MM-DD` |
-| Merge tested date commit from `dev` to `test` | `YY-MM-DD-RCN` | `YY-MM-DD-rcN` | Retag image `latest`; publish/copy tested APK bytes |
-| Merge current `test` release into `main` | `YY-MM-DD-Stable` | `YY-MM-DD-stable` | Retag image `stable`; publish the latest RC APK bytes |
+| Merged date PR into `dev` | `YY.MM.DD-alphaN` | `YY.MM.DD-alphaN` | Fresh signed APKs and image tagged `nightly` plus `YY.MM.DD` |
+| Merge tested date commit from `dev` to `test` | `YY.MM.DD-RCN` | `YY.MM.DD-rcN` | Retag image `latest`; publish/copy tested APK bytes |
+| Merge current `test` release into `main` | `YY.MM.DD-Stable` | `YY.MM.DD-stable` | Retag image `stable`; publish the latest RC APK bytes |
 
 RC1 reuses alpha APK bytes. Later dev hotfixes build a draft for the next RC; test promotion publishes it. RC drafts include product notes since the prior stage; identical-artifact promotions add no new changes and retain known issues. Stable reuses the latest RC APKs and locks the date.
 
@@ -24,7 +24,7 @@ Approved active-date dispatches validate/publish alpha without merging or deleti
 
 Review [Stable readiness](STABLE_READINESS.md) before main promotion.
 
-Date PRs run quality, CodeQL and full Go/browser e2e. Dev merge validation publishes the date image and alpha APKs, advances the date tag, then removes the merged date branch. `python3 scripts/promote.py test YY-MM-DD` verifies image/alpha APK provenance before merging to test; `python3 scripts/promote.py main` verifies an RC before merging to main. Helpers reuse tested artifacts and allow exact-tree merges. Resolve conflicts on dev; never bypass branch protection.
+Date PRs run quality, CodeQL and full Go/browser e2e. Dev merge validation publishes the date image and alpha APKs, advances the date tag, then removes the merged date branch. `python3 scripts/promote.py test YY.MM.DD` verifies image/alpha APK provenance before merging to test; `python3 scripts/promote.py main` verifies an RC before merging to main. Helpers reuse tested artifacts and allow exact-tree merges. Resolve conflicts on dev; never bypass branch protection.
 
 ## Signing and scope
 

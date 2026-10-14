@@ -10,7 +10,7 @@ import subprocess
 from release_dates import release_day, HISTORICAL_DATE
 
 SHA = re.compile(r'[0-9a-f]{40}')
-DATE = re.compile(r'\d{2}-\d{2}-\d{2}')
+DATE = re.compile(r'\d{2}\.\d{2}\.\d{2}')
 
 
 def valid_date(value):
@@ -37,7 +37,7 @@ def resolve_date(repository, revision, explicit=None):
             and (DATE.fullmatch(pr.get('head', {}).get('ref', '')) or HISTORICAL_DATE.fullmatch(pr.get('head', {}).get('ref', '')))
         }
         if len(matches) != 1:
-            raise ValueError('Dev release commit must come from exactly one merged YY-MM-DD PR')
+            raise ValueError('Dev release commit must come from exactly one merged YY.MM.DD PR')
         day = matches.pop()
     if remote_ref(repository, f'tags/{day}-Stable') or remote_ref(repository, f'tags/{day}-stable'):
         raise ValueError(f'{day} is stable; release a new date')
@@ -65,7 +65,7 @@ def date_for_source(revision):
         elif result.returncode != 1:
             raise subprocess.CalledProcessError(result.returncode, result.args)
     if not candidates:
-        raise ValueError('No YY-MM-DD release tag is reachable from the promoted source')
+        raise ValueError('No YY.MM.DD release tag is reachable from the promoted source')
     return max(candidates)
 
 

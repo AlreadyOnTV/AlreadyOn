@@ -1,6 +1,6 @@
 # Authentication and secure deployment acceptance
 
-The 26-10-18 cycle confirms Epic 33 implementation using source and targeted regressions. Release publication and physical-device certification are separate.
+The 26.10.18 cycle confirms Epic 33 implementation using source and targeted regressions. Release publication and physical-device certification are separate.
 
 | Task | Implementation and evidence |
 | --- | --- |

@@ -41,7 +41,7 @@ class PublicationPolicy(unittest.TestCase):
             self.assertEqual(result[0], 'ghcr.io/alreadyontv/alreadyon:' + channel)
             self.assertEqual(len(result), 2 if branch == 'dev' else 1)
             if branch == 'dev':
-                self.assertEqual(result[1], 'ghcr.io/alreadyontv/alreadyon:26-10-01')
+                self.assertEqual(result[1], 'ghcr.io/alreadyontv/alreadyon:26.10.01')
         for branch in ['feature/a', 'fix/a', 'bugfix/a', 'release']:
             with self.assertRaises(KeyError):
                 tags('owner/repo', branch, SHA, instant)
@@ -83,13 +83,13 @@ class RetentionPolicy(unittest.TestCase):
 
     def test_channels_never_expire(self):
         for channel in ['nightly', 'latest', 'stable']:
-            self.assertIsNotNone(self.keep([channel, '20-01-01', 'sha-' + SHA]))
+            self.assertIsNotNone(self.keep([channel, '20.01.01', 'sha-' + SHA]))
 
     def test_date_boundary_and_multiple_dates(self):
         for days, protected in [(89, True), (90, True), (91, False)]:
             day = (self.today - datetime.timedelta(days=days)).isoformat()
             self.assertEqual(self.keep([day]) is not None, protected)
-        self.assertIsNotNone(self.keep(['20-01-01', '26-10-05']))
+        self.assertIsNotNone(self.keep(['20.01.01', '26.10.05']))
 
     def test_candidates_and_unknown_tags(self):
         tag = 'pr-123-' + SHA
@@ -150,20 +150,20 @@ class RetentionPolicy(unittest.TestCase):
             delete.assert_not_called()
 
     def test_new_york_dates(self):
-        for utc, day in [('2026-01-02T04:59:59+00:00', '26-01-01'),
-                         ('2026-01-02T05:00:00+00:00', '26-01-02'),
-                         ('2026-07-02T03:59:59+00:00', '26-07-01'),
-                         ('2026-07-02T04:00:00+00:00', '26-07-02'),
-                         ('2026-03-08T07:00:00+00:00', '26-03-08'),
-                         ('2026-11-01T06:00:00+00:00', '26-11-01')]:
+        for utc, day in [('2026-01-02T04:59:59+00:00', '26.01.01'),
+                         ('2026-01-02T05:00:00+00:00', '26.01.02'),
+                         ('2026-07-02T03:59:59+00:00', '26.07.01'),
+                         ('2026-07-02T04:00:00+00:00', '26.07.02'),
+                         ('2026-03-08T07:00:00+00:00', '26.03.08'),
+                         ('2026-11-01T06:00:00+00:00', '26.11.01')]:
             self.assertTrue(tags('owner/repo', 'dev', SHA, datetime.datetime.fromisoformat(utc))[1].endswith(day))
 
     def test_dev_date_tag_uses_explicit_pr_release_date(self):
         instant = datetime.datetime(2026, 10, 11, 12, tzinfo=datetime.timezone.utc)
-        result = tags('owner/repo', 'dev', SHA, instant, release_date='26-10-10')
-        self.assertEqual(result[1], 'ghcr.io/owner/repo:26-10-10')
-        with self.assertRaisesRegex(ValueError, 'valid YY-MM-DD'):
-            tags('owner/repo', 'dev', SHA, instant, release_date='26-02-30')
+        result = tags('owner/repo', 'dev', SHA, instant, release_date='26.10.10')
+        self.assertEqual(result[1], 'ghcr.io/owner/repo:26.10.10')
+        with self.assertRaisesRegex(ValueError, 'valid YY.MM.DD'):
+            tags('owner/repo', 'dev', SHA, instant, release_date='26.02.30')
 
     def test_daily_tags_are_shared_and_replaceable(self):
         instant = datetime.datetime(2026, 10, 1, 12, tzinfo=datetime.timezone.utc)
@@ -205,7 +205,7 @@ class RetentionPolicy(unittest.TestCase):
         digest = 'sha256:' + 'd' * 64
         with patch.dict(os.environ, GITHUB_REPOSITORY='owner/repo', CI_REVISION=SHA,
                         SOURCE_IMAGE='alreadyon-ci:candidate',
-                        IMAGE_TAGS='ghcr.io/owner/repo:nightly ghcr.io/owner/repo:26-10-05'), \
+                        IMAGE_TAGS='ghcr.io/owner/repo:nightly ghcr.io/owner/repo:26.10.05'), \
                 patch.object(image_registry, 'record') as record, \
                 patch('subprocess.check_output', return_value='Digest: ' + digest), \
                 patch('subprocess.run') as docker, \

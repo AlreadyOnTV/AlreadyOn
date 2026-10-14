@@ -61,7 +61,7 @@ def changelog(sha, stable_tags):
     """Read notes at the release commit; unrelated branches cannot alter the baseline."""
     bases = []
     for tag in stable_tags:
-        if not re.fullmatch(r'\d{2}-\d{2}-\d{2}-[Ss]table', tag):
+        if not re.fullmatch(r'\d{2}\.\d{2}\.\d{2}-[Ss]table', tag):
             continue
         result = subprocess.run(['git', 'merge-base', '--is-ancestor', tag, sha],
                                 capture_output=True)

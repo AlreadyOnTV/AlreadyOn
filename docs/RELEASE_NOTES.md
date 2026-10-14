@@ -1,14 +1,14 @@
 # Release notes
 
-GitHub Release titles contain only `YY-MM-DD-alphaN`, `YY-MM-DD-rcN` or `YY-MM-DD-stable`. Tags also use two-digit years; preserve their existing stage casing. Naming migrations keep released APK bytes, version codes, signatures, hashes and provenance intact. Embedded historical version names are audit data, not mutable release labels.
+GitHub Release titles contain only `YY.MM.DD-alphaN`, `YY.MM.DD-rcN` or `YY.MM.DD-stable`. Tags also use two-digit years; preserve their existing stage casing. Naming migrations keep released APK bytes, version codes, signatures, hashes and provenance intact. Embedded historical version names are audit data, not mutable release labels.
 
 Each description always renders exactly these sections, in this order:
 
 ```markdown
 # Download Now
 
-- [Phone / tablet APK](https://github.com/AlreadyOnTV/AlreadyOn/releases/download/YY-MM-DD-alphaN/alreadyon-android.apk)
-- [Google TV APK](https://github.com/AlreadyOnTV/AlreadyOn/releases/download/YY-MM-DD-alphaN/alreadyon-tv.apk)
+- [Phone / tablet APK](https://github.com/AlreadyOnTV/AlreadyOn/releases/download/YY.MM.DD-alphaN/alreadyon-android.apk)
+- [Google TV APK](https://github.com/AlreadyOnTV/AlreadyOn/releases/download/YY.MM.DD-alphaN/alreadyon-tv.apk)
 
 # New Features
 

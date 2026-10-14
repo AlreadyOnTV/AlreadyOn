@@ -27,7 +27,7 @@ def image_tags(repository, branch, revision, now=None, release_date=None):
     sha(revision)
     channel = {'dev': 'nightly', 'test': 'latest', 'main': 'stable'}[branch]
     now = now or datetime.datetime.now(datetime.timezone.utc)
-    day = release_date or now.astimezone(ZoneInfo('America/New_York')).strftime('%y-%m-%d')
+    day = release_date or now.astimezone(ZoneInfo('America/New_York')).strftime('%y.%m.%d')
     day = release_day(day)
     image = 'ghcr.io/' + repository.lower()
     tags = [f'{image}:{channel}']

@@ -17,16 +17,16 @@ class PromotionOutputs(unittest.TestCase):
                                ('stable', 'Promote the selected tested candidate without rebuilding')]:
             script = next(s['run'] for s in workflow['jobs'][job]['steps'] if s.get('name') == step_name)
             for event in ('push', 'workflow_dispatch'):
-                for day in ('', '26-10-11'):
+                for day in ('', '26.10.11'):
                     with self.subTest(job=job, event=event, day=day), tempfile.TemporaryDirectory() as tmp:
                         root = Path(tmp)
                         helpers = root / 'scripts/ci'
                         helpers.mkdir(parents=True)
                         (helpers / 'branch-policy.py').write_text(
                             "import os\nwith open(os.environ['GITHUB_OUTPUT'],'a') as f: f.write('selected=" + SHA + "\\n')\nprint('Branch and promotion policy passed')\n")
-                        (helpers / 'release-context.py').write_text("print('26-10-11')\n")
+                        (helpers / 'release-context.py').write_text("print('26.10.11')\n")
                         (helpers / 'android-release.py').write_text(
-                            "import sys\nassert sys.argv[1:] == ['promote-stable','--sha','" + SHA + "','--day','26-10-11']\nprint('Published synthetic promotion')\n")
+                            "import sys\nassert sys.argv[1:] == ['promote-stable','--sha','" + SHA + "','--day','26.10.11']\nprint('Published synthetic promotion')\n")
                         output = root / 'output'
                         output.touch()
                         env = dict(os.environ, GITHUB_EVENT_NAME=event, SOURCE_SHA=SHA, RELEASE_DATE=day,

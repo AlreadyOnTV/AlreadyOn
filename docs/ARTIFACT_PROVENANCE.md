@@ -1,6 +1,6 @@
 # Signed artifact evidence
 
-Starting with cycle `26-10-18`, dev publication uploads the already tested image under a temporary run tag, resolves its immutable digest, and signs build provenance and an inventory-only CycloneDX SBOM using GitHub OIDC. The inventory is reconstructed from allowlisted package fields in the exact candidate scan; raw findings, credentials and filesystem paths are not published. Coverage is detected runtime OS/application packages, not proof that every statically bundled dependency is identified.
+Starting with cycle `26.10.18`, dev publication uploads the already tested image under a temporary run tag, resolves its immutable digest, and signs build provenance and an inventory-only CycloneDX SBOM using GitHub OIDC. The inventory is reconstructed from allowlisted package fields in the exact candidate scan; raw findings, credentials and filesystem paths are not published. Coverage is detected runtime OS/application packages, not proof that every statically bundled dependency is identified.
 
 Both signatures must verify for the repository, hosted runner and release builder before `nightly` or the date tag moves. Dev verification also checks the exact source commit. A signing/verification failure leaves channel tags unchanged; its staged image remains eligible for cleanup after the run finishes. Image layers are never rebuilt to create attestations.
 
