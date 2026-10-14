@@ -38,8 +38,14 @@ for original in originals:
         except urllib.error.HTTPError as error:
             if error.code!=404:raise
             existing=None
-        assert existing in (None,digest),'Short tag collision'
-        _,published=registry(new,raw,media);assert published==digest,'Digest changed while retagging'
+        # A newly validated alpha can already have advanced the movable date alias.
+        # Keep that newer alias and require another tag to retain the older digest.
+        if existing is None:
+            _,published=registry(new,raw,media)
+            assert published==digest,'Digest changed while retagging'
+        elif existing!=digest:
+            assert any(tag!=old for tag in original['tags']),'Older digest has no retained alias'
+        canonical_digest=existing or digest
         print('Identical digest retagged:',old,'->',new,digest,flush=True)
         # GHCR deletion acts on versions, so move only the obsolete alias to an
         # empty unique manifest before deleting that placeholder version.
@@ -52,9 +58,10 @@ for original in originals:
         _,temporary=registry(old,data,media);assert temporary==expected and temporary!=digest
         candidates=[x for x in versions() if x['name']==temporary and x['metadata']['container']['tags']==[old]]
         assert len(candidates)==1,'Cannot isolate obsolete alias for deletion'
-        _,current=registry(new);assert current==digest,'Source alias moved unexpectedly'
+        _,current=registry(new);assert current==canonical_digest,'Source alias moved unexpectedly'
         subprocess.run(['gh','api','--method','DELETE',f"orgs/AlreadyOnTV/packages/container/alreadyon/versions/{candidates[0]['id']}"],check=True,stdout=subprocess.DEVNULL)
-        _,current=registry(new);assert current==digest
+        _,current=registry(new);assert current==canonical_digest
+        _,retained=registry(digest);assert retained==digest
         try:registry(old)
         except urllib.error.HTTPError as error:assert error.code==404
         else:raise RuntimeError('Obsolete alias remains')
