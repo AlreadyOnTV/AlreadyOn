@@ -3,3 +3,5 @@
 Follow [AGENTS.md](../AGENTS.md), including ignored local maintainer notes when present. Read the linked project, contribution and delivery guides before changing behavior.
 
 Preserve unrelated work and coordinate shared checkouts. Keep changes small and documented; run appropriate checks. Never skip maintainer-controlled release, deployment or publication gates. Planning tickets do not authorize implementation.
+
+Use the active dated branch in [development setup](../docs/DEVELOPMENT.md); the legacy `build` workflow is retired for this cycle. Follow [release notes](../docs/RELEASE_NOTES.md): date/stage-only titles, Download Now with phone/tablet and TV APK links, then New Features, Bugfixes and Known Issues, explicit empty-section messages, and linked issue titles for fixes and prioritized remaining bugs. Maintain the known-issue list and use changes since the predecessor tag. Preserve hidden provenance, tags, APK versions and tested artifact bytes; formatting changes do not authorize rebuilding or promotion.

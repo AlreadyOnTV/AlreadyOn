@@ -94,8 +94,8 @@ const noWorkers = async (unreleased = () => 0) => {
       const password = dialog.getByLabel("Password", { exact: true });
       assert(
         (await username.getAttribute("name")) === "username" &&
-          (await username.getAttribute("autocomplete")) === "username",
-        "Login username exposes password-manager metadata",
+          (await username.getAttribute("autocomplete")) === (setup ? "off" : "username"),
+        "Only the actual login username exposes password-manager metadata",
       );
       assert(
         (await password.getAttribute("name")) === "password" &&
@@ -1448,7 +1448,7 @@ const noWorkers = async (unreleased = () => 0) => {
       "Narrow Server Settings hides the desktop tab row",
     );
     await navToggle.click();
-    await page.getByRole("menuitem", { name: "Accounts", exact: true }).click();
+    await page.getByRole("menuitem", { name: "Home Users", exact: true }).click();
     await page.waitForURL("**/admin/accounts");
     assert(
       (await page.getByRole("menu").count()) === 0,
@@ -2003,8 +2003,7 @@ const noWorkers = async (unreleased = () => 0) => {
     console.log("PASS: touch rotation fills landscape, restores portrait and preserves playback with allowed/denied/unsupported fullscreen; desktop unchanged");
   }
 
-  // Keyboard: arrows browse the guide in the small player and change channel in the large player
-  // or full screen; m, f, t and Space work everywhere.
+  // Keyboard: small-player arrows browse; expanded Up/Down tunes and horizontal arrows navigate controls.
   async function keyboard() {
     seed();
     const context = await browser.newContext();
@@ -2107,6 +2106,42 @@ const noWorkers = async (unreleased = () => 0) => {
       { timeout: 5000 },
     );
     await playing(page);
+    // Expanded playback uses a horizontal control cursor and menu-owned arrows.
+    const assertControlCursor = async () => {
+      const channelBefore = await rowOf('.guide-slot-box-tuned');
+      await page.keyboard.press('Escape');
+      await page.keyboard.press('ArrowRight');
+      await page.waitForFunction(() => ['Mute','Unmute'].includes(document.activeElement?.getAttribute('aria-label')));
+      assert(await rowOf('.guide-slot-box-tuned') === channelBefore, 'Horizontal arrows never tune');
+      const mutedBefore = (await video()).muted;
+      await page.keyboard.press('Enter');
+      assert((await video()).muted !== mutedBefore, 'Enter activates the selected Mute control');
+      await page.keyboard.press('ArrowRight');
+      await page.keyboard.press(' ');
+      await page.getByRole('menu',{name:'Settings',exact:true}).waitFor();
+      // This low-resolution fixture exposes Audio Tracks first, rather than Quality.
+      await page.waitForFunction(() => document.activeElement?.getAttribute('role') === 'menuitem');
+      await page.keyboard.press('Enter');
+      await page.getByRole('menu',{name:'Audio Tracks',exact:true}).waitFor();
+      await page.keyboard.press('ArrowDown');await page.keyboard.press('ArrowUp');
+      assert(await rowOf('.guide-slot-box-tuned') === channelBefore, 'Submenu Up/Down navigate without tuning');
+      await page.keyboard.press('Escape');
+      await page.getByRole('menu',{name:'Settings',exact:true}).waitFor();
+      await page.keyboard.press('ArrowDown');await page.keyboard.press('ArrowUp');
+      assert(await rowOf('.guide-slot-box-tuned') === channelBefore, 'Root menu Up/Down navigate without tuning');
+      await page.keyboard.press('Escape');
+      await page.locator('.playback-menu').waitFor({state:'detached'});
+      await page.keyboard.press('Escape');
+      await page.waitForFunction(() => getComputedStyle(document.querySelector('.playback-controls')).opacity === '0');
+      // Reproduce the banner/paused HUD state without relying on tune timing.
+      await page.locator('.playback-player').evaluate(stage => stage.classList.add('show-channel-overlay', 'is-paused'));
+      assert(await page.locator('.playback-controls').evaluate(el => getComputedStyle(el).opacity) === '0', 'Escape hides the HUD even during its channel banner or paused state');
+      await page.locator('.playback-player').evaluate(stage => stage.classList.remove('show-channel-overlay', 'is-paused'));
+      await page.keyboard.press('ArrowLeft');
+      await page.waitForFunction(() => document.activeElement?.getAttribute('aria-label') === 'Pause');
+      await page.waitForFunction(() => getComputedStyle(document.querySelector('.playback-controls')).opacity === '1');
+    };
+    await assertControlCursor();
     // m toggles mute, Space toggles pause, even with a guide slot focused.
     const before = await video();
     await page.keyboard.press("m");
@@ -2154,6 +2189,8 @@ const noWorkers = async (unreleased = () => 0) => {
       numbers[next],
       { timeout: 5000 },
     );
+    await playing(page);
+    await assertControlCursor();
     // t in full screen leaves full screen and switches the player size.
     await page.keyboard.press("t");
     await page.waitForFunction(
@@ -2267,7 +2304,7 @@ const noWorkers = async (unreleased = () => 0) => {
     await noWorkers(unreleased);
     await context.close();
     console.log(
-      "PASS: keyboard: small player browses, large/full-screen arrows tune, m f t and Space work, and the address keeps the channel",
+      "PASS: keyboard: small player browses, large/full-screen Up/Down tunes, horizontal controls and menu cursors work, m f t and Space work, and the address keeps the channel",
     );
   }
 
@@ -2294,7 +2331,7 @@ const noWorkers = async (unreleased = () => 0) => {
     await caption("E2E SUBTITLE ONE");
     await page.keyboard.press("c");
     await caption("");
-    // The profile's Subtitles box sets enabled + German.
+    // Select the language and mode by their public labels, independent of order.
     await page.goto(url + "/profile");
     assert(
       (await page.getByText("Time Span Shown").count()) === 0,
@@ -2303,8 +2340,8 @@ const noWorkers = async (unreleased = () => 0) => {
     const card = page.locator(".admin-card", {
       has: page.getByRole("heading", { name: "Subtitles", exact: true }),
     });
-    await card.locator("select").nth(0).selectOption("on");
-    await card.locator("select").nth(1).selectOption("de");
+    await card.getByLabel("Subtitle language", { exact: true }).selectOption("de");
+    await card.getByLabel("Subtitles", { exact: true }).selectOption("always");
     await page.getByRole("button", { name: "Save Changes" }).click();
     await page.locator(".guide-slot-box").first().waitFor();
     await playing(page);
@@ -2485,31 +2522,59 @@ const noWorkers = async (unreleased = () => 0) => {
         const page = await context.newPage();
         await login(page);
         const profiles = await (await page.request.get(url + "/api/profiles")).json();
-        const profile = { ...profiles[0], role: profileRole };
+        const profile = { ...profiles[0], name: "A deliberately long household profile name for header layout", role: profileRole };
         await page.addInitScript(id => localStorage.setItem("alreadyon.currentUserId", String(id)), profile.id);
         await page.route("**/api/auth/status", route => route.fulfill({json: {
           setupRequired: false, authenticated: true, role: accountRole,
           username: "menu-fixture", mustChangePassword: false,
         }}));
         await page.route("**/api/profiles", route => route.fulfill({json: [profile]}));
+        const expected = ["Switch Profile", "Profile",
+          ...(profileRole === "admin" ? ["Settings"] : []),
+          ...(accountRole === "owner" ? ["Server"] : []), "Sign Out"];
+        const routes = ["/", "/profile",
+          ...(profileRole === "admin" ? ["/account"] : []),
+          ...(accountRole === "owner" ? ["/admin/accounts"] : [])];
+        // Check real navigation, both hit targets, keyboard access and long-name
+        // containment. Fixtures change browser responses, never stored profiles.
+        for (const width of [1280, 360]) {
+          await page.setViewportSize({width, height: 900});
+          for (const route of routes) {
+            await page.goto(url + route);
+            const trigger = page.locator(".profile-menu-trigger");
+            await trigger.waitFor();
+            assert(await trigger.count() === 1, "One profile trigger per page");
+            assert(await trigger.locator(".profile-menu-trigger-name").textContent() === profile.name, "Selected name remains visible");
+            await trigger.locator("span").first().click();
+            const actual = (await page.locator(".profile-menu-item").allTextContents()).map(s => s.trim());
+            assert(JSON.stringify(actual) === JSON.stringify(expected), `${accountRole}/${profileRole} ${route} menu: ${actual}`);
+            await page.keyboard.press("Escape");
+            await trigger.locator(".profile-menu-trigger-name").click();
+            await page.locator(".profile-menu-panel").waitFor();
+            await page.keyboard.press("Escape");
+            await trigger.focus();
+            await trigger.press("Enter");
+            await page.locator(".profile-menu-panel").waitFor();
+            assert(await trigger.getAttribute("aria-expanded") === "true", "Keyboard opens profile menu");
+            assert(await page.evaluate(() => document.documentElement.scrollWidth <= innerWidth + 1), "Long-name header remains viewport-bound");
+            await page.keyboard.press("Escape");
+          }
+        }
         await page.goto(url);
-        await page.locator(".page-header-control-avatar").click();
-        const actual = (await page.locator(".profile-menu-item").allTextContents()).map(s => s.trim());
-        const expected = ["Dashboard", "Profile Settings", "Switch Profile",
-          ...(profileRole === "admin" ? ["Admin Settings"] : []),
-          ...(accountRole === "owner" ? ["Server Settings"] : []), "Sign Out"];
-        assert(JSON.stringify(actual) === JSON.stringify(expected), `${accountRole}/${profileRole} menu: ${actual}`);
-        await page.getByRole("button", {name: "Dashboard", exact: true}).click();
-        await page.getByRole("heading", {name: "Server Metrics", exact: true}).waitFor();
-        assert(await page.locator(".admin-tabs").count() === 0, "Dashboard has no settings tabs");
-        if (accountRole === "viewer") {
+        await page.locator(".profile-menu-trigger").click();
+        if (accountRole === "owner") {
+          await page.getByRole("button", {name: "Server", exact: true}).click();
+          await page.waitForURL('**/admin/dashboard');
+          await page.getByRole("heading", {name: "Server Metrics", exact: true}).waitFor();
+          assert((await page.locator('.admin-tab').first().innerText()) === 'Dashboard', 'Dashboard is the first Server tab');
+        } else {
           await page.goto(url + "/admin/accounts");
           await page.waitForURL(url + "/");
         }
         await context.close();
       }
     }
-    console.log("PASS: profile menu order and Dashboard navigation across account/profile roles");
+    console.log("PASS: profile menu order, role permissions and owner Dashboard navigation");
   }
 
   // Admin: activity cards precede server performance and the settings grid.
@@ -2546,11 +2611,11 @@ const noWorkers = async (unreleased = () => 0) => {
       "Current session should report its last activity",
     );
     await page.goto(url + "/admin");
-    await page.waitForURL("**/admin/accounts");
+    await page.waitForURL("**/admin/dashboard");
     const tabs = await page.locator(".admin-tab").allTextContents();
     assert(
       tabs.join(",") ===
-        "Accounts,Media,Commercials,Channels,Server,Logs,API",
+        "Dashboard,Home Users,Media,Commercials,Channels,Server,Logs,API",
       "Settings tab order: " + tabs,
     );
     await page.goto(url + "/dashboard");
@@ -2563,8 +2628,8 @@ const noWorkers = async (unreleased = () => 0) => {
       "Dashboard card order",
     );
     await page.setViewportSize({ width: 1100, height: 800 });
-    assert(await page.locator(".admin-tabs").count() === 0,
-      "Dashboard is independent of Server Settings navigation");
+    assert(await page.locator(".admin-tabs").count() === 1,
+      "Dashboard belongs to Server navigation");
     const graphLayout = await page
       .locator(".metrics-grid .metric-panel")
       .evaluateAll((panels) =>
@@ -3050,6 +3115,84 @@ const noWorkers = async (unreleased = () => 0) => {
     const page = await context.newPage();
     page.on("pageerror", (e) => errors.push(e.message));
     await login(page);
+    // Exercise the width cap with a legitimate long name; intrinsic grid tracks
+    // can exceed the capped item when a runner's font metrics are wider.
+    const headerProfiles = await (await page.request.get(url + '/api/profiles')).json();
+    await page.route('**/api/profiles', route => route.fulfill({json: headerProfiles.map(profile => ({
+      ...profile, name: 'An extraordinarily long profile name for layout',
+    }))}));
+    const assertSettingsHeaders = async (width) => {
+      await page.setViewportSize({ width, height: 844 });
+      for (const route of [
+        "/admin/dashboard",
+        "/admin/accounts",
+        "/admin/media",
+        "/admin/commercials",
+        "/admin/channels",
+        "/admin/server",
+        "/admin/logs",
+        "/admin/api",
+        "/account",
+        "/profile",
+      ]) {
+        await page.goto(url + route);
+        const menu = page.locator(".admin-topbar-inner > .profile-menu");
+        await menu.waitFor();
+        const trigger = menu.getByRole("button");
+        assert(await trigger.isVisible(), `${route} profile menu trigger is visible`);
+        assert(await page.locator('.profile-menu-panel').count() === 0, `${route} menu starts closed`);
+        assert(await menu.locator('.profile-menu-trigger-name').isVisible(),
+          `${route} header retains the avatar and single-line name`);
+        if (route === '/account' || route === '/admin/accounts') {
+          const table = page.locator(route === '/account' ? '.profiles-table' : '.accounts-table');
+          assert(await table.locator('th').first().evaluate(el => getComputedStyle(el).whiteSpace) === 'nowrap',
+            `${route} table headings keep whole words on compact screens`);
+          assert(await table.locator('..').getAttribute('tabindex') === '0',
+            `${route} table scroll region is keyboard accessible`);
+        }
+        const contentBefore = await page.locator(".admin-content").boundingBox();
+        await trigger.click();
+        const panel = page.locator(".profile-menu-panel");
+        await panel.waitFor();
+        const alignment = await page.evaluate(() => {
+          const header = document.querySelector(".admin-topbar-inner");
+          const menu = header.querySelector(":scope > .profile-menu");
+          const panel = menu.querySelector(".profile-menu-panel");
+          const menuBox = menu.getBoundingClientRect();
+          const panelBox = panel.getBoundingClientRect();
+          const headerBox = header.getBoundingClientRect();
+          const contentBox = document.querySelector(".admin-content").getBoundingClientRect();
+          return {
+            menuRight: menuBox.right,
+            headerRight: headerBox.right,
+            panelLeft: panelBox.left,
+            panelRight: panelBox.right,
+            contentTop: contentBox.top,
+            contentWidth: contentBox.width,
+            viewport: document.documentElement.clientWidth,
+            scrollWidth: document.documentElement.scrollWidth,
+          };
+        });
+        assert(
+          Math.abs(alignment.menuRight - alignment.headerRight) < 2 &&
+            alignment.panelLeft >= 0 &&
+            alignment.panelRight <= alignment.viewport + 1 &&
+            Math.abs(alignment.contentTop - contentBefore.y) < 1 &&
+            Math.abs(alignment.contentWidth - contentBefore.width) < 1 &&
+            alignment.menuRight <= alignment.viewport + 1 &&
+            alignment.scrollWidth <= alignment.viewport + 1,
+          `${route} profile menu stays aligned and in the ${width}px viewport: ` +
+            JSON.stringify(alignment),
+        );
+      }
+    };
+    await assertSettingsHeaders(320);
+    await assertSettingsHeaders(390);
+    await assertSettingsHeaders(768);
+    await assertSettingsHeaders(1280);
+    await page.unroute('**/api/profiles');
+    await page.setViewportSize({ width: 1280, height: 720 });
+    await page.goto(url + '/');
     await page.locator(".guide-slot-box").first().waitFor();
     assert(
       (await page.locator(".page-header select").count()) === 0,
@@ -3407,7 +3550,7 @@ const noWorkers = async (unreleased = () => 0) => {
         els.map((e) => Math.round(e.getBoundingClientRect().top)),
       );
     assert(
-      tops.length === 7 && tops.every((top, index) => index === 0 || top > tops[index - 1]),
+      tops.length === 8 && tops.every((top, index) => index === 0 || top > tops[index - 1]),
       "Desktop Server Settings uses an ordered vertical sidebar: " + tops.join(","),
     );
 
@@ -3699,6 +3842,9 @@ const noWorkers = async (unreleased = () => 0) => {
     if (!only || only.includes("subtitles")) await subtitleDefaults();
     if (!only || only.includes("pause")) await pausedBoundary();
     if (!only || only.includes("alignment")) await guideAlignment();
+    if (!only || only.includes("autofill-policy")) await require("./autofill-policy.cjs")({ browser, login, url, assert });
+    if (!only || only.includes("credential-drafts")) await require("./credential-drafts.cjs")({ browser, login, url, assert });
+    if (!only || only.includes("profile-creation")) await require("./profile-creation.cjs")({ browser, login, url, assert });
     if (!only || only.includes("profile-menu")) await profileMenuRoles();
     if (!only || only.includes("admin")) await adminTabs();
     if (!only || only.includes("admin-metrics-logs"))
@@ -3708,6 +3854,7 @@ const noWorkers = async (unreleased = () => 0) => {
         url,
         assert,
         delay,
+        seed,
       });
     if (!only || only.includes("activity")) await serverActivity();
     await waitForTuner(); // saving encoder settings re-measures

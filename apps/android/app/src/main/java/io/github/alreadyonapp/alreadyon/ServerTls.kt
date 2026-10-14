@@ -12,17 +12,21 @@ import java.security.cert.X509Certificate
 import javax.net.ssl.SSLContext
 import javax.net.ssl.X509TrustManager
 
-/** Explicit per-server exception; never modify global TLS defaults or allow another origin. */
-internal fun OkHttpClient.Builder.serverTls(origin: HttpUrl, bypass: Boolean, trustedCa: String? = null): OkHttpClient.Builder {
+/** Automatic LAN instance trust is app-local; system HTTPS trust remains unchanged. */
+internal fun OkHttpClient.Builder.serverTls(origin: HttpUrl, trustedCa: String? = null): OkHttpClient.Builder {
     if (!trustedCa.isNullOrBlank()) {
         val certificates = CertificateFactory.getInstance("X.509").generateCertificates(ByteArrayInputStream(trustedCa.toByteArray()))
         require(certificates.isNotEmpty())
         val store = KeyStore.getInstance(KeyStore.getDefaultType()).apply { load(null) }
-        certificates.forEachIndexed { index, certificate -> store.setCertificateEntry("server-$index", certificate) }
+        certificates.forEachIndexed { index, certificate ->
+            (certificate as X509Certificate).checkValidity()
+            store.setCertificateEntry("server-$index", certificate)
+        }
         val manager = TrustManagerFactory.getInstance(TrustManagerFactory.getDefaultAlgorithm()).apply { init(store) }
         val trust = manager.trustManagers.filterIsInstance<X509TrustManager>().single()
         val context = SSLContext.getInstance("TLS").apply { init(null, arrayOf(trust), SecureRandom()) }
-        // The accepted instance trust anchor identifies this LAN server, including its IP.
+        // LAN addresses may differ from the default certificate names. The accepted
+        // instance CA authenticates the chain; constrain this exception to its origin.
         return sslSocketFactory(context.socketFactory, trust).hostnameVerifier { host, _ -> host == origin.host }
             .followRedirects(false).followSslRedirects(false)
             .addInterceptor { chain ->
@@ -30,18 +34,26 @@ internal fun OkHttpClient.Builder.serverTls(origin: HttpUrl, bypass: Boolean, tr
                 chain.proceed(chain.request())
             }
     }
-    if (!bypass) return this
+    return this
+}
+
+/** Public LAN discovery only: refuse all credential-bearing or non-bootstrap requests. */
+internal fun OkHttpClient.Builder.bootstrapTls(origin: HttpUrl): OkHttpClient.Builder {
     val trust = object : X509TrustManager {
         override fun getAcceptedIssuers(): Array<X509Certificate> = emptyArray()
-        override fun checkClientTrusted(chain: Array<X509Certificate>, authType: String) = Unit
-        override fun checkServerTrusted(chain: Array<X509Certificate>, authType: String) = Unit
+        override fun checkClientTrusted(chain: Array<X509Certificate>, authType: String) = throw java.security.cert.CertificateException("Client certificates unsupported")
+        override fun checkServerTrusted(chain: Array<X509Certificate>, authType: String) { require(chain.isNotEmpty()); chain.forEach { it.checkValidity() } }
     }
     val context = SSLContext.getInstance("TLS").apply { init(null, arrayOf(trust), SecureRandom()) }
-    return sslSocketFactory(context.socketFactory, trust)
-        .hostnameVerifier { host, _ -> host == origin.host }
+    return sslSocketFactory(context.socketFactory, trust).hostnameVerifier { host, _ -> host == origin.host }
         .followRedirects(false).followSslRedirects(false)
         .addInterceptor { chain ->
-            if (!sameOrigin(origin, chain.request().url)) throw IOException("Unexpected server origin.")
-            chain.proceed(chain.request())
+            val request = chain.request()
+            if (!sameOrigin(origin, request.url) || request.method != "GET" ||
+                request.url.encodedPath !in setOf("/api/tv/server", "/api/tv/trust") || request.url.query != null ||
+                request.header("Authorization") != null || request.header("Cookie") != null) {
+                throw IOException("Only public server metadata is allowed before trust is established.")
+            }
+            chain.proceed(request)
         }
 }

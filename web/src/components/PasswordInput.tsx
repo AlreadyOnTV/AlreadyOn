@@ -5,6 +5,8 @@ import './PasswordInput.css';
 type PasswordInputProps = Omit<InputHTMLAttributes<HTMLInputElement>, 'type'> & {
   allowAutofill?: boolean;
   visibilityLabel?: string;
+  /** Saved API credentials are placeholders; only a nonempty replacement draft is revealable. */
+  revealDraftOnly?: boolean;
   /** Render as a masked text field so extensions such as Bitwarden, which ignore
    *  autocomplete hints, find no password field to fill on page load. */
   concealFromManagers?: boolean;
@@ -13,8 +15,10 @@ type PasswordInputProps = Omit<InputHTMLAttributes<HTMLInputElement>, 'type'> & 
 // Browsers without -webkit-text-security would show the text, so they keep type="password".
 const canMaskText = typeof CSS !== 'undefined' && CSS.supports?.('-webkit-text-security', 'disc');
 
-export function PasswordInput({ allowAutofill = false, concealFromManagers = false, visibilityLabel = 'Password', ...props }: PasswordInputProps) {
-  const [visible, setVisible] = useState(false);
+export function PasswordInput({ allowAutofill = false, concealFromManagers = false, visibilityLabel = 'Password', revealDraftOnly = false, ...props }: PasswordInputProps) {
+  const [shown, setVisible] = useState(false);
+  const canReveal = !revealDraftOnly || String(props.value ?? '').length > 0;
+  const visible = shown && canReveal;
   const toggleLabel = `${visible ? 'Hide' : 'Show'} ${visibilityLabel}`;
   const masked = concealFromManagers && canMaskText && !visible;
   const type = visible || masked ? 'text' : 'password';
@@ -23,8 +27,12 @@ export function PasswordInput({ allowAutofill = false, concealFromManagers = fal
     <span className="password-input-wrap">
       {/* Settings secrets must not be mistaken for the site's login credential.
           Extensions may ignore these hints; the login screen explicitly opts in. */}
-      <input {...props} autoComplete={allowAutofill ? props.autoComplete : 'off'} data-lpignore={allowAutofill ? undefined : 'true'} data-1p-ignore={allowAutofill ? undefined : 'true'} data-bwignore={allowAutofill ? undefined : 'true'} data-form-type={allowAutofill ? undefined : 'other'} className={['password-input-control', masked && 'password-input-masked', props.className].filter(Boolean).join(' ')} type={type} />
-      <button
+      <input {...props} onChange={(event) => {
+        // A new draft after clearing/saving starts masked, even if the last draft was shown.
+        if (revealDraftOnly && (!canReveal || event.target.value === '')) setVisible(false);
+        props.onChange?.(event);
+      }} autoComplete={allowAutofill ? props.autoComplete : 'off'} data-lpignore={allowAutofill ? undefined : 'true'} data-1p-ignore={allowAutofill ? undefined : 'true'} data-bwignore={allowAutofill ? undefined : 'true'} data-form-type={allowAutofill ? undefined : 'other'} className={['password-input-control', masked && 'password-input-masked', props.className].filter(Boolean).join(' ')} type={type} />
+      {canReveal && <button
         className="password-input-toggle"
         type="button"
         disabled={props.disabled}
@@ -48,7 +56,7 @@ export function PasswordInput({ allowAutofill = false, concealFromManagers = fal
             </>
           )}
         </svg>
-      </button>
+      </button>}
     </span>
   );
 }

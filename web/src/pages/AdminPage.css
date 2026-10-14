@@ -21,6 +21,11 @@
   margin: 0 auto;
 }
 
+.admin-topbar-inner > .profile-menu {
+  flex: 0 0 auto;
+  margin-left: auto;
+}
+
 .admin-back {
   background: var(--surface);
   color: var(--text);
@@ -187,6 +192,38 @@
     padding: 10px 12px;
   }
 
+  .admin-topbar-inner {
+    /* Keep the named profile control on the brand row; navigation occupies
+       the following row rather than overlapping either header element. */
+    display: grid;
+    grid-template-columns: minmax(0, 1fr) auto;
+    gap: 12px;
+  }
+
+  .admin-topbar-inner > .profile-menu {
+    grid-column: 2;
+    grid-row: 1;
+    /* A capped item must anchor to the track's end even when wider fonts
+       make the intrinsic auto column larger than the item itself. */
+    justify-self: end;
+    max-width: min(180px, 45vw);
+    margin-left: 0;
+  }
+
+  .admin-topbar-inner > .brand-link {
+    min-width: 0;
+  }
+
+  .admin-topbar-inner .profile-menu-trigger {
+    width: 100%;
+    min-width: 0;
+    box-sizing: border-box;
+  }
+
+  .admin-topbar-inner .profile-menu-trigger-name {
+    min-width: 0;
+  }
+
   .admin-content {
     padding: 24px 12px 32px;
   }
@@ -241,9 +278,9 @@
 
 /* Shared settings typography: one-point steps, respecting the user's text scale. */
 .admin-page {
-  --admin-title-size: calc(12pt * var(--font-scale));
-  --admin-control-size: calc(11pt * var(--font-scale));
-  --admin-body-size: calc(10pt * var(--font-scale));
+  --admin-title-size: 12pt;
+  --admin-control-size: 11pt;
+  --admin-body-size: 10pt;
   font-size: var(--admin-body-size);
 }
 .admin-page :is(h1, h2, h3, h4, h5, h6) {

@@ -60,7 +60,7 @@ internal fun ProfileSettingsScreen(state: PhoneState, model: PhoneModel) {
     var upload by remember(profile.id) { mutableStateOf<ByteArray?>(null) }
     var time by remember(profile.id) { mutableStateOf(profile.timeFormat) }
     var audio by remember(profile.id) { mutableStateOf(profile.language) }
-    var subtitles by remember(profile.id) { mutableStateOf(profile.subtitles) }
+    var subtitleMode by remember(profile.id) { mutableStateOf(profile.subtitleMode) }
     var language by remember(profile.id) { mutableStateOf(profile.subtitleLanguage) }
     var editingPin by remember { mutableStateOf(false) }
     var removePin by remember { mutableStateOf(false) }
@@ -115,7 +115,7 @@ internal fun ProfileSettingsScreen(state: PhoneState, model: PhoneModel) {
         }
     }
     val changed = name.trim() != profile.name || icon != profile.icon || upload != null || time != profile.timeFormat ||
-        audio != profile.language || subtitles != profile.subtitles || language != profile.subtitleLanguage
+        audio != profile.language || subtitleMode != profile.subtitleMode || language != profile.subtitleLanguage
     Column(Modifier.fillMaxSize()) {
         if (tv) Row(Modifier.fillMaxWidth().padding(bottom = 16.dp), horizontalArrangement = Arrangement.SpaceBetween,
             verticalAlignment = Alignment.CenterVertically) {
@@ -184,10 +184,8 @@ internal fun ProfileSettingsScreen(state: PhoneState, model: PhoneModel) {
                 if (!tv || section == "Time Format") item { SettingsCard(if (tv) "Time Format" else "Guide Display") { SettingsChoice(if (tv) "" else "Time Format", time, listOf("12h-padded" to "01:00am-02:00am", "12h" to "1:00am-2:00am", "24h" to "22:00-23:00"), entryModifier("Time Format")) { time = it } } }
                 if (!tv || section == "Audio Language") item { SettingsCard(if (tv) "Audio Language" else "Audio") { SettingsChoice(if (tv) "" else "Preferred Audio Language", audio, profileLanguages, entryModifier("Audio Language")) { audio = it } } }
                 if (!tv || section == "Subtitles") item { SettingsCard("Subtitles") {
-                    if (tv) OutlinedButton(onClick = { subtitles = !subtitles }, modifier = entryModifier("Subtitles").fillMaxWidth().tvFocusOutline()) {
-                        Text(if (subtitles) "On by Default" else "Off by Default")
-                    } else SettingsChoice("Subtitles By Default", if (subtitles) "on" else "off", listOf("off" to "Disabled", "on" to "Enabled")) { subtitles = it == "on" }
-                    SettingsChoice("Default Language", language, profileLanguages) { language = it }
+                    SettingsChoice("Subtitle language", language, profileLanguages, entryModifier("Subtitles")) { language = it }
+                    SettingsChoice("Subtitles", subtitleMode, listOf("always" to "Always on", "other_audio" to "For other audio", "off" to "Off")) { subtitleMode = it }
                 } }
                 localError?.let { item { Text(it, color = MaterialTheme.colorScheme.error) } }
                 item { Row(horizontalArrangement = Arrangement.spacedBy(8.dp)) {
@@ -200,14 +198,14 @@ internal fun ProfileSettingsScreen(state: PhoneState, model: PhoneModel) {
                         if (upload == null && icon != profile.icon) patch.put("icon", icon ?: JSONObject.NULL)
                         if (time != profile.timeFormat) patch.put("guideTimeFormat", time)
                         if (audio != profile.language) patch.put("audioLanguage", audio)
-                        if (subtitles != profile.subtitles) patch.put("subtitlesEnabled", subtitles)
+                        if (subtitleMode != profile.subtitleMode) patch.put("subtitleMode", subtitleMode)
                         if (language != profile.subtitleLanguage) patch.put("subtitleLanguage", language)
                         model.saveProfile(patch, upload, keepOpen = tv) { saved ->
                             if (!mounted) return@saveProfile
                             // Refresh the draft baseline only after the server accepts every save operation.
                             name = saved.name; icon = saved.icon; upload = null
                             time = saved.timeFormat; audio = saved.language
-                            subtitles = saved.subtitles; language = saved.subtitleLanguage
+                            subtitleMode = saved.subtitleMode; language = saved.subtitleLanguage
                             if (tv) {
                                 section = savedSection
                                 sidebarFocus.getValue(savedSection).requestFocus()
@@ -248,5 +246,7 @@ private fun SettingsChoice(label: String, value: String, options: List<Pair<Stri
     }
 }
 
+// Phone and TV share alphabetical display names, with English always first.
 private val profileLanguages = listOf("en", "es", "fr", "de", "it", "pt", "ja", "ko", "zh", "ru", "nl", "sv", "da", "no", "fi", "pl", "tr", "ar", "he", "hi", "cs", "el", "hu", "th", "uk")
     .map { it to java.util.Locale.forLanguageTag(it).getDisplayLanguage(java.util.Locale.ENGLISH) }
+    .sortedWith(compareBy<Pair<String, String>> { it.first != "en" }.thenBy { it.second })

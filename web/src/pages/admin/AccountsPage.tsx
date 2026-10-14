@@ -99,7 +99,7 @@ export default function AccountsPage() {
     <div className="admin-section">
       <div className="admin-card">
         <div className="folder-card-header">
-          <h3>Accounts</h3>
+          <h3>Home Users</h3>
           <button className="admin-btn" onClick={() => setEditing('new')} style={{ visibility: editing === null ? 'visible' : 'hidden' }}>
             + Add Account
           </button>
@@ -129,7 +129,8 @@ export default function AccountsPage() {
             }}
           />
         )}
-        <table className="admin-table">
+        <div className="accounts-table-scroll" role="region" aria-label="Home Users table" tabIndex={0}>
+        <table className="admin-table accounts-table">
           <thead>
             <tr>
               <th>Username</th>
@@ -209,6 +210,7 @@ export default function AccountsPage() {
             )}
           </tbody>
         </table>
+        </div>
         {resetting !== null && (
           <ResetPasswordForm
             account={accounts.find((a) => a.id === resetting)}

@@ -21,6 +21,7 @@ jobs:
       contents: read
       packages: write
       statuses: write
+      attestations: read
     steps:
       - uses: actions/checkout@v7
         with:
@@ -42,6 +43,12 @@ jobs:
           registry: ghcr.io
           username: ${{ github.actor }}
           password: ${{ secrets.GITHUB_TOKEN }}
+      - name: Verify signed provenance and inventory for new release cycles
+        env:
+          GH_TOKEN: ${{ github.token }}
+          SOURCE_IMAGE: ${{ steps.tags.outputs.source }}
+          CI_SELECTED_SHA: ${{ steps.policy.outputs.selected }}
+        run: python3 scripts/ci/verify-image.py --source "$SOURCE_IMAGE" --revision "$CI_SELECTED_SHA"
       - name: Add the channel tags to the already tested image
         env:
           GH_TOKEN: ${{ github.token }}

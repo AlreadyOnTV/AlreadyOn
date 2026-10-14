@@ -7,7 +7,7 @@ import tempfile
 import unittest
 
 SCRIPT = Path(__file__).parents[2] / 'deploy' / 'alreadyon-nightly-sync.sh'
-IMAGE = 'ghcr.io/alreadyonapp/alreadyon:nightly'
+IMAGE = 'ghcr.io/alreadyontv/alreadyon:nightly'
 
 # Minimal Docker double: state.json records calls without creating containers or images.
 FAKE_DOCKER = r'''#!/usr/bin/env python3

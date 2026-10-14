@@ -23,3 +23,7 @@ Browser sign-in checks identify setup and login by the dialog’s accessible nam
 See [scheduling](SCHEDULING.md), [TLS](TLS.md) and [runtime tests](../tests/integration/README.md).
 
 Browser settings checks verify friendly server-name persistence through the settings API. Direct HTTPS API tests cover native discovery; proxied requests remain outside the LAN pairing boundary.
+
+See [channel navigation](CHANNEL_NAVIGATION.md) for wraparound controls and edge cases.
+
+Use [device display settings](DISPLAY.md) for brightness and text sizing.

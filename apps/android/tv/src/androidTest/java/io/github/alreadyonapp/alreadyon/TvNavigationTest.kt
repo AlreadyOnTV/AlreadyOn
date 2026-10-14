@@ -8,6 +8,7 @@ import androidx.lifecycle.ViewModelProvider
 import org.junit.Rule
 import androidx.compose.ui.test.junit4.createAndroidComposeRule
 import androidx.compose.ui.test.*
+import androidx.compose.ui.semantics.SemanticsProperties
 import androidx.compose.ui.semantics.SemanticsActions
 import org.junit.Test
 import org.junit.runner.RunWith
@@ -57,16 +58,18 @@ class TvNavigationTest {
                 node.performClick()
             }
             if (manual) {
-                val addressField = hasSetTextAction() and hasText("HTTPS server address")
+                val addressField = hasSetTextAction() and hasText("Hostname / IP")
                 compose.onNode(addressField).assertExists()
-                compose.onNode(addressField).assertTextContains("https://")
+                compose.onNodeWithText("https://").assertExists()
                 compose.onNodeWithText("Searching for local servers…", substring = true).assertExists()
                 compose.waitUntil(15000) {
                     compose.onAllNodes(hasText("10.0.2.2:19900", substring = true)).fetchSemanticsNodes().isNotEmpty()
                 }
                 compose.onNode(addressField).assertExists()
                 compose.onNodeWithText("Searching for local servers…", substring = true).assertExists()
-                compose.onNode(addressField).performTextReplacement("127.0.0.1:${bridge.localPort}")
+                compose.onNode(addressField).performTextReplacement("127.0.0.1")
+                compose.onNode(hasSetTextAction() and hasText("Port")).assertTextContains("19900")
+                compose.onNode(hasSetTextAction() and hasText("Port")).performTextReplacement(bridge.localPort.toString())
                 compose.onNodeWithText("Searching for local servers…", substring = true).assertExists()
                 device.pressBack() // Dismiss the TV keyboard.
                 click("Check Server")
@@ -108,8 +111,8 @@ class TvNavigationTest {
             compose.onNodeWithText("Admin").performClick()
             compose.onNodeWithText("Switch Profile").assertExists()
             compose.onNodeWithText("Sign Out").assertExists()
-            compose.onNodeWithText("Profile Settings").assertExists()
-            compose.onNodeWithText("Dashboard").assertExists()
+            compose.onNodeWithText("Profile").assertExists()
+            compose.onNodeWithText("Dashboard").assertDoesNotExist()
             device.pressBack()
             val model = ViewModelProvider(compose.activity)[PhoneModel::class.java]
             compose.runOnIdle { model.setQuality(720); model.setSubtitle(null) }
@@ -121,22 +124,28 @@ class TvNavigationTest {
             compose.waitUntil(60000) { !exists("Preparing channel…") }
             compose.waitUntil(10000) { controlFocused("Pause") }
             device.pressDPadDown()
-            device.pressDPadUp()
-            compose.waitForIdle()
-            assertTrue("Vertical arrows retain transport focus", controlFocused("Pause"))
-            // Reveal the hidden transport controls using only the remote.
-            device.pressDPadDown()
-            compose.waitUntil(10000) { compose.onAllNodes(hasContentDescription("Mute") or hasContentDescription("Unmute")).fetchSemanticsNodes().isNotEmpty() }
-            device.pressDPadRight()
-            compose.waitForIdle()
-            compose.runOnIdle { assertEquals("Overlay navigation must not tune", 110, model.state.value.channel?.number) }
-            device.pressBack() // Hide controls before channel navigation.
-            device.pressDPadRight()
             compose.waitUntil(60000) { model.state.value.channel?.number == 111 && model.state.value.playback != null }
             compose.waitUntil(10000) { controlFocused("Pause") }
-            device.pressBack() // A newly tuned channel starts with the overlay focused.
-            device.pressDPadLeft()
+            compose.waitForIdle()
+            device.pressDPadUp()
             compose.waitUntil(60000) { model.state.value.channel?.number == 110 && model.state.value.playback != null }
+            compose.waitUntil(10000) { controlFocused("Pause") }
+            compose.waitForIdle()
+            device.pressBack() // Hide controls; Up/Down must still tune.
+            device.pressDPadDown()
+            compose.waitUntil(60000) { model.state.value.channel?.number == 111 && model.state.value.playback != null }
+            compose.waitUntil(10000) { controlFocused("Pause") }
+            compose.waitForIdle()
+            device.pressBack() // Hide controls before testing horizontal navigation.
+            device.pressDPadRight()
+            compose.waitUntil(10000) { controlFocused("Mute") || controlFocused("Unmute") }
+            compose.runOnIdle { assertEquals("Horizontal controls must not tune", 111, model.state.value.channel?.number) }
+            device.pressDPadLeft()
+            compose.waitUntil(10000) { controlFocused("Pause") }
+            device.pressDPadUp()
+            compose.waitUntil(60000) { model.state.value.channel?.number == 110 && model.state.value.playback != null }
+            compose.waitUntil(10000) { controlFocused("Pause") }
+            compose.waitForIdle()
             compose.runOnIdle {
                 assertEquals("Quality survives tuning", 720, model.state.value.quality)
                 assertEquals("Mute survives tuning", muted, model.state.value.muted)
@@ -146,26 +155,43 @@ class TvNavigationTest {
             device.pressDPadRight(); device.pressDPadRight(); device.pressDPadCenter()
             click("Quality")
             compose.waitUntil(10000) { compose.onAllNodes(hasText("✓ 720p") and isFocused()).fetchSemanticsNodes().isNotEmpty() }
+            device.pressDPadDown(); device.pressDPadUp()
+            compose.runOnIdle { assertEquals("Submenu arrows must not tune", 110, model.state.value.channel?.number) }
             device.pressBack() // Submenu to root menu.
+            device.pressDPadDown(); device.pressDPadUp()
+            compose.runOnIdle { assertEquals("Root menu arrows must not tune", 110, model.state.value.channel?.number) }
             click("Audio Tracks")
             compose.waitUntil(10000) { compose.onAllNodes(hasText("✓ ", substring = true) and isFocused()).fetchSemanticsNodes().isNotEmpty() }
             device.pressBack()
             click("Subtitles")
             compose.waitUntil(10000) { compose.onAllNodes(hasText("✓ Off") and isFocused()).fetchSemanticsNodes().isNotEmpty() }
-            device.pressBack(); device.pressBack(); device.pressBack(); device.pressBack()
+            repeat(4) { device.pressBack(); compose.waitForIdle() }
             compose.waitUntil(10000) { exists("CHANNEL") }
+            fun guideFocused(number: Int) = compose.onAllNodes(hasContentDescription("Channel $number: TV fixture $number") and isFocused()).fetchSemanticsNodes().isNotEmpty()
+            device.pressDPadUp()
+            compose.waitUntil(10000) { guideFocused(111) }
             device.pressDPadDown()
+            compose.waitUntil(10000) { guideFocused(110) }
+            fun selectedProgram() = compose.onNode(hasContentDescription("Channel 110: TV fixture 110") and isFocused())
+                .fetchSemanticsNode().config[SemanticsProperties.StateDescription]
+            val firstProgram = selectedProgram()
+            device.pressDPadLeft()
+            compose.waitForIdle()
+            val lastProgram = selectedProgram()
+            assertNotEquals("Left wraps to last airing", firstProgram, lastProgram)
+            device.pressDPadRight()
+            compose.waitUntil(10000) { selectedProgram() == firstProgram }
+            device.pressDPadDown()
+            compose.waitUntil(10000) { guideFocused(111) }
             device.pressBack() // Restore the current preview row.
             compose.waitUntil(10000) { compose.onAllNodes(hasContentDescription("Channel 110: TV fixture 110") and isFocused()).fetchSemanticsNodes().isNotEmpty() }
-            device.pressBack() // Focus the mini-player.
-            compose.waitUntil(10000) { controlFocused("Pause") }
-            device.pressDPadUp()
-            compose.waitUntil(10000) { compose.onAllNodes(hasText("Dashboard") and isFocused()).fetchSemanticsNodes().isNotEmpty() }
+            device.pressBack() // Second Back opens the profile menu.
+            compose.waitUntil(10000) { compose.onAllNodes(hasText("Switch Profile") and isFocused()).fetchSemanticsNodes().isNotEmpty() }
             device.pressBack()
-            compose.waitUntil(10000) { controlFocused("Pause") }
+            compose.waitUntil(10000) { compose.onAllNodes(hasContentDescription("Channel 110: TV fixture 110") and isFocused()).fetchSemanticsNodes().isNotEmpty() }
+            compose.onNodeWithContentDescription("Pause").assertDoesNotExist()
+            compose.onNodeWithContentDescription("Play").assertDoesNotExist()
             device.takeScreenshot(java.io.File(instrumentation.targetContext.getExternalFilesDir(null), "tv-guide.png"))
-            device.pressBack() // Exit from profile/player without signing out.
-            compose.waitUntil(10000) { compose.activity.isFinishing }
             return
         } finally {
             device.takeScreenshot(java.io.File(instrumentation.targetContext.getExternalFilesDir(null), "tv-last-state.png"))

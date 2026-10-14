@@ -1,0 +1,35 @@
+# Proposals are reviewed into the active date branch; never merge directly to dev.
+version: 2
+updates:
+  - package-ecosystem: gomod
+    directory: /server
+    target-branch: dev
+    schedule:
+      interval: weekly
+      day: monday
+      time: '03:00'
+      timezone: America/New_York
+  - package-ecosystem: npm
+    directories: [/web, /deploy/npm-tooling]
+    target-branch: dev
+    schedule:
+      interval: weekly
+      day: monday
+      time: '03:00'
+      timezone: America/New_York
+  - package-ecosystem: github-actions
+    directory: /
+    target-branch: dev
+    schedule:
+      interval: weekly
+      day: monday
+      time: '03:00'
+      timezone: America/New_York
+  - package-ecosystem: gradle
+    directory: /apps/android
+    target-branch: dev
+    schedule:
+      interval: weekly
+      day: monday
+      time: '03:00'
+      timezone: America/New_York

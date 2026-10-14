@@ -2,11 +2,11 @@
 
 [![AlreadyOn](../web/public/branding/header-doc.svg)](../README.md)
 
-[OpenAPI](openapi.yaml) is the source of truth for endpoint paths, schemas and errors. The API is pre-1.0; consumers should tolerate additive fields and handle documented failures. Breaking changes require an explicit review and migration notes.
+[OpenAPI](openapi.yaml) is the source of truth for endpoint paths, schemas and errors. This pre-1.0 API permits additive fields; handle documented failures. Breaking changes require review and migration notes.
 
 ## Authentication
 
-Browser sessions use cookies. Management API keys carry owner-level authority. Playback credentials are scoped to media delivery and must not be treated as management keys. Enforce account/profile ownership on every protected operation.
+Browser sessions use cookies. Management API keys carry owner authority. Playback credentials are scoped to media delivery and must not be treated as management keys. Enforce account/profile ownership on every protected operation.
 
 TV pairing adds local HTTPS discovery/trust metadata, PIN login and per-account PIN management. PIN login creates the same account session used by other clients; it does not bypass profile ownership, disabled accounts, password-change restrictions or stream limits. PINs must be unique within an instance. See [Google TV](../docs/GOOGLE_TV.md).
 
@@ -35,3 +35,5 @@ Native PIN sign-in now issues a persistent, revocable session; browser expiry se
 The temporary `DELETE /api/testing/commercial` operation has been removed. Playback no longer offers deletion of commercial library files.
 
 Authenticated owner and viewer accounts can read `/api/server/details`, `/api/server/activity` and `/api/server/metrics` for native Dashboards. Management writes remain owner-only. Server details add `serverName`; the existing `appVersion` JSON field continues to identify the server build for compatibility, while UI labels call it Server Version. Activity is server-wide, including other profiles, source IPs and background filenames.
+
+See [Subtitles](../docs/SUBTITLES.md) for profile-mode compatibility.

@@ -1,6 +1,6 @@
-// Dashboard, profile settings and switching are available to every profile.
+// Switching and profile preferences are available to every profile.
 // Web-only administration follows, then Sign Out on every device.
-import { startTransition, useEffect, useRef, useState } from 'react';
+import { startTransition, useEffect, useId, useRef, useState } from 'react';
 import { useNavigate } from 'react-router-dom';
 import { useUsers, roleLabel } from '../users/UsersContext';
 import { useAccount } from '../users/AccountContext';
@@ -8,6 +8,7 @@ import { PasswordInput } from '../components/PasswordInput';
 import { UserAvatar } from '../users/avatars';
 import { signOut } from '../api/access';
 import './ProfileMenu.css';
+import AddProfileModal from './AddProfileModal';
 
 type MenuView = 'root' | 'switch' | 'pin';
 
@@ -15,12 +16,22 @@ export default function ProfileMenu() {
   const { users, currentUser, isAdmin, setCurrentUserId, verifyPin } = useUsers();
   const { isOwner } = useAccount();
   const navigate = useNavigate();
+  const panelId = useId();
   const [open, setOpen] = useState(false);
+  const [adding, setAdding] = useState(false);
   const [view, setView] = useState<MenuView>('root');
   const [pendingUserId, setPendingUserId] = useState<number | null>(null);
   const [pinInput, setPinInput] = useState('');
   const [pinError, setPinError] = useState<string | null>(null);
   const containerRef = useRef<HTMLDivElement>(null);
+  // Pin the active profile first without mutating the account's shared list.
+  const switchUsers = [...users].sort((a, b) =>
+    Number(b.id === currentUser.id) - Number(a.id === currentUser.id) ||
+    a.name.localeCompare(b.name, undefined, { sensitivity: 'base' }) || a.id - b.id);
+  const closeCreation = () => {
+    setAdding(false);
+    containerRef.current?.querySelector<HTMLButtonElement>('.profile-menu-trigger')?.focus();
+  };
   const go = (path: string) => {
     setOpen(false);
     navigate(path);
@@ -95,35 +106,35 @@ export default function ProfileMenu() {
   return (
     <div className="profile-menu" ref={containerRef}>
       <button
-        className="page-header-control page-header-control-avatar instant-tooltip"
+        className="page-header-control page-header-control-avatar profile-menu-trigger instant-tooltip"
         onClick={toggle}
         aria-label={`Profile: ${currentUser.name}`}
+        aria-expanded={open}
+        aria-controls={open ? panelId : undefined}
         data-tooltip={currentUser.name}
       >
         <UserAvatar name={currentUser.name} icon={currentUser.icon} size={28} />
+        <span className="profile-menu-trigger-name">{currentUser.name}</span>
       </button>
 
       {open && (
-        <div className={'profile-menu-panel' + (view !== 'root' ? ' profile-menu-expanded' : '')}>
+        <div id={panelId} className={'profile-menu-panel' + (view !== 'root' ? ' profile-menu-expanded' : '')}>
           {view === 'root' && (
             <>
-              <button className="profile-menu-item" onClick={() => go('/dashboard')}>
-                Dashboard
-              </button>
-              <button className="profile-menu-item" onClick={() => go('/profile')}>
-                Profile Settings
-              </button>
               <button className="profile-menu-item" onClick={() => setView('switch')}>
                 Switch Profile
               </button>
+              <button className="profile-menu-item" onClick={() => go('/profile')}>
+                Profile
+              </button>
               {isAdmin && (
                 <button className="profile-menu-item" onClick={() => go('/account')}>
-                  Admin Settings
+                  Settings
                 </button>
               )}
               {isOwner && (
-                <button className="profile-menu-item" onClick={() => go('/admin/accounts')}>
-                  Server Settings
+                <button className="profile-menu-item" onClick={() => go('/admin/dashboard')}>
+                  Server
                 </button>
               )}
               <button className="profile-menu-item" onClick={() => void signOut()}>
@@ -134,10 +145,13 @@ export default function ProfileMenu() {
 
           {view === 'switch' && (
             <>
-              <button className="profile-menu-item profile-menu-back" onClick={() => setView('root')}>
-                ← Back
-              </button>
-              {users.map((u) => (
+              <div className="profile-menu-switch-header">
+                <button className="profile-menu-item profile-menu-back" onClick={() => setView('root')}>
+                  ← Back
+                </button>
+                {isAdmin && <button className="profile-menu-item profile-menu-add" onClick={() => { setOpen(false); setAdding(true); }}>Add Profile</button>}
+              </div>
+              {switchUsers.map((u) => (
                 <button
                   key={u.id}
                   className={'profile-menu-item profile-menu-profile' + (u.id === currentUser.id ? ' profile-menu-item-active' : '')}
@@ -189,6 +203,7 @@ export default function ProfileMenu() {
           )}
         </div>
       )}
+      {adding && isAdmin && <AddProfileModal onClose={closeCreation} />}
     </div>
   );
 }

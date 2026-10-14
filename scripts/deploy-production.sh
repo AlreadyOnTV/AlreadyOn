@@ -5,7 +5,7 @@ set -euo pipefail
 
 host=${1:?Usage: deploy-production.sh <ssh-host> [compose-directory]}
 app_dir=${2:-/opt/apps/alreadyon}
-target=ghcr.io/alreadyonapp/alreadyon:nightly
+target=ghcr.io/alreadyontv/alreadyon:nightly
 local_image=alreadyon:local
 engine=$(command -v podman || command -v docker)
 

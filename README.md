@@ -8,9 +8,11 @@
 
 AlreadyOn turns your own media library into scheduled television channels. Browse a guide, tune into an airing, and let playback continue across scheduled programs.
 
-The server uses Go and SQLite; the browser client uses React and TypeScript. An Android phone client is available; other native clients are experimental. Media stays on your server. Metadata providers are optional.
+The server uses Go and SQLite; the browser client uses React and TypeScript. Android phone/tablet and Google TV clients are available; Apple clients are not planned. Media stays on your server. Metadata providers are optional.
 
 ## Try it
+
+Visit the [product website](https://alreadyontv.com/) for an interface tour, beginner guides and tester support.
 
 Use [the container guide](deploy/README.md) for installation. Configure media folders, create the owner account through first-run setup, and scan the library. Mount media read-only unless you explicitly need file-management features.
 

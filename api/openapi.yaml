@@ -4191,16 +4191,22 @@ components:
             A preset id (fox, cat, dog, lion, panda, koala, owl, frog,
             monkey, rabbit), or the URL of an uploaded image, or null.
         fontLevel:
+          deprecated: true
           type: [integer, 'null']
           minimum: 0
           maximum: 3
         brightnessLevel:
+          deprecated: true
           type: [integer, 'null']
           minimum: 0
           maximum: 3
         guideTimeFormat:
           type: [string, 'null']
           enum: ['12h-padded', '12h', '24h', null]
+        subtitleMode:
+          type: [string, 'null']
+          enum: ['always', 'other_audio', 'off', null]
+          description: Always on, enabled when playing audio differs from audioLanguage, or off. Uses subtitleLanguage; unknown audio or missing matching subtitles does not interrupt playback. Null retains subtitlesEnabled. Setting a mode updates subtitlesEnabled for older clients; legacy subtitlesEnabled patches clear the mode.
         subtitlesEnabled:
           type: [boolean, 'null']
           description: Show subtitles by default. Null means off.
@@ -4249,16 +4255,22 @@ components:
           type: [string, 'null']
           description: A preset id, or null to remove the icon.
         fontLevel:
+          deprecated: true
           type: [integer, 'null']
           minimum: 0
           maximum: 3
         brightnessLevel:
+          deprecated: true
           type: [integer, 'null']
           minimum: 0
           maximum: 3
         guideTimeFormat:
           type: [string, 'null']
           enum: ['12h-padded', '12h', '24h', null]
+        subtitleMode:
+          type: [string, 'null']
+          enum: ['always', 'other_audio', 'off', null]
+          description: Always on, enabled when playing audio differs from audioLanguage, or off. Uses subtitleLanguage; unknown audio or missing matching subtitles does not interrupt playback. Null retains subtitlesEnabled. Setting a mode updates subtitlesEnabled for older clients; legacy subtitlesEnabled patches clear the mode.
         subtitlesEnabled:
           type: [boolean, 'null']
           description: Show subtitles by default. Null means off.

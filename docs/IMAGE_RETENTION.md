@@ -16,4 +16,4 @@ Local base images are refreshed on demand when their build timestamp exceeds sev
 
 Cleanup must preserve active release digests and anything referenced by a supported tag. PR images and unreferenced intermediates can be removed according to the registry cleanup policy. Check references before deleting artifacts; retention is not a database backup policy.
 
-Store private deployment records and registry credentials outside Git. Future supply-chain work, including provenance and SBOM publication, is tracked separately.
+Store private deployment records and registry credentials outside Git. New-cycle image provenance and SBOM signatures are stored independently in GitHub attestations; see [artifact evidence](ARTIFACT_PROVENANCE.md).

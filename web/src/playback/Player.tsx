@@ -17,6 +17,7 @@ import {
   languageLabel,
   loadCues,
   pickTrack,
+  preferredSubtitleLanguage,
   trackKey,
   type Cue,
 } from "./subtitles";
@@ -182,6 +183,7 @@ export function Player({
   const [showDetails, setShowDetails] = useState(false);
   // Pointer, touch and player keyboard input reset the three-second overlay deadline.
   const [idle, setIdle] = useState(false);
+  const [controlsDismissed, setControlsDismissed] = useState(false);
   const wakeControls = useRef<() => void>(() => {});
   const revealOnlyTap = useRef(false);
   useEffect(() => {
@@ -189,6 +191,7 @@ export function Player({
     if (!stage) return;
     let timer: ReturnType<typeof setTimeout>;
     const wake = () => {
+      setControlsDismissed(false);
       setIdle(false);
       clearTimeout(timer);
       timer = setTimeout(() => setIdle(true),
@@ -351,6 +354,7 @@ export function Player({
   }>({ audioLanguage: currentUser.audioLanguage ?? "en" });
   const chooseAudio = (track: AudioTrack) => {
     if (!session || track.index === session.plan.audioTrackIndex) return;
+    if (currentUser.subtitleMode === "other_audio") setSubtitleChoice(null);
     audioRef.current = {
       audioLanguage: track.language || currentUser.audioLanguage || "en",
       audioTrackIndex: track.index,
@@ -359,16 +363,21 @@ export function Player({
     void api.current?.requality();
   };
   useEffect(() => {
+    setSubtitleChoice(null);
     audioRef.current = { audioLanguage: currentUser.audioLanguage ?? "en" };
     void api.current?.requality();
   }, [currentUserId, currentUser.audioLanguage]);
   const profileLanguage =
     currentUser.subtitleLanguage ?? DEFAULT_SUBTITLE_LANGUAGE;
+  const selectedAudio = session?.audioTracks?.find(track => track.index === session.plan.audioTrackIndex);
+  const defaultLanguage = preferredSubtitleLanguage(selectedAudio?.language, currentUser.audioLanguage ?? "en",
+    currentUser.subtitleMode ?? (currentUser.subtitlesEnabled ? "always" : "off"),
+    session?.subtitles ?? [], profileLanguage);
   const wantedLanguage =
     subtitleChoice === false
       ? null
       : (subtitleChoice ??
-        (currentUser.subtitlesEnabled ? profileLanguage : null));
+        defaultLanguage);
   const activeTrack =
     session && wantedLanguage
       ? pickTrack(session.subtitles ?? [], wantedLanguage)
@@ -1453,6 +1462,7 @@ export function Player({
         (landscapePlayer ? " is-landscape-player" : "") +
         (paused ? " is-paused" : "") +
         (idle ? " is-idle" : "") +
+        (controlsDismissed ? " controls-dismissed" : "") +
         (channelOverlay ? " show-channel-overlay" : "")
       }
       data-mode={mode}
@@ -1514,6 +1524,8 @@ export function Player({
       )}
       {channelId && session && (
         <PlayerControls
+          onWakeControls={() => wakeControls.current()}
+          onHideControls={() => { setControlsDismissed(true); setIdle(true); }}
           session={session.channelId === channelId ? session : undefined}
           paused={paused}
           time={clock.time}

@@ -33,6 +33,6 @@ jobs:
         run: echo "revision=$(git rev-parse HEAD)" >> "$GITHUB_OUTPUT"
       - uses: ./.github/actions/build-bases
         with:
-          image: ghcr.io/alreadyonapp/alreadyon-base
+          image: ghcr.io/alreadyontv/alreadyon-base
           revision: ${{ steps.base.outputs.revision }}
           refresh: 'true'

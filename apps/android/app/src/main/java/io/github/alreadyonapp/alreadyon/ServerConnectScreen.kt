@@ -7,6 +7,9 @@ import androidx.compose.foundation.layout.*
 import androidx.compose.material3.*
 import androidx.compose.runtime.*
 import androidx.compose.ui.Modifier
+import androidx.compose.ui.platform.testTag
+import androidx.compose.ui.platform.LocalDensity
+import androidx.compose.ui.unit.Density
 import androidx.compose.ui.platform.LocalContext
 import androidx.compose.ui.platform.LocalView
 import androidx.compose.ui.unit.dp
@@ -48,7 +51,7 @@ private data class TvTrust(val certificate: String, val name: String)
 /** Only public bootstrap metadata uses an untrusted TLS connection; PINs never do. */
 private suspend fun probe(server: TvServer): TvTrust = withContext(Dispatchers.IO) {
     val base = server.origin.toHttpUrl()
-    val http = OkHttpClient.Builder().serverTls(base, true).connectTimeout(5, TimeUnit.SECONDS)
+    val http = OkHttpClient.Builder().bootstrapTls(base).connectTimeout(5, TimeUnit.SECONDS)
         .callTimeout(10, TimeUnit.SECONDS).build()
     fun get(path: String): JSONObject = http.newCall(Request.Builder().url(base.resolve(path)!!).build()).execute().use { response ->
         if (!response.isSuccessful) throw IOException("Server is not available for local TV pairing.")
@@ -60,7 +63,8 @@ private suspend fun probe(server: TvServer): TvTrust = withContext(Dispatchers.I
     if (info.optInt("protocol") != 1 || !info.optBoolean("pairingEnabled")) throw IOException("Set your TV PIN in this server’s Admin Settings first.")
     val data = get("/api/tv/trust")
     val pem = data.getString("certificate")
-    CertificateFactory.getInstance("X.509").generateCertificate(ByteArrayInputStream(pem.toByteArray()))
+    val certificate = CertificateFactory.getInstance("X.509").generateCertificate(ByteArrayInputStream(pem.toByteArray())) as java.security.cert.X509Certificate
+    certificate.checkValidity()
     return@withContext TvTrust(pem, info.getString("name"))
 
 }
@@ -78,7 +82,8 @@ internal fun ServerConnectScreen(state: PhoneState, model: PhoneModel, modifier:
     var pin by remember { mutableStateOf("") }
     var pinVisible by remember { mutableStateOf(false) }
     var username by remember { mutableStateOf("") }
-    var address by remember { mutableStateOf("https://") }
+    var address by remember { mutableStateOf(ManualServerAddress()) }
+    val portFocus = remember { FocusRequester() }
     var remaining by remember { mutableIntStateOf(30) }
     val scope = rememberCoroutineScope()
     val keyboard = LocalSoftwareKeyboardController.current
@@ -133,22 +138,31 @@ internal fun ServerConnectScreen(state: PhoneState, model: PhoneModel, modifier:
                     }, enabled = !checking && !state.busy) { Text("${server.name} · ${server.origin.removePrefix("https://")}") }
                 }
             }
-            OutlinedTextField(address, { address = it }, label = { Text("HTTPS server address") },
-                singleLine = true, keyboardOptions = KeyboardOptions(keyboardType = KeyboardType.Uri), modifier = Modifier.fillMaxWidth())
+            Row(Modifier.fillMaxWidth(), verticalAlignment = Alignment.CenterVertically,
+                horizontalArrangement = Arrangement.spacedBy(8.dp)) {
+                Text("https://", color = MaterialTheme.colorScheme.onSurfaceVariant)
+                OutlinedTextField(address.host, { address = address.withHost(it) }, label = { Text("Hostname / IP") },
+                    singleLine = true, keyboardOptions = KeyboardOptions(keyboardType = KeyboardType.Uri, imeAction = ImeAction.Next),
+                    keyboardActions = KeyboardActions(onNext = { portFocus.requestFocus() }), modifier = Modifier.weight(1f))
+                OutlinedTextField(address.port, { address = address.withPort(it) }, label = { Text("Port") },
+                    singleLine = true, keyboardOptions = KeyboardOptions(keyboardType = KeyboardType.Number),
+                    modifier = Modifier.width(90.dp).focusRequester(portFocus))
+            }
             Button(modifier = Modifier.tvFocusOutline(), onClick = {
-                val input = address.trim().let { if ("://" in it) it else "https://$it" }
-                val origin = serverOrigin(input)?.toHttpUrl()?.let { url ->
-                    if (url.port == 443 && java.net.URI(input).port == -1) url.newBuilder().port(19900).build().toString().removeSuffix("/")
-                    else url.toString().removeSuffix("/")
-                }
-                if (origin == null) error = "Enter a valid HTTPS server address."
-                else select(TvServer("AlreadyOn server", origin))
-            }, enabled = address.removePrefix("https://").isNotBlank() && !checking && !state.busy) { Text("Check Server") }
+                runCatching { address.origin() }.onSuccess { select(TvServer("AlreadyOn server", it)) }
+                    .onFailure { error = it.message ?: "Enter a valid hostname or IP address." }
+            }, enabled = address.host.isNotBlank() && !checking && !state.busy) { Text("Check Server") }
             Button(modifier = Modifier.tvFocusOutline(), onClick = { servers.clear(); recent?.let { servers.add(it) }; error = null; remaining = 30; scan++ }) { Text("Rescan") }
         } else {
             Text("${selected!!.name} · ${selected!!.origin.removePrefix("https://")}", style = MaterialTheme.typography.headlineSmall)
             if (checking) Text("Checking server…")
             if (trust != null) {
+                val changedCa = state.origin == selected!!.origin && state.trustedCa != null && state.trustedCa != trust!!.certificate
+                if (changedCa) {
+                    Text("The server CA has changed. Only accept it if you expected this change; another device may be impersonating your server.", color = MaterialTheme.colorScheme.error)
+                    Button(onClick = { model.acceptServerTrust(trust!!.certificate) }, enabled = !state.busy) { Text("Accept New CA") }
+                }
+
                 OutlinedTextField(username, { username = it }, label = { Text("Username") },
                     singleLine = true,
                     keyboardOptions = KeyboardOptions(imeAction = if (BuildConfig.IS_TV) ImeAction.Next else ImeAction.Default),
@@ -171,7 +185,7 @@ internal fun ServerConnectScreen(state: PhoneState, model: PhoneModel, modifier:
                         if (it.isFocused) { keyboard?.hide(); pinKeypad = true }
                     }, enabled = !state.busy)
                 Button(modifier = Modifier.focusRequester(connectFocus).tvFocusOutline(), onClick = { model.signInWithPIN(selected!!.origin, username, pin, trust!!.certificate, trust!!.name); pin = ""; pinVisible = false },
-                    enabled = username.isNotBlank() && pin.length in 6..12 && !state.busy) { Text("Connect") }
+                    enabled = !changedCa && username.isNotBlank() && pin.length in 6..12 && !state.busy) { Text("Connect") }
             }
             Button(modifier = Modifier.tvFocusOutline(), onClick = { selected = null; trust = null; pin = ""; pinVisible = false; error = null; model.dismissError() }, enabled = !checking && !state.busy) { Text("Choose Another Server") }
         }
@@ -187,7 +201,17 @@ internal fun ServerConnectScreen(state: PhoneState, model: PhoneModel, modifier:
             while (!keypadView.hasWindowFocus()) delay(16)
             firstDigit.requestFocus()
         }
-        Surface(shape = MaterialTheme.shapes.large) {
+        ServerPinKeypad(pin, firstDigit, { pin = it }, ::closePin)
+
+    }
+}
+
+/** Scaling density reduces measured dimensions and typography together, preserving system font scale. */
+@Composable
+internal fun ServerPinKeypad(pin: String, firstDigit: FocusRequester, onPin: (String) -> Unit, onDone: () -> Unit, scale: Float = 0.7f) {
+    val density = LocalDensity.current
+    CompositionLocalProvider(LocalDensity provides Density(density.density * scale, density.fontScale)) {
+        Surface(modifier = Modifier.testTag("server-pin-keypad"), shape = MaterialTheme.shapes.large) {
             Column(Modifier.width(360.dp).padding(20.dp), horizontalAlignment = Alignment.CenterHorizontally,
                 verticalArrangement = Arrangement.spacedBy(8.dp)) {
                 Text("TV PIN", style = MaterialTheme.typography.headlineSmall)
@@ -195,13 +219,12 @@ internal fun ServerConnectScreen(state: PhoneState, model: PhoneModel, modifier:
                 listOf(listOf("1", "2", "3"), listOf("4", "5", "6"), listOf("7", "8", "9"), listOf("Clear", "0", "Delete")).forEach { row ->
                     Row(horizontalArrangement = Arrangement.spacedBy(8.dp)) {
                         row.forEach { digit ->
-                            Button(onClick = {
-                                pin = when (digit) { "Clear" -> ""; "Delete" -> pin.dropLast(1); else -> (pin + digit).take(12) }
-                            }, modifier = Modifier.width(100.dp).then(if (digit == "1") Modifier.focusRequester(firstDigit) else Modifier).tvFocusOutline()) { Text(digit) }
+                            Button(onClick = { onPin(when (digit) { "Clear" -> ""; "Delete" -> pin.dropLast(1); else -> (pin + digit).take(12) }) },
+                                modifier = Modifier.width(100.dp).then(if (digit == "1") Modifier.focusRequester(firstDigit) else Modifier).tvFocusOutline()) { Text(digit) }
                         }
                     }
                 }
-                Button(onClick = { closePin() }, modifier = Modifier.tvFocusOutline()) { Text("✓ Done") }
+                Button(onClick = onDone, modifier = Modifier.tvFocusOutline()) { Text("✓ Done") }
             }
         }
     }
@@ -222,4 +245,14 @@ private fun PinVisibilityButton(visible: Boolean, enabled: Boolean, toggle: () -
     IconButton(onClick = toggle, enabled = enabled) {
         Icon(vector, contentDescription = if (visible) "Hide PIN" else "Show PIN")
     }
+}
+
+@Composable
+internal fun ServerTrustAlert(state: PhoneState, model: PhoneModel) {
+    if (!state.trustIssue) return
+    AlertDialog(onDismissRequest = model::dismissTrustIssue,
+        title = { Text("Server certificate trust failed") },
+        text = { Text("The server no longer validates against its saved CA, or its certificate has expired. Connections are blocked. Review the server and accept a new CA only if you expected a change.") },
+        confirmButton = { TextButton(onClick = model::reviewServerTrust) { Text("Review Server CA") } },
+        dismissButton = { TextButton(onClick = model::dismissTrustIssue) { Text("Cancel") } })
 }

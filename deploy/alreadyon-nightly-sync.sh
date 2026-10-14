@@ -4,7 +4,7 @@
 set -euo pipefail
 
 # Environment overrides exist only so repository tests can use a fake Docker.
-image=${NIGHTLY_IMAGE:-ghcr.io/alreadyonapp/alreadyon:nightly}
+image=${NIGHTLY_IMAGE:-ghcr.io/alreadyontv/alreadyon:nightly}
 app_dir=${APP_DIR:-/opt/apps/alreadyon}
 compose_file=$app_dir/docker-compose.yaml
 service=alreadyon

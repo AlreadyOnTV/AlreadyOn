@@ -1,4 +1,5 @@
 import Brand from '../components/Brand';
+import ProfileMenu from './ProfileMenu';
 // Admin Settings: the signed-in account (password, sign-in details) and that
 // account's profiles. It replaced the My Account tab of Server Settings so
 // Viewer accounts, which have no Server Settings, reach it the same way as
@@ -21,6 +22,7 @@ export default function AdminSettingsPage() {
       <div className="admin-topbar">
         <div className="admin-topbar-inner">
           <Brand />
+          <ProfileMenu />
         </div>
       </div>
       <div className="admin-content">

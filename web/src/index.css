@@ -38,8 +38,6 @@ body:has(.guide-page)::-webkit-scrollbar,
 .no-scrollbar::-webkit-scrollbar { display: none; }
 
 :root {
-  --font-scale: 1;
-  --page-brightness: 1;
 }
 
 html {
@@ -55,27 +53,6 @@ html {
 
 #root {
   min-height: 100vh;
-}
-
-/* Global brightness dimmer (TEMPORARY, evaluation feedback). This used to
-   be `filter: brightness()` on #root, but a `filter` on any ancestor —
-   even a no-op `brightness(1)` — creates a new containing block that
-   breaks `position: sticky` for every descendant (this was the actual
-   cause of the Guide page's whole family of sticky channel-column/header
-   bugs, present since the very first commit that added this dimmer,
-   independent of column count or scroll width). A fixed black overlay
-   with matching opacity produces the identical visual result (each
-   BRIGHTNESS_LEVELS value is <=1, so `1 - value` alpha-blends to the same
-   result as multiplying every channel by `value`) without touching any
-   element's containing block. */
-body::after {
-  content: "";
-  position: fixed;
-  inset: 0;
-  background: #000;
-  opacity: calc(1 - var(--page-brightness, 1));
-  pointer-events: none;
-  z-index: 9999;
 }
 
 /* Underline links so color is not their only identifying cue. Keep visited

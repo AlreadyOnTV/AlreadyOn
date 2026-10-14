@@ -2,7 +2,7 @@
 
 [![AlreadyOn](../web/public/branding/header-doc.svg)](../README.md)
 
-The Android phone client uses Kotlin, Compose and Media3. Phone/tablet and TV apps discover local HTTPS servers for 30 seconds while offering manual address entry immediately. Typing does not stop discovery; choosing a server does. After accepting the server certificate automatically, they sign in with username and the account’s 6–12 digit TV PIN configured in WebUI Admin Settings. They share account profiles, guide browsing and playback.
+The Android phone client uses Kotlin, Compose and Media3. Phone/tablet and TV apps discover local HTTPS servers for 30 seconds while offering [manual entry](SERVER_CONNECTION.md) immediately. Typing does not stop discovery; choosing a server does. After accepting the server certificate automatically, they sign in with username and the account’s 6–12 digit TV PIN configured in WebUI Admin Settings. They share account profiles, guide browsing and playback.
 
 Use [the app guide](../apps/android/README.md) to build. Keep `io.github.alreadyonapp.alreadyon` as the application identity. Signing keys and update credentials belong to the maintainer and must remain private.
 
@@ -18,7 +18,7 @@ Check sign-in, profile selection/PIN behavior, channel changes, transitions, tra
 
 See [emulator setup](ANDROID_EMULATOR.md), [playback](PLAYBACK.md) and [API compatibility](../api/COMPATIBILITY.md).
 
-The [Google TV target](GOOGLE_TV.md) shares this client infrastructure, with fixed TV presentation, remote navigation and local account PIN pairing.
+The [Google TV target](GOOGLE_TV.md) shares this infrastructure, with TV presentation, remote navigation and local account PIN pairing.
 
 See [physical TV review](TV_DEVICE_REVIEW.md) for safe remote-driven checks and release performance measurement.
 
@@ -29,3 +29,5 @@ Signed phone and TV apps check GitHub on startup without delaying viewing. **Upd
 Updates use the matching device APK and verify checksum, package, target and signing certificate before asking Android to install. Allow installs from AlreadyOn in Android settings when prompted. Approve the system installer; downloads show progress and can be cancelled. Existing login/settings remain intact. After installation the app attempts to reopen and removes its downloaded APK; if necessary select Open or launch it manually. Interrupted installs offer Continue Installation or Cancel on reopening.
 
 Install the first updater-enabled APK manually. Debug packages skip production update checks. See [updater behavior and tests](ANDROID_UPDATES.md). Missing metadata, network failures and older package identities never trigger an unsafe replacement.
+
+See [subtitle modes](SUBTITLES.md).

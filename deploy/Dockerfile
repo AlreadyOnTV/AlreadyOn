@@ -3,8 +3,8 @@
 ARG GO_VERSION=1.27
 ARG NODE_VERSION=24
 ARG UBUNTU_VERSION=26.04
-ARG CI_BASE=ghcr.io/alreadyonapp/alreadyon-base:base-ci
-ARG RUNTIME_BASE=ghcr.io/alreadyonapp/alreadyon-base:base-runtime
+ARG CI_BASE=ghcr.io/alreadyontv/alreadyon-base:base-ci
+ARG RUNTIME_BASE=ghcr.io/alreadyontv/alreadyon-base:base-runtime
 FROM ${CI_BASE} AS ci-base
 
 FROM ci-base AS server-build
@@ -50,7 +50,7 @@ ARG VCS_REF
 ARG BUILD_TIMESTAMP
 RUN test -n "$BUILD_TIMESTAMP" && echo "$VCS_REF" | grep -Eq '^[0-9a-f]{40}$' \
     && printf '%s_%.7s\n' "$(TZ=America/New_York date +%y.%m.%d)" "$VCS_REF" > /usr/local/share/alreadyon/build-version
-LABEL org.opencontainers.image.source="https://github.com/AlreadyOnApp/AlreadyOn" \
+LABEL org.opencontainers.image.source="https://github.com/AlreadyOnTV/AlreadyOn" \
     org.opencontainers.image.revision=$VCS_REF
 HEALTHCHECK --interval=30s --timeout=5s --start-period=60s --retries=3 \
     CMD alreadyon-tls health || exit 1

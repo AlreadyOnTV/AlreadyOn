@@ -12,6 +12,18 @@ SPEC.loader.exec_module(release_context)
 
 
 class ReleaseContextTests(unittest.TestCase):
+    def test_active_branch_build_resolves_without_a_merged_pr(self):
+        with patch.object(release_context, 'remote_ref', return_value=None):
+            self.assertEqual(release_context.build_date('owner/repo', 'a' * 40,
+                '2026-10-18', '2026-10-18\n'), '2026-10-18')
+
+    def test_unrelated_branch_and_conflicting_release_date_are_rejected(self):
+        for branch, requested in [('main', None), ('2026-10-17', None),
+                                  ('2026-10-18', '2026-10-19')]:
+            with self.subTest(branch=branch, requested=requested), self.assertRaises(ValueError):
+                release_context.build_date('owner/repo', 'a' * 40, branch,
+                                           '2026-10-18', requested)
+
     def test_date_pr_is_resolved_from_merged_pr_head(self):
         sha = "a" * 40
         pulls = [

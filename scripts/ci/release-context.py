@@ -1,6 +1,7 @@
 #!/usr/bin/env python3
 """Resolve a merged date-branch PR and maintain its movable source tag."""
 import argparse
+from pathlib import Path
 from datetime import datetime
 import json
 import os
@@ -130,14 +131,30 @@ def cleanup_release_branch(repository, day, revision):
     return True
 
 
+def build_date(repository, revision, branch, configured_date, requested_date=None):
+    """Permit dev releases and explicit current-cycle branches, never unrelated refs."""
+    if branch != 'dev':
+        active = valid_date(configured_date.strip())
+        if branch != active:
+            raise ValueError('Build must run on dev or the active release branch')
+        if requested_date and requested_date != active:
+            raise ValueError('Requested date must match the active release branch')
+        requested_date = active
+    return resolve_date(repository, revision, requested_date)
+
+
 def main():
     parser = argparse.ArgumentParser(description=__doc__)
-    parser.add_argument('command', choices=('date', 'date-for-source', 'tag', 'cleanup-branch'))
+    parser.add_argument('command', choices=('date', 'build-date', 'date-for-source', 'tag', 'cleanup-branch'))
     parser.add_argument('--repo')
     parser.add_argument('--sha', required=True)
     parser.add_argument('--date')
     args = parser.parse_args()
     repository = args.repo or os.environ['GITHUB_REPOSITORY']
+    if args.command == 'build-date':
+        configured = (Path(__file__).resolve().parents[2] / 'release-date.txt').read_text()
+        print(build_date(repository, args.sha, os.environ['GITHUB_REF_NAME'], configured, args.date))
+        return
     day = (date_for_source(args.sha) if args.command == 'date-for-source'
            else resolve_date(repository, args.sha, args.date))
     if args.command == 'tag':

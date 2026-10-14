@@ -56,7 +56,7 @@ module.exports = async ({ browser, login, url, assert, root, seed }) => {
     }).locator('.guide-slot-box').first().click(), 999, admin.id);
 
     // Settings must restore from the database, not a module variable or a URL.
-    for (const menu of ['Profile Settings', 'Server Settings']) {
+    for (const menu of ['Profile', 'Server']) {
       for (const reload of [false, true]) {
         await page.getByRole('button', { name: /^Profile:/ }).click();
         await page.getByRole('button', { name: menu, exact: true }).click();

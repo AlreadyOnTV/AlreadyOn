@@ -40,7 +40,7 @@ concurrency:
   cancel-in-progress: false
 jobs:
   candidate:
-    if: inputs.operation == 'candidate' && github.ref == 'refs/heads/dev'
+    if: inputs.operation == 'candidate' && (github.ref == 'refs/heads/dev' || (github.ref_name == inputs.release_date && github.workflow == 'Build Date Release Image'))
     runs-on: ubuntu-24.04
     timeout-minutes: 30
     permissions:
@@ -57,6 +57,20 @@ jobs:
         with:
           fetch-depth: 0
           persist-credentials: false
+      # Candidate checkout must match the exact source validated by the parent pipeline.
+      - name: Require current source and active cycle for dated candidates
+        env:
+          GH_TOKEN: ${{ github.token }}
+          SOURCE_SHA: ${{ inputs.source_sha || github.sha }}
+          RELEASE_DATE: ${{ inputs.release_date }}
+        run: |
+          test "$SOURCE_SHA" = "$(git rev-parse HEAD)"
+          current=$(gh api "repos/$GITHUB_REPOSITORY/git/ref/heads/$GITHUB_REF_NAME" --jq .object.sha)
+          test "$SOURCE_SHA" = "$current"
+          if [ "$GITHUB_REF_NAME" != dev ]; then
+            test "$GITHUB_REF_NAME" = "$(cat release-date.txt)"
+            test "$RELEASE_DATE" = "$GITHUB_REF_NAME"
+          fi
       - name: Validate release policy
         run: python3 -m unittest discover -s scripts/ci -p test_android_release.py
       - name: Allocate candidate version or verify completed rerun

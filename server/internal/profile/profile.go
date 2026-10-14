@@ -41,6 +41,7 @@ var (
 	ErrInvalidLevel        = errors.New("fontLevel and brightnessLevel must be 0-3")
 	ErrInvalidTimeFormat   = errors.New("guideTimeFormat must be 12h-padded, 12h, or 24h")
 	ErrInvalidAudioLang    = errors.New("profile: audio language must be a two-letter lowercase code")
+	ErrInvalidSubtitleMode = errors.New("subtitleMode must be always, other_audio or off")
 	ErrInvalidSubtitleLang = errors.New("subtitleLanguage must be a two-letter ISO 639-1 code such as en")
 	ErrLastAdmin           = errors.New("there must be at least one admin profile")
 	ErrTooManyProfiles     = errors.New("this account already has the maximum number of profiles")
@@ -73,6 +74,7 @@ type Profile struct {
 	// Audio defaults to English until chosen.
 	AudioLanguage *string
 	// Subtitle defaults: off, and English when switched on, until chosen.
+	SubtitleMode     *string
 	SubtitlesEnabled *bool
 	SubtitleLanguage *string
 	// LastWatchedChannelID is set only by a successful tune, not preference edits.
@@ -100,6 +102,7 @@ type Patch struct {
 	FontLevel        Optional[int]    `json:"fontLevel"`
 	BrightnessLevel  Optional[int]    `json:"brightnessLevel"`
 	GuideTimeFormat  Optional[string] `json:"guideTimeFormat"`
+	SubtitleMode     Optional[string] `json:"subtitleMode"`
 	SubtitlesEnabled Optional[bool]   `json:"subtitlesEnabled"`
 	AudioLanguage    Optional[string] `json:"audioLanguage"`
 	SubtitleLanguage Optional[string] `json:"subtitleLanguage"`
@@ -107,7 +110,7 @@ type Patch struct {
 
 const selectColumns = `id, user_id, name, role, audience_tier, pin_hash IS NOT NULL, icon,
 	font_level, brightness_level, guide_time_format,
-	subtitles_enabled, subtitle_language, audio_language, last_watched_channel_id`
+	subtitles_enabled, subtitle_language, audio_language, last_watched_channel_id, subtitle_mode`
 
 type rowScanner interface{ Scan(dest ...any) error }
 
@@ -115,9 +118,11 @@ func scan(row rowScanner) (Profile, error) {
 	var p Profile
 	var icon, format, subtitleLang sql.NullString
 	var font, brightness, subtitles sql.NullInt64
-	if err := row.Scan(&p.ID, &p.UserID, &p.Name, &p.Role, &p.AudienceTier, &p.HasPIN, &icon, &font, &brightness, &format, &subtitles, &subtitleLang, &p.AudioLanguage, &p.LastWatchedChannelID); err != nil {
+	var mode sql.NullString
+	if err := row.Scan(&p.ID, &p.UserID, &p.Name, &p.Role, &p.AudienceTier, &p.HasPIN, &icon, &font, &brightness, &format, &subtitles, &subtitleLang, &p.AudioLanguage, &p.LastWatchedChannelID, &mode); err != nil {
 		return Profile{}, err
 	}
+	p.SubtitleMode = nullString(mode)
 	p.SubtitleLanguage = nullString(subtitleLang)
 	if subtitles.Valid {
 		on := subtitles.Int64 == 1
@@ -291,8 +296,20 @@ func Update(ctx context.Context, db *sql.DB, id int64, patch Patch) (Profile, er
 		}
 		p.GuideTimeFormat = patch.GuideTimeFormat.Value
 	}
-	if patch.SubtitlesEnabled.Set {
+	if patch.SubtitleMode.Set {
+		if v := patch.SubtitleMode.Value; v != nil && *v != "always" && *v != "other_audio" && *v != "off" {
+			return Profile{}, ErrInvalidSubtitleMode
+		}
+		p.SubtitleMode = patch.SubtitleMode.Value
+		// Older apps still read the binary default. Auto mode stays off there.
+		if p.SubtitleMode != nil {
+			on := *p.SubtitleMode == "always"
+			p.SubtitlesEnabled = &on
+		}
+	} else if patch.SubtitlesEnabled.Set {
+		// An older client's explicit toggle must supersede the new mode.
 		p.SubtitlesEnabled = patch.SubtitlesEnabled.Value
+		p.SubtitleMode = nil
 	}
 	if patch.AudioLanguage.Set {
 		if v := patch.AudioLanguage.Value; v != nil && !subtitleLangPattern.MatchString(*v) {
@@ -358,10 +375,10 @@ func Delete(ctx context.Context, db *sql.DB, id int64) error {
 func save(ctx context.Context, tx *sql.Tx, p Profile) error {
 	_, err := tx.ExecContext(ctx, `UPDATE profiles SET name = ?, role = ?, audience_tier = ?, icon = ?,
 		font_level = ?, brightness_level = ?, guide_time_format = ?,
-		subtitles_enabled = ?, subtitle_language = ?, audio_language = ?,
+		subtitles_enabled = ?, subtitle_language = ?, audio_language = ?, subtitle_mode = ?,
 		updated_at_unix = unixepoch() WHERE id = ?`,
 		p.Name, p.Role, p.AudienceTier, p.Icon, p.FontLevel, p.BrightnessLevel, p.GuideTimeFormat,
-		p.SubtitlesEnabled, p.SubtitleLanguage, p.AudioLanguage, p.ID)
+		p.SubtitlesEnabled, p.SubtitleLanguage, p.AudioLanguage, p.SubtitleMode, p.ID)
 	if isUniqueViolation(err) {
 		return ErrDuplicateName
 	}

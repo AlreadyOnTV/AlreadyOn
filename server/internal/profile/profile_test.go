@@ -379,3 +379,40 @@ func TestAudioLanguagePreference(t *testing.T) {
 		t.Fatal("reset failed", err)
 	}
 }
+
+func TestSubtitleModePersistsPerProfileAndSupportsLegacyClients(t *testing.T) {
+	db := openDB(t)
+	ctx := context.Background()
+	original, err := Get(ctx, db, 1)
+	if err != nil || original.SubtitleMode != nil {
+		t.Fatalf("default: %+v %v", original, err)
+	}
+	for _, mode := range []string{"always", "other_audio", "off"} {
+		if _, err = Update(ctx, db, 1, mustPatch(t, `{"subtitleMode":"`+mode+`"}`)); err != nil {
+			t.Fatal(err)
+		}
+		saved, err := Get(ctx, db, 1)
+		if err != nil || saved.SubtitleMode == nil || *saved.SubtitleMode != mode || saved.SubtitlesEnabled == nil || *saved.SubtitlesEnabled != (mode == "always") {
+			t.Fatalf("not persisted/legacy mismatch: %+v %v", saved, err)
+		}
+	}
+	other, err := Get(ctx, db, 2)
+	if err != nil || other.SubtitleMode != nil {
+		t.Fatalf("leaked across profiles: %+v %v", other, err)
+	}
+	saved, err := Update(ctx, db, 1, mustPatch(t, `{"subtitleLanguage":"es"}`))
+	if err != nil || saved.SubtitleMode == nil || *saved.SubtitleMode != "off" {
+		t.Fatal("unrelated edit lost mode", err)
+	}
+	if _, err = Update(ctx, db, 1, mustPatch(t, `{"subtitleMode":"invalid"}`)); err != ErrInvalidSubtitleMode {
+		t.Fatal("invalid mode accepted", err)
+	}
+	saved, err = Update(ctx, db, 1, mustPatch(t, `{"subtitlesEnabled":true}`))
+	if err != nil || saved.SubtitleMode != nil || saved.SubtitlesEnabled == nil || !*saved.SubtitlesEnabled {
+		t.Fatalf("legacy toggle: %+v %v", saved, err)
+	}
+	saved, err = Update(ctx, db, 1, mustPatch(t, `{"subtitleMode":null}`))
+	if err != nil || saved.SubtitleMode != nil {
+		t.Fatalf("nullable mode: %+v %v", saved, err)
+	}
+}

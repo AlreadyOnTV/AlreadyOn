@@ -16,6 +16,7 @@ class WorkBranchTest(unittest.TestCase):
         spec.loader.exec_module(work_helper)
         with patch.object(work_helper, 'git', side_effect=['', 'build', 'a' * 40, 'a' * 40]), \
                 patch.object(work_helper, 'ancestor', return_value=True), \
+                patch.object(work_helper.Path, 'read_text', return_value='2026-10-11\n'), \
                 patch.object(work_helper, 'release_tags', return_value=[]), \
                 patch.object(work_helper, 'remote_ref_sha', return_value=None), \
                 patch.object(work_helper.subprocess, 'run') as commands, \
@@ -32,6 +33,7 @@ class WorkBranchTest(unittest.TestCase):
         spec.loader.exec_module(work_helper)
         with patch.object(work_helper, 'git', side_effect=['', 'build', 'a' * 40, 'a' * 40]), \
                 patch.object(work_helper, 'ancestor', return_value=True), \
+                patch.object(work_helper.Path, 'read_text', return_value='2026-10-11\n'), \
                 patch.object(work_helper, 'release_tags', return_value=['2026-10-11']), \
                 patch.object(work_helper.subprocess, 'run') as commands:
             with self.assertRaisesRegex(SystemExit, 'must reach Stable'):

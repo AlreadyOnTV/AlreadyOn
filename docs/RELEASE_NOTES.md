@@ -1,27 +1,34 @@
 # Release notes
 
-Release descriptions explain what users can do and what problems were fixed. Avoid raw commit messages, issue numbers without context, implementation jargon and CI transcripts.
+GitHub Release titles contain only `YYYY-MM-DD-alphaN`, `YYYY-MM-DD-rcN` or `YYYY-MM-DD-stable`. Historical tags retain their original spelling so installed clients and download URLs remain compatible.
 
-For each user-facing change, add a uniquely named Markdown file under `docs/release-notes/` in the same commit. Use one or more of these headings:
+Each description always renders exactly these sections, in this order:
 
 ```markdown
-## Features
+# Download Now
+
+- [Phone / tablet APK](https://github.com/AlreadyOnTV/AlreadyOn/releases/download/YYYY-MM-DD-alphaN/alreadyon-android.apk)
+- [Google TV APK](https://github.com/AlreadyOnTV/AlreadyOn/releases/download/YYYY-MM-DD-alphaN/alreadyon-tv.apk)
+
+# New Features
 
 - Connect to a nearby server without typing its address.
 
-## Improvements
+# Bugfixes
 
-- Show or hide the PIN you entered with the eye button.
+- [Bug: Guide fails to tune the selected channel](https://github.com/AlreadyOnTV/AlreadyOn/issues/123)
 
-## Bug fixes
+# Known Issues
 
-- Keep mute and subtitle settings when changing channels fullscreen.
+No known issues are currently listed for this release.
 ```
 
-Use one complete sentence per bullet on a single line. Name the affected app or screen where useful. Describe visible behavior, not the code used to implement it. Omit empty categories and changes that only affect development tooling. Once an entry reaches stable, leave it intact and add a new file for later changes.
+Empty sections say “No new features in this release.”, “No bugfixes in this release.” or the Known Issues sentence above. Download Now links both APKs for that release’s exact tag. There are no introductory release sentences or visible build-details block. Invisible source/version/baseline metadata supports safe reruns and promotions; signed asset provenance remains independently verified.
 
-Android alpha publication reads only release-note files marked `<!-- android-release -->` that changed since the newest published Android release from an earlier date. Add that marker to phone/TV notes; unmarked server-only changes are excluded. Later alpha/RC notes include only marked notes since the previous alpha/RC. A maintenance-only artifact explicitly says there are no new app changes.
+For user-facing changes, add a uniquely named Markdown file under `docs/release-notes/` in the same commit. Use `# New Features` for new capabilities and improvements, and `# Bugfixes` for addressed defects. Bugfix bullets must link the included GitHub issue and use its exact title. Historical Features, Improvements and Bug fixes fragment headings remain readable. Use single-line bullets, omit development-only maintenance, and leave published fragments intact.
 
-RC and Stable promotions copy the selected candidate’s changelog rather than reading newer source changes. They reuse the tested APK bytes, checksums, signatures and provenance. See [release policy](ANDROID_RELEASES.md). Download links appear below changes; source and build details remain collapsed.
+Candidate notes include product fragments changed since the previous published release tag, including server and WebUI changes. They read the exact source commit, not the working tree. When no predecessor exists, notes include the available source fragments. Legacy unlinked bugfix fragments must be reviewed and linked before publication; the generator refuses untracked bugfix bullets.
 
-Editing existing release descriptions does not rebuild APKs or change their source tags. Keep each description accurate for that release. Older candidates without structured notes need their descriptions updated before stable promotion.
+Maintain `docs/release-known-issues.md` with `# Known Issues` and linked issue-title bullets for confirmed remaining bugs prioritized for the next few builds/releases. Remove entries when fixed. The generator reads this reviewed list from the artifact source commit; it does not infer bugs from feature requests or retrospective reports. Historical descriptions list only bugs supported by evidence at their release date.
+
+RC and Stable promotions reuse tested APK bytes, checksums, signatures and provenance. An unchanged promoted artifact has no new features or bugfixes relative to its predecessor, and retains the candidate’s reviewed Known Issues. See [release policy](ANDROID_RELEASES.md). Editing release descriptions never rebuilds APKs or changes tags.

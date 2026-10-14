@@ -12,7 +12,7 @@ Use `make preview-status` and `make preview-stop` to inspect or stop this checko
 
 ## Single-checkout release work
 
-Use the primary repository checkout; do not create parallel worktrees. Begin with `python3 scripts/work.py start build`, which refreshes the local release branch from current `dev` only when its existing commits are already merged. Test locally at <https://localhost:5173>. When ready, run `python3 scripts/work.py publish [YYYY-MM-DD]` to push the date branch/tag and open the dev PR. Do not start another release date while one lacks Stable.
+Use the primary repository checkout; do not create parallel worktrees. The active maintainer cycle uses local and remote branch `2026-10-18`, based on `dev`; commit and push cycle work there. The maintainer explicitly retired `build` for this cycle. Test locally at <https://localhost:5173>. When ready for approved validation, open a PR from `2026-10-18` to `dev`; the legacy `work.py` helper requires `build` and is not used for this cycle. Do not start another cycle before Stable. Approved alpha dispatches retain the dated branch; see [cycle instructions](ORGANIZATION.md). Follow [release-note conventions](RELEASE_NOTES.md) for titles, changes and known issues.
 
 Trust this instance's local certificate only on your development machine. Do not weaken remote TLS validation. Local data lives under ignored `server/data/`; keep it across restarts.
 
@@ -26,4 +26,4 @@ Store machine-specific notes in ignored `.private/`. Do not commit home paths, h
 
 Run `make lint` and relevant Go tests. Use isolated [browser tests](../tests/e2e/README.md) and [runtime tests](../tests/integration/README.md) when requested. [Delivery](CI_CD.md) describes release checks. Never point destructive tests at your preview or a live server.
 
-The guide profile menu lists Dashboard, Profile Settings, Switch Profile, then Sign Out on every device. WebUI inserts Admin Settings for profile admins and Server Settings for server owners before Sign Out. Dashboard is a read-only page for every signed-in profile; it is no longer a Server Settings tab.
+The [profile menu](PROFILE_MENU.md) lists Switch Profile, Profile and Sign Out on every device. WebUI inserts Settings for Admin profiles and Server for owner accounts before Sign Out. Dashboard is the first/default tab inside Server; its WebUI navigation is owner-only. The avatar and profile name stay on one line at every width.

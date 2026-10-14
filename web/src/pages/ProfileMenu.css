@@ -1,5 +1,37 @@
 .profile-menu {
   position: relative;
+  min-width: 0;
+}
+
+/* One shared hit target keeps both avatar and visible name accessible. */
+.profile-menu .profile-menu-trigger {
+  display: inline-flex;
+  align-items: center;
+  gap: 8px;
+  max-width: 100%;
+  flex-wrap: nowrap;
+  height: 36px;
+  padding: 0 8px;
+  background: var(--surface);
+  color: var(--text);
+  border: 1px solid var(--border);
+  border-radius: var(--radius);
+  font-family: var(--body-font);
+  font-size: 14px;
+}
+
+.profile-menu-trigger-name {
+  min-width: 0;
+  max-width: min(180px, 30vw);
+  overflow: hidden;
+  white-space: nowrap;
+  text-overflow: ellipsis;
+}
+
+.admin-topbar-inner > .profile-menu { margin-left: auto; }
+
+@media (max-width: 767px), (pointer: coarse) {
+  .profile-menu .profile-menu-trigger { min-height: 44px; }
 }
 
 .profile-menu-panel {
@@ -31,7 +63,7 @@
   padding: 8px 10px;
   color: var(--text);
   font-family: var(--body-font);
-  font-size: calc(13px * var(--font-scale));
+  font-size: 13px;
 }
 
 .profile-menu-item:hover {
@@ -48,9 +80,13 @@
   overflow-y: auto;
 }
 
+/* Back and profile creation share the chooser's first row. */
+.profile-menu-switch-header { display: flex; justify-content: space-between; gap: 8px; }
+.profile-menu-switch-header .profile-menu-item { width: auto; white-space: nowrap; }
+
 .profile-menu-expanded .profile-menu-item {
   padding: 10px;
-  font-size: calc(17px * var(--font-scale));
+  font-size: 17px;
   overflow-wrap: anywhere;
 }
 
@@ -75,11 +111,11 @@
 }
 
 .profile-menu-expanded .profile-menu-role {
-  font-size: calc(13px * var(--font-scale));
+  font-size: 13px;
 }
 
 .profile-menu-expanded .profile-menu-pin-prompt {
-  font-size: calc(17px * var(--font-scale));
+  font-size: 17px;
 }
 
 .profile-menu-item-active {
@@ -96,7 +132,7 @@
 }
 
 .profile-menu-role {
-  font-size: calc(11px * var(--font-scale));
+  font-size: 11px;
   color: var(--text-muted);
   text-transform: uppercase;
 }
@@ -114,7 +150,7 @@
 }
 
 .profile-menu-pin-prompt label {
-  font-size: calc(12px * var(--font-scale));
+  font-size: 12px;
   color: var(--text-muted);
 }
 
@@ -134,7 +170,7 @@
   background: var(--now-highlight);
   border-radius: var(--radius);
   padding: 4px 8px;
-  font-size: calc(12px * var(--font-scale));
+  font-size: 12px;
   margin: 0;
 }
 
@@ -144,3 +180,6 @@
   color: var(--accent-text);
   font-weight: bold;
 }
+
+/* Avatars keep their shape while long names shrink to a single-line ellipsis. */
+.profile-menu-trigger > :first-child { flex-shrink: 0; }

@@ -1,6 +1,4 @@
-// Per-profile Guide display preferences (time format), a per-user
-// viewing preference rather than a server-wide setting. Same
-// derive-from-the-current-profile pattern as DisplaySettingsContext.
+// Guide time format comes from the current profile rather than server-wide settings.
 import { createContext, useContext, type ReactNode } from 'react';
 import { useUsers } from '../users/UsersContext';
 

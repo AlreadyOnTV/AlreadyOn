@@ -13,7 +13,7 @@ SPEC = importlib.util.spec_from_file_location('sbom_android_release', Path(__fil
 release = importlib.util.module_from_spec(SPEC)
 SPEC.loader.exec_module(release)
 SHA = 'a' * 40
-IMAGE = 'ghcr.io/alreadyonapp/alreadyon@sha256:' + 'b' * 64
+IMAGE = 'ghcr.io/alreadyontv/alreadyon@sha256:' + 'b' * 64
 
 
 class PublicInventory(unittest.TestCase):
@@ -41,7 +41,7 @@ class PublicInventory(unittest.TestCase):
             manifest['subjects'][name] = {'name': subject, 'sha256': checksum}
         (directory / 'sbom-manifest.json').write_text(json.dumps(manifest))
         with patch.object(release, 'publish'), patch.object(release, 'releases', return_value=[]), \
-                patch.object(release, 'changelog', return_value='Synthetic notes'):
+                patch.object(release, 'changelog', return_value='# New Features\n\n- Synthetic feature.'):
             release.candidate('owner/repo', '2026-10-11-RC2', SHA, 200000001, directory)
 
     def test_verified_inventory_matches_exact_apk_image_and_source(self):

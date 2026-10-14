@@ -160,6 +160,7 @@ class MainActivity : ComponentActivity() {
                                 }
                                 if (state.busy) LinearProgressIndicator(Modifier.fillMaxWidth())
                             }
+                            ServerTrustAlert(state, model)
                             when {
                                 !state.signedIn -> ServerConnectScreen(state, model, Modifier.weight(1f))
                                 state.mustChangePassword -> AccountScreen(state, model, forced = true)
@@ -191,18 +192,17 @@ class MainActivity : ComponentActivity() {
 internal fun ProfileMenu(state: PhoneState, model: PhoneModel, modifier: Modifier = Modifier, openSignal: Int = 0, onMenuDismiss: () -> Unit = {}) {
     var open by remember { mutableStateOf(false) }
     var consumedSignal by remember { mutableIntStateOf(openSignal) }
-    val dashboardFocus = remember { FocusRequester() }
+    val switchFocus = remember { FocusRequester() }
     LaunchedEffect(openSignal) {
         if (openSignal > consumedSignal) open = true
         consumedSignal = openSignal
     }
-    LaunchedEffect(open) { if (open && BuildConfig.IS_TV) { withFrameNanos { }; dashboardFocus.requestFocus() } }
+    LaunchedEffect(open) { if (open && BuildConfig.IS_TV) { withFrameNanos { }; switchFocus.requestFocus() } }
     Box {
         TextButton(onClick = { open = true }, modifier = modifier) { ProfileName(state.profile!!, model) }
         DropdownMenu(expanded = open, onDismissRequest = { open = false; onMenuDismiss() }) {
-            DropdownMenuItem(text = { Text("Dashboard") }, modifier = Modifier.focusRequester(dashboardFocus).tvFocusOutline(), onClick = { open = false; model.openSettings("dashboard") })
-            DropdownMenuItem(text = { Text("Profile Settings") }, modifier = Modifier.tvFocusOutline(), onClick = { open = false; model.openSettings("profile") })
-            DropdownMenuItem(text = { Text("Switch Profile") }, modifier = Modifier.tvFocusOutline(), onClick = { open = false; model.changeProfile() })
+            DropdownMenuItem(text = { Text("Switch Profile") }, modifier = Modifier.focusRequester(switchFocus).tvFocusOutline(), onClick = { open = false; model.changeProfile() })
+            DropdownMenuItem(text = { Text("Profile") }, modifier = Modifier.tvFocusOutline(), onClick = { open = false; model.openSettings("profile") })
             DropdownMenuItem(text = { Text("Sign Out") }, onClick = { open = false; model.logout() })
         }
     }

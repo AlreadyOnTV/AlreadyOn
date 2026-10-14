@@ -2,15 +2,15 @@
 
 [![AlreadyOn](../web/public/branding/header-doc.svg)](../README.md)
 
-Maintainers control releases. Checkout ownership and deployment credentials belong in ignored `.private/AGENTS.md`.
+Maintainers control releases; keep credentials private. [Release notes](RELEASE_NOTES.md) define date/stage-only titles, Download Now and three product sections and predecessor-tag comparisons. Titles preserve artifact tags.
 
 ## Development and releases
 
-`release-date.txt` pins the active cycle to `2026-10-11`, superseding older previews. Publishing reuses it until Stable on main; afterward a new date can begin.
+`release-date.txt` pins the active cycle to `2026-10-18`. Reuse until Stable on main, then begin another.
 
-Use one checkout, local `build`, and preview at `https://localhost:5173`. A dated dev PR runs quality, CodeQL, Go/browser e2e, disposable runtime checks and source/image scanning. After merge, release validation republishes the date image/`nightly`, advances the date tag, builds Android alpha artifacts, and deletes the merged date branch. Hotfixes reuse that date and repeat the PR gates.
+Use the primary checkout, `2026-10-18`, and HTTPS preview on port 5173. Dated dev PRs run full quality, source/browser/runtime and security gates. Explicit active-date dispatches run these gates and publish alpha artifacts without merging or deleting the branch. Dev merges republish date/`nightly` images and Android candidates, advance the date tag and delete the merged branch. Hotfixes repeat the gates.
 
-Run `make lint`, `python3 scripts/ci/check-documentation.py` and `python3 scripts/ci/check-syntax.py` locally. Lint includes public-guide length and link checks.
+Local checks: `make lint`, documentation and syntax checks.
 
 
 ## Approved release validation
@@ -23,9 +23,9 @@ Run `make lint`, `python3 scripts/ci/check-documentation.py` and `python3 script
 4. Full synthetic browser suite (`make test-e2e`).
 5. Disposable packaged-runtime checks (`make test-container`).
 
-Go tests use temporary storage.
 
-Resolve failures before promotion. Record the commit, image ID/digest and actual results. Live checks are non-destructive; synthetic suites use isolated data.
+
+Resolve failures. Record the commit, image ID/digest and actual results. Live checks are non-destructive; synthetic suites use isolated data.
 
 Before image builds, `scripts/local-bases.py` checks base recipes, parent and age; stale/missing bases rebuild. `make refresh-local-bases` forces refresh.
 
@@ -35,12 +35,12 @@ On approval, deploy the exact tested image and verify revision, health, service 
 
 After alpha approval run `python3 scripts/promote.py test YYYY-MM-DD`; after RC approval run `python3 scripts/promote.py main`. These create fast-forward or exact-tree merge commits only, require image/APK provenance, and reuse artifacts without e2e reruns. Resolve conflicts on dev; preserve branch protection.
 
-Dev builds follow validated PR merges; guarded test/main merges promote existing images. See [retention](IMAGE_RETENTION.md) and [deployment](../deploy/README.md).
+Dev builds follow validated PR merges; guarded test/main merges promote existing images. See [retention](IMAGE_RETENTION.md).
 
 ## Public automation
 
-PR validation builds patched runtime/CI images and scans the exact candidate with read-only credentials; publication credentials remain unavailable. Critical/High findings block publication; secret matches require private review. Scanner failures block the gate. Runtime and CI images are scanned; see [policy](VULNERABILITY_SCANNING.md).
+PR validation scans the exact patched candidate with read-only credentials; publication credentials are unavailable. Critical/High findings block publication; secret matches require private review. Scanner failures block the gate. Runtime/CI images are scanned. New cycles require [signed image evidence](ARTIFACT_PROVENANCE.md); [weekly dependency review](DEPENDENCY_MAINTENANCE.md) never publishes.
 
-CodeQL analyzes Go/TypeScript on dev/test/main; Pages publishes from main. Android automation builds alpha on dev, RC on test and Stable from RC artifacts on main; see [Android policy](ANDROID_RELEASES.md).
+CodeQL analyzes Go/TypeScript on dev/test/main; Pages uses its independent organization-site workflow. Android automation builds alpha on dev, RC on test and Stable from RC artifacts on main; see [Android policy](ANDROID_RELEASES.md).
 
-New images use `ghcr.io/alreadyonapp/alreadyon`. Go module and Android package identities stay compatible. **Refresh Base Images** rebuilds shared bases on the selected branch; CI bases pin their runtime digest. Hosted application builds resolve both digests without rebuilding during promotion.
+New images use `ghcr.io/alreadyontv/alreadyon`. Go module and Android package identities stay compatible. Stable is intended for October 18, 2026, after alpha/RC acceptance; no automatic deployment is scheduled. **Refresh Base Images** rebuilds shared bases; CI bases pin their runtime digest. Promotions reuse digests.

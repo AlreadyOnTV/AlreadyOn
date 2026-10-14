@@ -37,11 +37,11 @@ class PublicationPolicy(unittest.TestCase):
     def test_channels_and_lowercase(self):
         instant = datetime.datetime(2026, 10, 1, 12, tzinfo=datetime.timezone.utc)
         for branch, channel in [('dev', 'nightly'), ('test', 'latest'), ('main', 'stable')]:
-            result = tags('AlreadyOnApp/AlreadyOn', branch, SHA, instant)
-            self.assertEqual(result[0], 'ghcr.io/alreadyonapp/alreadyon:' + channel)
+            result = tags('AlreadyOnTV/AlreadyOn', branch, SHA, instant)
+            self.assertEqual(result[0], 'ghcr.io/alreadyontv/alreadyon:' + channel)
             self.assertEqual(len(result), 2 if branch == 'dev' else 1)
             if branch == 'dev':
-                self.assertEqual(result[1], 'ghcr.io/alreadyonapp/alreadyon:2026-10-01')
+                self.assertEqual(result[1], 'ghcr.io/alreadyontv/alreadyon:2026-10-01')
         for branch in ['feature/a', 'fix/a', 'bugfix/a', 'release']:
             with self.assertRaises(KeyError):
                 tags('owner/repo', branch, SHA, instant)

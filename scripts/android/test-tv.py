@@ -28,7 +28,7 @@ def main():
     parser.add_argument("--sdk", required=True, type=Path)
     parser.add_argument("--screenshots", type=Path, help="Optional local directory for emulator screenshots")
     parser.add_argument("--entry-mode", action="append", choices=("discovery", "manual"), help="Limit to selected connection flow; default runs both")
-    parser.add_argument("--test-class", choices=("TvNavigationTest", "DashboardTest"), default="TvNavigationTest", help="Select native navigation or focused Dashboard coverage")
+    parser.add_argument("--test-class", choices=("TvNavigationTest", "ProfileMenuTest"), default="TvNavigationTest", help="Select native navigation or focused profile-menu coverage")
     parser.add_argument("--interactive", action="store_true", help="Leave the disposable server running for manual emulator checks until Enter is pressed")
     args = parser.parse_args()
     adb = str(args.sdk / "platform-tools/adb")
@@ -50,7 +50,7 @@ def main():
             "./cmd/server", cwd=ROOT / "server")
         with socket.socket() as sock:
             # Fail if occupied; never replace a live service for the fixture.
-            sock.bind(("127.0.0.1", 0 if args.test_class == "DashboardTest" else 19900))
+            sock.bind(("127.0.0.1", 0 if args.test_class == "ProfileMenuTest" else 19900))
             port = sock.getsockname()[1]
         with (root / "server.log").open("w") as log:
             process = subprocess.Popen([str(binary)], cwd=root,
@@ -127,9 +127,6 @@ def main():
                     if args.screenshots:
                         args.screenshots.mkdir(parents=True, exist_ok=True)
                         run(adb, "-s", args.serial, "pull", "/sdcard/Android/data/io.github.alreadyonapp.alreadyon.tv.debug/files/tv-guide.png", str(args.screenshots / f"tv-guide-{entry_mode}.png"))
-                        if args.test_class == "DashboardTest":
-                            for name in ("tv-dashboard", "tv-dashboard-metrics"):
-                                run(adb, "-s", args.serial, "pull", f"/sdcard/Android/data/io.github.alreadyonapp.alreadyon.tv.debug/files/{name}.png", str(args.screenshots / f"{name}-{entry_mode}.png"))
             finally:
                 process.terminate()
                 try:

@@ -9,6 +9,7 @@ import (
 	"encoding/hex"
 	"errors"
 	"fmt"
+	"net"
 	"time"
 )
 
@@ -160,6 +161,7 @@ func recordSessionActivity(ctx context.Context, db *sql.DB, id int64, now time.T
 
 // SessionInfo describes one signed-in browser for the sessions list.
 type SessionInfo struct {
+	IPAddress        string
 	LastActiveAtUnix sql.NullInt64
 	ID               int64
 	UserAgent        string
@@ -170,7 +172,7 @@ type SessionInfo struct {
 // ListSessions returns a user's live browser sessions, newest first.
 func ListSessions(ctx context.Context, db *sql.DB, userID int64, now time.Time) ([]SessionInfo, error) {
 	rows, err := db.QueryContext(ctx, `
-		SELECT id, user_agent, created_at_unix, expires_at_unix, last_active_at_unix FROM browser_sessions
+		SELECT id, user_agent, created_at_unix, expires_at_unix, last_active_at_unix, ip_address FROM browser_sessions
 		WHERE user_id = ? AND expires_at_unix > ? ORDER BY created_at_unix DESC, id DESC`, userID, now.Unix())
 	if err != nil {
 		return nil, fmt.Errorf("auth: list sessions: %w", err)
@@ -179,12 +181,36 @@ func ListSessions(ctx context.Context, db *sql.DB, userID int64, now time.Time) 
 	var out []SessionInfo
 	for rows.Next() {
 		var s SessionInfo
-		if err := rows.Scan(&s.ID, &s.UserAgent, &s.CreatedAtUnix, &s.ExpiresAtUnix, &s.LastActiveAtUnix); err != nil {
+		if err := rows.Scan(&s.ID, &s.UserAgent, &s.CreatedAtUnix, &s.ExpiresAtUnix, &s.LastActiveAtUnix, &s.IPAddress); err != nil {
 			return nil, fmt.Errorf("auth: list sessions: %w", err)
 		}
 		out = append(out, s)
 	}
 	return out, rows.Err()
+}
+
+// RecordSessionIP stores only a valid socket peer address. It deliberately does
+// not accept forwarding headers; a proxy deployment reports the observed proxy.
+func RecordSessionIP(ctx context.Context, db *sql.DB, id int64, remote string) error {
+	host, _, err := net.SplitHostPort(remote)
+	if err != nil {
+		host = remote
+	}
+	ip := net.ParseIP(host)
+	if ip == nil {
+		return nil
+	}
+	// Media requests authenticate frequently. Avoid taking a SQLite write lock
+	// when a session is still connecting from its previously observed address.
+	var previous string
+	if err := db.QueryRowContext(ctx, `SELECT ip_address FROM browser_sessions WHERE id=?`, id).Scan(&previous); err != nil {
+		return err
+	}
+	if previous == ip.String() {
+		return nil
+	}
+	_, err = db.ExecContext(ctx, `UPDATE browser_sessions SET ip_address=? WHERE id=? AND ip_address<>?`, ip.String(), id, ip.String())
+	return err
 }
 
 // DeleteUserSessionsExcept ends every session of one user but keep (0 keeps

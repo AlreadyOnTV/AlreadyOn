@@ -27,12 +27,12 @@ import java.util.UUID
 internal data class PhonePlayback(val url: String, val title: String, val startMs: Long, val revision: Long, val hlsTargetMs: Long? = null, val capturedAt: Long = SystemClock.elapsedRealtime(), val requestedAt: Long = capturedAt,
     val seriesTitle: String = "", val episodeLabel: String = "", val mediaFileId: Long = -1, val sourceHeight: Int = 720,
     val selectedAudioIndex: Int? = null, val audioTracks: List<PhoneTrack> = emptyList(), val subtitleTracks: List<PhoneTrack> = emptyList(),
-    val streamOffsetSeconds: Double = 0.0, val hlsOriginMs: Long? = null, val bypassTls: Boolean = false, val trustedCa: String? = null)
+    val streamOffsetSeconds: Double = 0.0, val hlsOriginMs: Long? = null, val trustedCa: String? = null, val entryStartsAt: String? = null)
 internal data class PhoneState(
     val username: String = "", val role: String = "viewer", val mustChangePassword: Boolean = false,
     val passwordLocked: Boolean = true, val settings: String? = null, val notice: String? = null,
-    val origin: String = "", val serverName: String = "AlreadyOn", val bypassTls: Boolean = false, val trustedCa: String? = null, val signedIn: Boolean = false, val busy: Boolean = false,
-    val error: String? = null, val profiles: List<ViewerProfile> = emptyList(),
+    val origin: String = "", val serverName: String = "AlreadyOn", val trustedCa: String? = null, val signedIn: Boolean = false, val busy: Boolean = false,
+    val error: String? = null, val trustIssue: Boolean = false, val profiles: List<ViewerProfile> = emptyList(),
     val profile: ViewerProfile? = null, val channels: List<GuideChannel> = emptyList(),
     val channel: GuideChannel? = null, val playback: PhonePlayback? = null,
     val quality: Int = 0, val subtitleIndex: Int? = null, val subtitleFileId: Long? = null, val audioIndex: Int? = null, val audioFileId: Long? = null,
@@ -43,7 +43,7 @@ internal data class PhoneState(
 internal class PhoneModel(application: Application) : AndroidViewModel(application) {
     private val sessionStore = SessionStore(application)
     private val preferences = application.getSharedPreferences("connection", Application.MODE_PRIVATE)
-    private val mutable = MutableStateFlow(PhoneState(serverName = preferences.getString("server_name", "AlreadyOn").orEmpty(), origin = preferences.getString("server_origin", "").orEmpty(), bypassTls = preferences.getBoolean("bypass_tls", false), trustedCa = preferences.getString("trusted_ca", null)))
+    private val mutable = MutableStateFlow(PhoneState(serverName = preferences.getString("server_name", "AlreadyOn").orEmpty(), origin = preferences.getString("server_origin", "").orEmpty(), trustedCa = preferences.getString("trusted_ca", null)))
     val state = mutable.asStateFlow()
     private var client: ServerClient? = null
     private var action: Job? = null
@@ -79,7 +79,7 @@ internal class PhoneModel(application: Application) : AndroidViewModel(applicati
     /** Revalidate saved credentials with the server; protected profiles still require their PIN. */
     fun reconnect() = perform {
         val origin = serverOrigin(state.value.origin) ?: return@perform
-        val api = client ?: ServerClient(origin, sessionStore, state.value.bypassTls, state.value.trustedCa).also { client = it }
+        val api = client ?: ServerClient(origin, sessionStore, state.value.trustedCa).also { client = it }
         if (!api.hasSession()) return@perform
         val status = JSONObject(api.request("/api/auth/status"))
         if (!status.optBoolean("authenticated")) { expireSession(); return@perform }
@@ -99,20 +99,20 @@ internal class PhoneModel(application: Application) : AndroidViewModel(applicati
         stopWatching()
         client?.clearSession(); client = null
         preferences.edit().remove("profile_id").apply()
-        update { PhoneState(origin = it.origin, serverName = it.serverName, bypassTls = it.bypassTls, trustedCa = it.trustedCa) }
+        update { PhoneState(origin = it.origin, serverName = it.serverName, trustedCa = it.trustedCa) }
     }
 
-    fun login(rawOrigin: String, username: String, password: String, bypassTls: Boolean = false) = perform {
+    fun login(rawOrigin: String, username: String, password: String) = perform {
         val origin = serverOrigin(rawOrigin) ?: throw IOException("Enter a valid HTTPS server address.")
         if (isLoopback(java.net.URI(origin).host)) throw IOException("Localhost points to this phone. Use the server hostname.")
         client?.clearSession()
-        val api = ServerClient(origin, sessionStore, bypassTls)
+        val api = ServerClient(origin, sessionStore)
         val status = JSONObject(api.request("/api/auth/login", "POST",
             JSONObject().put("username", username).put("password", password)))
         if (!status.optBoolean("authenticated")) throw IOException("Sign-in was not accepted.")
         client = api
-        preferences.edit().putString("server_origin", origin).putBoolean("bypass_tls", bypassTls).remove("trusted_ca").commit()
-        update { it.copy(origin = origin, bypassTls = bypassTls, trustedCa = null) }
+        preferences.edit().putString("server_origin", origin).remove("bypass_tls").remove("trusted_ca").commit()
+        update { it.copy(origin = origin, trustedCa = null) }
         readAccount(JSONObject(api.request("/api/auth/status")))
         if (state.value.mustChangePassword) return@perform
         val profiles = api.profiles()
@@ -122,14 +122,17 @@ internal class PhoneModel(application: Application) : AndroidViewModel(applicati
     /** Native clients accept an instance CA before sending its PIN or saving a session. */
     fun signInWithPIN(origin: String, username: String, pin: String, trustedCa: String, serverName: String = "AlreadyOn") = perform {
         val normalized = serverOrigin(origin) ?: throw IOException("Invalid local server address.")
+        if (normalized == state.value.origin && state.value.trustedCa != null && state.value.trustedCa != trustedCa) {
+            throw IOException("The server CA changed. Review and accept the new CA before connecting.")
+        }
         client?.clearSession()
         val api = ServerClient(normalized, sessionStore, trustedCa = trustedCa)
         val status = JSONObject(api.request("/api/auth/tv-login", "POST", JSONObject().put("username", username.trim()).put("pin", pin)))
         if (!status.optBoolean("authenticated")) throw IOException("TV PIN was not accepted.")
         client = api
-        preferences.edit().putString("server_origin", normalized).putBoolean("bypass_tls", false)
+        preferences.edit().putString("server_origin", normalized).remove("bypass_tls")
             .putString("trusted_ca", trustedCa).putString("server_name", serverName).commit()
-        update { it.copy(origin = normalized, serverName = serverName, bypassTls = false, trustedCa = trustedCa) }
+        update { it.copy(origin = normalized, serverName = serverName, trustedCa = trustedCa) }
         readAccount(status)
         val profiles = api.profiles()
         update { it.copy(profiles = profiles) }
@@ -141,7 +144,29 @@ internal class PhoneModel(application: Application) : AndroidViewModel(applicati
         role = status.optString("role", "viewer"), mustChangePassword = status.optBoolean("mustChangePassword"),
         passwordLocked = status.optBoolean("passwordLocked", true)) }
 
+    fun dismissTrustIssue() = update { it.copy(trustIssue = false) }
+
+    fun reviewServerTrust() {
+        stopWatching()
+        update { it.copy(signedIn = false, trustIssue = false, error = null, settings = null, profile = null) }
+    }
+
+    /** Replacing saved trust requires an explicit user action; never retry under a new CA silently. */
+    fun acceptServerTrust(certificate: String) = perform {
+        val normalized = serverOrigin(state.value.origin) ?: throw IOException("Invalid local server address.")
+        // Validate the replacement before persisting it. Reauthentication runs separately.
+        ServerClient(normalized, sessionStore, certificate)
+        preferences.edit().putString("trusted_ca", certificate).commit()
+        client = null
+        update { it.copy(trustedCa = certificate, trustIssue = false, error = null) }
+        update { it.copy(notice = "New server CA accepted. Connect with your username and PIN.") }
+    }
+
     private fun handleFailure(error: Exception) {
+        if (generateSequence<Throwable>(error) { it.cause }.any { it is javax.net.ssl.SSLException || it is java.security.cert.CertificateException }) {
+            stopWatching()
+            update { it.copy(trustIssue = true) }
+        }
         if (error is ServerFailure && error.sessionExpired) expireSession()
         if (error is ServerFailure && error.code == "password_change_required") {
             stopWatching()
@@ -274,6 +299,11 @@ internal class PhoneModel(application: Application) : AndroidViewModel(applicati
         state.value.channel?.let { watch(it, restart = true) }
     }
     fun setAudio(track: PhoneTrack) {
+        if (state.value.profile?.subtitleMode == "other_audio") {
+            subtitleOverride = false
+            preferredSubtitle = null
+            update { it.copy(subtitleFileId = null) }
+        }
         update { it.copy(audioIndex = track.index, audioFileId = it.playback?.mediaFileId) }
         state.value.channel?.let { watch(it, restart = true) }
     }
@@ -283,13 +313,10 @@ internal class PhoneModel(application: Application) : AndroidViewModel(applicati
         update { it.copy(subtitleIndex = index, subtitleFileId = it.playback?.mediaFileId) }
     }
 
-    /** Numeric neighbours in the available guide; never wrap or alter presentation/settings. */
+    /** Circular neighbours follow visible guide order without changing player settings. */
     fun stepChannel(direction: Int) {
         val current = state.value.channel ?: return
-        val available = state.value.channels.filter { it.programs.isNotEmpty() }
-        val next = if (direction > 0) available.filter { it.number > current.number }.minByOrNull { it.number }
-            else available.filter { it.number < current.number }.maxByOrNull { it.number }
-        next?.let { watch(it, restart = true) }
+        nextPlayableChannel(state.value.channels, current.id, direction)?.let { watch(it, restart = true) }
     }
 
     private fun selectedSubtitle(media: PhonePlayback, profile: ViewerProfile): Int? {
@@ -300,9 +327,7 @@ internal class PhoneModel(application: Application) : AndroidViewModel(applicati
             return (media.subtitleTracks.find { it.label == preferred.label }
                 ?: media.subtitleTracks.find { it.language == preferred.language && it.language != "und" })?.index
         }
-        return if (profile.subtitles) media.subtitleTracks.firstOrNull {
-            it.language == profile.subtitleLanguage || it.language == subtitleISO3(profile.subtitleLanguage)
-        }?.index else null
+        return profileSubtitle(media, profile)
     }
 
     fun refreshGuide() = perform {
@@ -387,7 +412,8 @@ internal class PhoneModel(application: Application) : AndroidViewModel(applicati
                             selectedAudioIndex = tune.getJSONObject("plan").optInt("audioTrackIndex", -1).takeIf { it >= 0 },
                             audioTracks = phoneTracks(tune.optJSONArray("audioTracks")), subtitleTracks = phoneTracks(tune.optJSONArray("subtitles")),
                             streamOffsetSeconds = if (direct) 0.0 else tune.optDouble("streamOffsetSeconds"),
-                            bypassTls = state.value.bypassTls, trustedCa = state.value.trustedCa, hlsOriginMs = tune.optString("hlsOrigin").takeIf { it.isNotBlank() }?.let { Instant.parse(it).toEpochMilli() })
+                            entryStartsAt = tune.getString("entryStartsAt"),
+                            trustedCa = state.value.trustedCa, hlsOriginMs = tune.optString("hlsOrigin").takeIf { it.isNotBlank() }?.let { Instant.parse(it).toEpochMilli() })
                         update { it.copy(playback = media, profile = it.profile?.copy(lastChannel = channel.id),
                             subtitleIndex = selectedSubtitle(media, profile),
                             subtitleFileId = media.mediaFileId) }
@@ -451,8 +477,12 @@ internal class PhoneModel(application: Application) : AndroidViewModel(applicati
     fun unmute() = update { it.copy(muted = false) }
     fun toggleMute() = update { it.copy(muted = !it.muted) }
 
-    fun playerFailed(revision: Long) {
+    fun playerFailed(revision: Long, error: Exception? = null) {
         if (state.value.playback?.revision != revision) return
+        if (error != null) {
+            handleFailure(error)
+            if (state.value.trustIssue) return
+        }
         stopWatching()
         update { it.copy(error = "The phone could not play this stream. Select the channel to try again.") }
     }
@@ -514,4 +544,3 @@ internal fun safeError(e: Exception): String = when (e) {
 }
 
 /** Media track tags may use ISO 639-2 while profile preferences use ISO 639-1. */
-private fun subtitleISO3(code: String) = runCatching { java.util.Locale.forLanguageTag(code).isO3Language }.getOrDefault(code)

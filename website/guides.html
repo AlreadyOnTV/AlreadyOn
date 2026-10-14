@@ -1,0 +1,112 @@
+<!doctype html>
+<html lang="en"><head><meta charset="utf-8"><meta name="viewport" content="width=device-width, initial-scale=1"><meta name="description" content="Practical AlreadyOn installation, hosting, Android setup, and viewing guides for homelab testers."><meta name="theme-color" content="#10151d"><title>Get from setup to channel surfing · AlreadyOn</title><link rel="icon" href="assets/branding/icon.svg" type="image/svg+xml"><link rel="stylesheet" href="assets/site.css"><script src="assets/site.js" defer></script></head><body><a class="skip" href="#main">Skip to content</a>
+<header><a class="brand" href="./" aria-label="AlreadyOn home"><img src="assets/branding/header-doc.svg" alt="AlreadyOn"></a>
+<nav aria-label="Main navigation"><a href="./#experience">The experience</a><a href="guides.html">Guides</a><a href="help.html">Get help</a><a class="nav-button" href="guides.html#install">Get started <span aria-hidden="true">↗</span></a></nav></header>
+<main id="main">
+
+<section class="page-hero">
+<p class="eyebrow">THE FIELD GUIDE</p>
+<h1>From setup<br>to <em>“what’s on?”</em></h1>
+<p class="lead">A small, LAN-first setup is the best place to begin. Get one server and one screen working, then build from there.</p></section>
+<div class="guide-layout">
+<aside>
+<nav aria-label="Guide sections"><a href="#before">Before you begin</a><a href="#install">Install the server</a><a href="#library">Add your library</a><a href="#watch">Start watching</a><a href="#android">Phone &amp; TV apps</a><a href="#hosting">Hosting &amp; updates</a><a href="#troubleshooting">Common snags</a></nav></aside>
+<div class="guide-body">
+
+<section id="before">
+<p class="eyebrow">01 / PREPARE</p>
+<h2>Before you begin.</h2>
+<p>You’ll need a compatible <strong>x86-64 Linux host or NAS with Docker Engine and Docker Compose</strong>, your own TV/movie files, and a browser on the same trusted home network. The published server image targets Linux amd64.</p>
+<p>If your NAS uses a container app manager, use its Compose support or follow the same image, port, and folder mappings below. Exact menus differ between NAS vendors.</p>
+<div class="note"><strong>Start with a small collection.</strong> Media formats, CPU resources, and device capabilities affect playback. A few familiar files make the first scan and playback test easier.</div>
+<p>New to Docker? Follow <a href="https://docs.docker.com/engine/install/">Docker’s installation instructions</a> for your host, then its <a href="https://docs.docker.com/compose/gettingstarted/">Compose getting-started guide</a>.</p></section>
+
+<section id="install">
+<p class="eyebrow">02 / INSTALL</p>
+<h2>Give AlreadyOn a home.</h2>
+<ol>
+<li>Create a folder for AlreadyOn on your server. Save the example below in that folder as <code>compose.yaml</code>.</li>
+<li>Replace <code>/YOUR/MEDIA/FOLDER</code> with your host’s real media folder. Replace the timezone and user/group IDs with values appropriate for your host. On Linux, <code>id -u</code> and <code>id -g</code> show your current user and group IDs. The configuration folder needs write access; the media folder needs read access.</li>
+<li>Open a terminal in that folder and run <code>docker compose up -d</code>.</li>
+<li>Open <code>https://YOUR-SERVER-IP:19900</code> in a browser on the same network. Substitute your server’s local IP address.</li></ol>
+<div class="code-heading"><span>compose.yaml · CPU-only starting point</span><button class="copy" data-copy="compose">Copy</button></div>
+<pre><code id="compose">services:
+  alreadyon:
+    image: ghcr.io/alreadyontv/alreadyon:stable
+    restart: unless-stopped
+    ports:
+      - "19900:19900"
+    environment:
+      PUID: "1000"
+      PGID: "1000"
+      TZ: America/New_York
+    volumes:
+      - ./config:/config
+      - /YOUR/MEDIA/FOLDER:/data/media:ro</code></pre>
+<p><code>./config</code> keeps settings and the database outside the container. <code>:ro</code> makes the media mount read-only. Don’t remove the configuration folder when updating.</p>
+<div class="note"><strong>About the first browser certificate warning.</strong> A fresh server uses its own certificate. Confirm that the address belongs to your server on your trusted home network before continuing through the browser’s warning. Don’t disable certificate checks globally or accept an unexpected server.</div>
+<p>Complete the first-run page: choose a server name, then create the owner username and password. Keep these credentials private. The owner manages the library and server.</p>
+<p>For hardware transcoding and advanced options, read the <a href="https://github.com/AlreadyOnTV/AlreadyOn/blob/main/deploy/README.md">deployment reference</a> and <a href="https://github.com/AlreadyOnTV/AlreadyOn/blob/main/deploy/docker-compose.example.yml">complete Compose example</a>.</p></section>
+
+<section id="library">
+<p class="eyebrow">03 / LIBRARY</p>
+<h2>Bring the shows and movies.</h2>
+<ol>
+<li>Open the WebUI’s media settings as the owner.</li>
+<li>Add your <strong>TV Show Folders</strong> and <strong>Movie Folders</strong>. Use paths inside the container, such as <code>/data/media/TV</code> and <code>/data/media/Movies</code>—not the host-side path.</li>
+<li>Use <strong>Refresh Media</strong> to scan. Large libraries can take time.</li>
+<li>Open the guide and check the resulting channels. The lineup depends on the media and metadata available; empty channels may be hidden.</li></ol>
+<p>Folder organization and usable metadata help scheduling. If something is missing, check the folder mapping and container permissions before rescanning. Optional metadata integrations are described in the project’s <a href="https://github.com/AlreadyOnTV/AlreadyOn/tree/main/docs">reference documentation</a>.</p></section>
+
+<section id="watch">
+<p class="eyebrow">04 / WATCH</p>
+<h2>Pick a channel. Settle in.</h2>
+<p>Choose your profile and open the channel guide. Select a channel to join the currently airing program. AlreadyOn follows a scheduled, linear-TV rhythm, so tuning in may start partway through a show.</p>
+<p>Use the guide to see what’s on and what’s coming next. Switch channels when the mood changes. Owners can adjust their library and settings; everyday viewers can focus on watching.</p><a class="inline-image" href="./#experience"><img src="assets/screenshots/web-guide.png" alt="Example WebUI guide populated with synthetic demo channels" loading="lazy"></a>
+<p class="caption">Synthetic demo lineup shown. Your lineup depends on your library.</p></section>
+
+<section id="android">
+<p class="eyebrow">05 / MORE SCREENS</p>
+<h2>Connect a phone or Google TV.</h2>
+<ol>
+<li>Open the <a href="https://github.com/AlreadyOnTV/AlreadyOn/releases/latest">latest Stable release</a> on GitHub. Download <code>alreadyon-android.apk</code> for Android phones/tablets or <code>alreadyon-tv.apk</code> for Google TV. Use the signed release apps, not development builds.</li>
+<li>Install the APK on your device. Android may ask you to allow installation from the app or file source you’re using; approve only that source for this installation.</li>
+<li>In WebUI <strong>Admin Settings</strong>, set the account’s <strong>TV Pairing PIN</strong> (6–12 digits).</li>
+<li>Open AlreadyOn on the device. Let it find the server on your trusted LAN, or enter your server’s HTTPS address manually.</li>
+<li>Sign in with the account username and pairing PIN. Pick a profile and channel.</li></ol>
+<p>On Google TV, use the remote to navigate the guide, select a channel for fullscreen playback, and press Back to return to the guide. The current channel keeps playing.</p>
+<div class="note"><strong>No device-wide certificate import.</strong> For your own self-signed server, the Android apps establish server trust within the app on first connection. Start on a trusted network and confirm you are connecting to your server. If a later connection reports a trust problem, investigate the server/address change instead of blindly dismissing it.</div>
+<p>Discovery scans the local IPv4 network for about 30 seconds. Guest Wi-Fi isolation, firewall rules, or separate networks can prevent discovery. Manual entry also supports addresses outside that discovery scope. See the <a href="https://github.com/AlreadyOnTV/AlreadyOn/blob/main/docs/GOOGLE_TV.md">Android and Google TV reference</a> for details.</p>
+<p>The signed apps can offer updates from GitHub. Stable apps follow Stable releases, and Android asks you to approve installation. Reopen the app if necessary; normal updates preserve its settings.</p></section>
+
+<section id="hosting">
+<p class="eyebrow">06 / KEEP IT RUNNING</p>
+<h2>Your server, your pace.</h2>
+<p>Keep the first installation on your home network. Preserve and back up the configuration folder using your normal homelab backup process. Keep media mounted read-only where possible.</p>
+<h3>Update the server</h3>
+<p>Read the <a href="https://github.com/AlreadyOnTV/AlreadyOn/releases">release notes</a>, then run these commands in the folder containing <code>compose.yaml</code>:</p>
+<pre><code>docker compose pull
+docker compose up -d</code></pre>
+<p>Your persistent <code>./config</code> folder is reused. Test a channel afterward. Don’t delete the database or create a fresh configuration just to troubleshoot an update.</p>
+<h3>Access beyond your home network</h3>
+<p>Public hosting is an advanced, optional step. Use a domain and a valid HTTPS certificate, protect account credentials, and understand your network exposure before enabling access. Follow the project’s <a href="https://github.com/AlreadyOnTV/AlreadyOn/blob/main/docs/TLS.md">HTTPS reference</a>; don’t expose a quick test setup without reviewing it. VPN-based access is outside current support scope.</p></section>
+
+<section id="troubleshooting">
+<p class="eyebrow">WHEN SOMETHING GETS IN THE WAY</p>
+<h2>A few quick checks.</h2>
+<dl>
+<dt>The page won’t open</dt>
+<dd>Check that the container is running, you used <code>https://</code> and port <code>19900</code>, and the browser can reach your server’s network.</dd>
+<dt>The library is empty</dt>
+<dd>Check the host folder mapping, container paths, read permissions, and scan completion. Try one small known media folder first.</dd>
+<dt>The app can’t find the server</dt>
+<dd>Try manual entry. Check guest-network isolation and firewall rules. Confirm the server is reachable from that device.</dd>
+<dt>Playback fails or stutters</dt>
+<dd>Try another file and device. Note the media format, server resources, app/browser version, and whether other viewers are active.</dd></dl>
+<p>Still stuck? <a href="help.html">Our issue guide</a> explains what information helps us investigate.</p></section></div></div></main>
+<footer>
+<div><a class="brand" href="./"><img src="assets/branding/header-doc.svg" alt="AlreadyOn"></a>
+<p>Your library, tuned to you.</p></div>
+<div><a href="guides.html">Installation &amp; guides</a><a href="help.html">Tester support</a><a href="https://github.com/AlreadyOnTV/AlreadyOn">Source on GitHub ↗</a><a href="https://github.com/AlreadyOnTV/AlreadyOn/releases/latest">Download Android apps ↗</a></div>
+<p class="fine">An open-source project for your own media. No shows, movies, or streaming subscriptions included. GPL-3.0 licensed.</p></footer><dialog id="lightbox" aria-label="Interface screenshot"><button class="close" aria-label="Close screenshot">Close ×</button><img alt="">
+<p></p></dialog></body></html>
