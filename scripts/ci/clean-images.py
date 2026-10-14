@@ -12,9 +12,10 @@ import re
 import subprocess
 from zoneinfo import ZoneInfo
 from image_registry import api
+from release_dates import parse_day
 
 CHANNELS = {'nightly', 'latest', 'stable'}
-DATE = re.compile(r'\d{4}-\d{2}-\d{2}')
+DATE = re.compile(r'(?:\d{2}\.\d{2}\.\d{2}|(?:20)?\d{2}-\d{2}-\d{2})')
 PR = re.compile(r'pr-(\d+)(?:-[0-9a-f]{40})?')
 REBUILD = re.compile(r'rebuild-(\d+)-\d+')
 
@@ -23,7 +24,7 @@ def retain(tags, today, open_pr, active_run):
     """Return a protection reason, or None. Newest date alias defines expiry."""
     if CHANNELS.intersection(tags):
         return 'release channel'
-    dates = [datetime.date.fromisoformat(tag) for tag in tags if DATE.fullmatch(tag)]
+    dates = [parse_day(tag, historical=True) for tag in tags if DATE.fullmatch(tag)]
     if dates and max(dates) >= today - datetime.timedelta(days=90):
         return 'date within 90 days'
     for tag in tags:

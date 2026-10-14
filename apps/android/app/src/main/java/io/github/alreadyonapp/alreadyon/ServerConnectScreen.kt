@@ -15,6 +15,7 @@ import androidx.compose.ui.platform.LocalView
 import androidx.compose.ui.unit.dp
 import androidx.compose.foundation.text.KeyboardActions
 import androidx.compose.ui.Alignment
+import androidx.compose.ui.focus.FocusDirection
 import androidx.compose.ui.focus.FocusRequester
 import androidx.compose.ui.focus.focusRequester
 import androidx.compose.ui.focus.onFocusChanged
@@ -88,6 +89,17 @@ internal fun ServerConnectScreen(state: PhoneState, model: PhoneModel, modifier:
     val scope = rememberCoroutineScope()
     val keyboard = LocalSoftwareKeyboardController.current
     val focusManager = LocalFocusManager.current
+    // TV arrows leave the address editor vertically instead of moving its text cursor.
+    // Keep Left/Right available for editing and leave phone keyboard behavior unchanged.
+    val addressNavigation = Modifier.onPreviewKeyEvent { event ->
+        if (BuildConfig.IS_TV && event.key in listOf(Key.DirectionUp, Key.DirectionDown)) {
+            if (event.type == KeyEventType.KeyDown) {
+                keyboard?.hide()
+                focusManager.moveFocus(if (event.key == Key.DirectionUp) FocusDirection.Up else FocusDirection.Down)
+            }
+            true
+        } else false
+    }
     val usernameFocus = remember { FocusRequester() }
     LaunchedEffect(trust) { if (trust != null) usernameFocus.requestFocus() }
     val pinFocus = remember { FocusRequester() }
@@ -143,10 +155,10 @@ internal fun ServerConnectScreen(state: PhoneState, model: PhoneModel, modifier:
                 Text("https://", color = MaterialTheme.colorScheme.onSurfaceVariant)
                 OutlinedTextField(address.host, { address = address.withHost(it) }, label = { Text("Hostname / IP") },
                     singleLine = true, keyboardOptions = KeyboardOptions(keyboardType = KeyboardType.Uri, imeAction = ImeAction.Next),
-                    keyboardActions = KeyboardActions(onNext = { portFocus.requestFocus() }), modifier = Modifier.weight(1f))
+                    keyboardActions = KeyboardActions(onNext = { portFocus.requestFocus() }), modifier = Modifier.weight(1f).then(addressNavigation))
                 OutlinedTextField(address.port, { address = address.withPort(it) }, label = { Text("Port") },
                     singleLine = true, keyboardOptions = KeyboardOptions(keyboardType = KeyboardType.Number),
-                    modifier = Modifier.width(90.dp).focusRequester(portFocus))
+                    modifier = Modifier.width(90.dp).focusRequester(portFocus).then(addressNavigation))
             }
             Button(modifier = Modifier.tvFocusOutline(), onClick = {
                 runCatching { address.origin() }.onSuccess { select(TvServer("AlreadyOn server", it)) }

@@ -6,7 +6,7 @@ A Kotlin/Compose client with Media3 playback for an AlreadyOn installation. Both
 
 ## Build
 
-Use JDK 17, the committed Gradle wrapper and Android SDK components declared in the build files. The current project compiles against SDK 36 and supports API 26 or later.
+Use JDK 17, the committed Gradle wrapper and Android SDK components declared in the build files. The current project compiles against SDK 37 (target SDK 36) and supports API 26 or later.
 
 From this directory run `./gradlew :app:assembleDebug` for mobile or `./gradlew :tv:assembleDebug` for TV. Install the generated debug APK on a selected emulator or test device. Keep SDK paths in ignored `local.properties`; never commit signing keys, credentials or generated APKs.
 
@@ -19,3 +19,7 @@ In fullscreen portrait or landscape, swipe up to the next higher available chann
 Use an isolated server and check login/logout, profile permissions, guide navigation, tuning, program boundaries, track selection, rotation and background recovery. Verify physical-device playback independently of emulator behavior.
 
 No fingerprint confirmation is requested. Subsequent connections validate the accepted instance trust anchor. See [Android architecture](../../docs/ANDROID.md), [emulator setup](../../docs/ANDROID_EMULATOR.md) and [OpenAPI](../../api/openapi.yaml).
+
+The October 18 toolchain pairs Gradle 9.8.1 with AGP 9.4.1 and built-in Kotlin. Run Gradle with JDK 17; both apps keep Java 17 bytecode, compile SDK 37 and target SDK 36. Shared TV Kotlin directories use `android.sourceSets.kotlin`; the external Kotlin Android plugin is unnecessary. Compose retains its explicitly pinned compiler plugin. See [dependency maintenance](../../docs/DEPENDENCY_MAINTENANCE.md) for batch validation.
+
+TV address fields use Up/Down to traverse the form and Left/Right to edit text; phone input is unchanged. Fixture tests wait for remote focus. Port preflight rejects live listeners but tolerates TIME_WAIT sockets from the previous disposable fixture, so immediate reruns remain safe.

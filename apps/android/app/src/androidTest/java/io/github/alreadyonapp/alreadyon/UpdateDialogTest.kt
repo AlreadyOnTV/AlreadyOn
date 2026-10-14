@@ -1,3 +1,4 @@
+// Exercise short release URLs while preserving signed historical package metadata.
 package io.github.alreadyonapp.alreadyon
 
 import androidx.activity.compose.setContent
@@ -17,12 +18,12 @@ class UpdateDialogTest {
     @get:Rule val compose = createAndroidComposeRule<MainActivity>()
     @Test fun updateDialogShowsVersionsAndBothActions() {
         var accepted = false; var cancelled = false
-        compose.runOnUiThread { compose.activity.setContent { PhoneTheme { UpdateDialog(AppUpdateState(AppUpdate("2026-10-11-alpha1", "2026-10-11-alpha1", 24,
+        compose.runOnUiThread { compose.activity.setContent { PhoneTheme { UpdateDialog(AppUpdateState(AppUpdate("26.10.11-alpha1", "26.10.11-alpha1", 24,
             if (BuildConfig.IS_TV) "tv" else "phone", "", "", 1)),
             { accepted = true }, { cancelled = true }, {}, {}) } } }
         compose.onNodeWithText("Update Available").assertIsDisplayed()
         compose.onNodeWithText("Current version: ${BuildConfig.VERSION_NAME}").assertIsDisplayed()
-        compose.onNodeWithText("Available version: 2026-10-11-alpha1").assertIsDisplayed()
+        compose.onNodeWithText("Available version: 26.10.11-alpha1").assertIsDisplayed()
         if (BuildConfig.IS_TV) compose.waitUntil(timeoutMillis = 5_000) {
             compose.onNodeWithText("Update").fetchSemanticsNode().config[SemanticsProperties.Focused]
         }

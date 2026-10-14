@@ -6,9 +6,9 @@ Maintainers control releases; keep credentials private. [Release notes](RELEASE_
 
 ## Development and releases
 
-`release-date.txt` pins the active cycle to `2026-10-18`. Reuse until Stable on main, then begin another.
+`release-date.txt` pins the active cycle to `26.10.18`. Reuse until Stable on main, then begin another.
 
-Use the primary checkout, `2026-10-18`, and HTTPS preview on port 5173. Dated dev PRs run full quality, source/browser/runtime and security gates. Explicit active-date dispatches run these gates and publish alpha artifacts without merging or deleting the branch. Dev merges republish date/`nightly` images and Android candidates, advance the date tag and delete the merged branch. Hotfixes repeat the gates.
+Use the primary checkout, `26.10.18`, and HTTPS preview on port 5173. Dated dev PRs run full quality, source/browser/runtime and security gates. Explicit active-date dispatches run these gates and publish alpha artifacts without merging or deleting the branch. Dev merges republish date/`nightly` images and Android candidates, advance the date tag and delete the merged branch. Hotfixes repeat the gates.
 
 Local checks: `make lint`, documentation and syntax checks.
 
@@ -33,7 +33,7 @@ Before image builds, `scripts/local-bases.py` checks base recipes, parent and ag
 
 On approval, deploy the exact tested image and verify revision, health, service count, mounts and relevant playback. `scripts/deploy-production.sh <ssh-host> [compose-directory]` transfers it with the updater paused. Preserve live data.
 
-After alpha approval run `python3 scripts/promote.py test YYYY-MM-DD`; after RC approval run `python3 scripts/promote.py main`. These create fast-forward or exact-tree merge commits only, require image/APK provenance, and reuse artifacts without e2e reruns. Resolve conflicts on dev; preserve branch protection.
+After alpha approval run `python3 scripts/promote.py test YY.MM.DD`; after RC approval run `python3 scripts/promote.py main`. These create fast-forward or exact-tree merge commits only, require image/APK provenance, and reuse artifacts without e2e reruns. Resolve conflicts on dev; preserve branch protection.
 
 Dev builds follow validated PR merges; guarded test/main merges promote existing images. See [retention](IMAGE_RETENTION.md).
 

@@ -22,20 +22,20 @@ class ReleaseNotesTests(unittest.TestCase):
 
     def test_stable_preserves_tested_notes(self):
         changes = '## Features\n\n- Watch on TV.'
-        candidate = release_body('owner/repo', '2026-10-09-rc3', 'a' * 40, 123, changes)
+        candidate = release_body('owner/repo', '26.10.09-rc3', 'a' * 40, 123, changes)
         self.assertEqual(published_changelog(candidate), render_fragments([changes]))
-        promoted_rc = release_body('owner/repo', '2026-10-10-RC1', 'b' * 40, 123,
-                       changes, candidate_tag='2026-10-10-alpha1')
+        promoted_rc = release_body('owner/repo', '26.10.10-RC1', 'b' * 40, 123,
+                       changes, candidate_tag='26.10.10-alpha1')
         self.assertNotIn('Preview release', promoted_rc)
-        stable = release_body('owner/repo', '2026-10-09-stable', 'a' * 40, 123,
-                              published_changelog(candidate), '2026-10-09-rc3')
+        stable = release_body('owner/repo', '26.10.09-stable', 'a' * 40, 123,
+                              published_changelog(candidate), '26.10.09-rc3')
         self.assertNotIn('Stable release', stable)
         self.assertEqual(published_changelog(stable), render_fragments([changes]))
         self.assertNotIn('Build details and verification', stable)
         self.assertTrue(stable.startswith('# Download Now\n\n'))
-        self.assertIn('/2026-10-09-stable/alreadyon-android.apk', stable)
-        self.assertIn('/2026-10-09-stable/alreadyon-tv.apk', stable)
-        self.assertNotIn('/2026-10-09-rc3/', stable)
+        self.assertIn('/26.10.09-stable/alreadyon-android.apk', stable)
+        self.assertIn('/26.10.09-stable/alreadyon-tv.apk', stable)
+        self.assertNotIn('/26.10.09-rc3/', stable)
         self.assertNotIn('Download Now', published_changelog(stable))
         self.assertEqual([line for line in stable.splitlines() if line.startswith('# ')],
                          ['# Download Now', '# New Features', '# Bugfixes', '# Known Issues'])
@@ -45,10 +45,10 @@ class ReleaseNotesTests(unittest.TestCase):
             published_changelog('Technical notes only.')
 
     def test_candidate_changelog_records_its_explicit_baseline(self):
-        body = release_body('owner/repo', '2026-10-10-beta', 'a' * 40, 123,
+        body = release_body('owner/repo', '26.10.10-beta', 'a' * 40, 123,
                             '## Features\n\n- Enter a server address immediately.',
-                            changelog_baseline='2026-10-09-rc3')
-        self.assertIn('Changelog baseline: `2026-10-09-rc3`', body)
+                            changelog_baseline='26.10.09-rc3')
+        self.assertIn('Changelog baseline: `26.10.09-rc3`', body)
 
     def test_three_sections_and_empty_placeholders(self):
         result = render_fragments([])
@@ -61,13 +61,13 @@ class ReleaseNotesTests(unittest.TestCase):
     def test_bug_and_known_issue_links_are_required(self):
         for section in ['Bugfixes', 'Known Issues']:
             with self.assertRaisesRegex(ValueError, 'GitHub issue'):
-                release_body('owner/repo', '2026-10-18-alpha2', 'a' * 40, 123,
+                release_body('owner/repo', '26.10.18-alpha2', 'a' * 40, 123,
                              f'# {section}\n\n- An untracked fix.')
-        release_body('owner/repo', '2026-10-18-alpha2', 'a' * 40, 123,
+        release_body('owner/repo', '26.10.18-alpha2', 'a' * 40, 123,
                      '# Bugfixes\n\n- [Issue title](https://github.com/owner/repo/issues/1)')
 
     def test_identical_artifact_promotion_retains_only_known_issues(self):
-        body = release_body('owner/repo', '2026-10-18-alpha2', 'a' * 40, 123,
+        body = release_body('owner/repo', '26.10.18-alpha2', 'a' * 40, 123,
                             '# New Features\n\n- Watch TV.\n\n# Known Issues\n\n'
                             '- [Remaining bug](https://github.com/owner/repo/issues/2)')
         result = promotion_changes(body)
@@ -88,7 +88,7 @@ class ReleaseNotesTests(unittest.TestCase):
             (directory / 'first.md').write_text('## Features\n\n- Old feature.\n')
             git('add', '.')
             git('commit', '-qm', 'First feature')
-            git('tag', '2026-10-08-stable')
+            git('tag', '26.10.08-stable')
             (directory / 'second.md').write_text('<!-- android-release -->\n\n## Bug fixes\n\n- New fix.\n')
             (directory / 'server.md').write_text('## Bug fixes\n\n- Server-only fix.\n')
             (root / 'docs/release-known-issues.md').write_text(
@@ -96,14 +96,14 @@ class ReleaseNotesTests(unittest.TestCase):
             git('add', '.')
             git('commit', '-qm', 'New fix')
             sha = git('rev-parse', 'HEAD')
-            baseline = git('rev-parse', '2026-10-08-stable')
+            baseline = git('rev-parse', '26.10.08-stable')
             # A dirty working tree cannot leak unreleased changes into this APK's notes.
             (directory / 'second.md').write_text('## Features\n\n- Future feature.\n')
             (root / 'docs/release-known-issues.md').write_text('# Known Issues\n\n- Future bug.\n')
             previous = os.getcwd()
             try:
                 os.chdir(root)
-                result = changelog(sha, ['2026-10-08-stable'])
+                result = changelog(sha, ['26.10.08-stable'])
                 self.assertIn('New fix.', result)
                 self.assertNotIn('Old feature.', result)
                 self.assertNotIn('Future feature.', result)
@@ -117,6 +117,6 @@ class ReleaseNotesTests(unittest.TestCase):
                 with self.assertRaisesRegex(ValueError, 'ancestor'):
                     changelog_since(baseline, sha)
                 self.assertIn('Old feature.', changelog(sha, []))
-                self.assertIn('No new features in this release.', changelog('2026-10-08-stable', ['2026-10-08-stable']))
+                self.assertIn('No new features in this release.', changelog('26.10.08-stable', ['26.10.08-stable']))
             finally:
                 os.chdir(previous)

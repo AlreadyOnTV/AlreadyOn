@@ -1,0 +1,27 @@
+# Explicit naming-only maintenance: preserve released image digests and channel aliases.
+name: Migrate release image date labels
+on:
+  workflow_dispatch:
+    inputs:
+      apply:
+        description: Rename old date aliases and remove only migration placeholders
+        type: boolean
+        default: false
+permissions:
+  contents: read
+  packages: write
+jobs:
+  migrate:
+    runs-on: ubuntu-26.04
+    steps:
+      - uses: actions/checkout@v7
+        with:
+          persist-credentials: false
+      - name: Preserve digests while migrating date aliases
+        env:
+          GH_TOKEN: ${{ github.token }}
+        run: |
+          set -euo pipefail
+          options=()
+          if [ '${{ inputs.apply }}' = true ]; then options+=(--apply); fi
+          python3 scripts/ci/migrate-image-date-tags.py "${options[@]}"

@@ -1,6 +1,5 @@
-// Pin the initial Android toolchain; upgrades require a compatible Gradle/JDK review.
+// Gradle 9.8 requires AGP 9; built-in Kotlin owns Android compilation.
 plugins {
-    id("com.android.application") version "8.13.2" apply false
-    id("org.jetbrains.kotlin.android") version "2.2.21" apply false
+    id("com.android.application") version "9.4.1" apply false
     id("org.jetbrains.kotlin.plugin.compose") version "2.2.21" apply false
 }

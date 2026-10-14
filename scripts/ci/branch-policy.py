@@ -9,6 +9,7 @@ from pathlib import Path
 import re
 import subprocess
 import urllib.request
+from release_dates import parse_day
 
 
 def git(*args):
@@ -74,14 +75,14 @@ def promotion_source(result, upstream):
 
 def validate_work_branch(name, files):
     """Accept isolated assistant branches while keeping human docs branches separate."""
-    release_branch = re.fullmatch(r'\d{4}-\d{2}-\d{2}', name)
+    release_branch = re.fullmatch(r'\d{2}\.\d{2}\.\d{2}', name)
     if release_branch:
         try:
-            datetime.strptime(name, '%Y-%m-%d')
+            parse_day(name)
         except ValueError as error:
-            raise ValueError('Release branches must use a valid YYYY-MM-DD date') from error
+            raise ValueError('Release branches must use a valid YY.MM.DD date') from error
     elif not re.fullmatch(r'(feature|bugfix|docs|codex|copilot)/[A-Za-z0-9][A-Za-z0-9._/-]*', name):
-        raise ValueError('Issue branches must use YYYY-MM-DD, feature/, bugfix/, docs/, codex/ or copilot/')
+        raise ValueError('Issue branches must use YY.MM.DD, feature/, bugfix/, docs/, codex/ or copilot/')
     assistant = name.startswith(('codex/', 'copilot/'))
     if assistant and not re.fullmatch(r'(codex|copilot)/[a-z0-9]+(?:-[a-z0-9]+){1,2}', name):
         raise ValueError('Assistant branch descriptions must contain two or three lowercase hyphenated words')
@@ -90,7 +91,7 @@ def validate_work_branch(name, files):
                                        {'.png', '.jpg', '.jpeg', '.svg', '.webp'}) for p in files)
     legacy_build = bool(re.fullmatch(r'feature/build-[0-9]+', name))
     if docs_only and not (release_branch or name.startswith('docs/') or assistant or legacy_build):
-        raise ValueError('Use YYYY-MM-DD, docs/, codex/ or copilot/ for documentation-only changes')
+        raise ValueError('Use YY.MM.DD, docs/, codex/ or copilot/ for documentation-only changes')
     if not docs_only and name.startswith('docs/'):
         raise ValueError('Use feature/, bugfix/, codex/ or copilot/ for code changes')
 

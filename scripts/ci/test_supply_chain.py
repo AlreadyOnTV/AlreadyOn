@@ -42,20 +42,20 @@ class SupplyChain(unittest.TestCase):
         verify = load('verify-image')
         source = 'ghcr.io/owner/repo@sha256:' + 'd' * 64
         run = Mock(side_effect=[None, subprocess.CalledProcessError(1, 'gh')])
-        with patch.object(verify.subprocess, 'check_output', return_value='2026-10-18\n'):
+        with patch.object(verify.subprocess, 'check_output', return_value='26.10.18\n'):
             with self.assertRaises(subprocess.CalledProcessError):
                 verify.verify('owner/repo', source, 'a' * 40, run)
         self.assertEqual(run.call_count, 2)
         self.assertIn('--signer-workflow', run.call_args_list[0].args[0])
         self.assertIn('https://cyclonedx.org/bom', run.call_args_list[1].args[0])
-        with patch.object(verify.subprocess, 'check_output', return_value='2026-10-11\n'):
+        with patch.object(verify.subprocess, 'check_output', return_value='26.10.11\n'):
             run.reset_mock()
             verify.verify('owner/repo', 'legacy-sha-tag', 'a' * 40, run)
             run.assert_not_called()
 
     def test_mutable_source_cannot_enter_new_attested_promotion(self):
         verify = load('verify-image')
-        with patch.object(verify.subprocess, 'check_output', return_value='2026-10-18\n'):
+        with patch.object(verify.subprocess, 'check_output', return_value='26.10.18\n'):
             with self.assertRaises(ValueError): verify.verify('owner/repo', 'ghcr.io/owner/repo:nightly', 'a' * 40)
 
     def test_manual_or_failed_review_does_not_hide_a_missed_schedule(self):
@@ -74,7 +74,7 @@ class SupplyChain(unittest.TestCase):
         other = 'sha256:' + 'e' * 64
         with patch.dict(os.environ, GITHUB_REPOSITORY='owner/repo', CI_REVISION='a' * 40,
                         SOURCE_IMAGE='ghcr.io/owner/repo@' + first,
-                        IMAGE_TAGS='ghcr.io/owner/repo:nightly ghcr.io/owner/repo:2026-10-18'), \
+                        IMAGE_TAGS='ghcr.io/owner/repo:nightly ghcr.io/owner/repo:26.10.18'), \
                 patch.object(image_registry, 'record') as record, \
                 patch('subprocess.run'), \
                 patch('subprocess.check_output', side_effect=['Digest: ' + first, 'Digest: ' + other]), \

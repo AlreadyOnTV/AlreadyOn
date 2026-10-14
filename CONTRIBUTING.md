@@ -6,7 +6,7 @@ Start with [the project brief](docs/PROJECT_BRIEF.md) and [development setup](do
 
 ## Make a change
 
-1. External contributors normally use a fork and a focused branch. Maintainers use one checkout and the active cycle branch documented in [development setup](docs/DEVELOPMENT.md). The current branch is `2026-10-18`; `build` has been retired for this cycle.
+1. External contributors normally use a fork and a focused branch. Maintainers use one checkout and the active cycle branch documented in [development setup](docs/DEVELOPMENT.md). The current branch is `26.10.18`; `build` has been retired for this cycle.
 2. Implement one coherent change. Preserve existing behavior outside its scope.
 3. Update the relevant guide and [OpenAPI](api/openapi.yaml) when contracts change. Explain unusual logic in source comments. Include a [release-note entry](docs/RELEASE_NOTES.md) for user-facing changes. Use `# New Features` or `# Bugfixes`; fixes link exact issue titles. Update [known issues](docs/release-known-issues.md) when prioritized bugs are added or fixed. Omit internal maintenance.
 4. Run relevant checks and describe results in the PR. Include screenshots for visible interface changes and reproduction steps for fixes.

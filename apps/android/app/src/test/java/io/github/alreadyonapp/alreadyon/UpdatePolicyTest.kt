@@ -5,18 +5,23 @@ import org.junit.Assert.*
 import org.junit.Test
 
 class UpdatePolicyTest {
-    private val update = AppUpdate("2026-10-11-alpha1", "2026-10-11-alpha1", 24, "tv",
-        "https://github.com/AlreadyOnTV/AlreadyOn/releases/download/2026-10-11-alpha1/alreadyon-tv.apk", "a".repeat(64), 1024)
+    private val update = AppUpdate("26.10.11-alpha1", "26.10.11-alpha1", 24, "tv",
+        "https://github.com/AlreadyOnTV/AlreadyOn/releases/download/26.10.11-alpha1/alreadyon-tv.apk", "a".repeat(64), 1024)
     @Test fun stableInstallsExcludePreviewsAndDrafts() {
-        assertFalse(acceptsUpdateRelease("2026-10-10-Stable", "2026-10-11-alpha1", false, true))
-        assertTrue(acceptsUpdateRelease("2026-10-10-Stable", "2026-10-11-Stable", false, false))
-        assertFalse(acceptsUpdateRelease("2026-10-10-Stable", "2026-10-11-Stable", true, false))
-        assertFalse(acceptsUpdateRelease("2026-10-10-Stable", "2026-10-11-Stable", false, true))
+        assertFalse(acceptsUpdateRelease("26.10.10-Stable", "26.10.11-alpha1", false, true))
+        assertTrue(acceptsUpdateRelease("26.10.10-Stable", "26.10.11-Stable", false, false))
+        assertFalse(acceptsUpdateRelease("26.10.10-Stable", "26.10.11-Stable", true, false))
+        assertFalse(acceptsUpdateRelease("26.10.10-Stable", "26.10.11-Stable", false, true))
     }
     @Test fun previewInstallsAcceptNewerStagesButIgnoreNonAndroidReleases() {
         for (stage in listOf("alpha2", "RC1", "rc3", "Stable"))
-            assertTrue(acceptsUpdateRelease("2026-10-10-alpha1", "2026-10-11-$stage", false, stage != "Stable"))
-        assertFalse(acceptsUpdateRelease("2026-10-10-alpha1", "2026-10-11", false, false))
+            assertTrue(acceptsUpdateRelease("26.10.10-alpha1", "26.10.11-$stage", false, stage != "Stable"))
+        assertFalse(acceptsUpdateRelease("26.10.10-alpha1", "26.10.11", false, false))
+    }
+    @Test fun shortTagsAcceptHistoricalSignedMetadata() {
+        assertTrue(acceptsUpdateRelease("2026-10-18-alpha2", "26.10.18-alpha3", false, true))
+        assertTrue(verifiedUpdateMetadata(update.copy(version = "2026-10-11-alpha1"), 23, "tv"))
+        assertTrue(validUpdateAsset(update.url.replace("/26.10.11-alpha1/", "/2026-10-11-alpha1/")))
     }
     @Test fun identicalPromotedApksAndDowngradesAreNotUpdates() {
         assertFalse(verifiedUpdateMetadata(update, 24, "tv"))

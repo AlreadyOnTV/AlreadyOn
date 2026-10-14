@@ -10,7 +10,7 @@ on:
         type: string
         default: ''
       release_date:
-        description: Optional YYYY-MM-DD release branch date; push runs derive it from the merged PR
+        description: Optional YY.MM.DD release branch date; push runs derive it from the merged PR
         type: string
         required: false
 permissions:

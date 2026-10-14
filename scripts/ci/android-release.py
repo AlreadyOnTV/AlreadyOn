@@ -16,15 +16,16 @@ sys.path.insert(0, str(Path(__file__).parents[1] / 'security'))
 from public_inventory import NAMES as SBOM_NAMES, verify_bundle
 SBOM_ASSETS = (*SBOM_NAMES, 'sbom-manifest.json')
 
+from release_dates import release_day
 from release_notes import changelog, changelog_since, promotion_changes, release_body
 
 # New lifecycle: alphaN on dev, RCN on test, Stable on main. Accept old tags for history.
-ALPHA = re.compile(r"(\d{4}-\d{2}-\d{2})-alpha([1-9]\d*)\Z")
-RC = re.compile(r"(\d{4}-\d{2}-\d{2})-RC([1-9]\d*)\Z")
-STABLE = re.compile(r"(\d{4}-\d{2}-\d{2})-Stable\Z")
-LEGACY = re.compile(r"(\d{4}-\d{2}-\d{2})-(beta|rc|stable)([1-9]\d*)?\Z")
-LEGACY_BETA = re.compile(r"(\d{4}-\d{2}-\d{2})-beta([1-9]\d*)?\Z")
-CANDIDATE = re.compile(r"(\d{4}-\d{2}-\d{2})-(?:alpha[1-9]\d*|RC[1-9]\d*|beta(?:[1-9]\d*)?|rc[1-9]\d*)\Z")
+ALPHA = re.compile(r"((?:\d{2}\.\d{2}\.\d{2}|(?:20)?\d{2}-\d{2}-\d{2}))-alpha([1-9]\d*)\Z")
+RC = re.compile(r"((?:\d{2}\.\d{2}\.\d{2}|(?:20)?\d{2}-\d{2}-\d{2}))-RC([1-9]\d*)\Z")
+STABLE = re.compile(r"((?:\d{2}\.\d{2}\.\d{2}|(?:20)?\d{2}-\d{2}-\d{2}))-Stable\Z")
+LEGACY = re.compile(r"((?:\d{2}\.\d{2}\.\d{2}|(?:20)?\d{2}-\d{2}-\d{2}))-(beta|rc|stable)([1-9]\d*)?\Z")
+LEGACY_BETA = re.compile(r"((?:\d{2}\.\d{2}\.\d{2}|(?:20)?\d{2}-\d{2}-\d{2}))-beta([1-9]\d*)?\Z")
+CANDIDATE = re.compile(r"((?:\d{2}\.\d{2}\.\d{2}|(?:20)?\d{2}-\d{2}-\d{2}))-(?:alpha[1-9]\d*|RC[1-9]\d*|beta(?:[1-9]\d*)?|rc[1-9]\d*)\Z")
 ASSETS = ("alreadyon-android.apk", "SHA256SUMS", "android-release.json", "alreadyon-tv.apk")
 
 
@@ -44,13 +45,13 @@ def releases(repo):
 
 def stage_tag(tag):
     if match := ALPHA.fullmatch(tag):
-        return match[1], "alpha", int(match[2])
+        return release_day(match[1], historical=True), "alpha", int(match[2])
     if match := RC.fullmatch(tag):
-        return match[1], "rc", int(match[2])
+        return release_day(match[1], historical=True), "rc", int(match[2])
     if match := STABLE.fullmatch(tag):
-        return match[1], "stable", 0
+        return release_day(match[1], historical=True), "stable", 0
     if match := LEGACY.fullmatch(tag):
-        return match[1], match[2], int(match[3] or 0)
+        return release_day(match[1], historical=True), match[2], int(match[3] or 0)
     return None
 
 
@@ -86,7 +87,7 @@ def cleanup_legacy_betas(repo, day):
     removed = []
     for entry in releases(repo):
         match = LEGACY_BETA.fullmatch(entry["tag_name"])
-        if match is None or match[1] != day:
+        if match is None or release_day(match[1], historical=True) != day:
             continue
         run("gh", "release", "delete", entry["tag_name"], "--repo", repo,
             "--yes", "--cleanup-tag")
@@ -220,10 +221,7 @@ def publish(repo, tag, sha, directory, notes, prerelease, publish_now=True):
 
 
 def plan(repo, sha, day=None):
-    day = day or datetime.now(ZoneInfo("America/New_York")).date().isoformat()
-    if not re.fullmatch(r"\d{4}-\d{2}-\d{2}", day):
-        raise ValueError("Release date must use YYYY-MM-DD")
-    date.fromisoformat(day)
+    day = release_day(day or datetime.now(ZoneInfo("America/New_York")).date().strftime('%y.%m.%d'))
     entries = releases(repo)
     marker = f"Source commit: `{sha}`"
     existing = next((entry for entry in entries
@@ -273,6 +271,8 @@ def plan(repo, sha, day=None):
 
 def candidate(repo, tag, sha, code, directory):
     parsed = stage_tag(tag)
+    if parsed is not None and not tag.startswith(parsed[0] + "-"):
+        raise ValueError("New candidate tags must use YY.MM.DD")
     if parsed is None or parsed[1] not in {"alpha", "rc", "beta"} or not 0 < code <= 2100000000:
         raise ValueError("Invalid Android release version")
     manifest = {"source_sha": sha, "version_name": tag, "version_code": code,
@@ -362,7 +362,7 @@ def promote_stable(repo, day, selected_sha):
     for entry in releases(repo):
         match = RC.fullmatch(entry["tag_name"])
         source = release_source(entry)
-        if entry["draft"] or match is None or match[1] != day or not source:
+        if entry["draft"] or match is None or release_day(match[1], historical=True) != day or not source:
             continue
         ancestry = subprocess.run(["git", "merge-base", "--is-ancestor", source, selected_sha], check=False)
         if ancestry.returncode == 0:

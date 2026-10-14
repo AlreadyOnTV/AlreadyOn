@@ -9,3 +9,11 @@ The existing daily cleanup workflow has an independent read-only watchdog. It fa
 No scheduled job publishes or deploys application/base images. Maintainers refresh bases explicitly. Reviewed pin changes and refreshed bases enter the ordinary dated dev pipeline: quality, Go/browser tests, packaged-runtime checks and scanning precede image publication. Test/main reuse the recorded tested digest. Never rebuild a released image merely to silence an advisory; prepare a new validated candidate.
 
 Weekly automation and Dependabot configuration must reach the repository default branch before schedules become active. Before closing maintenance delivery, verify one successful scheduled review, a real dependency proposal, and watchdog rejection of a synthetic missed-run response. Local unit tests establish detection logic, not scheduler operation.
+
+## October 18 dependency batch
+
+Dependabot #43–#59 update Go, Android libraries/tooling, Pages actions v5, Android setup v4 and locked npm tooling. #56/#58 duplicate one Media3 update. Regenerate combined locks.
+
+Gradle 9.8.1 requires AGP 9.4.1 with built-in Kotlin and TV Kotlin source sets; [AGP 8 uses a removed API](https://docs.gradle.org/9.8.1/userguide/upgrading_version_9.html#agp_8x_incompatible). OkHttp 5 requires compile SDK 37 (`platforms;android-37.0`, not `platforms;android-37`). Target SDK 36, minimum SDK 26 and identities remain unchanged. Validate inventories and debug/release apps.
+
+Add required infrastructure documentation. Test the replacement npm CLI in the rebuilt CI base; dependency resolution alone cannot establish compatibility.

@@ -49,7 +49,9 @@ def main():
             f"-X github.com/alreadyonapp/alreadyon/server/internal/config.webDir={ROOT / 'web/dist'}",
             "./cmd/server", cwd=ROOT / "server")
         with socket.socket() as sock:
-            # Fail if occupied; never replace a live service for the fixture.
+            # Permit stale fixture TIME_WAIT sockets; an active listener still fails this bind.
+            # Never replace a live service to make a synthetic test pass.
+            sock.setsockopt(socket.SOL_SOCKET, socket.SO_REUSEADDR, 1)
             sock.bind(("127.0.0.1", 0 if args.test_class == "ProfileMenuTest" else 19900))
             port = sock.getsockname()[1]
         with (root / "server.log").open("w") as log:

@@ -1,4 +1,4 @@
-// Repository ownership changes do not change installed Android package identity.
+// YY.MM.DD releases retain the installed package identity; read old signed versions too.
 package io.github.alreadyonapp.alreadyon
 
 import java.net.URI
@@ -10,7 +10,7 @@ internal data class AppUpdate(val release: String, val version: String, val code
     val target: String, val url: String, val hash: String, val size: Long)
 
 internal fun acceptsUpdateRelease(installed: String, tag: String, draft: Boolean, prerelease: Boolean): Boolean {
-    if (draft || !Regex("\\d{4}-\\d{2}-\\d{2}-(alpha\\d+|beta\\d*|rc\\d+|stable)", RegexOption.IGNORE_CASE).matches(tag)) return false
+    if (draft || !Regex("(?:\\d{2}\\.\\d{2}\\.\\d{2}|(?:20)?\\d{2}-\\d{2}-\\d{2})-(alpha\\d+|beta\\d*|rc\\d+|stable)", RegexOption.IGNORE_CASE).matches(tag)) return false
     val stable = installed.endsWith("-stable", ignoreCase = true)
     return !stable || (!prerelease && tag.endsWith("-stable", ignoreCase = true))
 }
@@ -20,7 +20,7 @@ internal fun validUpdateAsset(url: String): Boolean {
     val uri = runCatching { URI(url) }.getOrNull() ?: return false
     return uri.scheme == "https" && uri.host == "github.com" && uri.userInfo == null &&
         uri.port == -1 && uri.rawQuery == null && uri.fragment == null &&
-        Regex("/AlreadyOnTV/AlreadyOn/releases/download/\\d{4}-\\d{2}-\\d{2}-(alpha\\d+|beta\\d*|rc\\d+|stable)/(android-release\\.json|alreadyon-android\\.apk|alreadyon-tv\\.apk)", RegexOption.IGNORE_CASE).matches(uri.rawPath)
+        Regex("/AlreadyOnTV/AlreadyOn/releases/download/(?:\\d{2}\\.\\d{2}\\.\\d{2}|(?:20)?\\d{2}-\\d{2}-\\d{2})-(alpha\\d+|beta\\d*|rc\\d+|stable)/(android-release\\.json|alreadyon-android\\.apk|alreadyon-tv\\.apk)", RegexOption.IGNORE_CASE).matches(uri.rawPath)
 }
 
 internal fun verifiedUpdateMetadata(update: AppUpdate, installedCode: Long, target: String): Boolean =
