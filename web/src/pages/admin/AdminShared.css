@@ -1515,4 +1515,9 @@ button.admin-badge:disabled {
 .channel-bulk-heading { white-space: nowrap; }
 
 /* The current-session badge sits below the name, keeping its column compact. */
-.session-current-device { display: table; margin-top: 6px; }
+.session-current-device {
+  display: block;
+  width: max-content;
+  white-space: nowrap;
+  margin-top: 6px;
+}

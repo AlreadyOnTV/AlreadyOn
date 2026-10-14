@@ -10,7 +10,7 @@ Dashboard is the first/default tab inside Server, followed by Home Users, Media,
 
 ## Signed-in devices
 
-Settings shows Device Name, Device Type, Device IP Address, Last Active, Expires and Sign Out in the Signed-In Browsers table. Wide tables scroll within a keyboard-accessible region at narrow widths.
+Settings shows Device, Type, IP Address, Last Active, Expires and Sign Out in the Signed-In Browsers table. The This Browser badge sits below the device name and sizes to its full text on one line. Wide tables scroll within a keyboard-accessible region at narrow widths.
 
 `GET /api/auth/sessions` adds `deviceName`, `deviceType` and `ipAddress` while preserving all existing fields. Names and types are best-effort user-agent descriptions of the browser/OS or native app, not private machine hostnames or security credentials. Device types are Web Browser, Phone and TV. Browser sessions use Web Browser on every operating system; native Android mobile uses Phone and native Google TV uses TV. The This Browser badge appears below the current session’s device name.
 

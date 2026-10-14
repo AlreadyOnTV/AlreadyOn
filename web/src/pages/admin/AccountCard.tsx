@@ -325,9 +325,9 @@ export default function AccountCard({ children }: { children: ReactNode }) {
       <table className="admin-table sessions-table">
         <thead>
           <tr>
-            <th>Device Name</th>
-            <th>Device Type</th>
-            <th title="Last address seen by the server; a reverse proxy may supply its own address.">Device IP Address</th>
+            <th>Device</th>
+            <th>Type</th>
+            <th title="Last address seen by the server; a reverse proxy may supply its own address.">IP Address</th>
             <th>Last Active</th>
             <th>Expires</th>
             <th>Sign Out</th>
