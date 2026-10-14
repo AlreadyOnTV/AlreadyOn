@@ -1,6 +1,6 @@
 # Release naming
 
-Release cycles use `YY-MM-DD`, for example `26-10-18`. Two-digit years mean 2000–2099, without the usual date-parser century pivot. Calendar dates and audit timestamps still use ISO 8601.
+Release cycles use `YY-MM-DD`, for example `26-10-18`. Two-digit years mean 2000–2099, without the usual date-parser century pivot. Calendar dates and audit timestamps still use ISO 8601. Server build identities remain `YY.MM.DD_shortsha`, distinct from release-cycle labels.
 
 The local/remote cycle branch, `release-date.txt`, source Git tag, GHCR date tag, APK version name for new builds and GitHub Release tag share that label. Titles append `-alphaN`, `-rcN` or `-stable`. Existing stage-tag casing (`RCN`, `Stable`) stays compatible; this migration changes the year only. The product, repository, container package and installed Android application IDs retain their names.
 
