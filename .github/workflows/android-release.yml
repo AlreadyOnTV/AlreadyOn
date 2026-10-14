@@ -105,7 +105,7 @@ jobs:
       - uses: android-actions/setup-android@v4
         if: steps.version.outputs.existing != 'true'
         with:
-          packages: 'platform-tools platforms;android-37 build-tools;36.0.0'
+          packages: 'platform-tools platforms;android-37.0 build-tools;36.0.0'
       - name: Build release APK with candidate version
         if: steps.version.outputs.existing != 'true'
         env:
