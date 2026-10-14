@@ -166,6 +166,27 @@ a.admin-btn:visited {
   stroke-linejoin: round;
 }
 
+/* Keep role and audience words readable on phones without widening the page.
+   The table remains keyboard-scrollable within its own labelled region. */
+.profiles-table-scroll,
+.accounts-table-scroll {
+  max-width: 100%;
+  overflow-x: auto;
+}
+
+.profiles-table,
+.accounts-table {
+  min-width: 520px;
+}
+
+.profiles-table th,
+.profiles-table td,
+.accounts-table th,
+.accounts-table td {
+  white-space: nowrap;
+  overflow-wrap: normal;
+}
+
 .profiles-table th:first-child,
 .profiles-table td:first-child {
   width: 1%;

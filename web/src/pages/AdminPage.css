@@ -21,6 +21,11 @@
   margin: 0 auto;
 }
 
+.admin-topbar-inner > .profile-menu {
+  flex: 0 0 auto;
+  margin-left: auto;
+}
+
 .admin-back {
   background: var(--surface);
   color: var(--text);
@@ -185,6 +190,35 @@
 @media (max-width: 700px) {
   .admin-topbar {
     padding: 10px 12px;
+  }
+
+  .admin-topbar-inner {
+    /* Keep the named profile control on the brand row; navigation occupies
+       the following row rather than overlapping either header element. */
+    display: grid;
+    grid-template-columns: minmax(0, 1fr) auto;
+    gap: 12px;
+  }
+
+  .admin-topbar-inner > .profile-menu {
+    grid-column: 2;
+    grid-row: 1;
+    max-width: min(180px, 45vw);
+    margin-left: 0;
+  }
+
+  .admin-topbar-inner > .brand-link {
+    min-width: 0;
+  }
+
+  .admin-topbar-inner .profile-menu-trigger {
+    width: 100%;
+    min-width: 0;
+    box-sizing: border-box;
+  }
+
+  .admin-topbar-inner .profile-menu-trigger-name {
+    min-width: 0;
   }
 
   .admin-content {
