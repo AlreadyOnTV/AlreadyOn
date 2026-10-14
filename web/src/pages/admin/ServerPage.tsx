@@ -119,6 +119,8 @@ function TmdbKeyRow({ keySet, onInfo, onSet, onClear }: { keySet: boolean; onInf
       name="TMDb API Key"
       control={
         <PasswordInput
+          revealDraftOnly
+          visibilityLabel="API key"
           aria-label="TMDb API Key"
           value={draft}
           placeholder={keySet ? '•••••••••••••••• (set)' : 'Not configured'}

@@ -83,7 +83,7 @@ export default forwardRef<DdnsControlsHandle, { onDirty: (dirty: boolean) => voi
     {provider !== 'none' && <>
       {field('Public Hostname', 'hostname', 'tv.example.com')}
       {provider === 'no-ip' && field('DDNS Username', 'username', 'Provider update username')}
-      {row(provider === 'cloudflare' ? 'API Token' : 'DDNS Password', <PasswordInput key={provider} aria-label="DDNS credential" value={secret} onChange={e => setSecret(e.target.value)} autoComplete="new-password" placeholder={selected.hasSecret ? 'Saved — leave blank to keep' : 'Enter provider credential'} disabled={busy || running} />)}
+      {row(provider === 'cloudflare' ? 'API Token' : 'DDNS Password', <PasswordInput revealDraftOnly visibilityLabel="credential" key={provider} aria-label="DDNS credential" value={secret} onChange={e => setSecret(e.target.value)} autoComplete="new-password" placeholder={selected.hasSecret ? '•••••••••••••••• (set)' : 'Enter provider credential'} disabled={busy || running} />)}
 
     </>}
     {error && <p className="setting-note profile-field-error" role="alert">{error}</p>}

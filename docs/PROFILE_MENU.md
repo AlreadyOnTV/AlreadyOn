@@ -15,3 +15,6 @@ Settings shows Device, Type, IP Address, Last Active, Expires and Sign Out in th
 `GET /api/auth/sessions` adds `deviceName`, `deviceType` and `ipAddress` while preserving all existing fields. Names and types are best-effort user-agent descriptions of the browser/OS or native app, not private machine hostnames or security credentials. Device types are Web Browser, Phone and TV. Browser sessions use Web Browser on every operating system; native Android mobile uses Phone and native Google TV uses TV. The This Browser badge appears below the current session’s device name.
 
 Migration 0085 adds an empty IP field to existing sessions without changing cookies, users or expiry. Sign-in and authenticated requests record the current server-observed socket peer IP. Untrusted forwarding headers are ignored; reverse-proxy deployments show the observed proxy address. Old sessions say Not recorded yet until they next connect. Last Active and Expires retain existing behavior, and session listing/revocation remain scoped to the signed-in account.
+
+
+See [saved API credential entry](SAVED_CREDENTIALS.md) for draft-only visibility controls.
