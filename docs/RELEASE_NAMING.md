@@ -8,6 +8,6 @@ The October 18 migration renames all existing public date labels directly, witho
 
 Never rebuild or edit previously signed APKs, checksums or inventories to rename a release. Their original version strings, source commits and hashes are immutable audit identifiers. Rename the public release and its links, retaining release IDs and asset IDs/bytes. Retag container manifests with identical digests; never delete a digest still serving another tag. Validate short-name parsing, ordering, candidate allocation, retention, promotion and update URLs. Read historical source policy dates without weakening provenance gates.
 
-The manual **Migrate release image date labels** workflow previews by default. Its approved apply mode moves obsolete aliases onto empty, unique placeholders, deletes only those placeholders, and verifies the new tags retain the original digest. This avoids deleting shared channel images.
+The manual **Migrate release image date labels** workflow previews by default. Its approved apply mode moves obsolete aliases onto empty, unique placeholders, deletes only those placeholders, and verifies the new tags retain the original digest. This avoids deleting shared channel images. If a new validated alpha has advanced the short date alias, preserve it and retain the older digest through its existing source tag.
 
 See [delivery](CI_CD.md) and [Android releases](ANDROID_RELEASES.md).
