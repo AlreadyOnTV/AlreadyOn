@@ -16,11 +16,11 @@ import org.junit.Rule
 import org.junit.Test
 import org.junit.runner.RunWith
 
-/** Exercises Dashboard with a real account session and isolated host fixture, without onboarding dependencies. */
+/** Exercises the native menu order and profile navigation with an isolated host fixture. */
 @RunWith(AndroidJUnit4::class)
-class DashboardTest {
+class ProfileMenuTest {
     @get:Rule val compose = createAndroidComposeRule<MainActivity>()
-    @Test fun dashboardDataRemoteNavigationAndBack() {
+    @Test fun profileMenuRemoteNavigationAndBack() {
         val instrumentation = InstrumentationRegistry.getInstrumentation()
         val port = InstrumentationRegistry.getArguments().getString("serverPort")?.toInt()
             ?: error("Use scripts/android/test-tv.py with a disposable server fixture")
@@ -45,28 +45,18 @@ class DashboardTest {
             compose.runOnIdle { model.finishTvTutorial() }
             compose.waitUntil(15000) { compose.onAllNodesWithText("CHANNEL").fetchSemanticsNodes().isNotEmpty() }
             compose.onNodeWithText("Admin").performSemanticsAction(SemanticsActions.OnClick) { it() }
-            compose.waitUntil(10000) { compose.onAllNodes(hasText("Dashboard") and isFocused()).fetchSemanticsNodes().isNotEmpty() }
-            compose.onNodeWithText("Switch Profile").assertExists()
-            compose.onNodeWithText("Profile Settings").assertExists()
-            device.pressDPadCenter()
-            compose.waitUntil(15000) { compose.onAllNodesWithText("No active streaming sessions.").fetchSemanticsNodes().isNotEmpty() }
-            compose.waitUntil(15000) { compose.onAllNodesWithText("AlreadyOn TV fixture").fetchSemanticsNodes().isNotEmpty() }
-            compose.onNodeWithText("AlreadyOn TV fixture").assertExists()
-            compose.onNodeWithText(origin).assertExists()
-            compose.onNodeWithText("Server Version").assertExists()
-            compose.onNodeWithText("App Version").assertExists()
-            compose.onNodeWithText(BuildConfig.VERSION_NAME).assertExists()
-            compose.onNodeWithText("Back to Guide").assertIsFocused()
-            device.takeScreenshot(java.io.File(instrumentation.targetContext.getExternalFilesDir(null), "tv-dashboard.png"))
+            compose.waitUntil(10000) { compose.onAllNodes(hasText("Switch Profile") and isFocused()).fetchSemanticsNodes().isNotEmpty() }
+            compose.onNodeWithText("Profile").assertExists()
+            compose.onNodeWithText("Sign Out").assertExists()
+            compose.onNodeWithText("Dashboard").assertDoesNotExist()
+            compose.onNodeWithText("Settings").assertDoesNotExist()
+            compose.onNodeWithText("Server").assertDoesNotExist()
             device.pressDPadDown()
-            compose.waitForIdle()
-            assertTrue("Dashboard sections receive remote focus", compose.onAllNodes(isFocused() and (hasText("Server Details") or hasAnyDescendant(hasText("Server Details")))).fetchSemanticsNodes().isNotEmpty())
-            repeat(5) { device.pressDPadDown(); compose.waitForIdle() }
-            compose.onNodeWithText("CPU").assertExists()
-            device.takeScreenshot(java.io.File(instrumentation.targetContext.getExternalFilesDir(null), "tv-dashboard-metrics.png"))
+            compose.onNodeWithText("Profile").assertIsFocused()
             device.pressDPadCenter()
-            compose.runOnIdle { assertEquals("dashboard", model.state.value.settings) }
-            compose.onAllNodes(isDialog()).assertCountEquals(0)
+            compose.waitUntil(15000) { model.state.value.settings == "profile" }
+            compose.onNodeWithText("Profile Settings").assertExists()
+            compose.onNodeWithText("Admin").assertExists()
             device.pressBack()
             compose.waitUntil(15000) { compose.onAllNodesWithText("CHANNEL").fetchSemanticsNodes().isNotEmpty() }
             compose.runOnIdle { assertNull(model.state.value.settings); assertNotNull(model.state.value.profile) }

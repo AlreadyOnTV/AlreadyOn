@@ -1,4 +1,4 @@
-// Dashboard, profile settings and switching are available to every profile.
+// Switching and profile preferences are available to every profile.
 // Web-only administration follows, then Sign Out on every device.
 import { startTransition, useEffect, useId, useRef, useState } from 'react';
 import { useNavigate } from 'react-router-dom';
@@ -111,23 +111,20 @@ export default function ProfileMenu() {
         <div id={panelId} className={'profile-menu-panel' + (view !== 'root' ? ' profile-menu-expanded' : '')}>
           {view === 'root' && (
             <>
-              <button className="profile-menu-item" onClick={() => go('/dashboard')}>
-                Dashboard
-              </button>
-              <button className="profile-menu-item" onClick={() => go('/profile')}>
-                Profile Settings
-              </button>
               <button className="profile-menu-item" onClick={() => setView('switch')}>
                 Switch Profile
               </button>
+              <button className="profile-menu-item" onClick={() => go('/profile')}>
+                Profile
+              </button>
               {isAdmin && (
                 <button className="profile-menu-item" onClick={() => go('/account')}>
-                  Admin Settings
+                  Settings
                 </button>
               )}
               {isOwner && (
-                <button className="profile-menu-item" onClick={() => go('/admin/accounts')}>
-                  Server Settings
+                <button className="profile-menu-item" onClick={() => go('/admin/dashboard')}>
+                  Server
                 </button>
               )}
               <button className="profile-menu-item" onClick={() => void signOut()}>

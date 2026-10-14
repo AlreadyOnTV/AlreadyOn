@@ -9,18 +9,20 @@ import ServerPage from './admin/ServerPage';
 import LogsPage from './admin/LogsPage';
 import ApiPage from './admin/ApiPage';
 import AccountsPage from './admin/AccountsPage';
+import DashboardPage from './admin/DashboardPage';
 import { useAccount } from '../users/AccountContext';
 import { useUsers } from '../users/UsersContext';
 import StartupNotice from '../status/StartupNotice';
 import { useStartupStatus } from '../status/useStartupStatus';
 import './AdminPage.css';
 
-type AdminTab = 'accounts' | 'channels' | 'commercials' | 'media' | 'server' | 'logs' | 'api';
+type AdminTab = 'dashboard' | 'accounts' | 'channels' | 'commercials' | 'media' | 'server' | 'logs' | 'api';
 
-const DEFAULT_TAB: AdminTab = 'accounts';
+const DEFAULT_TAB: AdminTab = 'dashboard';
 
 const TABS: { id: AdminTab; label: string }[] = [
-  { id: 'accounts', label: 'Accounts' },
+  { id: 'dashboard', label: 'Dashboard' },
+  { id: 'accounts', label: 'Home Users' },
   { id: 'media', label: 'Media' },
   { id: 'commercials', label: 'Commercials' },
   { id: 'channels', label: 'Channels' },
@@ -30,6 +32,7 @@ const TABS: { id: AdminTab; label: string }[] = [
 ];
 
 const TAB_COMPONENTS: Record<AdminTab, () => React.JSX.Element> = {
+  dashboard: DashboardPage,
   accounts: AccountsPage,
   channels: ChannelsPage,
   commercials: CommercialsPage,

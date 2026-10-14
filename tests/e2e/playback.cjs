@@ -1448,7 +1448,7 @@ const noWorkers = async (unreleased = () => 0) => {
       "Narrow Server Settings hides the desktop tab row",
     );
     await navToggle.click();
-    await page.getByRole("menuitem", { name: "Accounts", exact: true }).click();
+    await page.getByRole("menuitem", { name: "Home Users", exact: true }).click();
     await page.waitForURL("**/admin/accounts");
     assert(
       (await page.getByRole("menu").count()) === 0,
@@ -2492,10 +2492,10 @@ const noWorkers = async (unreleased = () => 0) => {
           username: "menu-fixture", mustChangePassword: false,
         }}));
         await page.route("**/api/profiles", route => route.fulfill({json: [profile]}));
-        const expected = ["Dashboard", "Profile Settings", "Switch Profile",
-          ...(profileRole === "admin" ? ["Admin Settings"] : []),
-          ...(accountRole === "owner" ? ["Server Settings"] : []), "Sign Out"];
-        const routes = ["/", "/dashboard", "/profile",
+        const expected = ["Switch Profile", "Profile",
+          ...(profileRole === "admin" ? ["Settings"] : []),
+          ...(accountRole === "owner" ? ["Server"] : []), "Sign Out"];
+        const routes = ["/", "/profile",
           ...(profileRole === "admin" ? ["/account"] : []),
           ...(accountRole === "owner" ? ["/admin/accounts"] : [])];
         // Check real navigation, both hit targets, keyboard access and long-name
@@ -2525,17 +2525,19 @@ const noWorkers = async (unreleased = () => 0) => {
         }
         await page.goto(url);
         await page.locator(".profile-menu-trigger").click();
-        await page.getByRole("button", {name: "Dashboard", exact: true}).click();
-        await page.getByRole("heading", {name: "Server Metrics", exact: true}).waitFor();
-        assert(await page.locator(".admin-tabs").count() === 0, "Dashboard has no settings tabs");
-        if (accountRole === "viewer") {
+        if (accountRole === "owner") {
+          await page.getByRole("button", {name: "Server", exact: true}).click();
+          await page.waitForURL('**/admin/dashboard');
+          await page.getByRole("heading", {name: "Server Metrics", exact: true}).waitFor();
+          assert((await page.locator('.admin-tab').first().innerText()) === 'Dashboard', 'Dashboard is the first Server tab');
+        } else {
           await page.goto(url + "/admin/accounts");
           await page.waitForURL(url + "/");
         }
         await context.close();
       }
     }
-    console.log("PASS: profile menu order and Dashboard navigation across account/profile roles");
+    console.log("PASS: profile menu order, role permissions and owner Dashboard navigation");
   }
 
   // Admin: activity cards precede server performance and the settings grid.
@@ -2572,11 +2574,11 @@ const noWorkers = async (unreleased = () => 0) => {
       "Current session should report its last activity",
     );
     await page.goto(url + "/admin");
-    await page.waitForURL("**/admin/accounts");
+    await page.waitForURL("**/admin/dashboard");
     const tabs = await page.locator(".admin-tab").allTextContents();
     assert(
       tabs.join(",") ===
-        "Accounts,Media,Commercials,Channels,Server,Logs,API",
+        "Dashboard,Home Users,Media,Commercials,Channels,Server,Logs,API",
       "Settings tab order: " + tabs,
     );
     await page.goto(url + "/dashboard");
@@ -2589,8 +2591,8 @@ const noWorkers = async (unreleased = () => 0) => {
       "Dashboard card order",
     );
     await page.setViewportSize({ width: 1100, height: 800 });
-    assert(await page.locator(".admin-tabs").count() === 0,
-      "Dashboard is independent of Server Settings navigation");
+    assert(await page.locator(".admin-tabs").count() === 1,
+      "Dashboard belongs to Server navigation");
     const graphLayout = await page
       .locator(".metrics-grid .metric-panel")
       .evaluateAll((panels) =>
@@ -3079,6 +3081,7 @@ const noWorkers = async (unreleased = () => 0) => {
     const assertSettingsHeaders = async (width) => {
       await page.setViewportSize({ width, height: 844 });
       for (const route of [
+        "/admin/dashboard",
         "/admin/accounts",
         "/admin/media",
         "/admin/commercials",
@@ -3503,7 +3506,7 @@ const noWorkers = async (unreleased = () => 0) => {
         els.map((e) => Math.round(e.getBoundingClientRect().top)),
       );
     assert(
-      tops.length === 7 && tops.every((top, index) => index === 0 || top > tops[index - 1]),
+      tops.length === 8 && tops.every((top, index) => index === 0 || top > tops[index - 1]),
       "Desktop Server Settings uses an ordered vertical sidebar: " + tops.join(","),
     );
 

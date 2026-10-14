@@ -110,8 +110,8 @@ class TvNavigationTest {
             compose.onNodeWithText("Admin").performClick()
             compose.onNodeWithText("Switch Profile").assertExists()
             compose.onNodeWithText("Sign Out").assertExists()
-            compose.onNodeWithText("Profile Settings").assertExists()
-            compose.onNodeWithText("Dashboard").assertExists()
+            compose.onNodeWithText("Profile").assertExists()
+            compose.onNodeWithText("Dashboard").assertDoesNotExist()
             device.pressBack()
             val model = ViewModelProvider(compose.activity)[PhoneModel::class.java]
             compose.runOnIdle { model.setQuality(720); model.setSubtitle(null) }
@@ -162,7 +162,7 @@ class TvNavigationTest {
             device.pressBack() // Focus the mini-player.
             compose.waitUntil(10000) { controlFocused("Pause") }
             device.pressDPadUp()
-            compose.waitUntil(10000) { compose.onAllNodes(hasText("Dashboard") and isFocused()).fetchSemanticsNodes().isNotEmpty() }
+            compose.waitUntil(10000) { compose.onAllNodes(hasText("Switch Profile") and isFocused()).fetchSemanticsNodes().isNotEmpty() }
             device.pressBack()
             compose.waitUntil(10000) { controlFocused("Pause") }
             device.takeScreenshot(java.io.File(instrumentation.targetContext.getExternalFilesDir(null), "tv-guide.png"))

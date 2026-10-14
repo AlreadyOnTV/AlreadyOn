@@ -132,7 +132,17 @@ internal fun TvShell(state: PhoneState, model: PhoneModel) {
             // In the guide and sign-in screens, focus belongs to the actionable children.
             }.then(if (fullscreen) Modifier.focusRequester(focus).focusable() else Modifier),
             verticalArrangement = Arrangement.spacedBy(if (fullscreen) 0.dp else 8.dp)) {
-            if (!fullscreen && (state.profile == null || state.tvTutorial)) Row(Modifier.fillMaxWidth()) { PhoneBrand() }
+            if (!fullscreen && state.profile == null) Row(Modifier.fillMaxWidth()) { PhoneBrand() }
+            // Keep one named profile control in the header across Guide/settings,
+            // independent of whether a channel's player panel is present.
+            if (!fullscreen && state.profile != null) Row(Modifier.fillMaxWidth(),
+                verticalAlignment = Alignment.CenterVertically, horizontalArrangement = Arrangement.SpaceBetween) {
+                PhoneBrand()
+                ProfileMenu(state, model, Modifier.focusRequester(profileFocus).onFocusChanged { if (it.isFocused) region = "profile" },
+                    openSignal = profileOpenSignal, onMenuDismiss = {
+                        scope.launch { withFrameNanos { }; region = "player"; controlsSignal++ }
+                    })
+            }
             if (!fullscreen) {
                 if (state.signedIn) state.error?.let { Text(it, color = MaterialTheme.colorScheme.error) }
                 // Routine background refreshes must not animate or shift the TV layout.
@@ -157,12 +167,6 @@ internal fun TvShell(state: PhoneState, model: PhoneModel) {
                                 onControlsVisibility = { controlsVisible = it }, onFullscreen = { if (!fullscreen) model.unmute(); fullscreen = !fullscreen; if (fullscreen) controlsSignal++ else returnToGuide() },
                                 onExitFullscreen = { fullscreen = false; returnToGuide() })
                             if (!fullscreen) Box(Modifier.weight(1f).fillMaxHeight()) {
-                                Row(Modifier.fillMaxWidth(), horizontalArrangement = Arrangement.End) {
-                                    ProfileMenu(state, model, Modifier.focusRequester(profileFocus).onFocusChanged { if (it.isFocused) region = "profile" },
-                                        openSignal = profileOpenSignal, onMenuDismiss = {
-                                            scope.launch { withFrameNanos { }; region = "player"; controlsSignal++ }
-                                        })
-                                }
                                 TvGuideDetails(selection, state.channel, palette, Modifier.fillMaxSize())
                             }
                         }

@@ -48,6 +48,6 @@ internal fun ProfileName(profile: ViewerProfile, model: PhoneModel, avatarSize: 
                 ?: Text(preset?.first ?: profile.name.trim().firstOrNull()?.uppercase().orEmpty().ifBlank { "?" },
                     fontSize = (avatarSize.value * 0.5625f).sp, fontWeight = FontWeight.Bold, color = MaterialTheme.colorScheme.onSurfaceVariant)
         }
-        if (showName) Text(profile.name, style = MaterialTheme.typography.labelLarge.copy(fontSize = nameSize, fontWeight = FontWeight.Bold))
+        if (showName) Text(profile.name, maxLines = 1, overflow = androidx.compose.ui.text.style.TextOverflow.Ellipsis, style = MaterialTheme.typography.labelLarge.copy(fontSize = nameSize, fontWeight = FontWeight.Bold))
     }
 }

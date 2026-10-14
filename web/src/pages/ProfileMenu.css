@@ -9,6 +9,7 @@
   align-items: center;
   gap: 8px;
   max-width: 100%;
+  flex-wrap: nowrap;
   height: 36px;
   padding: 0 8px;
   background: var(--surface);
@@ -20,6 +21,7 @@
 }
 
 .profile-menu-trigger-name {
+  min-width: 0;
   max-width: min(180px, 30vw);
   overflow: hidden;
   white-space: nowrap;
@@ -174,3 +176,6 @@
   color: var(--accent-text);
   font-weight: bold;
 }
+
+/* Avatars keep their shape while long names shrink to a single-line ellipsis. */
+.profile-menu-trigger > :first-child { flex-shrink: 0; }

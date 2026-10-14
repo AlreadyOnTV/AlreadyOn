@@ -26,4 +26,4 @@ Use a 3840×2160 Google TV AVD. Run `scripts/android/test-tv.py --serial emulato
 
 The guide fits two hours beside the channel column at every screen width. Remote Left/Right navigation scrolls to programs outside that window. Each program shows its start and end times, a single-line title, and an episode line (`S1E2 - Episode title`) for episodic content. Text is truncated inside the program cell.
 
-Choose Dashboard at the top of the profile menu to view server/APK details, active streams, background tasks and performance history. Every signed-in profile can use this read-only screen. Charts do not open popups; use the refresh/history controls and Back to Guide with the remote. Monitoring pauses while the app is in the background.
+The profile menu offers Switch Profile, Profile and Sign Out. Switch Profile receives initial remote focus. The avatar and profile name stay on one line in the header, including Profile settings. Dashboard now lives inside the owner-only Server section in WebUI; native menus do not offer server administration.
