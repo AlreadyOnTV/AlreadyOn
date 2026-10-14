@@ -78,9 +78,23 @@ class TvNavigationTest {
                 val server = hasText("10.0.2.2:19900", substring = true)
                 // Establish a known start below the discovered server, then navigate with the remote.
                 compose.onNodeWithText("Rescan").performSemanticsAction(SemanticsActions.RequestFocus) { it() }
+                compose.waitUntil(10000) { compose.onAllNodes(hasText("Rescan") and isFocused()).fetchSemanticsNodes().isNotEmpty() }
                 repeat(8) {
                     if (compose.onAllNodes(server and isFocused()).fetchSemanticsNodes().isEmpty()) {
+                        // Back dismisses the IME only when it is actually visible;
+                        // sending Back after it closes would finish the onboarding Activity.
+                        var imeVisible = false
+                        compose.runOnIdle {
+                            imeVisible = androidx.core.view.ViewCompat.getRootWindowInsets(compose.activity.window.decorView)
+                                ?.isVisible(androidx.core.view.WindowInsetsCompat.Type.ime()) == true
+                        }
+                        if (imeVisible) {
+                            device.pressBack()
+                            device.waitForIdle()
+                            compose.waitForIdle()
+                        }
                         device.pressDPadUp()
+                        device.waitForIdle()
                         compose.waitForIdle()
                     }
                 }

@@ -21,3 +21,5 @@ Use an isolated server and check login/logout, profile permissions, guide naviga
 No fingerprint confirmation is requested. Subsequent connections validate the accepted instance trust anchor. See [Android architecture](../../docs/ANDROID.md), [emulator setup](../../docs/ANDROID_EMULATOR.md) and [OpenAPI](../../api/openapi.yaml).
 
 The October 18 toolchain pairs Gradle 9.8.1 with AGP 9.4.1 and built-in Kotlin. Run Gradle with JDK 17; both apps keep Java 17 bytecode, compile SDK 37 and target SDK 36. Shared TV Kotlin directories use `android.sourceSets.kotlin`; the external Kotlin Android plugin is unnecessary. Compose retains its explicitly pinned compiler plugin. See [dependency maintenance](../../docs/DEPENDENCY_MAINTENANCE.md) for batch validation.
+
+TV address fields use Up/Down to traverse the form and Left/Right to edit text; phone input is unchanged. Fixture tests wait for remote focus. Port preflight rejects live listeners but tolerates TIME_WAIT sockets from the previous disposable fixture, so immediate reruns remain safe.
