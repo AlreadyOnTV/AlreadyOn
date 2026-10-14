@@ -707,6 +707,9 @@ export function testTranscoding(transcoding: string, decoding = false): Promise<
 }
 
 export interface BrowserSession {
+	deviceName: string;
+	deviceType: string;
+	ipAddress: string;
   lastActiveAt: string | null;
   id: number;
   userAgent: string;

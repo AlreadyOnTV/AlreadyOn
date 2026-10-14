@@ -84,6 +84,7 @@ func signInSession(w http.ResponseWriter, r *http.Request, db *sql.DB, cookieNam
 	} else {
 		setSessionCookie(w, r, cookieName, token, expires)
 	}
+	_ = auth.RecordSessionIP(r.Context(), db, id, r.RemoteAddr)
 	logging.Info("signed in: %s (%s) session %d started, valid until %s", u.Username, u.Role, id, expires.Format(time.RFC3339))
 	writeJSON(w, code, statusOf(u))
 }
@@ -217,6 +218,9 @@ func handleAuthLogout(db *sql.DB, cookieName string) http.HandlerFunc {
 }
 
 type sessionResponse struct {
+	DeviceName   string  `json:"deviceName"`
+	DeviceType   string  `json:"deviceType"`
+	IPAddress    string  `json:"ipAddress"`
 	LastActiveAt *string `json:"lastActiveAt"`
 	ID           int64   `json:"id"`
 	UserAgent    string  `json:"userAgent"`
@@ -247,7 +251,9 @@ func handleListSessions(db *sql.DB) http.HandlerFunc {
 		current := -auth.PrincipalID(r.Context())
 		resp := make([]sessionResponse, 0, len(list))
 		for _, s := range list {
+			name, kind := sessionDevice(s.UserAgent)
 			resp = append(resp, sessionResponse{
+				DeviceName: name, DeviceType: kind, IPAddress: s.IPAddress,
 				ID: s.ID, UserAgent: s.UserAgent, Current: s.ID == current,
 				CreatedAt: time.Unix(s.CreatedAtUnix, 0).UTC().Format(time.RFC3339),
 			})

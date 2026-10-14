@@ -321,22 +321,27 @@ export default function AccountCard({ children }: { children: ReactNode }) {
       )}
       {isOwner && lifetimeError && <p className="profile-field-error">{lifetimeError}</p>}
       {error && <p className="profile-field-error">{error}</p>}
-      <table className="admin-table">
+      <div className="sessions-table-scroll" role="region" aria-label="Signed-in devices" tabIndex={0}>
+      <table className="admin-table sessions-table">
         <thead>
           <tr>
-            <th>Browser</th>
+            <th>Device Name</th>
+            <th>Device Type</th>
+            <th title="Last address seen by the server; a reverse proxy may supply its own address.">Device IP Address</th>
             <th>Last Active</th>
             <th>Expires</th>
-            <th></th>
+            <th>Sign Out</th>
           </tr>
         </thead>
         <tbody>
           {sessions.map((s) => (
             <tr key={s.id}>
               <td>
-                {describeAgent(s.userAgent)}
-                {s.current && <span className="admin-badge admin-badge-on" style={{ marginLeft: 8 }}>This Browser</span>}
+                {s.deviceName || describeAgent(s.userAgent)}
+                {s.current && <span className="admin-badge admin-badge-on session-current-device">This Browser</span>}
               </td>
+              <td>{s.deviceType || 'Web Browser'}</td>
+              <td>{s.ipAddress || 'Not recorded yet'}</td>
               <td>{s.lastActiveAt ? when(s.lastActiveAt) : "Not recorded yet"}</td>
               <td>{when(s.expiresAt)}</td>
               <td className="admin-table-actions">
@@ -348,13 +353,14 @@ export default function AccountCard({ children }: { children: ReactNode }) {
           ))}
           {sessions.length === 0 && !error && (
             <tr>
-              <td colSpan={4} className="admin-section-hint">
+              <td colSpan={6} className="admin-section-hint">
                 Loading…
               </td>
             </tr>
           )}
         </tbody>
       </table>
+      </div>
       <div className="admin-table-actions session-browser-actions" style={{ marginTop: 12 }}>
         <button className="admin-btn admin-btn-secondary" onClick={() => void signOutOthers()} disabled={others === 0}>
           Sign Out All Other Browsers

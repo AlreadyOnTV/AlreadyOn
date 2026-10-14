@@ -221,6 +221,8 @@ func authenticate(r *http.Request, db *sql.DB, cookieName string) (int64, User) 
 	if err != nil {
 		return 0, User{}
 	}
+	// Address telemetry must not reject an otherwise valid session.
+	_ = RecordSessionIP(r.Context(), db, id, r.RemoteAddr)
 	return sessionPrincipal(id), u
 }
 
