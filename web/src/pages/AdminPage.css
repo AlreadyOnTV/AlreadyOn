@@ -203,6 +203,9 @@
   .admin-topbar-inner > .profile-menu {
     grid-column: 2;
     grid-row: 1;
+    /* A capped item must anchor to the track's end even when wider fonts
+       make the intrinsic auto column larger than the item itself. */
+    justify-self: end;
     max-width: min(180px, 45vw);
     margin-left: 0;
   }

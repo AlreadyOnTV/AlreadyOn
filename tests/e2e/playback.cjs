@@ -3115,6 +3115,12 @@ const noWorkers = async (unreleased = () => 0) => {
     const page = await context.newPage();
     page.on("pageerror", (e) => errors.push(e.message));
     await login(page);
+    // Exercise the width cap with a legitimate long name; intrinsic grid tracks
+    // can exceed the capped item when a runner's font metrics are wider.
+    const headerProfiles = await (await page.request.get(url + '/api/profiles')).json();
+    await page.route('**/api/profiles', route => route.fulfill({json: headerProfiles.map(profile => ({
+      ...profile, name: 'An extraordinarily long profile name for layout',
+    }))}));
     const assertSettingsHeaders = async (width) => {
       await page.setViewportSize({ width, height: 844 });
       for (const route of [
@@ -3184,6 +3190,7 @@ const noWorkers = async (unreleased = () => 0) => {
     await assertSettingsHeaders(390);
     await assertSettingsHeaders(768);
     await assertSettingsHeaders(1280);
+    await page.unroute('**/api/profiles');
     await page.setViewportSize({ width: 1280, height: 720 });
     await page.goto(url + '/');
     await page.locator(".guide-slot-box").first().waitFor();

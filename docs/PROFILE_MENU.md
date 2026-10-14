@@ -20,3 +20,5 @@ Migration 0085 adds an empty IP field to existing sessions without changing cook
 
 
 See [saved API credential entry](SAVED_CREDENTIALS.md) for draft-only visibility controls.
+
+Compact settings headers right-align capped profile controls across differing font metrics.
