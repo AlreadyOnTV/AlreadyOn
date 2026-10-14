@@ -194,10 +194,7 @@ export function Player({
       setControlsDismissed(false);
       setIdle(false);
       clearTimeout(timer);
-      timer = setTimeout(() => {
-        if (stage.querySelector('.playback-controls.is-open')) wake();
-        else setIdle(true);
-      },
+      timer = setTimeout(() => setIdle(true),
         window.matchMedia("(pointer: coarse)").matches
           ? TOUCH_CONTROLS_IDLE_MS : CONTROLS_IDLE_MS);
     };

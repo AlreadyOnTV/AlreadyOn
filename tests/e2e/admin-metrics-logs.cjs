@@ -1,5 +1,7 @@
 // Isolated browser fixtures for per-core CPU, disk I/O, log following and dashboard cost.
-module.exports = async function adminMetricsAndLogs({browser, login, url, assert, delay}) {
+module.exports = async function adminMetricsAndLogs({browser, login, url, assert, delay, seed}) {
+  // Folder-rescan scenarios can replace fixture schedules; restore this scenario’s guide.
+  seed();
   const context = await browser.newContext({viewport:{width:1440,height:1000}});
   const page = await context.newPage();
   const errors=[];page.on('pageerror',e=>errors.push(e.message));

@@ -2133,6 +2133,10 @@ const noWorkers = async (unreleased = () => 0) => {
       await page.locator('.playback-menu').waitFor({state:'detached'});
       await page.keyboard.press('Escape');
       await page.waitForFunction(() => getComputedStyle(document.querySelector('.playback-controls')).opacity === '0');
+      // Reproduce the banner/paused HUD state without relying on tune timing.
+      await page.locator('.playback-player').evaluate(stage => stage.classList.add('show-channel-overlay', 'is-paused'));
+      assert(await page.locator('.playback-controls').evaluate(el => getComputedStyle(el).opacity) === '0', 'Escape hides the HUD even during its channel banner or paused state');
+      await page.locator('.playback-player').evaluate(stage => stage.classList.remove('show-channel-overlay', 'is-paused'));
       await page.keyboard.press('ArrowLeft');
       await page.waitForFunction(() => document.activeElement?.getAttribute('aria-label') === 'Pause');
       await page.waitForFunction(() => getComputedStyle(document.querySelector('.playback-controls')).opacity === '1');
@@ -3843,6 +3847,7 @@ const noWorkers = async (unreleased = () => 0) => {
         url,
         assert,
         delay,
+        seed,
       });
     if (!only || only.includes("activity")) await serverActivity();
     await waitForTuner(); // saving encoder settings re-measures
