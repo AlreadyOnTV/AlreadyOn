@@ -104,23 +104,6 @@ export default function AdminPage() {
     navigate(`/admin/${next}`);
   };
 
-  // Extension-specific hints also cover dynamically mounted controls on every
-  // settings tab. The login surface is outside this scope and retains autofill.
-  useEffect(() => {
-    const root = document.querySelector('.admin-page');
-    if (!root) return;
-    const suppress = () => root.querySelectorAll('input:not([type="checkbox"]):not([type="radio"]), textarea, form').forEach(field => {
-      field.setAttribute('autocomplete', 'off');
-      field.setAttribute('data-bwignore', 'true');
-      field.setAttribute('data-1p-ignore', 'true');
-      field.setAttribute('data-lpignore', 'true');
-      field.setAttribute('data-form-type', 'other');
-    });
-    suppress();
-    const observer = new MutationObserver(suppress);
-    observer.observe(root, {childList:true, subtree:true});
-    return () => observer.disconnect();
-  }, []);
   if (!isOwner) return <></>;
   return (
     <div className={'admin-page admin-page-sidebar' + (activeTab === 'logs' ? ' admin-page-fit' : '')}>

@@ -139,7 +139,7 @@ function ChangePasswordDialog({ username, onDone }: { username: string; onDone: 
         </p>
         <input type="text" name="username" autoComplete="username" value={username} readOnly hidden />
         <label htmlFor="auth-current">Current Password</label>
-        <PasswordInput allowAutofill id="auth-current" name="currentPassword" autoComplete="current-password" value={current} onChange={(e) => setCurrent(e.target.value)} required autoFocus />
+        <PasswordInput id="auth-current" name="currentPassword" autoComplete="current-password" value={current} onChange={(e) => setCurrent(e.target.value)} required autoFocus />
         <label htmlFor="auth-new">New Password</label>
         <PasswordInput id="auth-new" name="newPassword" autoComplete="new-password" value={next} onChange={(e) => setNext(e.target.value)} required />
         <label htmlFor="auth-confirm">Confirm New Password</label>
@@ -191,7 +191,7 @@ function CredentialsDialog({ mode, notice, onDone }: { mode: 'setup' | 'login'; 
 
   return (
     <div className="auth-gate">
-      <form className="auth-dialog" role="dialog" aria-modal="true" aria-label={setup ? "Create Your AlreadyOn Account" : "Sign In"} onSubmit={(e) => void submit(e)}>
+      <form className="auth-dialog" data-password-manager-login={!setup ? 'true' : undefined} role="dialog" aria-modal="true" aria-label={setup ? "Create Your AlreadyOn Account" : "Sign In"} onSubmit={(e) => void submit(e)}>
         <Brand tagline />
         {setup && <h1 id="auth-title">Create Your AlreadyOn Account</h1>}
         {setup ? (

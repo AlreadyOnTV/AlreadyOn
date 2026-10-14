@@ -8,9 +8,11 @@ import { UsersProvider } from './users/UsersContext'
 import { GuideSettingsProvider } from './settings/GuideSettingsContext'
 import App from './App.tsx'
 import { AuthGate } from './users/AuthGate'
+import AutofillPolicy from './components/AutofillPolicy'
 
 createRoot(document.getElementById('root')!).render(
   <StrictMode>
+    <AutofillPolicy />
     <BrowserRouter>
       <AuthGate>
       <UsersProvider>

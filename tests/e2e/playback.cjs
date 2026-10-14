@@ -94,8 +94,8 @@ const noWorkers = async (unreleased = () => 0) => {
       const password = dialog.getByLabel("Password", { exact: true });
       assert(
         (await username.getAttribute("name")) === "username" &&
-          (await username.getAttribute("autocomplete")) === "username",
-        "Login username exposes password-manager metadata",
+          (await username.getAttribute("autocomplete")) === (setup ? "off" : "username"),
+        "Only the actual login username exposes password-manager metadata",
       );
       assert(
         (await password.getAttribute("name")) === "password" &&
@@ -3798,6 +3798,7 @@ const noWorkers = async (unreleased = () => 0) => {
     if (!only || only.includes("subtitles")) await subtitleDefaults();
     if (!only || only.includes("pause")) await pausedBoundary();
     if (!only || only.includes("alignment")) await guideAlignment();
+    if (!only || only.includes("autofill-policy")) await require("./autofill-policy.cjs")({ browser, login, url, assert });
     if (!only || only.includes("credential-drafts")) await require("./credential-drafts.cjs")({ browser, login, url, assert });
     if (!only || only.includes("profile-menu")) await profileMenuRoles();
     if (!only || only.includes("admin")) await adminTabs();
