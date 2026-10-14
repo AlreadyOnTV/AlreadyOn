@@ -2,11 +2,11 @@
 
 [![AlreadyOn](../web/public/branding/header-doc.svg)](../README.md)
 
-The `:tv` target shares networking, profiles, guide, branding, quality, mute, audio and subtitles with mobile `:app`. TV uses fixed landscape and a Leanback launcher. It starts with a compact player above the guide. Channel selection opens fullscreen; Back restores the guide without retuning.
+The `:tv` target shares networking, profiles, guide, branding, quality, mute, audio and subtitles with mobile `:app`. TV uses landscape and a Leanback launcher. A compact preview sits above the guide. Selection opens fullscreen; Back restores the guide.
 
-The chooser says **Select Profile**. Guide Up/Down changes rows; Left/Right selects programs. Channel selection opens fullscreen and unmutes.
+Guide Up/Down changes rows; Left/Right selects programs. Selection opens fullscreen and unmutes.
 
-Fullscreen Left/Right tunes with controls hidden and navigates controls when visible. Each overlay activation starts on Play/Pause. Submenus focus the current option. See [remote navigation](TV_REMOTE_NAVIGATION.md) for guide Back, mini-player and profile behavior.
+Fullscreen Up/Down tunes channels. Left/Right reveals and navigates controls; Select activates the cursor. Menu arrows navigate without tuning. Submenus focus the current option. Guide arrows wrap; Back restores the watched airing, then opens the profile menu. The preview has no controls. See [remote navigation](TV_REMOTE_NAVIGATION.md).
 
 ## Connect
 

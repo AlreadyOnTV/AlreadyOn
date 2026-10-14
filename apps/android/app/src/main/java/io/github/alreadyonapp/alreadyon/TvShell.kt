@@ -9,8 +9,6 @@ import androidx.compose.runtime.saveable.rememberSaveable
 import androidx.compose.ui.Alignment
 import androidx.compose.ui.Modifier
 import androidx.compose.ui.focus.onFocusChanged
-import androidx.compose.ui.platform.LocalContext
-import android.app.Activity
 import androidx.compose.ui.focus.FocusRequester
 import androidx.compose.ui.focus.focusRequester
 import androidx.compose.ui.input.key.*
@@ -21,6 +19,7 @@ import androidx.lifecycle.LifecycleEventObserver
 import androidx.lifecycle.compose.LocalLifecycleOwner
 import kotlinx.coroutines.delay
 import kotlinx.coroutines.launch
+import kotlinx.coroutines.channels.Channel
 import androidx.compose.ui.text.style.TextOverflow
 import androidx.compose.ui.semantics.semantics
 import androidx.compose.ui.semantics.contentDescription
@@ -32,19 +31,19 @@ internal fun TvShell(state: PhoneState, model: PhoneModel) {
     var controlsSignal by remember { mutableIntStateOf(0) }
     var controlsVisible by remember { mutableStateOf(false) }
     var region by remember { mutableStateOf("guide") }
-    var guideOnCurrent by remember { mutableStateOf(true) }
+    var guideBackArmed by remember { mutableStateOf(false) }
+    var playerMenuOpen by remember { mutableStateOf(false) }
+    val playerActions = remember { Channel<PlayerRemoteAction>(Channel.BUFFERED) }
     var guideReset by remember { mutableIntStateOf(0) }
     var profileOpenSignal by remember { mutableIntStateOf(0) }
     val selection = remember { mutableStateOf<Pair<GuideChannel, GuideProgram?>?>(null) }
     val scope = rememberCoroutineScope()
     val profileFocus = remember { FocusRequester() }
-    val activity = LocalContext.current as? Activity
-    fun returnToGuide() { region = "guide"; guideOnCurrent = true; guideReset++ }
+    fun returnToGuide() { region = "guide"; guideBackArmed = false; guideReset++ }
     fun guideBack() {
-        if (region == "guide") {
-            if (!guideOnCurrent) { guideOnCurrent = true; guideReset++ }
-            else if (state.channel != null) { region = "player"; controlsSignal++ } else activity?.finish()
-        } else activity?.finish()
+        if (region == "profile") returnToGuide()
+        else if (!guideBackArmed) { returnToGuide(); guideBackArmed = true }
+        else { region = "profile"; guideBackArmed = false; profileFocus.requestFocus(); profileOpenSignal++ }
     }
     val focus = remember { FocusRequester() }
     val manager = LocalFocusManager.current
@@ -84,45 +83,24 @@ internal fun TvShell(state: PhoneState, model: PhoneModel) {
                     }
                     return@onPreviewKeyEvent false
                 }
-                if (!fullscreen) {
-                    if (state.profile == null || state.settings != null) return@onPreviewKeyEvent false
-                    when (event.key) {
-                        Key.Back -> {
-                            if (event.type == KeyEventType.KeyUp) guideBack()
-                            return@onPreviewKeyEvent true
-                        }
-                        Key.DirectionUp, Key.DirectionDown -> if (region == "player") {
-                            if (event.type == KeyEventType.KeyDown) {
-                                if (event.key == Key.DirectionUp) { region = "profile"; profileFocus.requestFocus(); profileOpenSignal++ }
-                                else returnToGuide()
-                            }
-                            return@onPreviewKeyEvent true
-                        }
-                        else -> Unit
-                    }
-                    return@onPreviewKeyEvent false
-                }
+                if (!fullscreen) return@onPreviewKeyEvent false
                 when (event.key) {
-                    Key.Back -> {
-                        if (controlsVisible) false else {
-                            if (event.type == KeyEventType.KeyUp) { fullscreen = false; returnToGuide(); manager.clearFocus() }
-                            true
-                        }
-                    }
+                    // Android dispatches Back through BackHandler; handling its key event too
+                    // would hide the overlay and exit fullscreen on the same press.
+                    Key.Back -> false
                     Key.DirectionLeft, Key.DirectionRight -> {
-                        if (controlsVisible || state.playback == null) return@onPreviewKeyEvent false
-                        if (event.type == KeyEventType.KeyUp) model.stepChannel(if (event.key == Key.DirectionRight) 1 else -1)
+                        if (playerMenuOpen) return@onPreviewKeyEvent false
+                        if (event.type == KeyEventType.KeyDown) playerActions.trySend(if (event.key == Key.DirectionRight) PlayerRemoteAction.Right else PlayerRemoteAction.Left)
                         true
                     }
                     Key.DirectionUp, Key.DirectionDown -> {
-                        if (event.type == KeyEventType.KeyDown) {
-                            if (!controlsVisible) { controlsVisible = true; controlsSignal++ }
-                        }
+                        if (playerMenuOpen) return@onPreviewKeyEvent false
+                        if (event.type == KeyEventType.KeyUp) playerActions.trySend(if (event.key == Key.DirectionDown) PlayerRemoteAction.ChannelDown else PlayerRemoteAction.ChannelUp)
                         true
                     }
-                    Key.DirectionCenter, Key.Enter, Key.NumPadEnter -> {
-                        if (controlsVisible) false else {
-                            if (event.type == KeyEventType.KeyDown) { controlsVisible = true; controlsSignal++ }
+                    Key.DirectionCenter, Key.Enter, Key.NumPadEnter, Key.Spacebar -> {
+                        if (playerMenuOpen) false else {
+                            if (event.type == KeyEventType.KeyUp) playerActions.trySend(PlayerRemoteAction.Select)
                             true
                         }
                     }
@@ -140,7 +118,7 @@ internal fun TvShell(state: PhoneState, model: PhoneModel) {
                 PhoneBrand()
                 ProfileMenu(state, model, Modifier.focusRequester(profileFocus).onFocusChanged { if (it.isFocused) region = "profile" },
                     openSignal = profileOpenSignal, onMenuDismiss = {
-                        scope.launch { withFrameNanos { }; region = "player"; controlsSignal++ }
+                        scope.launch { withFrameNanos { }; returnToGuide() }
                     })
             }
             if (!fullscreen) {
@@ -163,7 +141,9 @@ internal fun TvShell(state: PhoneState, model: PhoneModel) {
                             horizontalArrangement = Arrangement.spacedBy(if (fullscreen) 0.dp else 20.dp)) {
                             PhonePlayer(state, model,
                                 if (fullscreen) Modifier.fillMaxSize() else Modifier.width(288.dp).fillMaxHeight(),
-                                fullscreen = fullscreen, tv = true, tvActive = fullscreen || region == "player", controlsSignal = controlsSignal,
+                                fullscreen = fullscreen, tv = true, tvActive = fullscreen, controlsSignal = controlsSignal,
+                                remoteActions = playerActions,
+                                onMenuVisibility = { playerMenuOpen = it },
                                 onControlsVisibility = { controlsVisible = it }, onFullscreen = { if (!fullscreen) model.unmute(); fullscreen = !fullscreen; if (fullscreen) controlsSignal++ else returnToGuide() },
                                 onExitFullscreen = { fullscreen = false; returnToGuide() })
                             if (!fullscreen) Box(Modifier.weight(1f).fillMaxHeight()) {
@@ -173,7 +153,8 @@ internal fun TvShell(state: PhoneState, model: PhoneModel) {
                     }
                     if (!fullscreen) TvGuide(state, palette, Modifier.weight(1f), resetSignal = guideReset,
                         onSelection = { channel, program -> selection.value = channel to program },
-                        onChannelFocus = { id, current -> region = "guide"; guideOnCurrent = id == state.channel?.id && current }) { channel ->
+                        onNavigation = { guideBackArmed = false },
+                        onChannelFocus = { _, _ -> region = "guide" }) { channel ->
                         model.unmute(); model.watch(channel); fullscreen = true; controlsSignal++
                     }
                 }

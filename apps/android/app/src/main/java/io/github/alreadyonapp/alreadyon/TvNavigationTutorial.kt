@@ -19,9 +19,9 @@ internal fun TvNavigationTutorial(modifier: Modifier, onContinue: () -> Unit) {
             verticalArrangement = Arrangement.spacedBy(16.dp)) {
             Text("Your remote, at a glance", style = MaterialTheme.typography.headlineMedium)
             Text("Guide: ↑ ↓ channels · ← → shows · Select to watch")
-            Text("Watching: ↑ or ↓ shows controls · ← → choose · Select to activate")
+            Text("Watching: ↑ ↓ change channels · ← → controls · Select to activate")
             Text("⋮ menu: ↑ ↓ choose options · Back closes menus and controls")
-            Text("Guide Back: current show → mini-player → Home\nMini-player: ↑ profile · ↓ guide")
+            Text("Guide: arrows browse and wrap\nBack: current show → profile menu → current show")
             Button(onClick = onContinue, modifier = Modifier.align(Alignment.End)
                 .focusRequester(focus).tvFocusOutline()) { Text("Got it") }
         }

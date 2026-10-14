@@ -44,6 +44,11 @@
 @container (max-width: 560px) { .playback-details { font-size: 9px; padding: 4px 6px; } .playback-details dl > div { grid-template-columns: 8em 1fr; gap: 4px; } }
 .playback-player.is-idle:not(.is-paused) { cursor: none; }
 
+/* Keyboard navigation reveals a visible cursor without requiring pointer hover. */
+.playback-player:not(.is-idle) .playback-controls:focus-within { opacity: 1; pointer-events: auto; }
+.playback-btn:focus-visible, .playback-menu button:focus-visible { outline: 2px solid #9ccfff; outline-offset: 2px; }
+.playback-player.controls-dismissed .playback-controls { opacity: 0; pointer-events: none; }
+
 .playback-control-bar { display: flex; align-items: center; gap: 6px; width: 100%; }
 .playback-program { display: none; width: 100%; align-items: stretch; gap: 14px; text-shadow: 0 1px 3px #000; }
 .playback-player.is-large .playback-program, .playback-player:fullscreen .playback-program { display: flex; }

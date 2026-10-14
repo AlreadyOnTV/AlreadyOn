@@ -562,12 +562,13 @@ export default function GuidePage() {
     if (!focused || e.defaultPrevented || e.ctrlKey || e.metaKey || e.altKey) return;
     const target = e.target instanceof Element ? e.target : null;
     // The profile menu own the keyboard while they are in use.
-    if (target?.closest('select, input, textarea, .profile-menu')) return;
+    if (target?.closest('select, input:not([type="range"]), textarea, dialog, .profile-menu')) return;
     // Enter and Space still press a focused button rather than tuning.
     if (e.key === 'Enter' && target?.closest('button, a, summary')) return;
-    // In the large player or full screen the arrows change channel instead of browsing the guide.
+    // Expanded playback reserves horizontal arrows for its control cursor.
     if (playerLarge || fullscreen) {
-      const step = e.key === 'ArrowRight' || e.key === 'ArrowDown' ? 1 : e.key === 'ArrowLeft' || e.key === 'ArrowUp' ? -1 : 0;
+      if (document.querySelector('.playback-menu')) return;
+      const step = e.key === 'ArrowDown' ? 1 : e.key === 'ArrowUp' ? -1 : 0;
       if (step !== 0) {
         e.preventDefault();
         // The ref, not state, so a burst of key presses keeps stepping.
@@ -582,6 +583,7 @@ export default function GuidePage() {
         }
         return;
       }
+      if (e.key === 'ArrowLeft' || e.key === 'ArrowRight') return;
     }
     if (e.key === 'ArrowRight' || e.key === 'ArrowLeft') {
       e.preventDefault();

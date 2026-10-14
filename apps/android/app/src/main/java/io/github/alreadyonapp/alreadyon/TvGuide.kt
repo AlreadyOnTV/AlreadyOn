@@ -37,7 +37,7 @@ import java.util.Locale
 /** One focus target per channel avoids hundreds of invisible Compose focus/layout nodes on small TVs. */
 @OptIn(ExperimentalFoundationApi::class)
 @Composable
-internal fun TvGuide(state: PhoneState, palette: PhonePalette, modifier: Modifier, resetSignal: Int = 0, onSelection: (GuideChannel, GuideProgram?) -> Unit = { _, _ -> }, onChannelFocus: (Long, Boolean) -> Unit = { _, _ -> }, onTune: (GuideChannel) -> Unit) {
+internal fun TvGuide(state: PhoneState, palette: PhonePalette, modifier: Modifier, resetSignal: Int = 0, onNavigation: () -> Unit = {}, onSelection: (GuideChannel, GuideProgram?) -> Unit = { _, _ -> }, onChannelFocus: (Long, Boolean) -> Unit = { _, _ -> }, onTune: (GuideChannel) -> Unit) {
     val channels = state.channels
     val rows = rememberLazyListState()
     val scope = rememberCoroutineScope()
@@ -54,8 +54,14 @@ internal fun TvGuide(state: PhoneState, palette: PhonePalette, modifier: Modifie
     LaunchedEffect(channels.isNotEmpty(), state.profile?.id, state.channel?.id, resetSignal) {
         if (channels.isNotEmpty()) {
             val index = channels.indexOfFirst { it.id == state.channel?.id }.coerceAtLeast(0)
-            selectedTime = System.currentTimeMillis(); origin = selectedTime / 1_800_000 * 1_800_000
             val channel = channels[index]
+            // The preview can be paused or delayed across a schedule boundary. Restore its
+            // actual airing, rather than whichever show the wall clock now points at.
+            val playingAt = state.playback?.entryStartsAt?.let { Instant.parse(it).toEpochMilli() }
+            selectedTime = playingAt?.takeIf { at -> channel.programs.any {
+                it.mediaFileId == state.playback?.mediaFileId && at >= Instant.parse(it.startsAt).toEpochMilli() && at < Instant.parse(it.endsAt).toEpochMilli()
+            } } ?: System.currentTimeMillis()
+            origin = selectedTime / 1_800_000 * 1_800_000
             onSelection(channel, channel.programs.find { selectedTime >= Instant.parse(it.startsAt).toEpochMilli() && selectedTime < Instant.parse(it.endsAt).toEpochMilli() }
                 ?: channel.programs.firstOrNull())
             rows.scrollToItem(index)
@@ -117,6 +123,7 @@ internal fun TvGuide(state: PhoneState, palette: PhonePalette, modifier: Modifie
                                 if (event.key !in listOf(Key.DirectionUp, Key.DirectionDown, Key.DirectionLeft, Key.DirectionRight)) false
                                 else {
                                     if (event.type == KeyEventType.KeyDown) {
+                                        onNavigation()
                                         if (event.key == Key.DirectionUp || event.key == Key.DirectionDown) {
                                             val neighbour = nextPlayableChannel(channels, channel.id, if (event.key == Key.DirectionDown) 1 else -1)
                                                 ?: return@onPreviewKeyEvent true
@@ -142,7 +149,7 @@ internal fun TvGuide(state: PhoneState, palette: PhonePalette, modifier: Modifie
                                             }
                                         } else {
                                             val current = selectionIndex()
-                                            val next = current + if (event.key == Key.DirectionRight) 1 else -1
+                                            val next = if (programs.isEmpty()) -1 else Math.floorMod(current + if (event.key == Key.DirectionRight) 1 else -1, programs.size)
                                             programs.getOrNull(next)?.let { selectedTime = it.second; reportFocus() }
                                         }
                                     }

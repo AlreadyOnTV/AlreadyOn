@@ -27,7 +27,7 @@ import java.util.UUID
 internal data class PhonePlayback(val url: String, val title: String, val startMs: Long, val revision: Long, val hlsTargetMs: Long? = null, val capturedAt: Long = SystemClock.elapsedRealtime(), val requestedAt: Long = capturedAt,
     val seriesTitle: String = "", val episodeLabel: String = "", val mediaFileId: Long = -1, val sourceHeight: Int = 720,
     val selectedAudioIndex: Int? = null, val audioTracks: List<PhoneTrack> = emptyList(), val subtitleTracks: List<PhoneTrack> = emptyList(),
-    val streamOffsetSeconds: Double = 0.0, val hlsOriginMs: Long? = null, val trustedCa: String? = null)
+    val streamOffsetSeconds: Double = 0.0, val hlsOriginMs: Long? = null, val trustedCa: String? = null, val entryStartsAt: String? = null)
 internal data class PhoneState(
     val username: String = "", val role: String = "viewer", val mustChangePassword: Boolean = false,
     val passwordLocked: Boolean = true, val settings: String? = null, val notice: String? = null,
@@ -412,6 +412,7 @@ internal class PhoneModel(application: Application) : AndroidViewModel(applicati
                             selectedAudioIndex = tune.getJSONObject("plan").optInt("audioTrackIndex", -1).takeIf { it >= 0 },
                             audioTracks = phoneTracks(tune.optJSONArray("audioTracks")), subtitleTracks = phoneTracks(tune.optJSONArray("subtitles")),
                             streamOffsetSeconds = if (direct) 0.0 else tune.optDouble("streamOffsetSeconds"),
+                            entryStartsAt = tune.getString("entryStartsAt"),
                             trustedCa = state.value.trustedCa, hlsOriginMs = tune.optString("hlsOrigin").takeIf { it.isNotBlank() }?.let { Instant.parse(it).toEpochMilli() })
                         update { it.copy(playback = media, profile = it.profile?.copy(lastChannel = channel.id),
                             subtitleIndex = selectedSubtitle(media, profile),

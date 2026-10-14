@@ -1,6 +1,6 @@
 // Custom player controls. They replace the browser's own bar so the total time
 // can be the episode's real length and the menu can carry subtitles. Buttons
-// never take focus, so the arrow keys keep navigating the guide.
+// take keyboard focus only for expanded playback; preview arrows browse the guide.
 import { useEffect, useRef, useState, type ReactNode } from 'react';
 import { ProgramOverlay } from './ProgramOverlay';
 import type { PlaybackSession, AudioTrack, SubtitleTrack } from './types';
@@ -17,6 +17,8 @@ function formatClock(seconds: number): string {
 }
 
 export interface ControlsProps {
+  onWakeControls: () => void;
+  onHideControls: () => void;
   session?: PlaybackSession;
   paused: boolean;
   time: number;
@@ -64,6 +66,63 @@ export function PlayerControls(p: ControlsProps) {
   const [menu, setMenu] = useState<Menu>(null);
   const rootRef = useRef<HTMLDivElement>(null);
   const settingsButtonRef = useRef<HTMLButtonElement>(null);
+  const { onWakeControls, onHideControls, large } = p;
+  // Capture expanded-player navigation before the Guide/global shortcuts.
+  // Menu arrows own their cursor; only Up/Down outside menus reach channel tuning.
+  useEffect(() => {
+    const expanded = () => !!rootRef.current?.closest('.playback-player.is-large') || !!document.fullscreenElement?.contains(rootRef.current);
+    const keydown = (event: KeyboardEvent) => {
+      if (!expanded() || event.ctrlKey || event.altKey || event.metaKey || event.defaultPrevented) return;
+      const target = event.target instanceof Element ? event.target : null;
+      if (target?.closest('input:not([type="range"]), textarea, select, dialog, .profile-menu, .page-header')) return;
+      const root = rootRef.current;
+      if (!root) return;
+      // Read the rendered menu, so a rapid next key cannot use a stale effect closure.
+      const activeMenu = (root.dataset.playerMenu ?? null) as Menu;
+      const arrows = ['ArrowLeft', 'ArrowRight', 'ArrowUp', 'ArrowDown'];
+      if (!activeMenu && (event.key === 'ArrowUp' || event.key === 'ArrowDown')) return;
+      if (![...arrows, 'Enter', ' ', 'Escape'].includes(event.key)) return;
+      event.preventDefault();
+      event.stopPropagation();
+      if (event.key === 'Escape') {
+        if (activeMenu) {
+          setMenu(activeMenu === 'settings' ? null : 'settings');
+          onWakeControls();
+          if (activeMenu === 'settings') settingsButtonRef.current?.focus();
+        } else {
+          onHideControls();
+          if (document.activeElement instanceof HTMLElement && root.contains(document.activeElement)) document.activeElement.blur();
+        }
+        return;
+      }
+      onWakeControls();
+      const buttons = [...root.querySelectorAll<HTMLButtonElement>(activeMenu ? '[role="menu"] button:not(:disabled)' : '.playback-control-bar button:not(:disabled)')];
+      if (!buttons.length) return;
+      const index = buttons.indexOf(document.activeElement as HTMLButtonElement);
+      if (arrows.includes(event.key)) {
+        const delta = event.key === 'ArrowLeft' || event.key === 'ArrowUp' ? -1 : 1;
+        const next = Math.max(0, Math.min(buttons.length - 1, (index < 0 ? 0 : index) + delta));
+        buttons[next].focus();
+        buttons[next].scrollIntoView({block:'nearest'});
+      } else if (!event.repeat) {
+        const button = buttons[index < 0 ? 0 : index];
+        button.focus();
+        button.click();
+      }
+    };
+    const keyup = (event: KeyboardEvent) => {
+      if (expanded() && (event.key === ' ' || event.key === 'Enter') && rootRef.current?.contains(document.activeElement)) {
+        event.preventDefault(); event.stopPropagation();
+      }
+    };
+    window.addEventListener('keydown', keydown, true);
+    window.addEventListener('keyup', keyup, true);
+    return () => { window.removeEventListener('keydown', keydown, true); window.removeEventListener('keyup', keyup, true); };
+  }, [large, onWakeControls, onHideControls, menu]);
+  useEffect(() => {
+    if (menu && (large || document.fullscreenElement?.contains(rootRef.current)))
+      rootRef.current?.querySelector<HTMLButtonElement>('[role="menu"] button:not(:disabled)')?.focus();
+  }, [menu, large]);
   useEffect(() => {
     if (!menu) return;
     const outside = (e: PointerEvent) => {
@@ -83,7 +142,7 @@ export function PlayerControls(p: ControlsProps) {
   const pipSupported = typeof document !== 'undefined' && document.pictureInPictureEnabled;
 
   return (
-    <div className={'playback-controls' + (menu ? ' is-open' : '')} ref={rootRef} onClick={(e) => e.stopPropagation()}>
+    <div className={'playback-controls' + (menu ? ' is-open' : '')} data-player-menu={menu ?? undefined} ref={rootRef} onClick={(e) => e.stopPropagation()}>
       {menu === 'audio' && (
         <div className="playback-menu" role="menu" aria-label="Audio Tracks">
           <button {...noFocus} role="menuitem" onClick={() => setMenu('settings')}>‹ Audio Tracks</button>

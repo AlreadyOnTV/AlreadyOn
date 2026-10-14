@@ -39,6 +39,8 @@ import androidx.media3.ui.compose.SURFACE_TYPE_SURFACE_VIEW
 import androidx.compose.ui.focus.FocusRequester
 import androidx.compose.ui.focus.focusRequester
 import androidx.compose.ui.focus.focusProperties
+import androidx.compose.ui.focus.onFocusChanged
+import kotlinx.coroutines.channels.ReceiveChannel
 import androidx.compose.ui.Modifier
 import androidx.compose.ui.platform.LocalView
 import androidx.compose.ui.platform.LocalContext
@@ -171,18 +173,55 @@ private fun NativeVideo(playback: PhonePlayback, model: PhoneModel, modifier: Mo
 @Composable
 internal fun PhonePlayer(state: PhoneState, model: PhoneModel, modifier: Modifier, fullscreen: Boolean, pictureInPicture: Boolean = false,
     tv: Boolean = false, tvActive: Boolean = true, controlsSignal: Int = 0, onControlsVisibility: (Boolean) -> Unit = {},
+    remoteActions: ReceiveChannel<PlayerRemoteAction>? = null, onMenuVisibility: (Boolean) -> Unit = {},
     onFullscreen: () -> Unit, onExitFullscreen: () -> Unit = onFullscreen) {
     var visible by remember { mutableStateOf(!tv) }
     val transportFocus = remember { FocusRequester() }
+    val muteFocus = remember { FocusRequester() }
+    val settingsFocus = remember { FocusRequester() }
+    val fullscreenFocus = remember { FocusRequester() }
+    val controlTargets = listOf(transportFocus, muteFocus, settingsFocus, fullscreenFocus)
+    var controlCursor by remember { mutableIntStateOf(0) }
 
     var controlsHeight by remember { mutableIntStateOf(0) }
     val density = LocalDensity.current
     var interaction by remember { mutableIntStateOf(0) }
     var menu by remember { mutableStateOf(false) }
     var page by remember { mutableStateOf<String?>(null) }
-    // Every overlay activation starts at transport; submenu navigation keeps its own focus.
-    LaunchedEffect(controlsSignal, fullscreen, state.playback?.revision, state.paused, tvActive) {
-        if (tv && tvActive) { visible = true; menu = false; page = null; interaction++ }
+    // Process every remote command in order, including rapid Right/Right/Select.
+    LaunchedEffect(fullscreen, tvActive) {
+        if (tv && tvActive) { visible = true; menu = false; page = null; controlCursor = 0; interaction++ }
+    }
+    LaunchedEffect(state.playback?.revision) { if (tv && tvActive) { visible = true; interaction++ } }
+    LaunchedEffect(controlsSignal) { if (tv && tvActive) { visible = true; interaction++ } }
+    LaunchedEffect(menu) { onMenuVisibility(menu) }
+    DisposableEffect(Unit) { onDispose { onMenuVisibility(false) } }
+    LaunchedEffect(remoteActions, fullscreen) {
+        if (remoteActions == null) return@LaunchedEffect
+        if (!tv || !fullscreen) { while (remoteActions.tryReceive().isSuccess) { }; return@LaunchedEffect }
+        for (action in remoteActions) {
+            if (menu) continue // The focusable popup owns its remote events.
+            if (action == PlayerRemoteAction.ChannelUp || action == PlayerRemoteAction.ChannelDown) {
+                model.stepChannel(if (action == PlayerRemoteAction.ChannelDown) 1 else -1)
+                continue
+            }
+            val hidden = !visible
+            visible = true; interaction++
+            if (hidden) { controlCursor = 0; withFrameNanos { }; withFrameNanos { } }
+            when (action) {
+                PlayerRemoteAction.Left, PlayerRemoteAction.Right -> {
+                    controlCursor = (controlCursor + if (action == PlayerRemoteAction.Right) 1 else -1).coerceIn(0, 3)
+                    controlTargets[controlCursor].requestFocus()
+                }
+                PlayerRemoteAction.Select -> when (controlCursor) {
+                    0 -> if (model.state.value.playback != null) model.togglePause()
+                    1 -> model.toggleMute()
+                    2 -> { menu = true; page = null }
+                    3 -> onFullscreen()
+                }
+                else -> Unit
+            }
+        }
     }
     val controlModifier = if (tv) Modifier.focusProperties { canFocus = tvActive } else Modifier
 
@@ -212,7 +251,7 @@ internal fun PhonePlayer(state: PhoneState, model: PhoneModel, modifier: Modifie
     LaunchedEffect(visible, interaction, menu, state.paused, state.playback?.revision) {
         if (visible && (!tv || fullscreen) && !menu && !state.paused && state.playback != null) { delay(5000); visible = false }
     }
-    BackHandler(enabled = tv && fullscreen && (menu || visible)) {
+    BackHandler(enabled = tv && fullscreen) {
         if (page != null) page = null else if (menu) menu = false
         else if (visible) visible = false
         else onExitFullscreen() // A second fast Back must not be swallowed before handler recomposition.
@@ -236,20 +275,20 @@ internal fun PhonePlayer(state: PhoneState, model: PhoneModel, modifier: Modifie
             },
         )
     } else Modifier
-    Box(modifier.background(Color.Black).then(swipeModifier).then(if (tv) Modifier else Modifier.clickable { visible = !visible })) {
+    Box(modifier.background(Color.Black).then(swipeModifier).then(if (tv && !fullscreen) Modifier.focusProperties { canFocus = false } else Modifier).then(if (tv) Modifier else Modifier.clickable { visible = !visible })) {
         state.playback?.let { playback ->
             NativeVideo(playback, model, Modifier.fillMaxSize(), state.paused,
-                if (state.muted) 0f else 1f, onPosition = { sourceTime = it }, onTap = { visible = !visible })
+                if (state.muted) 0f else 1f, onPosition = { sourceTime = it }, onTap = { if (!tv || fullscreen) visible = !visible })
         } ?: Text(state.error ?: "Preparing channel…", Modifier.align(Alignment.Center), color = Color.White)
         if (!pictureInPicture) captionStatus?.let { message -> Text(message,
             Modifier.align(Alignment.TopEnd).padding(4.dp).background(Color.Black.copy(alpha = 0.75f)).padding(4.dp),
             color = Color.White, style = MaterialTheme.typography.bodySmall) }
         val caption = cues.filter { sourceTime >= it.start && sourceTime < it.end }.joinToString("\n") { it.text }
         // Keep captions near the lower edge; reserve overlay clearance only while controls are shown.
-        val controlsShown = !pictureInPicture && (!tv || fullscreen || tvActive) && (visible || (!tv && state.paused) || state.playback == null)
+        val controlsShown = !pictureInPicture && (!tv || fullscreen) && (visible || (!tv && state.paused) || state.playback == null)
         LaunchedEffect(controlsShown) { onControlsVisibility(controlsShown) }
-        LaunchedEffect(controlsShown, controlsSignal, fullscreen, state.playback?.revision, state.paused, tvActive) {
-            if (tv && tvActive && controlsShown && state.playback != null) transportFocus.requestFocus()
+        LaunchedEffect(controlsShown, fullscreen, state.playback?.revision, tvActive) {
+            if (tv && tvActive && controlsShown && state.playback != null && !menu) controlTargets[controlCursor].requestFocus()
         }
         val subtitleLineHeight = with(density) { 20.sp.toDp() }
         val captionInset = if (pictureInPicture) 4.dp else
@@ -260,13 +299,8 @@ internal fun PhonePlayer(state: PhoneState, model: PhoneModel, modifier: Modifie
             // Match the web touch layout: gradient and shared station/program metadata above the transport row.
             Column(Modifier.align(Alignment.BottomCenter).fillMaxWidth().onPreviewKeyEvent { event ->
                 // Remote navigation extends the overlay timeout while leaving focus to its controls.
-                if (tv && fullscreen && event.key == Key.Back) {
-                    if (event.type == KeyEventType.KeyUp) visible = false
-                    true
-                } else {
-                    if (tv && event.type == KeyEventType.KeyDown) interaction++
-                    false
-                }
+                if (tv && event.type == KeyEventType.KeyDown) interaction++
+                false
             }.onSizeChanged { controlsHeight = it.height }
                 .background(Brush.verticalGradient(listOf(Color.Transparent, Color.Black.copy(alpha = 0.85f))))
                 .padding(if (fullscreen) WindowInsets.safeDrawing.asPaddingValues() else PaddingValues(0.dp))
@@ -300,12 +334,12 @@ internal fun PhonePlayer(state: PhoneState, model: PhoneModel, modifier: Modifie
                 LinearProgressIndicator(progress = { if (duration > 0) elapsed.toFloat() / duration else 0f },
                         modifier = Modifier.fillMaxWidth().height(4.dp), color = Color(0xff389bea), trackColor = Color.White.copy(alpha = 0.3f))
                 Row(Modifier.fillMaxWidth(), verticalAlignment = Alignment.CenterVertically) {
-                    WebControl(if (state.paused) "Play" else "Pause", if (state.paused) "M8 5v14l11-7z" else "M6 5h4v14H6zm8 0h4v14h-4z", state.playback != null, if (tv) controlModifier.focusProperties { left = FocusRequester.Cancel }.focusRequester(transportFocus) else Modifier) { interact(model::togglePause) }
+                    WebControl(if (state.paused) "Play" else "Pause", if (state.paused) "M8 5v14l11-7z" else "M6 5h4v14H6zm8 0h4v14h-4z", state.playback != null, if (tv) controlModifier.focusProperties { left = FocusRequester.Cancel }.focusRequester(transportFocus).onFocusChanged { if (it.isFocused) controlCursor = 0 } else Modifier) { interact(model::togglePause) }
                     Text("${clock(elapsed)} / ${clock(duration)}", color = Color.White, fontSize = 10.sp)
                     Spacer(Modifier.weight(1f))
-                    WebControl(if (silent) "Unmute" else "Mute", if (silent) "M3 9v6h4l5 5V4L7 9H3zm13.6 3 2.4 2.4-1.4 1.4-2.4-2.4-2.4 2.4-1.4-1.4 2.4-2.4-2.4-2.4 1.4-1.4 2.4 2.4 2.4-2.4 1.4 1.4z" else "M3 9v6h4l5 5V4L7 9H3zm13.5 3A4.5 4.5 0 0 0 14 8v8a4.5 4.5 0 0 0 2.5-4z", modifier = controlModifier) { interact { model.toggleMute(); menu = false } }
+                    WebControl(if (silent) "Unmute" else "Mute", if (silent) "M3 9v6h4l5 5V4L7 9H3zm13.6 3 2.4 2.4-1.4 1.4-2.4-2.4-2.4 2.4-1.4-1.4 2.4-2.4-2.4-2.4 1.4-1.4 2.4 2.4 2.4-2.4 1.4 1.4z" else "M3 9v6h4l5 5V4L7 9H3zm13.5 3A4.5 4.5 0 0 0 14 8v8a4.5 4.5 0 0 0 2.5-4z", modifier = controlModifier.then(if (tv) Modifier.focusRequester(muteFocus).onFocusChanged { if (it.isFocused) controlCursor = 1 } else Modifier)) { interact { model.toggleMute(); menu = false } }
                     Box {
-                        WebControl("Settings", "M12 8a2 2 0 1 0 0-4 2 2 0 0 0 0 4zm0 6a2 2 0 1 0 0-4 2 2 0 0 0 0 4zm0 6a2 2 0 1 0 0-4 2 2 0 0 0 0 4z", modifier = controlModifier) { interact { menu = !menu; page = null } }
+                        WebControl("Settings", "M12 8a2 2 0 1 0 0-4 2 2 0 0 0 0 4zm0 6a2 2 0 1 0 0-4 2 2 0 0 0 0 4zm0 6a2 2 0 1 0 0-4 2 2 0 0 0 0 4z", modifier = controlModifier.then(if (tv) Modifier.focusRequester(settingsFocus).onFocusChanged { if (it.isFocused) controlCursor = 2 } else Modifier)) { interact { menu = !menu; page = null } }
                         PlayerPopup(expanded = menu, onDismiss = { if (page != null) page = null else menu = false }) {
                                 key(page) {
                                 when (page) {
@@ -338,7 +372,7 @@ internal fun PhonePlayer(state: PhoneState, model: PhoneModel, modifier: Modifie
                                 }
                         }
                     }
-                    WebControl(if (fullscreen) "Exit fullscreen" else "Fullscreen", "M5 5h5v2H7v3H5V5zm9 0h5v5h-2V7h-3V5zM5 14h2v3h3v2H5v-5zm12 0h2v5h-5v-2h3v-3z", modifier = controlModifier.then(if (tv) Modifier.focusProperties { right = FocusRequester.Cancel } else Modifier)) { interact(onFullscreen) }
+                    WebControl(if (fullscreen) "Exit fullscreen" else "Fullscreen", "M5 5h5v2H7v3H5V5zm9 0h5v5h-2V7h-3V5zM5 14h2v3h3v2H5v-5zm12 0h2v5h-5v-2h3v-3z", modifier = controlModifier.then(if (tv) Modifier.focusProperties { right = FocusRequester.Cancel }.focusRequester(fullscreenFocus).onFocusChanged { if (it.isFocused) controlCursor = 3 } else Modifier)) { interact(onFullscreen) }
                 }
             }
         }

@@ -183,6 +183,7 @@ export function Player({
   const [showDetails, setShowDetails] = useState(false);
   // Pointer, touch and player keyboard input reset the three-second overlay deadline.
   const [idle, setIdle] = useState(false);
+  const [controlsDismissed, setControlsDismissed] = useState(false);
   const wakeControls = useRef<() => void>(() => {});
   const revealOnlyTap = useRef(false);
   useEffect(() => {
@@ -190,9 +191,13 @@ export function Player({
     if (!stage) return;
     let timer: ReturnType<typeof setTimeout>;
     const wake = () => {
+      setControlsDismissed(false);
       setIdle(false);
       clearTimeout(timer);
-      timer = setTimeout(() => setIdle(true),
+      timer = setTimeout(() => {
+        if (stage.querySelector('.playback-controls.is-open')) wake();
+        else setIdle(true);
+      },
         window.matchMedia("(pointer: coarse)").matches
           ? TOUCH_CONTROLS_IDLE_MS : CONTROLS_IDLE_MS);
     };
@@ -1460,6 +1465,7 @@ export function Player({
         (landscapePlayer ? " is-landscape-player" : "") +
         (paused ? " is-paused" : "") +
         (idle ? " is-idle" : "") +
+        (controlsDismissed ? " controls-dismissed" : "") +
         (channelOverlay ? " show-channel-overlay" : "")
       }
       data-mode={mode}
@@ -1521,6 +1527,8 @@ export function Player({
       )}
       {channelId && session && (
         <PlayerControls
+          onWakeControls={() => wakeControls.current()}
+          onHideControls={() => { setControlsDismissed(true); setIdle(true); }}
           session={session.channelId === channelId ? session : undefined}
           paused={paused}
           time={clock.time}

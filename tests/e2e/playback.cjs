@@ -2003,8 +2003,7 @@ const noWorkers = async (unreleased = () => 0) => {
     console.log("PASS: touch rotation fills landscape, restores portrait and preserves playback with allowed/denied/unsupported fullscreen; desktop unchanged");
   }
 
-  // Keyboard: arrows browse the guide in the small player and change channel in the large player
-  // or full screen; m, f, t and Space work everywhere.
+  // Keyboard: small-player arrows browse; expanded Up/Down tunes and horizontal arrows navigate controls.
   async function keyboard() {
     seed();
     const context = await browser.newContext();
@@ -2107,6 +2106,38 @@ const noWorkers = async (unreleased = () => 0) => {
       { timeout: 5000 },
     );
     await playing(page);
+    // Expanded playback uses a horizontal control cursor and menu-owned arrows.
+    const assertControlCursor = async () => {
+      const channelBefore = await rowOf('.guide-slot-box-tuned');
+      await page.keyboard.press('Escape');
+      await page.keyboard.press('ArrowRight');
+      await page.waitForFunction(() => ['Mute','Unmute'].includes(document.activeElement?.getAttribute('aria-label')));
+      assert(await rowOf('.guide-slot-box-tuned') === channelBefore, 'Horizontal arrows never tune');
+      const mutedBefore = (await video()).muted;
+      await page.keyboard.press('Enter');
+      assert((await video()).muted !== mutedBefore, 'Enter activates the selected Mute control');
+      await page.keyboard.press('ArrowRight');
+      await page.keyboard.press(' ');
+      await page.getByRole('menu',{name:'Settings',exact:true}).waitFor();
+      // This low-resolution fixture exposes Audio Tracks first, rather than Quality.
+      await page.waitForFunction(() => document.activeElement?.getAttribute('role') === 'menuitem');
+      await page.keyboard.press('Enter');
+      await page.getByRole('menu',{name:'Audio Tracks',exact:true}).waitFor();
+      await page.keyboard.press('ArrowDown');await page.keyboard.press('ArrowUp');
+      assert(await rowOf('.guide-slot-box-tuned') === channelBefore, 'Submenu Up/Down navigate without tuning');
+      await page.keyboard.press('Escape');
+      await page.getByRole('menu',{name:'Settings',exact:true}).waitFor();
+      await page.keyboard.press('ArrowDown');await page.keyboard.press('ArrowUp');
+      assert(await rowOf('.guide-slot-box-tuned') === channelBefore, 'Root menu Up/Down navigate without tuning');
+      await page.keyboard.press('Escape');
+      await page.locator('.playback-menu').waitFor({state:'detached'});
+      await page.keyboard.press('Escape');
+      await page.waitForFunction(() => getComputedStyle(document.querySelector('.playback-controls')).opacity === '0');
+      await page.keyboard.press('ArrowLeft');
+      await page.waitForFunction(() => document.activeElement?.getAttribute('aria-label') === 'Pause');
+      await page.waitForFunction(() => getComputedStyle(document.querySelector('.playback-controls')).opacity === '1');
+    };
+    await assertControlCursor();
     // m toggles mute, Space toggles pause, even with a guide slot focused.
     const before = await video();
     await page.keyboard.press("m");
@@ -2154,6 +2185,8 @@ const noWorkers = async (unreleased = () => 0) => {
       numbers[next],
       { timeout: 5000 },
     );
+    await playing(page);
+    await assertControlCursor();
     // t in full screen leaves full screen and switches the player size.
     await page.keyboard.press("t");
     await page.waitForFunction(
@@ -2267,7 +2300,7 @@ const noWorkers = async (unreleased = () => 0) => {
     await noWorkers(unreleased);
     await context.close();
     console.log(
-      "PASS: keyboard: small player browses, large/full-screen arrows tune, m f t and Space work, and the address keeps the channel",
+      "PASS: keyboard: small player browses, large/full-screen Up/Down tunes, horizontal controls and menu cursors work, m f t and Space work, and the address keeps the channel",
     );
   }
 
