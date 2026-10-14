@@ -129,7 +129,8 @@ export default function AccountsPage() {
             }}
           />
         )}
-        <table className="admin-table">
+        <div className="accounts-table-scroll" role="region" aria-label="Accounts table" tabIndex={0}>
+        <table className="admin-table accounts-table">
           <thead>
             <tr>
               <th>Username</th>
@@ -209,6 +210,7 @@ export default function AccountsPage() {
             )}
           </tbody>
         </table>
+        </div>
         {resetting !== null && (
           <ResetPasswordForm
             account={accounts.find((a) => a.id === resetting)}

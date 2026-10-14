@@ -205,6 +205,12 @@
     margin-left: 0;
   }
 
+  /* Reserve one touch target beside the brand; the accessible name stays on
+     the button while the visible name belongs only in wider headers. */
+  .admin-topbar-inner .profile-menu-trigger-name {
+    display: none;
+  }
+
   .admin-content {
     padding: 24px 12px 32px;
   }

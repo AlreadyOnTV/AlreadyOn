@@ -123,6 +123,7 @@ export default function UsersPage() {
             + Add Profile
           </button>
         </div>
+        <div className="profiles-table-scroll" role="region" aria-label="Profiles table" tabIndex={0}>
         <table className="admin-table profiles-table">
           <thead>
             <tr>
@@ -174,6 +175,7 @@ export default function UsersPage() {
             {editingId === 'new' && <UserEditRow draft={draft} setDraft={setDraft} onSave={saveEdit} onCancel={cancelEdit} />}
           </tbody>
         </table>
+        </div>
       </div>
 
       </AccountCard>

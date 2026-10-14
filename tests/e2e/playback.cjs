@@ -3094,6 +3094,16 @@ const noWorkers = async (unreleased = () => 0) => {
         await menu.waitFor();
         const trigger = menu.getByRole("button");
         assert(await trigger.isVisible(), `${route} profile menu trigger is visible`);
+        assert(await page.locator('.profile-menu-panel').count() === 0, `${route} menu starts closed`);
+        assert(await menu.locator('.profile-menu-trigger-name').isVisible() === (width > 700),
+          `${route} compact header hides the name but retains the avatar`);
+        if (route === '/account' || route === '/admin/accounts') {
+          const table = page.locator(route === '/account' ? '.profiles-table' : '.accounts-table');
+          assert(await table.locator('th').first().evaluate(el => getComputedStyle(el).whiteSpace) === 'nowrap',
+            `${route} table headings keep whole words on compact screens`);
+          assert(await table.locator('..').getAttribute('tabindex') === '0',
+            `${route} table scroll region is keyboard accessible`);
+        }
         const contentBefore = await page.locator(".admin-content").boundingBox();
         await trigger.click();
         const panel = page.locator(".profile-menu-panel");
@@ -3135,6 +3145,7 @@ const noWorkers = async (unreleased = () => 0) => {
     await assertSettingsHeaders(768);
     await assertSettingsHeaders(1280);
     await page.setViewportSize({ width: 1280, height: 720 });
+    await page.goto(url + '/');
     await page.locator(".guide-slot-box").first().waitFor();
     assert(
       (await page.locator(".page-header select").count()) === 0,
