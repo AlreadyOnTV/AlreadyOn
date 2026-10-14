@@ -193,22 +193,32 @@
   }
 
   .admin-topbar-inner {
-    position: relative;
-    min-height: 44px;
-    padding-right: 56px;
+    /* Keep the named profile control on the brand row; navigation occupies
+       the following row rather than overlapping either header element. */
+    display: grid;
+    grid-template-columns: minmax(0, 1fr) auto;
+    gap: 12px;
   }
 
   .admin-topbar-inner > .profile-menu {
-    position: absolute;
-    top: 0;
-    right: 0;
+    grid-column: 2;
+    grid-row: 1;
+    max-width: min(180px, 45vw);
     margin-left: 0;
   }
 
-  /* Reserve one touch target beside the brand; the accessible name stays on
-     the button while the visible name belongs only in wider headers. */
+  .admin-topbar-inner > .brand-link {
+    min-width: 0;
+  }
+
+  .admin-topbar-inner .profile-menu-trigger {
+    width: 100%;
+    min-width: 0;
+    box-sizing: border-box;
+  }
+
   .admin-topbar-inner .profile-menu-trigger-name {
-    display: none;
+    min-width: 0;
   }
 
   .admin-content {

@@ -3095,8 +3095,8 @@ const noWorkers = async (unreleased = () => 0) => {
         const trigger = menu.getByRole("button");
         assert(await trigger.isVisible(), `${route} profile menu trigger is visible`);
         assert(await page.locator('.profile-menu-panel').count() === 0, `${route} menu starts closed`);
-        assert(await menu.locator('.profile-menu-trigger-name').isVisible() === (width > 700),
-          `${route} compact header hides the name but retains the avatar`);
+        assert(await menu.locator('.profile-menu-trigger-name').isVisible(),
+          `${route} header retains the avatar and single-line name`);
         if (route === '/account' || route === '/admin/accounts') {
           const table = page.locator(route === '/account' ? '.profiles-table' : '.accounts-table');
           assert(await table.locator('th').first().evaluate(el => getComputedStyle(el).whiteSpace) === 'nowrap',
