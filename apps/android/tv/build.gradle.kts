@@ -2,12 +2,12 @@ import org.jetbrains.kotlin.gradle.dsl.JvmTarget
 
 plugins {
     id("com.android.application")
-    id("org.jetbrains.kotlin.android")
     id("org.jetbrains.kotlin.plugin.compose")
 }
 android {
     namespace = "io.github.alreadyonapp.alreadyon"
-    compileSdk = 36
+    // OkHttp 5 Android metadata requires API 37; target/min SDK stay unchanged.
+    compileSdk = 37
     defaultConfig {
         applicationId = "io.github.alreadyonapp.alreadyon"
         minSdk = 26
@@ -36,8 +36,8 @@ android {
         }
     }
     // Shared model, playback controls, guide and brand; TV owns its shell and launcher.
-    sourceSets["main"].java.srcDir("../app/src/main/java")
-    sourceSets["androidTest"].java.srcDir("../app/src/androidTest/java")
+    sourceSets["main"].kotlin.srcDir("../app/src/main/java")
+    sourceSets["androidTest"].kotlin.srcDir("../app/src/androidTest/java")
     sourceSets["main"].res.srcDir("../app/src/main/res")
     providers.gradleProperty("androidUpdateTestAssetsDirectory").orNull?.let {
         sourceSets["androidTest"].assets.srcDir(it)
@@ -46,7 +46,7 @@ android {
         sourceCompatibility = JavaVersion.VERSION_17
         targetCompatibility = JavaVersion.VERSION_17
     }
-    buildFeatures { compose = true; buildConfig = true }
+    buildFeatures { compose = true; buildConfig = true; resValues = true }
 }
 kotlin { compilerOptions { jvmTarget.set(JvmTarget.JVM_17) } }
 

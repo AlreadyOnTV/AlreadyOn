@@ -3,12 +3,12 @@ import org.jetbrains.kotlin.gradle.dsl.JvmTarget
 // Developer installs have a separate identity from the eventual signed release channel.
 plugins {
     id("com.android.application")
-    id("org.jetbrains.kotlin.android")
     id("org.jetbrains.kotlin.plugin.compose")
 }
 android {
     namespace = "io.github.alreadyonapp.alreadyon"
-    compileSdk = 36
+    // OkHttp 5 Android metadata requires API 37; target/min SDK stay unchanged.
+    compileSdk = 37
     defaultConfig {
         applicationId = "io.github.alreadyonapp.alreadyon"
         testInstrumentationRunner = "androidx.test.runner.AndroidJUnitRunner"
