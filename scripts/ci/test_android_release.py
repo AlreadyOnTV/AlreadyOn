@@ -21,6 +21,11 @@ class AndroidReleaseTests(unittest.TestCase):
                 patch.object(release, "changelog", return_value="## Features\n\n- Synthetic feature."):
             release.candidate("owner/repo", tag, "a" * 40, 200000000, directory)
 
+    def test_new_candidates_reject_historical_public_labels(self):
+        with tempfile.TemporaryDirectory() as temp:
+            with self.assertRaisesRegex(ValueError, "YY-MM-DD"):
+                self.fixture(Path(temp), "2026-10-18-alpha3")
+
     def test_candidate_identifies_phone_and_tv_update_assets(self):
         with tempfile.TemporaryDirectory() as temp:
             directory = Path(temp)

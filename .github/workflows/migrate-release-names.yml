@@ -20,9 +20,8 @@ jobs:
       - name: Preserve digests while migrating date aliases
         env:
           GH_TOKEN: ${{ github.token }}
-          APPLY: ${{ inputs.apply }}
         run: |
           set -euo pipefail
           options=()
-          if [ "$APPLY" = true ]; then options+=(--apply); fi
+          if [ '${{ inputs.apply }}' = true ]; then options+=(--apply); fi
           python3 scripts/ci/migrate-image-date-tags.py "${options[@]}"
