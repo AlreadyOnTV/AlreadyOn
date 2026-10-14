@@ -271,7 +271,7 @@ def plan(repo, sha, day=None):
 
 def candidate(repo, tag, sha, code, directory):
     parsed = stage_tag(tag)
-    if tag.startswith("20"):
+    if parsed is not None and not tag.startswith(parsed[0] + "-"):
         raise ValueError("New candidate tags must use YY-MM-DD")
     if parsed is None or parsed[1] not in {"alpha", "rc", "beta"} or not 0 < code <= 2100000000:
         raise ValueError("Invalid Android release version")
