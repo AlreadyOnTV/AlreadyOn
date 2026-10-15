@@ -70,9 +70,9 @@
   color: var(--text-muted);
 }
 
-.admin-field-row input[type='text'],
-.admin-field-row input[type='password'],
-.admin-field-row input[type='number'],
+.admin-field-row input[type="text"],
+.admin-field-row input[type="password"],
+.admin-field-row input[type="number"],
 .admin-field-row select {
   flex: 1;
   max-width: 320px;
@@ -175,10 +175,36 @@ a.admin-btn:visited {
   overflow-x: auto;
 }
 
+/* Keep session actions beside the heading, with room before the device list. */
+.sessions-header {
+  display: flex;
+  align-items: center;
+  justify-content: space-between;
+  flex-wrap: wrap;
+  gap: 12px;
+  margin-bottom: 20px;
+}
+
+.sessions-header h3 {
+  margin: 0;
+}
+
+.sessions-header .session-browser-actions {
+  margin-left: auto;
+}
+
+.sessions-table-scroll {
+  margin-top: 28px;
+}
+
 .profiles-table,
 .accounts-table,
 .sessions-table {
   min-width: 520px;
+}
+
+.sessions-table th {
+  text-align: center;
 }
 
 .profiles-table th,
@@ -209,7 +235,7 @@ a.admin-btn:visited {
 }
 
 .admin-table td select,
-.admin-table td input[type='text'] {
+.admin-table td input[type="text"] {
   width: 100%;
   max-width: 180px;
   padding: 6px 8px;
@@ -561,9 +587,9 @@ button.admin-badge:disabled {
   color: var(--text-muted);
 }
 
-.setting-control input[type='text'],
-.setting-control input[type='password'],
-.setting-control input[type='email'],
+.setting-control input[type="text"],
+.setting-control input[type="password"],
+.setting-control input[type="email"],
 .setting-control select {
   width: 100%;
   max-width: 360px;
@@ -651,9 +677,9 @@ button.admin-badge:disabled {
 }
 
 /* All modal controls share the application's input palette. */
-.admin-modal input:not([type='checkbox']):not([type='radio']),
+.admin-modal input:not([type="checkbox"]):not([type="radio"]),
 .admin-modal select,
-.admin-table thead input:not([type='checkbox']),
+.admin-table thead input:not([type="checkbox"]),
 .admin-table thead select,
 .metrics-controls select {
   color: var(--text);
@@ -853,8 +879,7 @@ button.admin-badge:disabled {
   gap: 6px;
 }
 
-.session-lifetime-saving,
-.session-lifetime-message {
+.session-lifetime-saving {
   margin: 0;
   font-size: var(--admin-body-size);
   line-height: 1.25;
@@ -862,10 +887,6 @@ button.admin-badge:disabled {
 
 .session-lifetime-saving {
   color: var(--text-muted);
-}
-
-.session-lifetime-message {
-  color: #64d982;
 }
 
 .filter-draggable-row {
@@ -876,7 +897,9 @@ button.admin-badge:disabled {
   cursor: grab;
 }
 .filter-definition-table tbody .filter-draggable-row:not(.is-dragging) {
-  transition: transform 120ms ease, box-shadow 120ms ease;
+  transition:
+    transform 120ms ease,
+    box-shadow 120ms ease;
 }
 .filter-draggable-row:active {
   cursor: grabbing;
@@ -988,7 +1011,9 @@ button.admin-badge:disabled {
 
 .filter-draggable-row.is-dragging > td {
   background: var(--surface-alt);
-  box-shadow: inset 0 1px 0 color-mix(in srgb, var(--text) 22%, transparent), inset 0 -1px 0 color-mix(in srgb, var(--border) 75%, transparent);
+  box-shadow:
+    inset 0 1px 0 color-mix(in srgb, var(--text) 22%, transparent),
+    inset 0 -1px 0 color-mix(in srgb, var(--border) 75%, transparent);
 }
 
 /* The neighboring row shifts just enough to expose the insertion edge, so the
@@ -1090,7 +1115,7 @@ button.admin-badge:disabled {
 }
 
 .channel-selection-toggle span::after {
-  content: '';
+  content: "";
   display: block;
   width: 14px;
   height: 14px;
@@ -1402,10 +1427,6 @@ button.admin-badge:disabled {
     justify-content: flex-start;
   }
 
-  .session-lifetime-row {
-    flex-wrap: wrap;
-  }
-
   .session-never-label {
     min-width: 0;
   }
@@ -1440,7 +1461,13 @@ button.admin-badge:disabled {
 }
 
 @media (pointer: coarse) {
-  .admin-page :is(button, .admin-btn, select, input:not([type='checkbox']):not([type='radio'])) {
+  .admin-page
+    :is(
+      button,
+      .admin-btn,
+      select,
+      input:not([type="checkbox"]):not([type="radio"])
+    ) {
     min-height: 44px;
   }
 }
@@ -1469,7 +1496,7 @@ button.admin-badge:disabled {
   gap: 0.25rem;
   min-width: 0;
 }
-.tls-upload input[type='file'] {
+.tls-upload input[type="file"] {
   width: 100%;
   min-width: 0;
   box-sizing: border-box;
@@ -1512,12 +1539,71 @@ button.admin-badge:disabled {
   margin: 0;
 }
 
-.channel-bulk-heading { white-space: nowrap; }
-
-/* The current-session badge sits below the name, keeping its column compact. */
-.session-current-device {
-  display: block;
-  width: max-content;
+.channel-bulk-heading {
   white-space: nowrap;
-  margin-top: 6px;
+}
+
+/* Fixed checkmark space keeps inputs still while save confirmation fades. */
+.session-policy-controls {
+  display: flex;
+  align-items: center;
+  gap: 8px;
+  position: relative;
+  min-width: 0;
+}
+.session-save-check {
+  width: 1em;
+  flex: 0 0 1em;
+  color: #36c978;
+  opacity: 0;
+}
+.session-save-check.is-saved {
+  animation: session-saved-fade 5s forwards;
+}
+@keyframes session-saved-fade {
+  0%,
+  80% {
+    opacity: 1;
+  }
+  100% {
+    opacity: 0;
+  }
+}
+.admin-field-row input.session-days-input {
+  flex: 0 0 auto;
+  width: calc(6ch + 42px);
+  max-width: calc(6ch + 42px);
+  box-sizing: border-box;
+  font-variant-numeric: tabular-nums;
+}
+.session-current-pill {
+  background: #3563df;
+  color: #fff;
+  display: inline-flex;
+  align-items: center;
+  justify-content: center;
+  border-radius: 999px;
+  cursor: default;
+  white-space: nowrap;
+}
+.session-policy-saving {
+  position: absolute;
+  top: 100%;
+  left: 1.5em;
+  font-size: 0.8em;
+}
+@media (max-width: 600px) {
+  .account-card .session-policy-row {
+    flex-direction: column;
+    align-items: flex-start;
+    gap: 6px;
+  }
+  .account-card .session-policy-row > label:first-child {
+    flex: none;
+    min-width: 0;
+  }
+  .sessions-header .session-browser-actions {
+    max-width: 100%;
+    flex-wrap: wrap;
+  }
 }

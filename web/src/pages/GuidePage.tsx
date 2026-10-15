@@ -327,7 +327,7 @@ export default function GuidePage() {
           // here, so nothing downstream ever needs to know segments
           // existed at all.
           const sortedData = data
-            .map((c) => ({ ...c, programs: mergeIntervalSegments(c.programs.filter((p) => p.kind !== 'commercial')) }))
+            .map((c) => ({ ...c, programs: mergeIntervalSegments(c.programs.filter((p) => p.kind !== 'commercial')), previousPrograms: mergeIntervalSegments((c.previousPrograms ?? []).filter(p => p.kind !== 'commercial')) }))
             .sort((a, b) => a.number - b.number);
           setChannels(sortedData);
           // The rounded-down current half-hour — the grid's true left
@@ -767,6 +767,7 @@ export default function GuidePage() {
                 rowMinHeight={rowMinHeight}
                 infoWidth={infoWidth}
                 timelineWidthPx={timelineWidthPx}
+                timeFont={metrics?.timeFont}
                 focused={focused}
                 tuned={tuned}
                 slotRefs={slotRefs}
@@ -818,6 +819,7 @@ function GuideChannelRow({
   rowMinHeight,
   infoWidth,
   timelineWidthPx,
+  timeFont,
   focused,
   tuned,
   slotRefs,
@@ -831,6 +833,7 @@ function GuideChannelRow({
   rowMinHeight: number;
   infoWidth: number;
   timelineWidthPx: number;
+  timeFont?: string;
   focused: Selected | null;
   tuned: Selected | null;
   slotRefs: React.RefObject<Map<string, HTMLButtonElement>>;
@@ -848,9 +851,19 @@ function GuideChannelRow({
       </div>
       <div className="guide-row-timeline">
         {(() => {
-          const layout = layoutPrograms(channel.programs, gridStartMs, slotPixelWidth, timelineWidthPx);
-          return channel.programs.map((program, index) => {
+          const history = (channel.previousPrograms ?? []).filter(program => new Date(program.endsAt).getTime() > gridStartMs);
+          const displayed = [...history, ...channel.programs];
+          const layout = layoutPrograms(displayed, gridStartMs, slotPixelWidth, timelineWidthPx);
+          return displayed.map((program, index) => {
             const { leftPx, widthPx } = layout[index];
+            if (index < history.length) {
+              const range = formatRange(clockMinutesOf(program.startsAt), clockMinutesOf(program.endsAt), timeFormat);
+              const showText = !!timeFont && measureTextWidth(timeFont, range) <= widthPx - 22;
+              return <div key={`past-${program.startsAt}`} className="guide-slot-history" style={{left: leftPx, width: widthPx, padding: showText ? undefined : 0}}
+                data-starts-at={program.startsAt} data-ends-at={program.endsAt} title={[displayTitle(program), episodeLabel(program), range].filter(Boolean).join(' · ')}>
+                {showText && <><span className="guide-slot-title">{displayTitle(program)}</span><span className="guide-slot-episode">{episodeLabel(program)}</span><span className="guide-slot-time">{range}</span></>}
+              </div>;
+            }
             const isFocused = channel.number === focused?.channelNumber && program.startsAt === focused.programStartsAt;
             const isTuned = channel.number === tuned?.channelNumber && program.startsAt === tuned.programStartsAt;
             // Keyed by the program's own identity, not its index: an

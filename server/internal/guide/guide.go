@@ -7,6 +7,7 @@ package guide
 import (
 	"context"
 	"database/sql"
+	"errors"
 	"fmt"
 	"path/filepath"
 	"strings"
@@ -219,4 +220,26 @@ func titleFromPath(path string) string {
 	base := filepath.Base(path)
 	base = strings.TrimSuffix(base, filepath.Ext(base))
 	return strings.TrimSpace(base)
+}
+
+// DisplayWindow adds at most half an hour of real schedule history for clipped
+// past cells. Callers keep it separate from current/upcoming tuning candidates.
+func DisplayWindow(ctx context.Context, db *sql.DB, clock schedule.Clock, channelID int64, dur time.Duration) ([]Program, error) {
+	current, err := Window(ctx, db, clock, channelID, dur)
+	if err != nil && !errors.Is(err, schedule.ErrEmptyLineup) {
+		return nil, err
+	}
+	entries, err := schedule.Previous(ctx, db, clock, channelID, 30*time.Minute, windowBatchLimit)
+	if err != nil {
+		return nil, err
+	}
+	metadata, err := loadMetadata(ctx, db, entries)
+	if err != nil {
+		return nil, err
+	}
+	programs := make([]Program, 0, len(entries)+len(current))
+	for _, entry := range entries {
+		programs = append(programs, toProgram(entry, metadata))
+	}
+	return append(programs, current...), nil
 }

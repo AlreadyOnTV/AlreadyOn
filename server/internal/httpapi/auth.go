@@ -471,3 +471,41 @@ func requireUser(w http.ResponseWriter, r *http.Request) (auth.User, bool) {
 	}
 	return u, ok
 }
+
+// Inactivity policy is server-wide and writable only by the owner, like session lifetime.
+func handleInactiveSessionPolicy(db *sql.DB) http.HandlerFunc {
+	return func(w http.ResponseWriter, r *http.Request) {
+		if r.Method == http.MethodPut {
+			var body struct {
+				Enabled *bool `json:"enabled"`
+				Days    *int  `json:"days"`
+			}
+			if !decodeStrict(w, r, &body) {
+				return
+			}
+			if body.Enabled == nil || body.Days == nil {
+				writeJSONError(w, http.StatusBadRequest, "enabled and days are required")
+				return
+			}
+			policy := auth.InactiveSessionPolicy{Enabled: *body.Enabled, Days: *body.Days}
+			if policy.Days < 1 || policy.Days > auth.MaxSessionDays {
+				writeJSONError(w, http.StatusBadRequest, "days must be between 1 and 3650")
+				return
+			}
+			if err := auth.SetInactiveSessionPolicy(r.Context(), db, policy); err != nil {
+				writeJSONError(w, http.StatusInternalServerError, "could not save inactivity policy")
+				return
+			}
+			if err := auth.PruneSessions(r.Context(), db, time.Now()); err != nil {
+				writeJSONError(w, http.StatusInternalServerError, "could not clean inactive sessions")
+				return
+			}
+		}
+		policy, err := auth.GetInactiveSessionPolicy(r.Context(), db)
+		if err != nil {
+			writeJSONError(w, http.StatusInternalServerError, "could not load inactivity policy")
+			return
+		}
+		writeJSON(w, http.StatusOK, policy)
+	}
+}

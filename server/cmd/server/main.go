@@ -127,6 +127,24 @@ func run() (restart bool) {
 
 	ctx, stop := signal.NotifyContext(context.Background(), syscall.SIGINT, syscall.SIGTERM)
 	defer stop()
+	go func() {
+		sweep := func() {
+			if err := auth.PruneSessions(ctx, db.DB, time.Now()); err != nil {
+				logging.Warn("session cleanup failed: %v", err)
+			}
+		}
+		sweep()
+		ticker := time.NewTicker(time.Hour)
+		defer ticker.Stop()
+		for {
+			select {
+			case <-ctx.Done():
+				return
+			case <-ticker.C:
+				sweep()
+			}
+		}
+	}()
 	ddnsManager := ddns.New(db.DB)
 	go ddnsManager.Start(ctx)
 	// A dedicated bounded plaintext listener exposes challenge tokens only.

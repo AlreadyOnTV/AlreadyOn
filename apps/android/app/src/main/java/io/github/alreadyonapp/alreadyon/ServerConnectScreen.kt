@@ -118,7 +118,13 @@ internal fun ServerConnectScreen(state: PhoneState, model: PhoneModel, modifier:
     fun select(server: TvServer) {
         selected = server; checking = true; error = null; trust = null; model.dismissError()
         scope.launch {
-            try { val result = probe(server); selected = server.copy(name = result.name); trust = result }
+            try {
+                // Saved trust and cookies are usable only for the exact recently connected origin.
+                // Validate with the server before presenting the PIN form or fetching new trust.
+                if (model.resumeSavedServer(server.origin)) return@launch
+                val result = probe(server)
+                selected = server.copy(name = result.name); trust = result
+            }
             catch (e: kotlinx.coroutines.CancellationException) { throw e }
             catch (e: Exception) { error = e.message ?: "Could not check server." }
             finally { checking = false }

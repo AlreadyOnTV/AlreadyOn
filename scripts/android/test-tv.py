@@ -28,7 +28,7 @@ def main():
     parser.add_argument("--sdk", required=True, type=Path)
     parser.add_argument("--screenshots", type=Path, help="Optional local directory for emulator screenshots")
     parser.add_argument("--entry-mode", action="append", choices=("discovery", "manual"), help="Limit to selected connection flow; default runs both")
-    parser.add_argument("--test-class", choices=("TvNavigationTest", "ProfileMenuTest"), default="TvNavigationTest", help="Select native navigation or focused profile-menu coverage")
+    parser.add_argument("--test-class", choices=("TvNavigationTest", "ProfileMenuTest", "SessionResumeTest"), default="TvNavigationTest", help="Select native navigation or focused profile-menu coverage")
     parser.add_argument("--interactive", action="store_true", help="Leave the disposable server running for manual emulator checks until Enter is pressed")
     args = parser.parse_args()
     adb = str(args.sdk / "platform-tools/adb")
@@ -52,7 +52,7 @@ def main():
             # Permit stale fixture TIME_WAIT sockets; an active listener still fails this bind.
             # Never replace a live service to make a synthetic test pass.
             sock.setsockopt(socket.SOL_SOCKET, socket.SO_REUSEADDR, 1)
-            sock.bind(("127.0.0.1", 0 if args.test_class == "ProfileMenuTest" else 19900))
+            sock.bind(("127.0.0.1", 19900 if args.test_class == "TvNavigationTest" else 0))
             port = sock.getsockname()[1]
         with (root / "server.log").open("w") as log:
             process = subprocess.Popen([str(binary)], cwd=root,

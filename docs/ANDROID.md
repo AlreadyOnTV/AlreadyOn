@@ -14,13 +14,11 @@ Native onboarding accepts the instance certificate on first connection without a
 
 ## Validation
 
-Check sign-in, profile selection/PIN behavior, channel changes, transitions, tracks, rotation, picture-in-picture and background recovery. Use synthetic fixtures; actual device validation is distinct from emulator or browser testing. Record device/codec limitations without publishing personal host or device details. To test mobile onboarding without changing an existing installation’s sessions, build debug with `-PandroidDebugSuffix=.pairingtest.debug`; release identity stays unchanged.
+Check sign-in, profile selection/PIN behavior, channel changes, transitions, tracks, rotation, picture-in-picture and background recovery. Use synthetic fixtures; actual device validation is distinct from emulator or browser testing. Record device/codec limitations without publishing personal host or device details.
 
 See [emulator setup](ANDROID_EMULATOR.md), [playback](PLAYBACK.md) and [API compatibility](../api/COMPATIBILITY.md).
 
-The [Google TV target](GOOGLE_TV.md) shares this infrastructure, with TV presentation, remote navigation and local account PIN pairing.
-
-See [physical TV review](TV_DEVICE_REVIEW.md) for safe remote-driven checks and release performance measurement.
+See [Google TV](GOOGLE_TV.md) and [physical TV review](TV_DEVICE_REVIEW.md).
 
 ## App updates
 
@@ -28,6 +26,10 @@ Signed phone and TV apps check GitHub on startup without delaying viewing. **Upd
 
 Updates use the matching device APK and verify checksum, package, target and signing certificate before asking Android to install. Allow installs from AlreadyOn in Android settings when prompted. Approve the system installer; downloads show progress and can be cancelled. Existing login/settings remain intact. After installation the app attempts to reopen and removes its downloaded APK; if necessary select Open or launch it manually. Interrupted installs offer Continue Installation or Cancel on reopening.
 
-Install the first updater-enabled APK manually. Debug packages skip production update checks. See [updater behavior and tests](ANDROID_UPDATES.md). Missing metadata, network failures and older package identities never trigger an unsafe replacement.
+Install the first updater-enabled APK manually. Debug packages skip update checks. See [updater tests](ANDROID_UPDATES.md).
 
 See [subtitle modes](SUBTITLES.md).
+
+Phone/TV Sign Out retains the encrypted session. Selecting the recent server revalidates it before skipping credentials; profile PINs still apply. WebUI revocation, expiry and account restrictions require fresh authentication. Network/TLS failures retain the cookie.
+
+Active clients refresh shared profile settings and avatars every five minutes and on app resume, preserving local settings drafts and playback choices.

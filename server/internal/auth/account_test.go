@@ -123,6 +123,10 @@ func TestConcurrentFirstRunCreatesExactlyOneAccount(t *testing.T) {
 
 func TestSessionsExpireAndAreRevocable(t *testing.T) {
 	ctx, db := context.Background(), openAuthDB(t)
+	// This regression isolates absolute expiry; inactivity has separate boundary tests.
+	if err := SetInactiveSessionPolicy(ctx, db, InactiveSessionPolicy{Enabled: false, Days: 14}); err != nil {
+		t.Fatal(err)
+	}
 	now := time.Now()
 	uid := mustOwner(t, db)
 	token, id, expires, err := CreateSession(ctx, db, now, uid, "test browser")
@@ -490,6 +494,9 @@ func TestLastEnabledOwnerIsAlwaysKept(t *testing.T) {
 // Native persistence still uses the revocation ledger and does not change browser expiry.
 func TestNativeSessionPersistsUntilRevoked(t *testing.T) {
 	db := openAuthDB(t)
+	if err := SetInactiveSessionPolicy(t.Context(), db, InactiveSessionPolicy{Enabled: false, Days: 14}); err != nil {
+		t.Fatal(err)
+	}
 	uid := mustOwner(t, db)
 	now := time.Now()
 	token, id, expires, err := CreateNativeSession(t.Context(), db, now, uid, "native fixture")

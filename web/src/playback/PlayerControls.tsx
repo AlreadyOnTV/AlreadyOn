@@ -60,6 +60,11 @@ function Icon({ children }: { children: ReactNode }) {
 
 type Menu = null | 'captions' | 'settings' | 'quality' | 'audio';
 
+const playerLanguage = (code?: string) => {
+  const language = (code ?? '').trim().toLowerCase().replaceAll('_', '-').split('-')[0];
+  return /^[a-z]{2,3}$/.test(language) && !['und', 'zxx', 'mul'].includes(language) ? language : 'unknown';
+};
+
 const qualityLabel = (height: number) => (height === 0 ? 'Auto' : height === 2160 ? '4K' : `${height}p`);
 
 export function PlayerControls(p: ControlsProps) {
@@ -136,7 +141,7 @@ export function PlayerControls(p: ControlsProps) {
 
   // One entry per language; a language with several tracks uses its first full one.
   const languages = [...new Set(p.tracks.map(trackKey))];
-  const captionsOn = p.subtitleLanguage !== null;
+  const captionsOn = p.subtitleLanguage !== null && p.tracks.some(track => canonicalLanguage(trackKey(track)) === canonicalLanguage(p.subtitleLanguage!));
   const selectedAudio = p.audioTracks.find(track => track.index === p.audioTrackIndex);
   const toggle = (next: Menu) => setMenu((m) => (m ? null : next));
   const pipSupported = typeof document !== 'undefined' && document.pictureInPictureEnabled;
@@ -189,17 +194,13 @@ export function PlayerControls(p: ControlsProps) {
       )}
       {menu === 'settings' && (
         <div className="playback-menu" role="menu" aria-label="Settings">
-          {p.qualities.length > 0 && (
-            <button {...noFocus} role="menuitem" onClick={() => setMenu('quality')}>
-              Quality <span>{qualityLabel(p.quality)}</span>
-            </button>
-          )}
-          {p.audioTracks.length > 0 && <button {...noFocus} role="menuitem" onClick={() => setMenu('audio')}>Audio Tracks <span>{selectedAudio ? languageLabel(canonicalLanguage(selectedAudio.language || 'und')) : ''}</span></button>}
-          {p.tracks.length > 0 && (
-            <button {...noFocus} role="menuitem" onClick={() => setMenu('captions')}>
-              Subtitles (c) <span>{captionsOn ? languageLabel(p.subtitleLanguage!) : 'Off'}</span>
-            </button>
-          )}
+          <button {...noFocus} role="menuitem" onClick={() => setMenu('quality')}>
+            Quality ({p.quality === 0 ? 'auto' : qualityLabel(p.quality)})
+          </button>
+          <button {...noFocus} role="menuitem" onClick={() => setMenu('audio')}>Audio Tracks ({playerLanguage(selectedAudio?.language)})</button>
+          <button {...noFocus} role="menuitem" onClick={() => setMenu('captions')}>
+            Subtitles ({captionsOn ? 'on' : 'off'})
+          </button>
           {pipSupported && (
             <button
               {...noFocus}

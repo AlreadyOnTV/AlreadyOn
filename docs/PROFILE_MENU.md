@@ -1,24 +1,28 @@
 # Profile menu
 
-WebUI, phone and Google TV show the selected profile’s avatar and name together in the top-right header as one clickable element on one line. Long names truncate; WebUI retains the complete accessible name and tooltip. The control remains visible at compact widths.
+WebUI, phone and Google TV show the profile avatar and name as one top-right control. Long names truncate; WebUI retains an accessible name and tooltip. The control remains visible at compact widths.
 
-Menu order is Switch Profile, Profile, Settings, Server, Sign Out. Switch Profile, Profile and Sign Out appear for every signed-in profile. Settings appears only for Admin profiles in WebUI. Server appears only for owner accounts in WebUI. Native menus contain Switch Profile, Profile and Sign Out. These visibility rules do not grant additional API permissions.
+Menu order is Switch Profile, Profile, Settings, Server, Sign Out. Switch Profile, Profile and Sign Out appear for every signed-in profile. Settings appears only for Admin profiles in WebUI. Server appears only for owner accounts in WebUI. Native menus contain Switch Profile, Profile and Sign Out. API permissions remain independent.
 
 WebUI keyboard Enter/Space opens the menu; Escape or clicking outside closes it. Switching profiles retains profile PIN checks and returns to the Guide. TV opens the menu with Switch Profile focused.
 
-Dashboard is the first/default tab inside Server, followed by Home Users, Media, Commercials, Channels, Server, Logs and API. The `/admin/accounts` bookmark still selects Home Users. `/dashboard` redirects to `/admin/dashboard`; viewers are redirected to the Guide by the existing Server owner gate. Monitoring APIs retain their existing authorization.
+Dashboard is the first/default tab inside Server, followed by Home Users, Media, Commercials, Channels, Server, Logs and API. `/admin/accounts` selects Home Users; `/dashboard` redirects to `/admin/dashboard`. Viewers return to the Guide. Monitoring authorization is unchanged.
 
 See [profile creation](PROFILE_CREATION.md) for the WebUI Admin-only Add Profile shortcut and sorted switch list.
 
-## Signed-in devices
+## Sessions
 
-Settings shows Device, Type, IP Address, Last Active, Expires and Sign Out in the Signed-In Browsers table. The This Browser badge sits below the device name and sizes to its full text on one line. Wide tables scroll within a keyboard-accessible region at narrow widths.
+Settings shows Device, IP Address, Last Active, Expires and Sign Out in the Sessions table. The current session stays first, with a noninteractive blue This Session pill replacing Sign Out; others sort by recent activity. Wide tables scroll within a keyboard-accessible region at narrow widths.
 
-`GET /api/auth/sessions` adds `deviceName`, `deviceType` and `ipAddress` while preserving all existing fields. Names and types are best-effort user-agent descriptions of the browser/OS or native app, not private machine hostnames or security credentials. Device types are Web Browser, Phone and TV. Browser sessions use Web Browser on every operating system; native Android mobile uses Phone and native Google TV uses TV. The This Browser badge appears below the current session’s device name.
+Web browsers do not expose a reliable computer hostname. Device labels use Windows, Linux or Mac; native clients use Google TV or Android Phone. Type is omitted from the table; the API retains its compatibility field. IP addresses come from the socket peer, never untrusted forwarding headers.
 
-Migration 0085 adds an empty IP field to existing sessions without changing cookies, users or expiry. Sign-in and authenticated requests record the current server-observed socket peer IP. Untrusted forwarding headers are ignored; reverse-proxy deployments show the observed proxy address. Old sessions say Not recorded yet until they next connect. Last Active and Expires retain existing behavior, and session listing/revocation remain scoped to the signed-in account.
+Day fields save on blur independently of Save Changes. Successful saves show a green checkmark in reserved space for five seconds. Toggles apply immediately.
+
+Owner-only **Remove Inactive Sessions** defaults to On and 14 days. It applies to existing and future sessions even with Never Expire enabled. Activity includes authenticated API and media requests; missing historical activity falls back to creation time. Sessions idle longer than the threshold are invalid immediately and removed on startup, hourly, when listing sessions, or after policy changes. Turning cleanup off does not restore removed sessions.
 
 
 See [saved API credential entry](SAVED_CREDENTIALS.md) for draft-only visibility controls.
 
-Compact settings headers right-align capped profile controls across differing font metrics.
+
+
+Active WebUI, phone and TV clients refresh shared profile settings and avatars every five minutes and when visible/resumed. Native Sign Out retains the encrypted session for recent-server reconnection; WebUI session revocation remains authoritative. Profile PINs and local drafts remain independent.

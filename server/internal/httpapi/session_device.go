@@ -2,43 +2,25 @@ package httpapi
 
 import "strings"
 
-// User agents expose app/browser identity, not a private machine hostname.
-// These display hints never participate in authentication or authorization.
+// Browsers do not supply a reliable computer hostname; never invent one from a peer IP.
+// Keep deviceType in the API for compatibility, while Settings presents only the device label.
 func sessionDevice(agent string) (string, string) {
 	if agent == "AlreadyOn-Android/TV" {
-		return "AlreadyOn for Google TV", "TV"
+		return "Google TV", "TV"
 	}
 	if agent == "AlreadyOn-Android/Mobile" {
-		return "AlreadyOn for Android", "Phone"
+		return "Android Phone", "Phone"
 	}
-	if agent == "" {
-		return "Unknown device", "Web Browser"
-	}
-	browser := "Browser"
 	switch {
-	case strings.Contains(agent, "Edg/"):
-		browser = "Edge"
-	case strings.Contains(agent, "Firefox/"):
-		browser = "Firefox"
-	case strings.Contains(agent, "Chrome/"):
-		browser = "Chrome"
-	case strings.Contains(agent, "Safari/"):
-		browser = "Safari"
-	}
-	os := "unknown system"
-	switch {
-	case strings.Contains(agent, "iPad"):
-		os = "iPadOS"
-	case strings.Contains(agent, "iPhone"):
-		os = "iOS"
-	case strings.Contains(agent, "Android"):
-		os = "Android"
 	case strings.Contains(agent, "Windows"):
-		os = "Windows"
+		return "Windows", "Web Browser"
+	case strings.Contains(agent, "Android"):
+		return "Android Phone", "Web Browser"
 	case strings.Contains(agent, "Mac OS X"):
-		os = "macOS"
+		return "Mac", "Web Browser"
 	case strings.Contains(agent, "Linux"):
-		os = "Linux"
+		return "Linux", "Web Browser"
+	default:
+		return "Unknown Device", "Web Browser"
 	}
-	return browser + " on " + os, "Web Browser"
 }

@@ -62,6 +62,17 @@ internal fun ProfileSettingsScreen(state: PhoneState, model: PhoneModel) {
     var audio by remember(profile.id) { mutableStateOf(profile.language) }
     var subtitleMode by remember(profile.id) { mutableStateOf(profile.subtitleMode) }
     var language by remember(profile.id) { mutableStateOf(profile.subtitleLanguage) }
+    var previousProfile by remember(profile.id) { mutableStateOf(profile) }
+    LaunchedEffect(profile) {
+        // Rebase untouched drafts when another device saves; retain local edits and uploads.
+        if (name == previousProfile.name) name = profile.name
+        if (upload == null && icon == previousProfile.icon) icon = profile.icon
+        if (time == previousProfile.timeFormat) time = profile.timeFormat
+        if (audio == previousProfile.language) audio = profile.language
+        if (subtitleMode == previousProfile.subtitleMode) subtitleMode = profile.subtitleMode
+        if (language == previousProfile.subtitleLanguage) language = profile.subtitleLanguage
+        previousProfile = profile
+    }
     var editingPin by remember { mutableStateOf(false) }
     var removePin by remember { mutableStateOf(false) }
     var pin by remember { mutableStateOf("") }

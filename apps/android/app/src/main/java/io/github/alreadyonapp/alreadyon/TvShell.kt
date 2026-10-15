@@ -31,7 +31,7 @@ internal fun TvShell(state: PhoneState, model: PhoneModel) {
     var controlsSignal by remember { mutableIntStateOf(0) }
     var controlsVisible by remember { mutableStateOf(false) }
     var region by remember { mutableStateOf("guide") }
-    var guideBackArmed by remember { mutableStateOf(false) }
+    var guideAtCurrent by remember { mutableStateOf(false) }
     var playerMenuOpen by remember { mutableStateOf(false) }
     val playerActions = remember { Channel<PlayerRemoteAction>(Channel.BUFFERED) }
     var guideReset by remember { mutableIntStateOf(0) }
@@ -39,11 +39,11 @@ internal fun TvShell(state: PhoneState, model: PhoneModel) {
     val selection = remember { mutableStateOf<Pair<GuideChannel, GuideProgram?>?>(null) }
     val scope = rememberCoroutineScope()
     val profileFocus = remember { FocusRequester() }
-    fun returnToGuide() { region = "guide"; guideBackArmed = false; guideReset++ }
+    fun returnToGuide() { region = "guide"; guideAtCurrent = true; guideReset++; model.refreshGuide() }
     fun guideBack() {
         if (region == "profile") returnToGuide()
-        else if (!guideBackArmed) { returnToGuide(); guideBackArmed = true }
-        else { region = "profile"; guideBackArmed = false; profileFocus.requestFocus(); profileOpenSignal++ }
+        else if (!guideAtCurrent) returnToGuide()
+        else { region = "profile"; guideAtCurrent = false; profileFocus.requestFocus(); profileOpenSignal++ }
     }
     val focus = remember { FocusRequester() }
     val manager = LocalFocusManager.current
@@ -83,11 +83,22 @@ internal fun TvShell(state: PhoneState, model: PhoneModel) {
                     }
                     return@onPreviewKeyEvent false
                 }
-                if (!fullscreen) return@onPreviewKeyEvent false
+                if (!fullscreen) {
+                    if (event.key == Key.Back && state.profile != null && state.settings == null && region == "guide") {
+                        if (event.type == KeyEventType.KeyUp) guideBack()
+                        return@onPreviewKeyEvent true
+                    }
+                    return@onPreviewKeyEvent false
+                }
                 when (event.key) {
-                    // Android dispatches Back through BackHandler; handling its key event too
-                    // would hide the overlay and exit fullscreen on the same press.
-                    Key.Back -> false
+                    // Consume both key phases outside popups so Compose focus restoration cannot
+                    // swallow the first Back. Popup Back still owns nested menu navigation.
+                    Key.Back -> {
+                        if (playerMenuOpen) false else {
+                            if (event.type == KeyEventType.KeyUp) playerActions.trySend(PlayerRemoteAction.Back)
+                            true
+                        }
+                    }
                     Key.DirectionLeft, Key.DirectionRight -> {
                         if (playerMenuOpen) return@onPreviewKeyEvent false
                         if (event.type == KeyEventType.KeyDown) playerActions.trySend(if (event.key == Key.DirectionRight) PlayerRemoteAction.Right else PlayerRemoteAction.Left)
@@ -153,8 +164,8 @@ internal fun TvShell(state: PhoneState, model: PhoneModel) {
                     }
                     if (!fullscreen) TvGuide(state, palette, Modifier.weight(1f), resetSignal = guideReset,
                         onSelection = { channel, program -> selection.value = channel to program },
-                        onNavigation = { guideBackArmed = false },
-                        onChannelFocus = { _, _ -> region = "guide" }) { channel ->
+                        onNavigation = { guideAtCurrent = false },
+                        onChannelFocus = { channelId, current -> region = "guide"; guideAtCurrent = channelId == state.channel?.id && current }) { channel ->
                         model.unmute(); model.watch(channel); fullscreen = true; controlsSignal++
                     }
                 }

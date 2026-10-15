@@ -192,14 +192,19 @@ internal fun PhonePlayer(state: PhoneState, model: PhoneModel, modifier: Modifie
     LaunchedEffect(fullscreen, tvActive) {
         if (tv && tvActive) { visible = true; menu = false; page = null; controlCursor = 0; interaction++ }
     }
-    LaunchedEffect(state.playback?.revision) { if (tv && tvActive) { visible = true; interaction++ } }
-    LaunchedEffect(controlsSignal) { if (tv && tvActive) { visible = true; interaction++ } }
+    LaunchedEffect(state.playback?.revision) { if (tv && tvActive) { visible = true; controlCursor = 0; interaction++ } }
+    LaunchedEffect(controlsSignal) { if (tv && tvActive) { visible = true; controlCursor = 0; interaction++ } }
     LaunchedEffect(menu) { onMenuVisibility(menu) }
     DisposableEffect(Unit) { onDispose { onMenuVisibility(false) } }
     LaunchedEffect(remoteActions, fullscreen) {
         if (remoteActions == null) return@LaunchedEffect
         if (!tv || !fullscreen) { while (remoteActions.tryReceive().isSuccess) { }; return@LaunchedEffect }
         for (action in remoteActions) {
+            if (action == PlayerRemoteAction.Back) {
+                if (page != null) page = null else if (menu) menu = false
+                else if (visible) visible = false else onExitFullscreen()
+                continue
+            }
             if (menu) continue // The focusable popup owns its remote events.
             if (action == PlayerRemoteAction.ChannelUp || action == PlayerRemoteAction.ChannelDown) {
                 model.stepChannel(if (action == PlayerRemoteAction.ChannelDown) 1 else -1)
@@ -207,7 +212,11 @@ internal fun PhonePlayer(state: PhoneState, model: PhoneModel, modifier: Modifie
             }
             val hidden = !visible
             visible = true; interaction++
-            if (hidden) { controlCursor = 0; withFrameNanos { }; withFrameNanos { } }
+            if (hidden) {
+                controlCursor = 0; withFrameNanos { }; withFrameNanos { }
+                transportFocus.requestFocus()
+                if (action == PlayerRemoteAction.Left || action == PlayerRemoteAction.Right) continue
+            }
             when (action) {
                 PlayerRemoteAction.Left, PlayerRemoteAction.Right -> {
                     controlCursor = (controlCursor + if (action == PlayerRemoteAction.Right) 1 else -1).coerceIn(0, 3)
@@ -288,7 +297,11 @@ internal fun PhonePlayer(state: PhoneState, model: PhoneModel, modifier: Modifie
         val controlsShown = !pictureInPicture && (!tv || fullscreen) && (visible || (!tv && state.paused) || state.playback == null)
         LaunchedEffect(controlsShown) { onControlsVisibility(controlsShown) }
         LaunchedEffect(controlsShown, fullscreen, state.playback?.revision, tvActive) {
-            if (tv && tvActive && controlsShown && state.playback != null && !menu) controlTargets[controlCursor].requestFocus()
+            if (tv && tvActive && controlsShown && state.playback != null && !menu) {
+                controlCursor = 0
+                withFrameNanos { }
+                transportFocus.requestFocus()
+            }
         }
         val subtitleLineHeight = with(density) { 20.sp.toDp() }
         val captionInset = if (pictureInPicture) 4.dp else
@@ -344,7 +357,7 @@ internal fun PhonePlayer(state: PhoneState, model: PhoneModel, modifier: Modifie
                                 key(page) {
                                 when (page) {
                                     null -> listOf("Quality", "Audio Tracks", "Subtitles").forEach { label ->
-                                        PlayerMenuItem(text = { Text(label) }, onClick = { interact { page = label } }, autofocus = tv && label == "Quality")
+                                        PlayerMenuItem(text = { Text(playerMenuLabel(label, state)) }, onClick = { interact { page = label } }, autofocus = tv && label == "Quality")
                                     }
                                     "Quality" -> {
                                         PlayerMenuItem(text = { Text("‹ Quality") }, onClick = { page = null })
