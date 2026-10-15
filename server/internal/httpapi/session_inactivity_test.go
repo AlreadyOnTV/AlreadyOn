@@ -1,5 +1,7 @@
 package httpapi
 
+// These API tests cover inactivity-policy validation, ownership, and cleanup.
+
 import (
 	"github.com/alreadyonapp/alreadyon/server/internal/auth"
 	"strings"

@@ -3,6 +3,7 @@ package io.github.alreadyonapp.alreadyon
 import org.junit.Assert.*
 import org.junit.Test
 
+// Cover active track labels, missing metadata, and guide timeline rollover.
 class PlayerMenuStatusTest {
     @Test fun activeTracksAndMissingMetadata() {
         val media = PhonePlayback("", "", 0, 1, mediaFileId = 9, capturedAt = 0, selectedAudioIndex = 2,

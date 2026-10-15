@@ -1,5 +1,7 @@
 package auth
 
+// These tests verify expiry and cleanup across browser and native sessions.
+
 import (
 	"context"
 	"testing"

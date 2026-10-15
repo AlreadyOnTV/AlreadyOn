@@ -1,5 +1,7 @@
 package io.github.alreadyonapp.alreadyon
 
+// Format active playback state for concise player overflow-menu labels.
+
 import java.util.Locale
 
 /** Only detected language codes belong in status rows; names and und are unknown. */
