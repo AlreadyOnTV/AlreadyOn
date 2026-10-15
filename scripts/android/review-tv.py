@@ -99,11 +99,20 @@ def main():
     key(4)
     assert 'Switch Profile' in texts(snapshot()), 'One Back after fullscreen return opens profile menu'
     key(4)
+    assert focused(snapshot()).startswith('Channel '), 'Profile dismissal restores guide focus before tuning'
     key(23)
+    assert 'CHANNEL' not in texts(snapshot()), 'Select enters fullscreen again'
     key(20)
-    time.sleep(2)
+    deadline = time.monotonic() + 30
+    while time.monotonic() < deadline:
+        tree = snapshot()
+        if focused(tree) in ('Play', 'Pause'):
+            break
+    else:
+        raise AssertionError('Channel switch must reset transport focus')
+    key(4) # Hide before checking the opening Left press.
     key(21)
-    assert focused(snapshot()) in ('Play', 'Pause'), 'Channel switch/opening Left resets transport focus'
+    assert focused(snapshot()) in ('Play', 'Pause'), 'Opening Left resets transport focus'
     key(4)
     key(4)
     print('PASS: physical TV guide Back, overlay reveal focus, single Back dismissal, nested menus, active status and channel switching', flush=True)
