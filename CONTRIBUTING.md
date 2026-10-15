@@ -8,7 +8,7 @@ Use the [documentation index](docs/README.md) for current guides. Start with [th
 
 1. External contributors normally use a fork and a focused branch. Maintainers use one checkout and the active cycle branch documented in [development setup](docs/DEVELOPMENT.md). The current branch is `26.10.18`; `build` has been retired for this cycle.
 2. Implement one coherent change. Preserve existing behavior outside its scope.
-3. Update the relevant guide and [OpenAPI](api/openapi.yaml) when contracts change. Explain unusual logic in source comments. Describe user-facing changes in the PR for [release preparation](docs/RELEASE_NOTES.md). Reviewed descriptions and known issues live in GitHub Release drafts, not repository Markdown. Fixes link exact issue titles. Omit internal maintenance.
+3. Update the relevant guide and [OpenAPI](api/openapi.yaml) when contracts change. Explain unusual logic in source comments. Describe user-facing changes in the PR for [release preparation](docs/RELEASE_NOTES.md). Release descriptions are generated from product-labelled PRs and linked issues, not repository Markdown. Fixes link exact issue titles. Omit internal maintenance.
 4. Run relevant checks and describe results in the PR. Include screenshots for visible interface changes and reproduction steps for fixes.
 5. For maintainer releases, test against the native preview, then open the active dated branch’s PR to dev when validation is approved. The PR must pass code scanning and full e2e before merge; use the documented exact-artifact promotion commands afterward.
 

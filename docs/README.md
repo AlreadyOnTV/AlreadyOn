@@ -13,6 +13,6 @@ Start with [the project brief](PROJECT_BRIEF.md), [contributing](../CONTRIBUTING
 | Release and maintenance | [Delivery gates](CI_CD.md), [APK releases](ANDROID_RELEASES.md), [signing](ANDROID_SIGNING.md), [Stable readiness](STABLE_READINESS.md), [provenance](ARTIFACT_PROVENANCE.md), [retention](IMAGE_RETENTION.md), [dependencies](DEPENDENCY_MAINTENANCE.md), [scanning](VULNERABILITY_SCANNING.md) |
 | Identity and presentation | [Organization/cycle](ORGANIZATION.md), [branding](BRANDING.md), [website](WEBSITE.md), [screenshot provenance](../website/assets/screenshots/README.md) |
 
-[Release naming](RELEASE_NAMING.md) and [release preparation](RELEASE_NOTES.md) define the format; descriptions and reviewed known issues live in GitHub Releases. Do not maintain release-note fragments or review snapshots in the repository.
+[Release naming](RELEASE_NAMING.md) and [release preparation](RELEASE_NOTES.md) define the format; descriptions are generated from GitHub PRs/issues and saved in GitHub Releases. Do not maintain release-note fragments or review snapshots in the repository.
 
 Keep durable contracts and repeatable procedures here. Completed acceptance reports, implementation diaries, benchmark snapshots and review captures belong in their issue/PR or Git history, rather than a second maintained specification.
