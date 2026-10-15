@@ -45,6 +45,8 @@ header {
 .brand img {
   width:205px;
   height:auto}
+header .brand img {
+  width:256.25px}
 .brand {
   display:inline-block}
 header nav {
@@ -570,6 +572,8 @@ dialog p {
   display:block}
 .brand img {
   width:170px}
+header .brand img {
+  width:212.5px}
 header nav {
   margin-top:18px;
   justify-content:space-between;
