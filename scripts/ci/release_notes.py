@@ -1,21 +1,14 @@
-"""Render reviewed release changes and the source snapshot of known issues."""
+"""Render reviewed GitHub Release notes without repository changelog files."""
 import re
-import subprocess
 
 SECTIONS = ('New Features', 'Bugfixes', 'Known Issues')
 ALIASES = {'Features': 'New Features', 'Improvements': 'New Features', 'Bug fixes': 'Bugfixes'}
 EMPTY = {'New Features': 'No new features in this release.',
          'Bugfixes': 'No bugfixes in this release.',
          'Known Issues': 'No known issues are currently listed for this release.'}
-KNOWN_ISSUES = 'docs/release-known-issues.md'
 START = '<!-- end-user-changelog:start -->'
 END = '<!-- end-user-changelog:end -->'
-DIRECTORY = 'docs/release-notes/'
 ANDROID_RELEASE_MARKER = '<!-- android-release -->'
-
-
-def git(*args):
-    return subprocess.check_output(['git', *args], text=True).strip()
 
 
 def render_fragments(fragments):
@@ -43,13 +36,6 @@ def render_fragments(fragments):
                          for section, entries in groups.items())
 
 
-def known_issues(sha):
-    """Read the reviewed list at the artifact source, never from a dirty checkout."""
-    if not git('ls-tree', '--name-only', sha, '--', KNOWN_ISSUES):
-        return ''
-    return git('show', f'{sha}:{KNOWN_ISSUES}')
-
-
 def promotion_changes(body):
     """Identical promoted artifacts add no changes; retain their reviewed known issues."""
     notes = render_fragments([published_changelog(body)])
@@ -57,44 +43,37 @@ def promotion_changes(body):
     return render_fragments(['# Known Issues\n\n' + known])
 
 
-def changelog(sha, stable_tags):
-    """Read notes at the release commit; unrelated branches cannot alter the baseline."""
-    bases = []
-    for tag in stable_tags:
-        if not re.fullmatch(r'\d{2}\.\d{2}\.\d{2}-[Ss]table', tag):
-            continue
-        result = subprocess.run(['git', 'merge-base', '--is-ancestor', tag, sha],
-                                capture_output=True)
-        if result.returncode == 0:
-            bases.append((int(git('rev-list', '--count', f'{tag}..{sha}')), tag))
-        elif result.returncode != 1:
-            raise ValueError(f'Cannot resolve stable release baseline {tag}')
-    if bases:
-        base = min(bases)[1]
-        files = git('diff', '--name-only', '--diff-filter=AM', base, sha, '--', DIRECTORY).splitlines()
+def reviewed_changes(entries, tag, sha, baseline_tag):
+    """Require notes reviewed for this exact source/predecessor before publication.
+
+    Notes-only drafts use separate metadata so they cannot masquerade as built
+    candidates. Published reruns use the existing artifact provenance markers.
+    """
+    entry = next((entry for entry in entries if entry['tag_name'] == tag), None)
+    if entry is None:
+        raise ValueError(f'Prepare reviewed notes in the GitHub Release draft for {tag}')
+    body = entry.get('body') or ''
+    is_notes_draft = 'Notes source commit:' in body
+    source_label = 'Notes source commit' if is_notes_draft else 'Source commit'
+    baseline_label = 'Notes baseline' if is_notes_draft else 'Changelog baseline'
+    source = re.findall(rf'{source_label}: `([0-9a-f]{{40}})`', body)
+    baseline = re.findall(rf'{baseline_label}: `([^`]+)`', body)
+    if source != [sha] or entry.get('target_commitish') != sha and entry.get('draft', False):
+        raise ValueError('Reviewed release notes must target the exact source commit')
+    expected = baseline_tag or 'none'
+    # Older published first-release bodies omitted the absent baseline.
+    if baseline != [expected] and not (not baseline and baseline_tag is None and not is_notes_draft):
+        raise ValueError('Reviewed release notes do not match the predecessor release')
+    if is_notes_draft:
+        if not entry.get('draft', False) or entry.get('assets'):
+            raise ValueError('Notes-only release drafts must be unpublished and have no assets')
+        notes = body.split('<!--', 1)[0].strip()
     else:
-        files = git('ls-tree', '-r', '--name-only', sha, '--', DIRECTORY).splitlines()
-    fragments = [git('show', f'{sha}:{name}') for name in sorted(files) if name.endswith('.md')]
-    return render_fragments(fragments + [known_issues(sha)])
-
-
-def changelog_since(sha, baseline_sha):
-    """Render product notes changed since the previous published release source."""
-    result = subprocess.run(['git', 'merge-base', '--is-ancestor', baseline_sha, sha],
-                            capture_output=True)
-    if result.returncode == 1:
-        raise ValueError('Changelog baseline must be an ancestor of the release source')
-    if result.returncode != 0:
-        raise subprocess.CalledProcessError(result.returncode, result.args)
-    files = git('diff', '--name-only', '--diff-filter=AM', baseline_sha, sha,
-                '--', DIRECTORY).splitlines()
-    fragments = []
-    for name in sorted(files):
-        if not name.endswith('.md'):
-            continue
-        fragment = git('show', f'{sha}:{name}')
-        fragments.append(fragment)
-    return render_fragments(fragments + [known_issues(sha)])
+        notes = published_changelog(body)
+    headings = [line for line in notes.splitlines() if line.startswith('# ')]
+    if headings != ['# New Features', '# Bugfixes', '# Known Issues']:
+        raise ValueError('Reviewed notes require New Features, Bugfixes and Known Issues in order')
+    return render_fragments([notes])
 
 
 def published_changelog(body):

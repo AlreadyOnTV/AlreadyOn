@@ -18,7 +18,7 @@ class AndroidReleaseTests(unittest.TestCase):
         (directory / release.ASSETS[0]).write_bytes(b"synthetic signed APK")
         (directory / release.ASSETS[3]).write_bytes(b"synthetic signed TV APK")
         with patch.object(release, "publish"), patch.object(release, "releases", return_value=[]), \
-                patch.object(release, "changelog", return_value="## Features\n\n- Synthetic feature."):
+                patch.object(release, "reviewed_changes", return_value="## Features\n\n- Synthetic feature."):
             release.candidate("owner/repo", tag, "a" * 40, 200000000, directory)
 
     def test_short_year_20_is_not_confused_with_a_century_prefix(self):
@@ -112,11 +112,28 @@ class AndroidReleaseTests(unittest.TestCase):
             prior = {"tag_name": "26.10.09-rc3", "draft": False}
             with patch.object(release, "releases", return_value=[prior]), \
                     patch.object(release, "api", return_value={"sha": "b" * 40}), \
-                    patch.object(release, "changelog_since", return_value="## Features\n\n- Enter a server address immediately.") as notes, \
+                    patch.object(release, "reviewed_changes", return_value="## Features\n\n- Enter a server address immediately.") as notes, \
                     patch.object(release, "publish") as published:
                 release.candidate("owner/repo", "26.10.10-alpha1", "a" * 40, 200000000, directory)
-                notes.assert_called_once_with("a" * 40, "b" * 40)
+                notes.assert_called_once_with([prior], "26.10.10-alpha1", "a" * 40, "26.10.09-rc3")
                 self.assertIn("Changelog baseline: `26.10.09-rc3`", published.call_args.args[4])
+
+    def test_plan_preserves_reviewed_notes_only_draft(self):
+        sha = 'a' * 40
+        draft = {'tag_name': '26.10.18-alpha1', 'draft': True, 'target_commitish': sha,
+                 'assets': [], 'body': '# New Features\n\nNo new features in this release.\n\n'
+                 '# Bugfixes\n\nNo bugfixes in this release.\n\n'
+                 '# Known Issues\n\nNo known issues are currently listed for this release.\n\n'
+                 f'<!--\nNotes source commit: `{sha}`\nNotes baseline: `none`\n-->'}
+        with patch.object(release, 'releases', return_value=[draft]), \
+                patch.object(release, 'run', return_value='') as run:
+            release.plan('owner/repo', sha, '26.10.18')
+            self.assertFalse(any(args.args[:3] == ('gh', 'release', 'delete') for args in run.call_args_list))
+        with patch.object(release, 'releases', return_value=[draft]), \
+                patch.object(release, 'run', return_value='') as run:
+            with self.assertRaisesRegex(ValueError, 'exact source'):
+                release.plan('owner/repo', 'b' * 40, '26.10.18')
+            run.assert_not_called()
 
     def test_new_plan_selects_alpha1_even_with_legacy_betas(self):
         class FixedDateTime:

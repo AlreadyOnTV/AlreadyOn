@@ -16,7 +16,7 @@ Native onboarding accepts the instance certificate on first connection without a
 
 Check sign-in, profile selection/PIN behavior, channel changes, transitions, tracks, rotation, picture-in-picture and background recovery. Use synthetic fixtures; actual device validation is distinct from emulator or browser testing. Record device/codec limitations without publishing personal host or device details.
 
-See [emulator setup](ANDROID_EMULATOR.md), [playback](PLAYBACK.md) and [API compatibility](../api/COMPATIBILITY.md).
+See [emulator setup](ANDROID_EMULATOR.md), [playback](PLAYBACK.md) and [OpenAPI](../api/openapi.yaml).
 
 See [Google TV](GOOGLE_TV.md) and [physical TV review](TV_DEVICE_REVIEW.md).
 

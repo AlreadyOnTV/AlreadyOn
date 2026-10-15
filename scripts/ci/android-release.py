@@ -17,7 +17,7 @@ from public_inventory import NAMES as SBOM_NAMES, verify_bundle
 SBOM_ASSETS = (*SBOM_NAMES, 'sbom-manifest.json')
 
 from release_dates import release_day
-from release_notes import changelog, changelog_since, promotion_changes, release_body
+from release_notes import reviewed_changes, promotion_changes, release_body
 
 # New lifecycle: alphaN on dev, RCN on test, Stable on main. Accept old tags for history.
 ALPHA = re.compile(r"((?:\d{2}\.\d{2}\.\d{2}|(?:20)?\d{2}-\d{2}-\d{2}))-alpha([1-9]\d*)\Z")
@@ -242,7 +242,11 @@ def plan(repo, sha, day=None):
     tag = next_dev_tag(entries, day)
     draft = next((entry for entry in entries if entry["tag_name"] == tag and entry["draft"]), None)
     if draft:
-        if existing and existing["tag_name"] == tag:
+        if 'Notes source commit:' in (draft.get('body') or ''):
+            # Preserve a maintainer's notes-only draft; it has no APK version yet.
+            reviewed_changes(entries, tag, sha, changelog_baseline(entries, tag))
+            version_code = int(time.time()) - 1577836800
+        elif existing and existing["tag_name"] == tag:
             version_code = tag_version_code(draft)
             if set(ASSETS).issubset({asset["name"] for asset in draft.get("assets", [])}):
                 with tempfile.TemporaryDirectory() as temp:
@@ -291,13 +295,7 @@ def candidate(repo, tag, sha, code, directory):
     verify_assets(directory, sha)
     entries = releases(repo)
     baseline_tag = changelog_baseline(entries, tag)
-    if baseline_tag:
-        baseline_sha = api(f"repos/{repo}/commits/{baseline_tag}")["sha"]
-        changes = changelog_since(sha, baseline_sha)
-    else:
-        stable_tags = [entry['tag_name'] for entry in entries
-                       if not entry['draft'] and not entry['prerelease']]
-        changes = changelog(sha, stable_tags)
+    changes = reviewed_changes(entries, tag, sha, baseline_tag)
     notes = release_body(repo, tag, sha, code, changes, changelog_baseline=baseline_tag)
     publish_now = parsed[1] in {"alpha", "beta"}
     publish(repo, tag, sha, directory, notes, True, publish_now=publish_now)

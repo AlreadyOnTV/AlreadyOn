@@ -1,12 +1,7 @@
 """Changelog tests isolate Git history and never publish a release."""
-import os
-from pathlib import Path
-import subprocess
-import tempfile
 import unittest
-from unittest.mock import patch
 
-from release_notes import changelog, changelog_since, published_changelog, release_body, render_fragments, promotion_changes
+from release_notes import reviewed_changes, published_changelog, release_body, render_fragments, promotion_changes
 
 
 class ReleaseNotesTests(unittest.TestCase):
@@ -82,48 +77,35 @@ class ReleaseNotesTests(unittest.TestCase):
         self.assertIn('No new features in this release.', result)
         self.assertIn('[Remaining bug]', result)
 
-    def test_git_range_uses_reachable_stable_and_release_snapshot(self):
-        with tempfile.TemporaryDirectory() as temp:
-            root = Path(temp)
-            def git(*args):
-                return subprocess.check_output(['git', *args], cwd=root, text=True).strip()
-            git('init', '-q')
-            git('config', 'user.name', 'Synthetic test')
-            git('config', 'user.email', 'test@example.invalid')
-            directory = root / 'docs/release-notes'
-            directory.mkdir(parents=True)
-            (directory / 'first.md').write_text('## Features\n\n- Old feature.\n')
-            git('add', '.')
-            git('commit', '-qm', 'First feature')
-            git('tag', '26.10.08-stable')
-            (directory / 'second.md').write_text('<!-- android-release -->\n\n## Bug fixes\n\n- New fix.\n')
-            (directory / 'server.md').write_text('## Bug fixes\n\n- Server-only fix.\n')
-            (root / 'docs/release-known-issues.md').write_text(
-                '# Known Issues\n\n- [Known bug](https://github.com/owner/repo/issues/2)\n')
-            git('add', '.')
-            git('commit', '-qm', 'New fix')
-            sha = git('rev-parse', 'HEAD')
-            baseline = git('rev-parse', '26.10.08-stable')
-            # A dirty working tree cannot leak unreleased changes into this APK's notes.
-            (directory / 'second.md').write_text('## Features\n\n- Future feature.\n')
-            (root / 'docs/release-known-issues.md').write_text('# Known Issues\n\n- Future bug.\n')
-            previous = os.getcwd()
-            try:
-                os.chdir(root)
-                result = changelog(sha, ['26.10.08-stable'])
-                self.assertIn('New fix.', result)
-                self.assertNotIn('Old feature.', result)
-                self.assertNotIn('Future feature.', result)
-                candidate = changelog_since(sha, baseline)
-                self.assertIn('New fix.', candidate)
-                self.assertIn('[Known bug]', candidate)
-                self.assertNotIn('Future bug.', candidate)
-                self.assertNotIn('Old feature.', candidate)
-                self.assertIn('Server-only fix.', candidate)
-                self.assertNotIn('Future feature.', candidate)
-                with self.assertRaisesRegex(ValueError, 'ancestor'):
-                    changelog_since(baseline, sha)
-                self.assertIn('Old feature.', changelog(sha, []))
-                self.assertIn('No new features in this release.', changelog('26.10.08-stable', ['26.10.08-stable']))
-            finally:
-                os.chdir(previous)
+    def draft(self, sha='a' * 40, baseline='26.10.09-rc3'):
+        return {'tag_name': '26.10.18-alpha1', 'target_commitish': sha, 'draft': True,
+                'body': '# New Features\n\n- Watch TV.\n\n# Bugfixes\n\nNo bugfixes in this release.\n\n'
+                        '# Known Issues\n\n- [Remaining bug](https://github.com/owner/repo/issues/2)\n\n'
+                        f'<!--\nNotes source commit: `{sha}`\nNotes baseline: `{baseline}`\n-->\n'}
+
+    def test_reviewed_draft_is_bound_to_source_and_predecessor(self):
+        draft = self.draft()
+        result = reviewed_changes([draft], draft['tag_name'], 'a' * 40, '26.10.09-rc3')
+        self.assertIn('Watch TV.', result)
+        self.assertIn('[Remaining bug]', result)
+        self.assertNotIn('Notes source commit', result)
+        for sha, baseline in [('b' * 40, '26.10.09-rc3'), ('a' * 40, '26.10.09-rc2')]:
+            with self.assertRaises(ValueError):
+                reviewed_changes([draft], draft['tag_name'], sha, baseline)
+        with self.assertRaisesRegex(ValueError, 'Prepare reviewed notes'):
+            reviewed_changes([], draft['tag_name'], 'a' * 40, None)
+
+    def test_first_release_and_invalid_draft_cannot_bypass_review(self):
+        draft = self.draft(baseline='none')
+        self.assertIn('Watch TV.', reviewed_changes([draft], draft['tag_name'], 'a' * 40, None))
+        for patch in [{'target_commitish': '26.10.18'}, {'draft': False}, {'assets': [{'name': 'apk'}]},
+                      {'body': 'Unstructured notes'}, {'body': draft['body'].replace('# Known Issues', '# Internals')}]:
+            with self.assertRaises(ValueError):
+                reviewed_changes([{**draft, **patch}], draft['tag_name'], 'a' * 40, None)
+
+    def test_published_rerun_reads_existing_notes(self):
+        entry = {'tag_name': '26.10.18-alpha1', 'draft': False,
+                 'body': release_body('owner/repo', '26.10.18-alpha1', 'a' * 40, 23,
+                                      render_fragments([]), changelog_baseline='26.10.09-rc3')}
+        self.assertEqual(reviewed_changes([entry], entry['tag_name'], 'a' * 40, '26.10.09-rc3'),
+                         render_fragments([]))
