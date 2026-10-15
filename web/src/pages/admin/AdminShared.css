@@ -70,9 +70,9 @@
   color: var(--text-muted);
 }
 
-.admin-field-row input[type='text'],
-.admin-field-row input[type='password'],
-.admin-field-row input[type='number'],
+.admin-field-row input[type="text"],
+.admin-field-row input[type="password"],
+.admin-field-row input[type="number"],
 .admin-field-row select {
   flex: 1;
   max-width: 320px;
@@ -235,7 +235,7 @@ a.admin-btn:visited {
 }
 
 .admin-table td select,
-.admin-table td input[type='text'] {
+.admin-table td input[type="text"] {
   width: 100%;
   max-width: 180px;
   padding: 6px 8px;
@@ -587,9 +587,9 @@ button.admin-badge:disabled {
   color: var(--text-muted);
 }
 
-.setting-control input[type='text'],
-.setting-control input[type='password'],
-.setting-control input[type='email'],
+.setting-control input[type="text"],
+.setting-control input[type="password"],
+.setting-control input[type="email"],
 .setting-control select {
   width: 100%;
   max-width: 360px;
@@ -677,9 +677,9 @@ button.admin-badge:disabled {
 }
 
 /* All modal controls share the application's input palette. */
-.admin-modal input:not([type='checkbox']):not([type='radio']),
+.admin-modal input:not([type="checkbox"]):not([type="radio"]),
 .admin-modal select,
-.admin-table thead input:not([type='checkbox']),
+.admin-table thead input:not([type="checkbox"]),
 .admin-table thead select,
 .metrics-controls select {
   color: var(--text);
@@ -889,7 +889,6 @@ button.admin-badge:disabled {
   color: var(--text-muted);
 }
 
-
 .filter-draggable-row {
   user-select: none;
   -webkit-user-select: none;
@@ -898,7 +897,9 @@ button.admin-badge:disabled {
   cursor: grab;
 }
 .filter-definition-table tbody .filter-draggable-row:not(.is-dragging) {
-  transition: transform 120ms ease, box-shadow 120ms ease;
+  transition:
+    transform 120ms ease,
+    box-shadow 120ms ease;
 }
 .filter-draggable-row:active {
   cursor: grabbing;
@@ -1010,7 +1011,9 @@ button.admin-badge:disabled {
 
 .filter-draggable-row.is-dragging > td {
   background: var(--surface-alt);
-  box-shadow: inset 0 1px 0 color-mix(in srgb, var(--text) 22%, transparent), inset 0 -1px 0 color-mix(in srgb, var(--border) 75%, transparent);
+  box-shadow:
+    inset 0 1px 0 color-mix(in srgb, var(--text) 22%, transparent),
+    inset 0 -1px 0 color-mix(in srgb, var(--border) 75%, transparent);
 }
 
 /* The neighboring row shifts just enough to expose the insertion edge, so the
@@ -1112,7 +1115,7 @@ button.admin-badge:disabled {
 }
 
 .channel-selection-toggle span::after {
-  content: '';
+  content: "";
   display: block;
   width: 14px;
   height: 14px;
@@ -1458,7 +1461,13 @@ button.admin-badge:disabled {
 }
 
 @media (pointer: coarse) {
-  .admin-page :is(button, .admin-btn, select, input:not([type='checkbox']):not([type='radio'])) {
+  .admin-page
+    :is(
+      button,
+      .admin-btn,
+      select,
+      input:not([type="checkbox"]):not([type="radio"])
+    ) {
     min-height: 44px;
   }
 }
@@ -1487,7 +1496,7 @@ button.admin-badge:disabled {
   gap: 0.25rem;
   min-width: 0;
 }
-.tls-upload input[type='file'] {
+.tls-upload input[type="file"] {
   width: 100%;
   min-width: 0;
   box-sizing: border-box;
@@ -1530,7 +1539,9 @@ button.admin-badge:disabled {
   margin: 0;
 }
 
-.channel-bulk-heading { white-space: nowrap; }
+.channel-bulk-heading {
+  white-space: nowrap;
+}
 
 /* Fixed checkmark space keeps inputs still while save confirmation fades. */
 .session-policy-controls {
@@ -1550,8 +1561,13 @@ button.admin-badge:disabled {
   animation: session-saved-fade 5s forwards;
 }
 @keyframes session-saved-fade {
-  0%, 80% { opacity: 1; }
-  100% { opacity: 0; }
+  0%,
+  80% {
+    opacity: 1;
+  }
+  100% {
+    opacity: 0;
+  }
 }
 .admin-field-row input.session-days-input {
   flex: 0 0 auto;
