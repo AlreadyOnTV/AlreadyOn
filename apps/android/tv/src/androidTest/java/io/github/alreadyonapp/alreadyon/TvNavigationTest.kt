@@ -152,7 +152,7 @@ class TvNavigationTest {
             compose.waitForIdle()
             device.pressBack() // Hide controls before testing horizontal navigation.
             device.pressDPadRight()
-            compose.waitUntil(10000) { controlFocused("Mute") || controlFocused("Unmute") }
+            compose.waitUntil(10000) { controlFocused("Pause") }
             compose.runOnIdle { assertEquals("Horizontal controls must not tune", 111, model.state.value.channel?.number) }
             device.pressDPadLeft()
             compose.waitUntil(10000) { controlFocused("Pause") }
@@ -167,21 +167,25 @@ class TvNavigationTest {
             }
             compose.waitUntil(10000) { controlFocused("Pause") }
             device.pressDPadRight(); device.pressDPadRight(); device.pressDPadCenter()
-            click("Quality")
+            click("Quality (720p)")
             compose.waitUntil(10000) { compose.onAllNodes(hasText("✓ 720p") and isFocused()).fetchSemanticsNodes().isNotEmpty() }
             device.pressDPadDown(); device.pressDPadUp()
             compose.runOnIdle { assertEquals("Submenu arrows must not tune", 110, model.state.value.channel?.number) }
             device.pressBack() // Submenu to root menu.
             device.pressDPadDown(); device.pressDPadUp()
             compose.runOnIdle { assertEquals("Root menu arrows must not tune", 110, model.state.value.channel?.number) }
-            click("Audio Tracks")
+            click(playerMenuLabel("Audio Tracks", model.state.value))
             compose.waitUntil(10000) { compose.onAllNodes(hasText("✓ ", substring = true) and isFocused()).fetchSemanticsNodes().isNotEmpty() }
             device.pressBack()
-            click("Subtitles")
+            click("Subtitles (off)")
             compose.waitUntil(10000) { compose.onAllNodes(hasText("✓ Off") and isFocused()).fetchSemanticsNodes().isNotEmpty() }
             repeat(4) { device.pressBack(); compose.waitForIdle() }
             compose.waitUntil(10000) { exists("CHANNEL") }
             fun guideFocused(number: Int) = compose.onAllNodes(hasContentDescription("Channel $number: TV fixture $number") and isFocused()).fetchSemanticsNodes().isNotEmpty()
+            device.pressBack() // Current airing needs only one Back to open the profile menu.
+            compose.waitUntil(10000) { compose.onAllNodes(hasText("Switch Profile") and isFocused()).fetchSemanticsNodes().isNotEmpty() }
+            device.pressBack()
+            compose.waitUntil(10000) { guideFocused(110) }
             device.pressDPadUp()
             compose.waitUntil(10000) { guideFocused(111) }
             device.pressDPadDown()

@@ -49,7 +49,19 @@ internal fun TvGuide(state: PhoneState, palette: PhonePalette, modifier: Modifie
     val format = remember(state.profile?.timeFormat) {
         DateTimeFormatter.ofPattern(when (state.profile?.timeFormat) { "24h" -> "HH:mm"; "12h-padded" -> "hh:mma"; else -> "h:mma" }, Locale.US).withZone(ZoneId.systemDefault())
     }
-    LaunchedEffect(Unit) { while (true) { delay(30_000); now = System.currentTimeMillis() } }
+    // Wake at the actual boundary; a delayed/backgrounded coroutine catches up once.
+    LaunchedEffect(Unit) {
+        while (true) {
+            val stamp = System.currentTimeMillis()
+            val slot = guideHalfHour(stamp)
+            if (guideHalfHour(now) != slot) {
+                origin = slot
+                if (selectedTime < slot) selectedTime = stamp
+            }
+            now = stamp
+            delay((slot + 1_800_000 - stamp).coerceIn(1, 30_000))
+        }
+    }
     // Restoring the guide always restores the selected channel, independent of stream readiness.
     LaunchedEffect(channels.isNotEmpty(), state.profile?.id, state.channel?.id, resetSignal) {
         if (channels.isNotEmpty()) {
@@ -61,7 +73,8 @@ internal fun TvGuide(state: PhoneState, palette: PhonePalette, modifier: Modifie
             selectedTime = playingAt?.takeIf { at -> channel.programs.any {
                 it.mediaFileId == state.playback?.mediaFileId && at >= Instant.parse(it.startsAt).toEpochMilli() && at < Instant.parse(it.endsAt).toEpochMilli()
             } } ?: System.currentTimeMillis()
-            origin = selectedTime / 1_800_000 * 1_800_000
+            origin = guideHalfHour(System.currentTimeMillis())
+            onChannelFocus(channel.id, true)
             onSelection(channel, channel.programs.find { selectedTime >= Instant.parse(it.startsAt).toEpochMilli() && selectedTime < Instant.parse(it.endsAt).toEpochMilli() }
                 ?: channel.programs.firstOrNull())
             rows.scrollToItem(index)
@@ -104,7 +117,7 @@ internal fun TvGuide(state: PhoneState, palette: PhonePalette, modifier: Modifie
                         .takeIf { it >= 0 } ?: programs.indexOfFirst { it.second >= at }.takeIf { it >= 0 } ?: programs.lastIndex
                     fun reveal(start: Long, end: Long) {
                         // Scroll only when the cell is outside the viewport; headers always retain half-hour boundaries.
-                        if (end <= origin || start >= origin + windowMs) origin = start / 1_800_000 * 1_800_000
+                        if (end <= origin || start >= origin + windowMs) origin = guideHalfHour(start).coerceAtLeast(guideHalfHour(System.currentTimeMillis()))
                     }
                     fun reportFocus() {
                         val chosen = programs.getOrNull(selectionIndex())
@@ -112,9 +125,18 @@ internal fun TvGuide(state: PhoneState, palette: PhonePalette, modifier: Modifie
                             selectedTime = selectedTime.coerceIn(chosen.second, (chosen.third - 1).coerceAtLeast(chosen.second))
                             reveal(chosen.second, chosen.third)
                         }
-                        val current = chosen != null && chosen == programs.getOrNull(selectionIndex(System.currentTimeMillis()))
+                        val playingAt = state.playback?.entryStartsAt?.let { Instant.parse(it).toEpochMilli() } ?: System.currentTimeMillis()
+                        val current = chosen != null && chosen == programs.getOrNull(selectionIndex(playingAt))
                         onChannelFocus(channel.id, current)
                         onSelection(channel, chosen?.first)
+                    }
+                    LaunchedEffect(programs, now) {
+                        if (focused) {
+                            val chosen = programs.getOrNull(selectionIndex())
+                            val playingAt = state.playback?.entryStartsAt?.let { Instant.parse(it).toEpochMilli() } ?: now
+                            onChannelFocus(channel.id, chosen != null && chosen == programs.getOrNull(selectionIndex(playingAt)))
+                            onSelection(channel, chosen?.first)
+                        }
                     }
                     Box(Modifier.fillMaxWidth().height(56.dp).focusRequester(targets.getValue(channel.id))
                             .onFocusChanged { focused = it.hasFocus; if (it.isFocused) reportFocus() }

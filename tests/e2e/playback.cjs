@@ -1506,12 +1506,15 @@ const noWorkers = async (unreleased = () => 0) => {
     // The Settings menu order, and Show Playback Details puts the live panel in the top left corner.
     await page.locator(".playback-player").hover();
     await page.getByRole("button", { name: "Settings", exact: true }).click();
-    const items = (
-      await page.locator('.playback-menu [role^="menuitem"]').allTextContents()
-    ).map((t) =>
+    const statusRows = await page.locator('.playback-menu [role^="menuitem"]').allTextContents();
+    assert(statusRows[0] === "Quality (auto)", "Quality row reports active Auto mode");
+    assert(/^Audio Tracks \((?:[a-z]{2,3}|unknown)\)$/.test(statusRows[1]), "Audio row reports detected language or unknown");
+    assert(/^Subtitles \(on|off\)$/.test(statusRows[2]), "Subtitle row reports active on/off status");
+    const items = statusRows.map((t) =>
       t
         .replace(/\s*(Auto|Normal|Off|On|\d+p|[\d.]+×)$/, "")
         .replace(/ \(c\)$/, "")
+        .replace(/ \([^)]*\)$/, "")
         .replace(/^Audio Tracks.*$/, "Audio Tracks"),
     );
     const wanted = [
@@ -2119,10 +2122,10 @@ const noWorkers = async (unreleased = () => 0) => {
       await page.keyboard.press('ArrowRight');
       await page.keyboard.press(' ');
       await page.getByRole('menu',{name:'Settings',exact:true}).waitFor();
-      // This low-resolution fixture exposes Audio Tracks first, rather than Quality.
+      // Every source exposes the status rows; Quality is first even for Auto-only sources.
       await page.waitForFunction(() => document.activeElement?.getAttribute('role') === 'menuitem');
       await page.keyboard.press('Enter');
-      await page.getByRole('menu',{name:'Audio Tracks',exact:true}).waitFor();
+      await page.getByRole('menu',{name:'Quality',exact:true}).waitFor();
       await page.keyboard.press('ArrowDown');await page.keyboard.press('ArrowUp');
       assert(await rowOf('.guide-slot-box-tuned') === channelBefore, 'Submenu Up/Down navigate without tuning');
       await page.keyboard.press('Escape');
