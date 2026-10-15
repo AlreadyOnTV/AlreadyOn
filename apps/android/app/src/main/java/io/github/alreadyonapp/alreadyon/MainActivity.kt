@@ -207,6 +207,7 @@ internal fun ProfileMenu(state: PhoneState, model: PhoneModel, modifier: Modifie
     var open by remember { mutableStateOf(false) }
     var consumedSignal by remember { mutableIntStateOf(openSignal) }
     val switchFocus = remember { FocusRequester() }
+    var menuBackDown by remember { mutableStateOf(false) }
     LaunchedEffect(openSignal) {
         if (openSignal > consumedSignal) open = true
         consumedSignal = openSignal
@@ -215,10 +216,17 @@ internal fun ProfileMenu(state: PhoneState, model: PhoneModel, modifier: Modifie
     Box {
         TextButton(onClick = { open = true }, modifier = modifier) { ProfileName(state.profile!!, model) }
         DropdownMenu(expanded = open, onDismissRequest = { open = false; onMenuDismiss() },
-            properties = androidx.compose.ui.window.PopupProperties(dismissOnBackPress = onMenuBack == null),
+            properties = androidx.compose.ui.window.PopupProperties(focusable = true, dismissOnBackPress = onMenuBack == null),
             modifier = Modifier.onPreviewKeyEvent { event ->
                 if (event.key == Key.Back && onMenuBack != null) {
-                    if (event.type == KeyEventType.KeyUp) { open = false; onMenuBack() }
+                    // A popup opened by Back can receive that opening press's trailing
+                    // KeyUp. Only a new down/up pair belongs to the menu itself.
+                    if (event.type == KeyEventType.KeyDown) menuBackDown = true
+                    if (event.type == KeyEventType.KeyUp && menuBackDown) {
+                        menuBackDown = false
+                        open = false
+                        onMenuBack()
+                    }
                     true
                 } else {
                     if (event.type == KeyEventType.KeyDown) onMenuNavigation()

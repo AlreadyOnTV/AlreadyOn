@@ -46,7 +46,8 @@ internal fun TvShell(state: PhoneState, model: PhoneModel) {
     val profileFocus = remember { FocusRequester() }
     fun returnToGuide() { exitBackAt = null; region = "guide"; guideAtCurrent = true; guideReset++; model.refreshGuide() }
     fun guideBack() {
-        if (region == "profile" || !guideAtCurrent) { exitBackAt = null; returnToGuide() }
+        if (region == "profile" && exitBackAt?.let { SystemClock.elapsedRealtime() - it <= 2_000 } == true) exitApp()
+        else if (region == "profile" || !guideAtCurrent) returnToGuide()
         else {
             exitBackAt = SystemClock.elapsedRealtime()
             region = "profile"
@@ -95,7 +96,7 @@ internal fun TvShell(state: PhoneState, model: PhoneModel) {
                     return@onPreviewKeyEvent false
                 }
                 if (!fullscreen) {
-                    if (event.key == Key.Back && state.profile != null && state.settings == null && region == "guide") {
+                    if (event.key == Key.Back && state.profile != null && state.settings == null && (region == "guide" || exitBackAt != null)) {
                         if (event.type == KeyEventType.KeyUp) guideBack()
                         return@onPreviewKeyEvent true
                     }
