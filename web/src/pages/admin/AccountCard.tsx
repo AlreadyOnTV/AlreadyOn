@@ -37,7 +37,7 @@ const when = (iso: string | null) => (iso === null ? 'Never' : new Date(iso).toL
 
 const DEFAULT_SESSION_DAYS = 30;
 const MAX_SESSION_DAYS = 3650;
-const LIFETIME_MESSAGE_MS = 5000;
+const SAVE_CONFIRMATION_MS = 5000;
 
 export default function AccountCard({ children }: { children: ReactNode }) {
   const { username, isOwner, passwordLocked, rename } = useAccount();
@@ -64,7 +64,7 @@ export default function AccountCard({ children }: { children: ReactNode }) {
   const [daysText, setDaysText] = useState(String(DEFAULT_SESSION_DAYS));
   const [never, setNever] = useState(false);
   const [lifetimeError, setLifetimeError] = useState<string | null>(null);
-  const [lifetimeMessage, setLifetimeMessage] = useState<string | null>(null);
+  const [lifetimeSaved, setLifetimeSaved] = useState(0);
   const [lifetimeSaving, setLifetimeSaving] = useState(false);
   const lifetimeRequest = useRef(0);
   const [inactiveEnabled, setInactiveEnabled] = useState(true);
@@ -72,6 +72,10 @@ export default function AccountCard({ children }: { children: ReactNode }) {
   const [savedInactive, setSavedInactive] = useState<{ enabled: boolean; days: number } | null>(null);
   const [inactiveSaving, setInactiveSaving] = useState(false);
   const [inactiveError, setInactiveError] = useState<string | null>(null);
+  const [inactiveSaved, setInactiveSaved] = useState(0);
+  const inactiveRequest = useRef(0);
+  // Preserve request order when blurring a field immediately before toggling it.
+  const policyWrites = useRef<Promise<unknown>>(Promise.resolve());
 
 
   const load = useCallback(() => {
@@ -101,21 +105,25 @@ export default function AccountCard({ children }: { children: ReactNode }) {
     load();
   }, [isOwner, load]);
 
-  useEffect(() => {
-    if (!isOwner || !savedInactive) return;
-    const days = Number(inactiveDays);
+  const saveInactive = async (enabled: boolean, days: number) => {
+    if (!savedInactive) return;
     if (!Number.isInteger(days) || days < 1 || days > MAX_SESSION_DAYS) {
       setInactiveError('Enter a whole number from 1 to 3650.'); return;
     }
-    if (savedInactive.enabled === inactiveEnabled && savedInactive.days === days) return;
-    const timer = window.setTimeout(() => {
-      setInactiveSaving(true); setInactiveError(null);
-      void setInactiveSessionPolicy({ enabled: inactiveEnabled, days }).then(policy => {
-        setSavedInactive(policy); load();
-      }).catch((err: Error) => setInactiveError(err.message)).finally(() => setInactiveSaving(false));
-    }, 1500);
-    return () => window.clearTimeout(timer);
-  }, [isOwner, savedInactive, inactiveEnabled, inactiveDays, load]);
+    const request = ++inactiveRequest.current;
+    setInactiveError(null); setInactiveSaved(0); setInactiveSaving(true);
+    const write = policyWrites.current.then(() => setInactiveSessionPolicy({ enabled, days }));
+    policyWrites.current = write.catch(() => {});
+    try {
+      const policy = await write;
+      if (request !== inactiveRequest.current) return;
+      setSavedInactive(policy); setInactiveSaved(Date.now()); load();
+    } catch (err) {
+      if (request === inactiveRequest.current) setInactiveError(err instanceof Error ? err.message : 'Failed to save inactivity policy');
+    } finally {
+      if (request === inactiveRequest.current) setInactiveSaving(false);
+    }
+  };
 
   const wantedDays = never ? 0 : Number(daysText);
   const daysValid = never || (Number.isInteger(wantedDays) && wantedDays >= 1 && wantedDays <= MAX_SESSION_DAYS);
@@ -123,13 +131,15 @@ export default function AccountCard({ children }: { children: ReactNode }) {
   const saveLifetime = useCallback(async (days: number) => {
     const request = ++lifetimeRequest.current;
     setLifetimeError(null);
-    setLifetimeMessage(null);
+    setLifetimeSaved(0);
     setLifetimeSaving(true);
     try {
-      const saved = await setSessionLifetime(days);
+      const write = policyWrites.current.then(() => setSessionLifetime(days));
+      policyWrites.current = write.catch(() => {});
+      const saved = await write;
       if (request !== lifetimeRequest.current) return;
       setSavedDays(saved);
-      setLifetimeMessage(days === 0 ? 'New sign-ins no longer expire.' : `New sign-ins now last ${days} ${days === 1 ? 'day' : 'days'}.`);
+      setLifetimeSaved(Date.now());
     } catch (err) {
       if (request === lifetimeRequest.current) setLifetimeError(err instanceof Error ? err.message : 'Failed to save the sign-in lifetime');
     } finally {
@@ -137,22 +147,16 @@ export default function AccountCard({ children }: { children: ReactNode }) {
     }
   }, []);
 
-  // Number entry waits for a pause so typing 120 does not save 1, then 12,
-  // then 120. The Never Expire switch bypasses this delay below.
   useEffect(() => {
-    if (savedDays === null || never || lifetimeSaving || wantedDays === savedDays) return;
-    if (!daysValid) return;
-    const timer = window.setTimeout(() => void saveLifetime(wantedDays), 3000);
+    if (!lifetimeSaved) return;
+    const timer = window.setTimeout(() => setLifetimeSaved(0), SAVE_CONFIRMATION_MS);
     return () => window.clearTimeout(timer);
-  }, [daysText, daysValid, lifetimeSaving, never, savedDays, saveLifetime, wantedDays]);
-
-  // Successful lifetime updates are transient confirmation, unlike validation
-  // errors which remain until the administrator corrects the value.
+  }, [lifetimeSaved]);
   useEffect(() => {
-    if (!lifetimeMessage) return;
-    const timer = window.setTimeout(() => setLifetimeMessage(null), LIFETIME_MESSAGE_MS);
+    if (!inactiveSaved) return;
+    const timer = window.setTimeout(() => setInactiveSaved(0), SAVE_CONFIRMATION_MS);
     return () => window.clearTimeout(timer);
-  }, [lifetimeMessage]);
+  }, [inactiveSaved]);
 
   const changeNever = (value: boolean) => {
     setNever(value);
@@ -246,6 +250,8 @@ export default function AccountCard({ children }: { children: ReactNode }) {
     }
   };
 
+  const activity = (session: BrowserSession) => session.lastActiveAt ? Date.parse(session.lastActiveAt) || 0 : 0;
+  const sortedSessions = [...sessions].sort((a, b) => Number(b.current) - Number(a.current) || activity(b) - activity(a));
   const others = sessions.filter((s) => !s.current).length;
 
   return (
@@ -320,41 +326,52 @@ export default function AccountCard({ children }: { children: ReactNode }) {
       </div>
       {message && <p className="admin-section-hint" role="status">{message}</p>}
       {isOwner && (
-      <div className="admin-field-row session-lifetime-row">
+      <div className="admin-field-row session-policy-row">
         <label htmlFor="account-days">Stay Signed In For (Days)</label>
-        <input
-          id="account-days"
-          type="number"
-          min={1}
-          max={MAX_SESSION_DAYS}
-          value={daysText}
-          disabled={never}
-          onChange={(e) => {
-            const text = e.target.value;
-            const days = Number(text);
-            setDaysText(text);
-            setLifetimeMessage(null);
-            setLifetimeError(text !== '' && Number.isInteger(days) && days >= 1 && days <= MAX_SESSION_DAYS ? null : `Enter a whole number from 1 to ${MAX_SESSION_DAYS}.`);
-          }}
-          style={{ width: 100 }}
-        />
-        <div className="session-never-control">
-          <label className="session-never-label">
-            <SettingToggle checked={never} onChange={changeNever} label="Never Expire" text />
-            <span>Never Expire</span>
-          </label>
-          {lifetimeSaving && <p className="session-lifetime-saving" role="status">Saving sign-in lifetime…</p>}
-          {lifetimeMessage && <p className="session-lifetime-message" role="status">{lifetimeMessage}</p>}
+        <div className="session-policy-controls">
+          <span className={'session-save-check' + (lifetimeSaved ? ' is-saved' : '')} role="status" aria-label={lifetimeSaved ? 'Sign-in lifetime saved' : undefined}>{lifetimeSaved ? '✓' : ''}</span>
+          <input
+            id="account-days"
+            type="number"
+            min={1}
+            max={MAX_SESSION_DAYS}
+            value={daysText}
+            disabled={never || savedDays === null}
+            onBlur={() => { if (!never && daysValid && wantedDays !== savedDays) void saveLifetime(wantedDays); }}
+            onChange={(e) => {
+              const text = e.target.value;
+              const days = Number(text);
+              setDaysText(text);
+              setLifetimeSaved(0);
+              setLifetimeError(text !== '' && Number.isInteger(days) && days >= 1 && days <= MAX_SESSION_DAYS ? null : `Enter a whole number from 1 to ${MAX_SESSION_DAYS}.`);
+            }}
+            className="session-days-input"
+          />
+          <div className="session-never-control">
+            <label className="session-never-label">
+              <SettingToggle checked={never} onChange={changeNever} label="Never Expire" text />
+              <span>Never Expire</span>
+            </label>
+            {lifetimeSaving && <p className="session-lifetime-saving" role="status">Saving sign-in lifetime…</p>}
+          </div>
         </div>
       </div>
       )}
-      {isOwner && <div className="admin-field-row">
+      {isOwner && <div className="admin-field-row session-policy-row">
         <label htmlFor="inactive-session-days">Remove Inactive Sessions</label>
-        <SettingToggle checked={inactiveEnabled} onChange={setInactiveEnabled} label="Remove Inactive Sessions" text />
-        <input id="inactive-session-days" type="number" min={1} max={MAX_SESSION_DAYS} value={inactiveDays}
-          disabled={!inactiveEnabled} onChange={event => setInactiveDays(event.target.value)} style={{width: 100}} />
-        <span>Days</span>
-        {inactiveSaving && <span role="status">Saving…</span>}
+        <div className="session-policy-controls">
+          <span className={'session-save-check' + (inactiveSaved ? ' is-saved' : '')} role="status" aria-label={inactiveSaved ? 'Inactivity policy saved' : undefined}>{inactiveSaved ? '✓' : ''}</span>
+          <input id="inactive-session-days" type="number" min={1} max={MAX_SESSION_DAYS} value={inactiveDays}
+            className="session-days-input" disabled={!inactiveEnabled || !savedInactive}
+            onChange={event => { setInactiveDays(event.target.value); setInactiveSaved(0); setInactiveError(null); }}
+            onBlur={() => { if (Number(inactiveDays) !== savedInactive?.days) void saveInactive(inactiveEnabled, Number(inactiveDays)); }} />
+          <SettingToggle checked={inactiveEnabled} onChange={enabled => {
+            setInactiveEnabled(enabled);
+            const days = Number(inactiveDays);
+            void saveInactive(enabled, Number.isInteger(days) && days >= 1 && days <= MAX_SESSION_DAYS ? days : savedInactive?.days ?? 14);
+          }} label="Remove Inactive Sessions" text />
+          {inactiveSaving && <span className="session-policy-saving" role="status">Saving…</span>}
+        </div>
       </div>}
       {isOwner && inactiveError && <p className="profile-field-error">{inactiveError}</p>}
       {isOwner && lifetimeError && <p className="profile-field-error">{lifetimeError}</p>}
@@ -371,19 +388,20 @@ export default function AccountCard({ children }: { children: ReactNode }) {
           </tr>
         </thead>
         <tbody>
-          {sessions.map((s) => (
+          {sortedSessions.map((s) => (
             <tr key={s.id}>
               <td>
                 {s.deviceName || describeAgent(s.userAgent)}
-                {s.current && <span className="admin-badge admin-badge-on session-current-device">This Session</span>}
               </td>
               <td>{s.ipAddress || 'Not recorded yet'}</td>
               <td>{s.lastActiveAt ? when(s.lastActiveAt) : "Not recorded yet"}</td>
               <td>{when(s.expiresAt)}</td>
               <td className="admin-table-actions">
-                <button className="admin-btn admin-btn-secondary" onClick={() => void signOutOne(s)}>
-                  Sign Out
-                </button>
+                {s.current ? <span className="admin-btn session-current-pill">This Session</span> : (
+                  <button className="admin-btn admin-btn-secondary" onClick={() => void signOutOne(s)}>
+                    Sign Out
+                  </button>
+                )}
               </td>
             </tr>
           ))}

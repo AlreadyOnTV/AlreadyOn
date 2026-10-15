@@ -875,8 +875,7 @@ button.admin-badge:disabled {
   gap: 6px;
 }
 
-.session-lifetime-saving,
-.session-lifetime-message {
+.session-lifetime-saving {
   margin: 0;
   font-size: var(--admin-body-size);
   line-height: 1.25;
@@ -886,9 +885,6 @@ button.admin-badge:disabled {
   color: var(--text-muted);
 }
 
-.session-lifetime-message {
-  color: #64d982;
-}
 
 .filter-draggable-row {
   user-select: none;
@@ -1424,10 +1420,6 @@ button.admin-badge:disabled {
     justify-content: flex-start;
   }
 
-  .session-lifetime-row {
-    flex-wrap: wrap;
-  }
-
   .session-never-label {
     min-width: 0;
   }
@@ -1536,10 +1528,62 @@ button.admin-badge:disabled {
 
 .channel-bulk-heading { white-space: nowrap; }
 
-/* The current-session badge sits below the name, keeping its column compact. */
-.session-current-device {
-  display: block;
-  width: max-content;
+/* Fixed checkmark space keeps inputs still while save confirmation fades. */
+.session-policy-controls {
+  display: flex;
+  align-items: center;
+  gap: 8px;
+  position: relative;
+  min-width: 0;
+}
+.session-save-check {
+  width: 1em;
+  flex: 0 0 1em;
+  color: #36c978;
+  opacity: 0;
+}
+.session-save-check.is-saved {
+  animation: session-saved-fade 5s forwards;
+}
+@keyframes session-saved-fade {
+  0%, 80% { opacity: 1; }
+  100% { opacity: 0; }
+}
+.admin-field-row input.session-days-input {
+  flex: 0 0 auto;
+  width: calc(6ch + 42px);
+  max-width: calc(6ch + 42px);
+  box-sizing: border-box;
+  font-variant-numeric: tabular-nums;
+}
+.session-current-pill {
+  background: #3563df;
+  color: #fff;
+  display: inline-flex;
+  align-items: center;
+  justify-content: center;
+  border-radius: 999px;
+  cursor: default;
   white-space: nowrap;
-  margin-top: 6px;
+}
+.session-policy-saving {
+  position: absolute;
+  top: 100%;
+  left: 1.5em;
+  font-size: 0.8em;
+}
+@media (max-width: 600px) {
+  .account-card .session-policy-row {
+    flex-direction: column;
+    align-items: flex-start;
+    gap: 6px;
+  }
+  .account-card .session-policy-row > label:first-child {
+    flex: none;
+    min-width: 0;
+  }
+  .sessions-header .session-browser-actions {
+    max-width: 100%;
+    flex-wrap: wrap;
+  }
 }

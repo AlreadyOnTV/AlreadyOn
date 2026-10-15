@@ -2539,8 +2539,89 @@ const noWorkers = async (unreleased = () => 0) => {
     assert((await saved(() => toggle.click())).enabled === false, 'Cleanup can be disabled');
     assert(await days.isDisabled(), 'Inactive days are disabled with cleanup Off');
     assert((await saved(() => toggle.click())).enabled === true, 'Cleanup can be enabled');
-    assert((await saved(() => days.fill('21'))).days === 21, 'Inactive days are configurable');
-    await saved(() => days.fill('14'));
+    assert((await saved(async () => { await days.fill('21'); await days.blur(); })).days === 21, 'Inactive days are configurable');
+    await saved(async () => { await days.fill('14'); await days.blur(); });
+    const lifetime = page.locator('#account-days');
+    for (const [field, endpoint, value, status] of [
+      [lifetime, 'session-lifetime', '31', 'Sign-in lifetime saved'],
+      [days, 'session-inactivity', '15', 'Inactivity policy saved'],
+    ]) {
+      let writes = 0;
+      const listener = request => { if (request.url().endsWith('/api/auth/' + endpoint) && request.method() === 'PUT') writes++; };
+      page.on('request', listener);
+      await field.fill(value);
+      const before = await field.boundingBox();
+      await page.waitForTimeout(3200);
+      assert(writes === 0, 'Day fields must not save while still focused');
+      const response = page.waitForResponse(r => r.url().endsWith('/api/auth/' + endpoint) && r.request().method() === 'PUT');
+      await field.blur();
+      assert((await response).ok(), 'Blur saves the day field');
+      await page.getByRole('status', {name:status, exact:true}).waitFor();
+      const after = await field.boundingBox();
+      assert(before.x === after.x && before.width === after.width, 'Save feedback must not shift the input');
+      await page.waitForTimeout(5200);
+      assert(await page.getByRole('status', {name:status, exact:true}).count() === 0, 'Save checkmark clears after five seconds');
+      page.off('request', listener);
+    }
+    let deferFirstPolicySave = true;
+    await page.route('**/api/auth/session-inactivity', async route => {
+      if (route.request().method() === 'PUT' && deferFirstPolicySave) {
+        deferFirstPolicySave = false;
+        const response = await route.fetch();
+        await page.waitForTimeout(400);
+        await route.fulfill({response});
+        return;
+      }
+      await route.continue();
+    });
+    const policyResponse = (enabled, value) => page.waitForResponse(response => {
+      const request = response.request();
+      if (!request.url().endsWith('/api/auth/session-inactivity') || request.method() !== 'PUT') return false;
+      const body = request.postDataJSON();
+      return body.enabled === enabled && body.days === value;
+    });
+    const blurredSave = policyResponse(true, 16);
+    const toggledSave = policyResponse(false, 16);
+    await days.fill('16');
+    await toggle.click();
+    assert((await blurredSave).ok(), 'Blurred policy save completes before the toggle save');
+    assert((await toggledSave).ok(), 'Toggle save completes after the blurred policy save');
+    const racedPolicy = await (await page.request.get(url + '/api/auth/session-inactivity')).json();
+    assert(racedPolicy.enabled === false && racedPolicy.days === 16, 'Rapid blur then toggle persists the latest policy');
+    await page.unroute('**/api/auth/session-inactivity');
+    const restoredPolicy = policyResponse(true, 16);
+    await toggle.click();
+    assert((await restoredPolicy).ok(), 'Cleanup can be re-enabled after the race check');
+    const resetDays = policyResponse(true, 14);
+    await days.fill('14');
+    await days.blur();
+    assert((await resetDays).ok(), 'Inactivity days can be restored after the race check');
+
+    const actual = await (await page.request.get(url + '/api/auth/sessions')).json();
+    const current = actual.find(session => session.current);
+    await page.route('**/api/auth/sessions', route => route.fulfill({json:[
+      {...current,id:'old',current:false,deviceName:'Old device',lastActiveAt:'2026-10-01T00:00:00Z'},
+      {...current,id:'recent',current:false,deviceName:'Recent device',lastActiveAt:'2026-10-13T00:00:00Z'},
+      {...current,deviceName:'Current device',lastActiveAt:'2026-09-01T00:00:00Z'},
+    ]}));
+    await page.reload();
+    await page.locator('.session-current-pill').waitFor();
+    const rowsText = await page.locator('.sessions-table tbody tr td:first-child').allTextContents();
+    assert(JSON.stringify(rowsText.map(text => text.trim())) === JSON.stringify(['Current device','Recent device','Old device']), 'Current session first, then newest activity');
+    assert(await page.locator('.sessions-table tbody tr').first().getByRole('button').count() === 0, 'Current session has no clickable sign-out control');
+    await page.locator('#inactive-session-days').scrollIntoViewIfNeeded();
+    for (const width of [320,375,600,1280]) {
+      await page.setViewportSize({width,height:900});
+      const layout = await page.evaluate(() => {
+        const input = document.querySelector('#inactive-session-days').getBoundingClientRect();
+        const toggle = document.querySelector('[role="switch"][aria-label="Remove Inactive Sessions"]').getBoundingClientRect();
+        const controls = [...document.querySelectorAll('.session-policy-controls')].map(el => el.getBoundingClientRect());
+        return {overflow:document.documentElement.scrollWidth > innerWidth, right:toggle.x > input.right,
+          fits:controls.every(rect => rect.right <= innerWidth && rect.left >= 0)};
+      });
+      assert(!layout.overflow && layout.right && layout.fits, `Session controls fit at ${width}px: ${JSON.stringify(layout)}`);
+      await page.screenshot({path:`/tmp/alreadyon-sessions-${width}.png`});
+    }
     await page.screenshot({path:'/tmp/alreadyon-sessions-settings.png'});
     const channels = await (await page.request.get(url + '/api/guide')).json();
     const base = channels[0];
