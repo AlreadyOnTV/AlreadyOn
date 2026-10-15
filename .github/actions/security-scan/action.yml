@@ -14,7 +14,8 @@ runs:
     - uses: actions/setup-go@v7
       with:
         go-version-file: server/go.mod
-        cache-dependency-path: server/go.sum
+        # The caller may already have restored this cache in the same job.
+        cache: false
     - uses: actions/setup-java@v6
       with:
         distribution: temurin

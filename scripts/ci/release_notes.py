@@ -115,7 +115,7 @@ def release_body(repo, tag, sha, code, changes, candidate_tag=None, changelog_ba
         if line.startswith('# '):
             section = line[2:]
         elif line.startswith('- ') and section in {'Bugfixes', 'Known Issues'}:
-            if not re.fullmatch(r'- \[.+\]\(https://github\.com/[^/]+/[^/]+/issues/\d+\)', line):
+            if not re.fullmatch(r'- \[.+\]\(https://github\.com/[^/]+/[^/]+/issues/\d+\)(?:: .+)?', line):
                 raise ValueError(f'{section} entries must link a GitHub issue using its title')
     # Legacy readers rely on these labels. Keep them invisible without moving or
     # replacing signed assets, and continue to verify asset provenance separately.
