@@ -175,6 +175,28 @@ a.admin-btn:visited {
   overflow-x: auto;
 }
 
+/* Keep session actions beside the heading, with room before the device list. */
+.sessions-header {
+  display: flex;
+  align-items: center;
+  justify-content: space-between;
+  flex-wrap: wrap;
+  gap: 12px;
+  margin-bottom: 20px;
+}
+
+.sessions-header h3 {
+  margin: 0;
+}
+
+.sessions-header .session-browser-actions {
+  margin-left: auto;
+}
+
+.sessions-table-scroll {
+  margin-top: 28px;
+}
+
 .profiles-table,
 .accounts-table,
 .sessions-table {

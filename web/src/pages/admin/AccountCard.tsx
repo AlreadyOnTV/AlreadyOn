@@ -307,7 +307,17 @@ export default function AccountCard({ children }: { children: ReactNode }) {
     </div>
     {children}
     <div className="admin-card account-card">
-      <h3>Sessions</h3>
+      <div className="sessions-header">
+        <h3>Sessions</h3>
+        <div className="admin-table-actions session-browser-actions">
+          <button className="admin-btn admin-btn-secondary" onClick={() => void signOutOthers()} disabled={others === 0}>
+            Sign Out All Other Sessions
+          </button>
+          <button className={'admin-btn admin-btn-secondary' + (confirming === 'all' ? ' admin-btn-danger' : '')} onClick={() => void signOutEverywhere()}>
+            {confirming === 'all' ? 'Confirm: Sign Out Everywhere?' : 'Sign Out Everywhere'}
+          </button>
+        </div>
+      </div>
       {message && <p className="admin-section-hint" role="status">{message}</p>}
       {isOwner && (
       <div className="admin-field-row session-lifetime-row">
@@ -386,14 +396,6 @@ export default function AccountCard({ children }: { children: ReactNode }) {
           )}
         </tbody>
       </table>
-      </div>
-      <div className="admin-table-actions session-browser-actions" style={{ marginTop: 12 }}>
-        <button className="admin-btn admin-btn-secondary" onClick={() => void signOutOthers()} disabled={others === 0}>
-          Sign Out All Other Sessions
-        </button>
-        <button className={'admin-btn admin-btn-secondary' + (confirming === 'all' ? ' admin-btn-danger' : '')} onClick={() => void signOutEverywhere()}>
-          {confirming === 'all' ? 'Confirm: Sign Out Everywhere?' : 'Sign Out Everywhere'}
-        </button>
       </div>
     </div>
     </>
