@@ -65,6 +65,13 @@ class ReleaseNotesTests(unittest.TestCase):
                              f'# {section}\n\n- An untracked fix.')
         release_body('owner/repo', '26.10.18-alpha2', 'a' * 40, 123,
                      '# Bugfixes\n\n- [Issue title](https://github.com/owner/repo/issues/1)')
+        described = release_body(
+            'owner/repo', '26.10.18-alpha2', 'a' * 40, 123,
+            '# Bugfixes\n\n- [[Bug][TV] Fix guide focus](https://github.com/owner/repo/issues/62): Restore focus after returning to the guide.')
+        self.assertIn(
+            '- [[Bug][TV] Fix guide focus](https://github.com/owner/repo/issues/62): Restore focus after returning to the guide.',
+            described,
+        )
 
     def test_identical_artifact_promotion_retains_only_known_issues(self):
         body = release_body('owner/repo', '26.10.18-alpha2', 'a' * 40, 123,

@@ -27,6 +27,8 @@ Empty sections say “No new features in this release.”, “No bugfixes in thi
 
 For user-facing changes, add a uniquely named Markdown file under `docs/release-notes/` in the same commit. Use `# New Features` for new capabilities and improvements, and `# Bugfixes` for addressed defects. Bugfix bullets must link the included GitHub issue and use its exact title. Historical Features, Improvements and Bug fixes fragment headings remain readable. Use single-line bullets, omit development-only maintenance, and leave published fragments intact.
 
+Bugfix bullets may append a concise description after the linked issue title, separated by `:`.
+
 Candidate notes include product fragments changed since the previous published release tag, including server and WebUI changes. They read the exact source commit, not the working tree. When no predecessor exists, notes include the available source fragments. Legacy unlinked bugfix fragments must be reviewed and linked before publication; the generator refuses untracked bugfix bullets.
 
 Maintain `docs/release-known-issues.md` with `# Known Issues` and linked issue-title bullets for confirmed remaining bugs prioritized for the next few builds/releases. Remove entries when fixed. The generator reads this reviewed list from the artifact source commit; it does not infer bugs from feature requests or retrospective reports. Historical descriptions list only bugs supported by evidence at their release date.
