@@ -2838,6 +2838,21 @@ const noWorkers = async (unreleased = () => 0) => {
       );
       page.off("request", listener);
     }
+    const restoreLifetime = page.waitForResponse(
+      (response) =>
+        response.url().endsWith("/api/auth/session-lifetime") &&
+        response.request().method() === "PUT",
+    );
+    await lifetime.fill("30");
+    await lifetime.blur();
+    assert(
+      (await restoreLifetime).ok(),
+      "Restore the sign-in lifetime for following scenarios",
+    );
+    await page.waitForFunction(
+      async () =>
+        (await (await fetch("/api/auth/session-lifetime")).json()).days === 30,
+    );
     let deferFirstPolicySave = true;
     await page.route("**/api/auth/session-inactivity", async (route) => {
       if (route.request().method() === "PUT" && deferFirstPolicySave) {
@@ -4240,7 +4255,7 @@ const noWorkers = async (unreleased = () => 0) => {
     ]) {
       await page.setViewportSize(viewport);
       const placement = await page
-        .locator(".session-policy-row")
+        .locator(".session-policy-row", { has: page.locator("#account-days") })
         .evaluate((element) => {
           const check = element.querySelector(".session-save-check");
           const input = element.querySelector("#account-days");
