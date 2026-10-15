@@ -89,12 +89,15 @@ const noWorkers = async (unreleased = () => 0) => {
     await guide.or(dialog).waitFor();
     if (await dialog.count()) {
       // Sign-in uses the brand rather than a heading; distinguish dialogs by their accessible name.
-      const setup = (await dialog.getAttribute("aria-label")) === "Create Your AlreadyOn Account";
+      const setup =
+        (await dialog.getAttribute("aria-label")) ===
+        "Create Your AlreadyOn Account";
       const username = dialog.getByLabel("Username");
       const password = dialog.getByLabel("Password", { exact: true });
       assert(
         (await username.getAttribute("name")) === "username" &&
-          (await username.getAttribute("autocomplete")) === (setup ? "off" : "username"),
+          (await username.getAttribute("autocomplete")) ===
+            (setup ? "off" : "username"),
         "Only the actual login username exposes password-manager metadata",
       );
       assert(
@@ -134,8 +137,7 @@ const noWorkers = async (unreleased = () => 0) => {
         const confirmation = dialog.getByLabel("Confirm password");
         assert(
           (await confirmation.getAttribute("name")) === "confirmPassword" &&
-            (await confirmation.getAttribute("autocomplete")) ===
-              "off",
+            (await confirmation.getAttribute("autocomplete")) === "off",
           "Account setup confirmation suppresses password-manager autofill",
         );
         await visibility(confirmation, account.password);
@@ -1012,11 +1014,18 @@ const noWorkers = async (unreleased = () => 0) => {
       const box = await slider.boundingBox();
       await page.mouse.move(box.x + box.width - 7, box.y + box.height / 2);
       await page.mouse.down();
-      await page.mouse.move(box.x + 7 + (box.width - 14) * 0.3, box.y + box.height / 2, { steps: 8 });
+      await page.mouse.move(
+        box.x + 7 + (box.width - 14) * 0.3,
+        box.y + box.height / 2,
+        { steps: 8 },
+      );
       await page.mouse.up();
       const value = Number(await slider.inputValue());
-      assert(value > 0 && value < 0.6, "Mouse dragging changes the volume slider");
-      await page.waitForFunction(v => {
+      assert(
+        value > 0 && value < 0.6,
+        "Mouse dragging changes the volume slider",
+      );
+      await page.waitForFunction((v) => {
         const video = document.querySelector("video");
         return Math.abs(video.volume - v) < 0.01 && !video.muted;
       }, value);
@@ -1355,9 +1364,13 @@ const noWorkers = async (unreleased = () => 0) => {
     // prevents Browser.setWindowBounds on hosted Chromium; exercise viewport
     // fallback here and leave accepted fullscreen to mobileLandscape's mock.
     await page.addInitScript(() => {
-      Element.prototype.requestFullscreen = () => Promise.reject(
-        new DOMException("Layout scenario uses viewport fallback", "NotAllowedError"),
-      );
+      Element.prototype.requestFullscreen = () =>
+        Promise.reject(
+          new DOMException(
+            "Layout scenario uses viewport fallback",
+            "NotAllowedError",
+          ),
+        );
     });
     await login(page);
     await page.waitForFunction(() =>
@@ -1448,7 +1461,9 @@ const noWorkers = async (unreleased = () => 0) => {
       "Narrow Server Settings hides the desktop tab row",
     );
     await navToggle.click();
-    await page.getByRole("menuitem", { name: "Home Users", exact: true }).click();
+    await page
+      .getByRole("menuitem", { name: "Home Users", exact: true })
+      .click();
     await page.waitForURL("**/admin/accounts");
     assert(
       (await page.getByRole("menu").count()) === 0,
@@ -1506,10 +1521,21 @@ const noWorkers = async (unreleased = () => 0) => {
     // The Settings menu order, and Show Playback Details puts the live panel in the top left corner.
     await page.locator(".playback-player").hover();
     await page.getByRole("button", { name: "Settings", exact: true }).click();
-    const statusRows = await page.locator('.playback-menu [role^="menuitem"]').allTextContents();
-    assert(statusRows[0] === "Quality (auto)", "Quality row reports active Auto mode");
-    assert(/^Audio Tracks \((?:[a-z]{2,3}|unknown)\)$/.test(statusRows[1]), "Audio row reports detected language or unknown");
-    assert(/^Subtitles \(on|off\)$/.test(statusRows[2]), "Subtitle row reports active on/off status");
+    const statusRows = await page
+      .locator('.playback-menu [role^="menuitem"]')
+      .allTextContents();
+    assert(
+      statusRows[0] === "Quality (auto)",
+      "Quality row reports active Auto mode",
+    );
+    assert(
+      /^Audio Tracks \((?:[a-z]{2,3}|unknown)\)$/.test(statusRows[1]),
+      "Audio row reports detected language or unknown",
+    );
+    assert(
+      /^Subtitles \(on|off\)$/.test(statusRows[2]),
+      "Subtitle row reports active on/off status",
+    );
     const items = statusRows.map((t) =>
       t
         .replace(/\s*(Auto|Normal|Off|On|\d+p|[\d.]+×)$/, "")
@@ -1651,37 +1677,73 @@ const noWorkers = async (unreleased = () => 0) => {
       .first()
       .locator("select");
     assert(
-      (await dns.locator("option").allTextContents()).join("|") === "None|Cloudflare|No-IP",
+      (await dns.locator("option").allTextContents()).join("|") ===
+        "None|Cloudflare|No-IP",
       "Only supported DDNS providers should be available",
     );
     // This quality-persistence scenario exercises shared Save Changes/reload,
     // not a real DNS service. Keep its provider credentials and responses local.
     // Provider network behavior is covered by isolated Go transport fixtures.
-    let ddns = { provider: "none", running: "", configs: [{
-      provider: "no-ip", hostname: "", zoneId: "", username: "",
-      hasSecret: false, enabled: false, lastAttempt: 0, lastUpdate: 0,
-      lastVerified: 0, lastIp: "", lastError: "", nextAttempt: 0, blocked: false,
-    }] };
+    let ddns = {
+      provider: "none",
+      running: "",
+      configs: [
+        {
+          provider: "no-ip",
+          hostname: "",
+          zoneId: "",
+          username: "",
+          hasSecret: false,
+          enabled: false,
+          lastAttempt: 0,
+          lastUpdate: 0,
+          lastVerified: 0,
+          lastIp: "",
+          lastError: "",
+          nextAttempt: 0,
+          blocked: false,
+        },
+      ],
+    };
     await page.route(url + "/api/settings/ddns", async (route) => {
       if (route.request().method() === "PUT") {
         const input = route.request().postDataJSON();
-        assert(input.provider === "none" || input.provider === "no-ip", "Unexpected test provider");
+        assert(
+          input.provider === "none" || input.provider === "no-ip",
+          "Unexpected test provider",
+        );
         ddns.provider = input.provider;
-        if (input.provider === "no-ip") ddns.configs[0] = {
-          ...ddns.configs[0], hostname: input.hostname, username: input.username,
-          hasSecret: true, enabled: true, lastAttempt: 1, lastVerified: 1,
-        };
+        if (input.provider === "no-ip")
+          ddns.configs[0] = {
+            ...ddns.configs[0],
+            hostname: input.hostname,
+            username: input.username,
+            hasSecret: true,
+            enabled: true,
+            lastAttempt: 1,
+            lastVerified: 1,
+          };
       }
       await route.fulfill({ json: ddns });
     });
     await dns.selectOption("no-ip");
-    await page.getByLabel("Public Hostname", { exact: true }).fill("fixture.example.com");
-    await page.getByLabel("DDNS Username", { exact: true }).fill("synthetic-user");
-    const settingsSecret=page.getByLabel("DDNS credential");
-    for (const attr of ["data-lpignore","data-1p-ignore","data-bwignore"]) {
-      assert(await settingsSecret.getAttribute(attr)==="true", `Settings autofill suppression missing ${attr}`);
+    await page
+      .getByLabel("Public Hostname", { exact: true })
+      .fill("fixture.example.com");
+    await page
+      .getByLabel("DDNS Username", { exact: true })
+      .fill("synthetic-user");
+    const settingsSecret = page.getByLabel("DDNS credential");
+    for (const attr of ["data-lpignore", "data-1p-ignore", "data-bwignore"]) {
+      assert(
+        (await settingsSecret.getAttribute(attr)) === "true",
+        `Settings autofill suppression missing ${attr}`,
+      );
     }
-    assert(await settingsSecret.getAttribute("autocomplete")==="off", "Settings must not invite credential autofill");
+    assert(
+      (await settingsSecret.getAttribute("autocomplete")) === "off",
+      "Settings must not invite credential autofill",
+    );
     await settingsSecret.fill("synthetic-password");
     await Promise.all([
       page.waitForNavigation(),
@@ -1895,9 +1957,16 @@ const noWorkers = async (unreleased = () => 0) => {
   // Exercise real touch input and computed CSS so a coarse-pointer override
   // cannot silently defeat the idle timer in either phone orientation.
   async function mobileOverlay() {
-    for (const viewport of [{ width: 390, height: 844 }, { width: 844, height: 390 }]) {
+    for (const viewport of [
+      { width: 390, height: 844 },
+      { width: 844, height: 390 },
+    ]) {
       seed();
-      const context = await browser.newContext({ viewport: { width: 390, height: 844 }, isMobile: true, hasTouch: true });
+      const context = await browser.newContext({
+        viewport: { width: 390, height: 844 },
+        isMobile: true,
+        hasTouch: true,
+      });
       const page = await context.newPage();
       page.on("pageerror", (e) => errors.push(e.message));
       await login(page);
@@ -1908,42 +1977,78 @@ const noWorkers = async (unreleased = () => 0) => {
       // Selecting a guide slot may scroll the landscape page past the player.
       // Bring it back before waiting for idle so every reveal tap reaches video.
       await video.scrollIntoViewIfNeeded();
-      const opacity = () => page.locator(".playback-controls").evaluate((el) => getComputedStyle(el).opacity);
-      const visible = () => page.waitForFunction(() =>
-        getComputedStyle(document.querySelector(".playback-controls")).opacity === "1", null, { timeout: 3000 });
-      const hidden = (timeout = 8000) => page.waitForFunction(() =>
-        getComputedStyle(document.querySelector(".playback-controls")).opacity === "0", null, { timeout });
+      const opacity = () =>
+        page
+          .locator(".playback-controls")
+          .evaluate((el) => getComputedStyle(el).opacity);
+      const visible = () =>
+        page.waitForFunction(
+          () =>
+            getComputedStyle(document.querySelector(".playback-controls"))
+              .opacity === "1",
+          null,
+          { timeout: 3000 },
+        );
+      const hidden = (timeout = 8000) =>
+        page.waitForFunction(
+          () =>
+            getComputedStyle(document.querySelector(".playback-controls"))
+              .opacity === "0",
+          null,
+          { timeout },
+        );
       // Locator taps scroll, wait for stable geometry and hit-test the target;
       // raw touchscreen coordinates can miss after guide-driven page scrolling.
       const tapVideo = () => video.tap();
       await hidden();
       if (viewport.width > viewport.height) {
         // Reproduce the scrolled landscape position that raw coordinates miss.
-        await page.locator(".guide-page").evaluate((el) => { el.scrollTop = el.scrollHeight; });
+        await page.locator(".guide-page").evaluate((el) => {
+          el.scrollTop = el.scrollHeight;
+        });
       }
       await tapVideo();
       // React state and the CSS fade settle asynchronously after a real touch.
       await visible();
-      assert(await opacity() === "1", "Touch reveals the hidden overlay");
-      assert(await page.locator("video").evaluate((el) => !el.paused), "Reveal tap must not pause video");
+      assert((await opacity()) === "1", "Touch reveals the hidden overlay");
+      assert(
+        await page.locator("video").evaluate((el) => !el.paused),
+        "Reveal tap must not pause video",
+      );
       await delay(2000);
       await page.getByRole("button", { name: "Pause", exact: true }).tap();
-      assert(await page.locator("video").evaluate((el) => el.paused), "Control tap still pauses");
+      assert(
+        await page.locator("video").evaluate((el) => el.paused),
+        "Control tap still pauses",
+      );
       await delay(2000);
-      assert(await opacity() === "1", "Control interaction resets the three-second deadline");
+      assert(
+        (await opacity()) === "1",
+        "Control interaction resets the three-second deadline",
+      );
       await hidden(2000);
       await tapVideo();
-      assert(await page.locator("video").evaluate((el) => el.paused), "Reveal tap preserves paused state");
+      assert(
+        await page.locator("video").evaluate((el) => el.paused),
+        "Reveal tap preserves paused state",
+      );
       await page.getByRole("button", { name: "Play", exact: true }).tap();
       await playing(page);
       await hidden();
       await tapVideo();
       await page.getByRole("button", { name: "Settings", exact: true }).tap();
-      assert(await page.getByRole("menu", { name: "Settings", exact: true }).count() === 1, "Settings action still opens menu");
+      assert(
+        (await page
+          .getByRole("menu", { name: "Settings", exact: true })
+          .count()) === 1,
+        "Settings action still opens menu",
+      );
       await hidden();
       await context.close();
     }
-    console.log("PASS: touch overlays hide and reset after three seconds in portrait and landscape");
+    console.log(
+      "PASS: touch overlays hide and reset after three seconds in portrait and landscape",
+    );
   }
 
   // Native fullscreen policy varies across Android/iOS. Exercise accepted,
@@ -1951,22 +2056,38 @@ const noWorkers = async (unreleased = () => 0) => {
   async function mobileLandscape() {
     for (const policy of ["allowed", "denied", "unsupported"]) {
       seed();
-      const context = await browser.newContext({ viewport: { width: 390, height: 844 }, isMobile: true, hasTouch: true });
+      const context = await browser.newContext({
+        viewport: { width: 390, height: 844 },
+        isMobile: true,
+        hasTouch: true,
+      });
       const page = await context.newPage();
       page.on("pageerror", (e) => errors.push(e.message));
       await page.addInitScript((policy) => {
         let element = null;
         window.__rotationFullscreen = { requests: 0, exits: 0 };
-        Object.defineProperty(document, "fullscreenElement", { configurable: true, get: () => element });
+        Object.defineProperty(document, "fullscreenElement", {
+          configurable: true,
+          get: () => element,
+        });
         Object.defineProperty(Element.prototype, "requestFullscreen", {
           configurable: true,
-          value: policy === "unsupported" ? undefined : function () {
-            window.__rotationFullscreen.requests++;
-            if (policy === "denied") return Promise.reject(new DOMException("Denied by browser policy", "NotAllowedError"));
-            element = this;
-            document.dispatchEvent(new Event("fullscreenchange"));
-            return Promise.resolve();
-          },
+          value:
+            policy === "unsupported"
+              ? undefined
+              : function () {
+                  window.__rotationFullscreen.requests++;
+                  if (policy === "denied")
+                    return Promise.reject(
+                      new DOMException(
+                        "Denied by browser policy",
+                        "NotAllowedError",
+                      ),
+                    );
+                  element = this;
+                  document.dispatchEvent(new Event("fullscreenchange"));
+                  return Promise.resolve();
+                },
         });
         document.exitFullscreen = () => {
           window.__rotationFullscreen.exits++;
@@ -1978,32 +2099,78 @@ const noWorkers = async (unreleased = () => 0) => {
       await login(page);
       await page.locator(".guide-slot-box").first().tap();
       await playing(page);
-      await page.locator("video").evaluate((el) => { window.__rotationVideo = el; });
-      assert(await page.locator(".is-landscape-player").count() === 0, "Portrait keeps the guide layout");
+      await page.locator("video").evaluate((el) => {
+        window.__rotationVideo = el;
+      });
+      assert(
+        (await page.locator(".is-landscape-player").count()) === 0,
+        "Portrait keeps the guide layout",
+      );
       await page.setViewportSize({ width: 844, height: 390 });
       await page.waitForFunction(() => {
-        const stage = document.querySelector(".playback-player.is-landscape-player");
+        const stage = document.querySelector(
+          ".playback-player.is-landscape-player",
+        );
         if (!stage) return false;
         const box = stage.getBoundingClientRect();
-        return Math.abs(box.x) < 1 && Math.abs(box.y) < 1 && Math.abs(box.width - innerWidth) < 1 && Math.abs(box.height - innerHeight) < 1;
+        return (
+          Math.abs(box.x) < 1 &&
+          Math.abs(box.y) < 1 &&
+          Math.abs(box.width - innerWidth) < 1 &&
+          Math.abs(box.height - innerHeight) < 1
+        );
       });
-      assert(await page.locator("video").evaluate((el) => el === window.__rotationVideo && !el.paused), "Landscape preserves playing video element");
-      if (policy === "allowed") await page.waitForFunction(() => document.fullscreenElement === document.querySelector(".playback-player"));
-      else assert(await page.evaluate(() => document.fullscreenElement === null), "Denied/unsupported fullscreen stays in viewport fallback");
+      assert(
+        await page
+          .locator("video")
+          .evaluate((el) => el === window.__rotationVideo && !el.paused),
+        "Landscape preserves playing video element",
+      );
+      if (policy === "allowed")
+        await page.waitForFunction(
+          () =>
+            document.fullscreenElement ===
+            document.querySelector(".playback-player"),
+        );
+      else
+        assert(
+          await page.evaluate(() => document.fullscreenElement === null),
+          "Denied/unsupported fullscreen stays in viewport fallback",
+        );
       await page.setViewportSize({ width: 390, height: 844 });
-      await page.waitForFunction(() => !document.querySelector(".is-landscape-player") && !document.fullscreenElement);
-      assert(await page.locator("video").evaluate((el) => el === window.__rotationVideo && !el.paused), "Portrait restores guide without pausing or replacing video");
-      assert(await page.evaluate(() => window.__rotationFullscreen.exits) === (policy === "allowed" ? 1 : 0), "Only automatic fullscreen is released");
+      await page.waitForFunction(
+        () =>
+          !document.querySelector(".is-landscape-player") &&
+          !document.fullscreenElement,
+      );
+      assert(
+        await page
+          .locator("video")
+          .evaluate((el) => el === window.__rotationVideo && !el.paused),
+        "Portrait restores guide without pausing or replacing video",
+      );
+      assert(
+        (await page.evaluate(() => window.__rotationFullscreen.exits)) ===
+          (policy === "allowed" ? 1 : 0),
+        "Only automatic fullscreen is released",
+      );
       await context.close();
     }
-    const desktop = await browser.newContext({ viewport: { width: 1280, height: 800 } });
+    const desktop = await browser.newContext({
+      viewport: { width: 1280, height: 800 },
+    });
     const page = await desktop.newPage();
     await login(page);
     await page.locator(".guide-slot-box").first().click();
     await playing(page);
-    assert(await page.locator(".is-landscape-player").count() === 0, "Desktop landscape never triggers automatic fullscreen");
+    assert(
+      (await page.locator(".is-landscape-player").count()) === 0,
+      "Desktop landscape never triggers automatic fullscreen",
+    );
     await desktop.close();
-    console.log("PASS: touch rotation fills landscape, restores portrait and preserves playback with allowed/denied/unsupported fullscreen; desktop unchanged");
+    console.log(
+      "PASS: touch rotation fills landscape, restores portrait and preserves playback with allowed/denied/unsupported fullscreen; desktop unchanged",
+    );
   }
 
   // Keyboard: small-player arrows browse; expanded Up/Down tunes and horizontal arrows navigate controls.
@@ -2111,38 +2278,81 @@ const noWorkers = async (unreleased = () => 0) => {
     await playing(page);
     // Expanded playback uses a horizontal control cursor and menu-owned arrows.
     const assertControlCursor = async () => {
-      const channelBefore = await rowOf('.guide-slot-box-tuned');
-      await page.keyboard.press('Escape');
-      await page.keyboard.press('ArrowRight');
-      await page.waitForFunction(() => ['Mute','Unmute'].includes(document.activeElement?.getAttribute('aria-label')));
-      assert(await rowOf('.guide-slot-box-tuned') === channelBefore, 'Horizontal arrows never tune');
+      const channelBefore = await rowOf(".guide-slot-box-tuned");
+      await page.keyboard.press("Escape");
+      await page.keyboard.press("ArrowRight");
+      await page.waitForFunction(() =>
+        ["Mute", "Unmute"].includes(
+          document.activeElement?.getAttribute("aria-label"),
+        ),
+      );
+      assert(
+        (await rowOf(".guide-slot-box-tuned")) === channelBefore,
+        "Horizontal arrows never tune",
+      );
       const mutedBefore = (await video()).muted;
-      await page.keyboard.press('Enter');
-      assert((await video()).muted !== mutedBefore, 'Enter activates the selected Mute control');
-      await page.keyboard.press('ArrowRight');
-      await page.keyboard.press(' ');
-      await page.getByRole('menu',{name:'Settings',exact:true}).waitFor();
+      await page.keyboard.press("Enter");
+      assert(
+        (await video()).muted !== mutedBefore,
+        "Enter activates the selected Mute control",
+      );
+      await page.keyboard.press("ArrowRight");
+      await page.keyboard.press(" ");
+      await page.getByRole("menu", { name: "Settings", exact: true }).waitFor();
       // Every source exposes the status rows; Quality is first even for Auto-only sources.
-      await page.waitForFunction(() => document.activeElement?.getAttribute('role') === 'menuitem');
-      await page.keyboard.press('Enter');
-      await page.getByRole('menu',{name:'Quality',exact:true}).waitFor();
-      await page.keyboard.press('ArrowDown');await page.keyboard.press('ArrowUp');
-      assert(await rowOf('.guide-slot-box-tuned') === channelBefore, 'Submenu Up/Down navigate without tuning');
-      await page.keyboard.press('Escape');
-      await page.getByRole('menu',{name:'Settings',exact:true}).waitFor();
-      await page.keyboard.press('ArrowDown');await page.keyboard.press('ArrowUp');
-      assert(await rowOf('.guide-slot-box-tuned') === channelBefore, 'Root menu Up/Down navigate without tuning');
-      await page.keyboard.press('Escape');
-      await page.locator('.playback-menu').waitFor({state:'detached'});
-      await page.keyboard.press('Escape');
-      await page.waitForFunction(() => getComputedStyle(document.querySelector('.playback-controls')).opacity === '0');
+      await page.waitForFunction(
+        () => document.activeElement?.getAttribute("role") === "menuitem",
+      );
+      await page.keyboard.press("Enter");
+      await page.getByRole("menu", { name: "Quality", exact: true }).waitFor();
+      await page.keyboard.press("ArrowDown");
+      await page.keyboard.press("ArrowUp");
+      assert(
+        (await rowOf(".guide-slot-box-tuned")) === channelBefore,
+        "Submenu Up/Down navigate without tuning",
+      );
+      await page.keyboard.press("Escape");
+      await page.getByRole("menu", { name: "Settings", exact: true }).waitFor();
+      await page.keyboard.press("ArrowDown");
+      await page.keyboard.press("ArrowUp");
+      assert(
+        (await rowOf(".guide-slot-box-tuned")) === channelBefore,
+        "Root menu Up/Down navigate without tuning",
+      );
+      await page.keyboard.press("Escape");
+      await page.locator(".playback-menu").waitFor({ state: "detached" });
+      await page.keyboard.press("Escape");
+      await page.waitForFunction(
+        () =>
+          getComputedStyle(document.querySelector(".playback-controls"))
+            .opacity === "0",
+      );
       // Reproduce the banner/paused HUD state without relying on tune timing.
-      await page.locator('.playback-player').evaluate(stage => stage.classList.add('show-channel-overlay', 'is-paused'));
-      assert(await page.locator('.playback-controls').evaluate(el => getComputedStyle(el).opacity) === '0', 'Escape hides the HUD even during its channel banner or paused state');
-      await page.locator('.playback-player').evaluate(stage => stage.classList.remove('show-channel-overlay', 'is-paused'));
-      await page.keyboard.press('ArrowLeft');
-      await page.waitForFunction(() => document.activeElement?.getAttribute('aria-label') === 'Pause');
-      await page.waitForFunction(() => getComputedStyle(document.querySelector('.playback-controls')).opacity === '1');
+      await page
+        .locator(".playback-player")
+        .evaluate((stage) =>
+          stage.classList.add("show-channel-overlay", "is-paused"),
+        );
+      assert(
+        (await page
+          .locator(".playback-controls")
+          .evaluate((el) => getComputedStyle(el).opacity)) === "0",
+        "Escape hides the HUD even during its channel banner or paused state",
+      );
+      await page
+        .locator(".playback-player")
+        .evaluate((stage) =>
+          stage.classList.remove("show-channel-overlay", "is-paused"),
+        );
+      await page.keyboard.press("ArrowLeft");
+      await page.waitForFunction(
+        () => document.activeElement?.getAttribute("aria-label") === "Pause",
+      );
+      await page.waitForFunction(
+        () =>
+          getComputedStyle(document.querySelector(".playback-controls"))
+            .opacity === "1",
+      );
     };
     await assertControlCursor();
     // m toggles mute, Space toggles pause, even with a guide slot focused.
@@ -2343,7 +2553,9 @@ const noWorkers = async (unreleased = () => 0) => {
     const card = page.locator(".admin-card", {
       has: page.getByRole("heading", { name: "Subtitles", exact: true }),
     });
-    await card.getByLabel("Subtitle language", { exact: true }).selectOption("de");
+    await card
+      .getByLabel("Subtitle language", { exact: true })
+      .selectOption("de");
     await card.getByLabel("Subtitles", { exact: true }).selectOption("always");
     await page.getByRole("button", { name: "Save Changes" }).click();
     await page.locator(".guide-slot-box").first().waitFor();
@@ -2518,143 +2730,363 @@ const noWorkers = async (unreleased = () => 0) => {
   }
 
   async function sessionsAndGuideHistory() {
-    const context = await browser.newContext({ timezoneId: 'America/New_York' });
+    const context = await browser.newContext({
+      timezoneId: "America/New_York",
+    });
     const page = await context.newPage();
     await login(page);
-    await page.goto(url + '/account');
-    await page.getByRole('heading', {name:'Sessions',exact:true}).waitFor();
-    assert(await page.getByRole('columnheader',{name:'Type',exact:true}).count() === 0, 'Session Type column is removed');
-    assert(await page.getByRole('cell',{name:'Linux',exact:true}).count() > 0, 'Web sessions use operating system labels');
-    const toggle = page.getByRole('switch',{name:'Remove Inactive Sessions',exact:true});
-    const days = page.locator('#inactive-session-days');
-    await page.waitForFunction(() => document.querySelector('#inactive-session-days')?.value === '14');
-    assert(await toggle.getAttribute('aria-checked') === 'true', 'Inactivity removal defaults On');
-    const saved = async action => {
-      const response = page.waitForResponse(r => r.url().endsWith('/api/auth/session-inactivity') && r.request().method() === 'PUT');
+    await page.goto(url + "/account");
+    await page
+      .getByRole("heading", { name: "Sessions", exact: true })
+      .waitFor();
+    assert(
+      (await page
+        .getByRole("columnheader", { name: "Type", exact: true })
+        .count()) === 0,
+      "Session Type column is removed",
+    );
+    assert(
+      (await page.getByRole("cell", { name: "Linux", exact: true }).count()) >
+        0,
+      "Web sessions use operating system labels",
+    );
+    const toggle = page.getByRole("switch", {
+      name: "Remove Inactive Sessions",
+      exact: true,
+    });
+    const days = page.locator("#inactive-session-days");
+    await page.waitForFunction(
+      () => document.querySelector("#inactive-session-days")?.value === "14",
+    );
+    assert(
+      (await toggle.getAttribute("aria-checked")) === "true",
+      "Inactivity removal defaults On",
+    );
+    const saved = async (action) => {
+      const response = page.waitForResponse(
+        (r) =>
+          r.url().endsWith("/api/auth/session-inactivity") &&
+          r.request().method() === "PUT",
+      );
       await action();
       const result = await response;
-      assert(result.ok(), 'Inactivity policy saves successfully');
+      assert(result.ok(), "Inactivity policy saves successfully");
       return result.json();
     };
-    assert((await saved(() => toggle.click())).enabled === false, 'Cleanup can be disabled');
-    assert(await days.isDisabled(), 'Inactive days are disabled with cleanup Off');
-    assert((await saved(() => toggle.click())).enabled === true, 'Cleanup can be enabled');
-    assert((await saved(async () => { await days.fill('21'); await days.blur(); })).days === 21, 'Inactive days are configurable');
-    await saved(async () => { await days.fill('14'); await days.blur(); });
-    const lifetime = page.locator('#account-days');
+    assert(
+      (await saved(() => toggle.click())).enabled === false,
+      "Cleanup can be disabled",
+    );
+    assert(
+      await days.isDisabled(),
+      "Inactive days are disabled with cleanup Off",
+    );
+    assert(
+      (await saved(() => toggle.click())).enabled === true,
+      "Cleanup can be enabled",
+    );
+    assert(
+      (
+        await saved(async () => {
+          await days.fill("21");
+          await days.blur();
+        })
+      ).days === 21,
+      "Inactive days are configurable",
+    );
+    await saved(async () => {
+      await days.fill("14");
+      await days.blur();
+    });
+    const lifetime = page.locator("#account-days");
     for (const [field, endpoint, value, status] of [
-      [lifetime, 'session-lifetime', '31', 'Sign-in lifetime saved'],
-      [days, 'session-inactivity', '15', 'Inactivity policy saved'],
+      [lifetime, "session-lifetime", "31", "Sign-in lifetime saved"],
+      [days, "session-inactivity", "15", "Inactivity policy saved"],
     ]) {
       let writes = 0;
-      const listener = request => { if (request.url().endsWith('/api/auth/' + endpoint) && request.method() === 'PUT') writes++; };
-      page.on('request', listener);
+      const listener = (request) => {
+        if (
+          request.url().endsWith("/api/auth/" + endpoint) &&
+          request.method() === "PUT"
+        )
+          writes++;
+      };
+      page.on("request", listener);
       await field.fill(value);
       const before = await field.boundingBox();
       await page.waitForTimeout(3200);
-      assert(writes === 0, 'Day fields must not save while still focused');
-      const response = page.waitForResponse(r => r.url().endsWith('/api/auth/' + endpoint) && r.request().method() === 'PUT');
+      assert(writes === 0, "Day fields must not save while still focused");
+      const response = page.waitForResponse(
+        (r) =>
+          r.url().endsWith("/api/auth/" + endpoint) &&
+          r.request().method() === "PUT",
+      );
       await field.blur();
-      assert((await response).ok(), 'Blur saves the day field');
-      await page.getByRole('status', {name:status, exact:true}).waitFor();
+      assert((await response).ok(), "Blur saves the day field");
+      await page.getByRole("status", { name: status, exact: true }).waitFor();
       const after = await field.boundingBox();
-      assert(before.x === after.x && before.width === after.width, 'Save feedback must not shift the input');
+      assert(
+        before.x === after.x && before.width === after.width,
+        "Save feedback must not shift the input",
+      );
       await page.waitForTimeout(5200);
-      assert(await page.getByRole('status', {name:status, exact:true}).count() === 0, 'Save checkmark clears after five seconds');
-      page.off('request', listener);
+      assert(
+        (await page
+          .getByRole("status", { name: status, exact: true })
+          .count()) === 0,
+        "Save checkmark clears after five seconds",
+      );
+      page.off("request", listener);
     }
     let deferFirstPolicySave = true;
-    await page.route('**/api/auth/session-inactivity', async route => {
-      if (route.request().method() === 'PUT' && deferFirstPolicySave) {
+    await page.route("**/api/auth/session-inactivity", async (route) => {
+      if (route.request().method() === "PUT" && deferFirstPolicySave) {
         deferFirstPolicySave = false;
         const response = await route.fetch();
         await page.waitForTimeout(400);
-        await route.fulfill({response});
+        await route.fulfill({ response });
         return;
       }
       await route.continue();
     });
-    const policyResponse = (enabled, value) => page.waitForResponse(response => {
-      const request = response.request();
-      if (!request.url().endsWith('/api/auth/session-inactivity') || request.method() !== 'PUT') return false;
-      const body = request.postDataJSON();
-      return body.enabled === enabled && body.days === value;
-    });
+    const policyResponse = (enabled, value) =>
+      page.waitForResponse((response) => {
+        const request = response.request();
+        if (
+          !request.url().endsWith("/api/auth/session-inactivity") ||
+          request.method() !== "PUT"
+        )
+          return false;
+        const body = request.postDataJSON();
+        return body.enabled === enabled && body.days === value;
+      });
     const blurredSave = policyResponse(true, 16);
     const toggledSave = policyResponse(false, 16);
-    await days.fill('16');
+    await days.fill("16");
     await toggle.click();
-    assert((await blurredSave).ok(), 'Blurred policy save completes before the toggle save');
-    assert((await toggledSave).ok(), 'Toggle save completes after the blurred policy save');
-    const racedPolicy = await (await page.request.get(url + '/api/auth/session-inactivity')).json();
-    assert(racedPolicy.enabled === false && racedPolicy.days === 16, 'Rapid blur then toggle persists the latest policy');
-    await page.unroute('**/api/auth/session-inactivity');
+    assert(
+      (await blurredSave).ok(),
+      "Blurred policy save completes before the toggle save",
+    );
+    assert(
+      (await toggledSave).ok(),
+      "Toggle save completes after the blurred policy save",
+    );
+    const racedPolicy = await (
+      await page.request.get(url + "/api/auth/session-inactivity")
+    ).json();
+    assert(
+      racedPolicy.enabled === false && racedPolicy.days === 16,
+      "Rapid blur then toggle persists the latest policy",
+    );
+    await page.unroute("**/api/auth/session-inactivity");
     const restoredPolicy = policyResponse(true, 16);
     await toggle.click();
-    assert((await restoredPolicy).ok(), 'Cleanup can be re-enabled after the race check');
+    assert(
+      (await restoredPolicy).ok(),
+      "Cleanup can be re-enabled after the race check",
+    );
     const resetDays = policyResponse(true, 14);
-    await days.fill('14');
+    await days.fill("14");
     await days.blur();
-    assert((await resetDays).ok(), 'Inactivity days can be restored after the race check');
+    assert(
+      (await resetDays).ok(),
+      "Inactivity days can be restored after the race check",
+    );
 
-    const actual = await (await page.request.get(url + '/api/auth/sessions')).json();
-    const current = actual.find(session => session.current);
-    await page.route('**/api/auth/sessions', route => route.fulfill({json:[
-      {...current,id:'old',current:false,deviceName:'Old device',lastActiveAt:'2026-10-01T00:00:00Z'},
-      {...current,id:'recent',current:false,deviceName:'Recent device',lastActiveAt:'2026-10-13T00:00:00Z'},
-      {...current,deviceName:'Current device',lastActiveAt:'2026-09-01T00:00:00Z'},
-    ]}));
+    const actual = await (
+      await page.request.get(url + "/api/auth/sessions")
+    ).json();
+    const current = actual.find((session) => session.current);
+    await page.route("**/api/auth/sessions", (route) =>
+      route.fulfill({
+        json: [
+          {
+            ...current,
+            id: "old",
+            current: false,
+            deviceName: "Old device",
+            lastActiveAt: "2026-10-01T00:00:00Z",
+          },
+          {
+            ...current,
+            id: "recent",
+            current: false,
+            deviceName: "Recent device",
+            lastActiveAt: "2026-10-13T00:00:00Z",
+          },
+          {
+            ...current,
+            deviceName: "Current device",
+            lastActiveAt: "2026-09-01T00:00:00Z",
+          },
+        ],
+      }),
+    );
     await page.reload();
-    await page.locator('.session-current-pill').waitFor();
-    const rowsText = await page.locator('.sessions-table tbody tr td:first-child').allTextContents();
-    assert(JSON.stringify(rowsText.map(text => text.trim())) === JSON.stringify(['Current device','Recent device','Old device']), 'Current session first, then newest activity');
-    assert(await page.locator('.sessions-table tbody tr').first().getByRole('button').count() === 0, 'Current session has no clickable sign-out control');
-    await page.locator('#inactive-session-days').scrollIntoViewIfNeeded();
-    for (const width of [320,375,600,1280]) {
-      await page.setViewportSize({width,height:900});
+    await page.locator(".session-current-pill").waitFor();
+    const sessionHeaderAlignment = await page
+      .locator(".sessions-table thead th")
+      .evaluateAll((headers) =>
+        headers.map((header) => getComputedStyle(header).textAlign),
+      );
+    assert(
+      sessionHeaderAlignment.every((alignment) => alignment === "center"),
+      "Signed-in session column headers are centered",
+    );
+    const rowsText = await page
+      .locator(".sessions-table tbody tr td:first-child")
+      .allTextContents();
+    assert(
+      JSON.stringify(rowsText.map((text) => text.trim())) ===
+        JSON.stringify(["Current device", "Recent device", "Old device"]),
+      "Current session first, then newest activity",
+    );
+    assert(
+      (await page
+        .locator(".sessions-table tbody tr")
+        .first()
+        .getByRole("button")
+        .count()) === 0,
+      "Current session has no clickable sign-out control",
+    );
+    await page.locator("#inactive-session-days").scrollIntoViewIfNeeded();
+    for (const width of [320, 375, 600, 1280]) {
+      await page.setViewportSize({ width, height: 900 });
       const layout = await page.evaluate(() => {
-        const input = document.querySelector('#inactive-session-days').getBoundingClientRect();
-        const toggle = document.querySelector('[role="switch"][aria-label="Remove Inactive Sessions"]').getBoundingClientRect();
-        const controls = [...document.querySelectorAll('.session-policy-controls')].map(el => el.getBoundingClientRect());
-        return {overflow:document.documentElement.scrollWidth > innerWidth, right:toggle.x > input.right,
-          fits:controls.every(rect => rect.right <= innerWidth && rect.left >= 0)};
+        const input = document
+          .querySelector("#inactive-session-days")
+          .getBoundingClientRect();
+        const toggle = document
+          .querySelector(
+            '[role="switch"][aria-label="Remove Inactive Sessions"]',
+          )
+          .getBoundingClientRect();
+        const controls = [
+          ...document.querySelectorAll(".session-policy-controls"),
+        ].map((el) => el.getBoundingClientRect());
+        return {
+          overflow: document.documentElement.scrollWidth > innerWidth,
+          right: toggle.x > input.right,
+          fits: controls.every(
+            (rect) => rect.right <= innerWidth && rect.left >= 0,
+          ),
+        };
       });
-      assert(!layout.overflow && layout.right && layout.fits, `Session controls fit at ${width}px: ${JSON.stringify(layout)}`);
-      await page.screenshot({path:`/tmp/alreadyon-sessions-${width}.png`});
+      assert(
+        !layout.overflow && layout.right && layout.fits,
+        `Session controls fit at ${width}px: ${JSON.stringify(layout)}`,
+      );
+      await page.screenshot({ path: `/tmp/alreadyon-sessions-${width}.png` });
     }
-    await page.screenshot({path:'/tmp/alreadyon-sessions-settings.png'});
-    const channels = await (await page.request.get(url + '/api/guide')).json();
+    await page.screenshot({ path: "/tmp/alreadyon-sessions-settings.png" });
+    const channels = await (await page.request.get(url + "/api/guide")).json();
     const base = channels[0];
-    const fixed = Date.parse('2026-10-15T01:48:00Z');
-    const stamp = (hour,minute) => new Date(Date.parse('2026-10-15T00:00:00Z') + hour*3600000 + minute*60000).toISOString();
-    const program = (title,start,end) => ({...base.programs[0],kind:'program',mediaType:'episode',title,seriesTitle:title,episodeTitle:'An exceptionally long previous episode title for clipping',seasonNumber:1,episodeNumber:2,startsAt:start,endsAt:end});
-    const rows = [
-      {...base,number:998,previousPrograms:[program('Wide ended show with a long title',stamp(1,15),stamp(1,45))],programs:[program('Current show',stamp(1,46),stamp(2,15))]},
-      {...base,number:999,previousPrograms:[program('Skinny ended show',stamp(1,0),stamp(1,31))],programs:[program('Current second show',stamp(1,32),stamp(2,2))]},
-    ];
-    await page.clock.install({time:fixed});
-    await page.route('**/api/guide**',route => route.fulfill({json:rows}));
-    await page.goto(url);
-    await page.locator('.guide-slot-history').first().waitFor();
-    const cells = page.locator('.guide-slot-history');
-    assert(await cells.count() === 2, 'Ended airings have separate display cells');
-    assert((await cells.nth(0).textContent()).includes('Wide ended show'), 'Wide history cell includes title');
-    assert((await cells.nth(0).locator('.guide-slot-episode').textContent()).includes('S01E02'), 'Wide ended episode includes season/episode text');
-    assert((await cells.nth(1).textContent()).trim() === '', 'Skinny history cell omits all text');
-    const metrics = await page.evaluate(() => {
-      const cells = [...document.querySelectorAll('.guide-slot-history')];
-      const slot = document.querySelector('.guide-head-slot');
-      const time = cells[0].querySelector('.guide-slot-time');
-      return {origin:Number(slot.dataset.startMs),slotWidth:slot.getBoundingClientRect().width, widths:cells.map(c=>c.getBoundingClientRect().width),left:cells.map(c=>parseFloat(c.style.left)),timeFits:time.scrollWidth<=time.clientWidth,grey:getComputedStyle(cells[0]).backgroundColor,current:getComputedStyle(document.querySelector('.guide-slot-box')).backgroundColor};
+    const fixed = Date.parse("2026-10-15T01:48:00Z");
+    const stamp = (hour, minute) =>
+      new Date(
+        Date.parse("2026-10-15T00:00:00Z") + hour * 3600000 + minute * 60000,
+      ).toISOString();
+    const program = (title, start, end) => ({
+      ...base.programs[0],
+      kind: "program",
+      mediaType: "episode",
+      title,
+      seriesTitle: title,
+      episodeTitle: "An exceptionally long previous episode title for clipping",
+      seasonNumber: 1,
+      episodeNumber: 2,
+      startsAt: start,
+      endsAt: end,
     });
-    assert(metrics.origin === Date.parse(stamp(1,30)), 'First column remains the current half hour');
-    assert(Math.abs(metrics.widths[0] - (Math.round(metrics.slotWidth/2)-6)) <= 2, 'Wide history is clipped to fifteen real minutes');
-    assert(metrics.widths[1] < metrics.widths[0]/4, 'Skinny ended airing preserves its real narrow width');
-    assert(metrics.left.every(left=>left===3), 'Ended cells clip at the visible slot origin');
-    assert(metrics.timeFits && metrics.grey !== metrics.current, 'Ended time fits and grey distinguishes history');
-    await page.screenshot({path:'/tmp/alreadyon-guide-history-web.png'});
+    const rows = [
+      {
+        ...base,
+        number: 998,
+        previousPrograms: [
+          program(
+            "Wide ended show with a long title",
+            stamp(1, 15),
+            stamp(1, 45),
+          ),
+        ],
+        programs: [program("Current show", stamp(1, 46), stamp(2, 15))],
+      },
+      {
+        ...base,
+        number: 999,
+        previousPrograms: [
+          program("Skinny ended show", stamp(1, 0), stamp(1, 31)),
+        ],
+        programs: [program("Current second show", stamp(1, 32), stamp(2, 2))],
+      },
+    ];
+    await page.clock.install({ time: fixed });
+    await page.route("**/api/guide**", (route) =>
+      route.fulfill({ json: rows }),
+    );
+    await page.goto(url);
+    await page.locator(".guide-slot-history").first().waitFor();
+    const cells = page.locator(".guide-slot-history");
+    assert(
+      (await cells.count()) === 2,
+      "Ended airings have separate display cells",
+    );
+    assert(
+      (await cells.nth(0).textContent()).includes("Wide ended show"),
+      "Wide history cell includes title",
+    );
+    assert(
+      (
+        await cells.nth(0).locator(".guide-slot-episode").textContent()
+      ).includes("S01E02"),
+      "Wide ended episode includes season/episode text",
+    );
+    assert(
+      (await cells.nth(1).textContent()).trim() === "",
+      "Skinny history cell omits all text",
+    );
+    const metrics = await page.evaluate(() => {
+      const cells = [...document.querySelectorAll(".guide-slot-history")];
+      const slot = document.querySelector(".guide-head-slot");
+      const time = cells[0].querySelector(".guide-slot-time");
+      return {
+        origin: Number(slot.dataset.startMs),
+        slotWidth: slot.getBoundingClientRect().width,
+        widths: cells.map((c) => c.getBoundingClientRect().width),
+        left: cells.map((c) => parseFloat(c.style.left)),
+        timeFits: time.scrollWidth <= time.clientWidth,
+        grey: getComputedStyle(cells[0]).backgroundColor,
+        current: getComputedStyle(document.querySelector(".guide-slot-box"))
+          .backgroundColor,
+      };
+    });
+    assert(
+      metrics.origin === Date.parse(stamp(1, 30)),
+      "First column remains the current half hour",
+    );
+    assert(
+      Math.abs(metrics.widths[0] - (Math.round(metrics.slotWidth / 2) - 6)) <=
+        2,
+      "Wide history is clipped to fifteen real minutes",
+    );
+    assert(
+      metrics.widths[1] < metrics.widths[0] / 4,
+      "Skinny ended airing preserves its real narrow width",
+    );
+    assert(
+      metrics.left.every((left) => left === 3),
+      "Ended cells clip at the visible slot origin",
+    );
+    assert(
+      metrics.timeFits && metrics.grey !== metrics.current,
+      "Ended time fits and grey distinguishes history",
+    );
+    await page.screenshot({ path: "/tmp/alreadyon-guide-history-web.png" });
     await context.close();
-    console.log('PASS: device labels, inactivity settings and grey clipped previous airings with width-based text');
+    console.log(
+      "PASS: device labels, inactivity settings and grey clipped previous airings with width-based text",
+    );
   }
 
   async function profileRefresh() {
@@ -2664,25 +3096,70 @@ const noWorkers = async (unreleased = () => 0) => {
     await login(page);
     const list = await (await page.request.get(url + "/api/profiles")).json();
     const active = list[0];
-    const refreshed = { ...active, name: "Remote profile update", icon: "owl", guideTimeFormat: "24h" };
+    const refreshed = {
+      ...active,
+      name: "Remote profile update",
+      icon: "owl",
+      guideTimeFormat: "24h",
+    };
     let polls = 0;
-    await page.route("**/api/profiles", route => { polls++; return route.fulfill({ json: list.map(p => p.id === active.id ? refreshed : p) }); });
+    await page.route("**/api/profiles", (route) => {
+      polls++;
+      return route.fulfill({
+        json: list.map((p) => (p.id === active.id ? refreshed : p)),
+      });
+    });
     await page.clock.fastForward(5 * 60 * 1000);
-    await page.locator('.profile-menu-trigger').filter({ hasText: refreshed.name }).waitFor();
-    assert(polls >= 1, "Visible WebUI polls profiles at five minutes without a focus event");
-    assert(await page.locator('.profile-menu-trigger').textContent().then(t => t.includes("🦉")), "Remote avatar preset reaches active profile");
+    await page
+      .locator(".profile-menu-trigger")
+      .filter({ hasText: refreshed.name })
+      .waitFor();
+    assert(
+      polls >= 1,
+      "Visible WebUI polls profiles at five minutes without a focus event",
+    );
+    assert(
+      await page
+        .locator(".profile-menu-trigger")
+        .textContent()
+        .then((t) => t.includes("🦉")),
+      "Remote avatar preset reaches active profile",
+    );
     await page.goto(url + "/profile");
-    const nameInput = page.locator('.admin-card').filter({ has: page.getByRole('heading', {name: 'Display Name', exact: true}) }).locator('input');
+    const nameInput = page
+      .locator(".admin-card")
+      .filter({
+        has: page.getByRole("heading", { name: "Display Name", exact: true }),
+      })
+      .locator("input");
     await nameInput.fill("Local unsaved name");
     refreshed.name = "Second remote update";
     refreshed.icon = "/profile-icons/synthetic-refresh.png";
-    await page.route("**/profile-icons/synthetic-refresh.png", route => route.fulfill({ status: 200, contentType: 'image/png', body: Buffer.from('iVBORw0KGgoAAAANSUhEUgAAAAEAAAABCAQAAAC1HAwCAAAAC0lEQVR42mP8/x8AAwMCAO+jWZkAAAAASUVORK5CYII=', 'base64') }));
+    await page.route("**/profile-icons/synthetic-refresh.png", (route) =>
+      route.fulfill({
+        status: 200,
+        contentType: "image/png",
+        body: Buffer.from(
+          "iVBORw0KGgoAAAANSUhEUgAAAAEAAAABCAQAAAC1HAwCAAAAC0lEQVR42mP8/x8AAwMCAO+jWZkAAAAASUVORK5CYII=",
+          "base64",
+        ),
+      }),
+    );
     await page.clock.fastForward(5 * 60 * 1000);
-    await page.locator('.profile-menu-trigger img').waitFor();
-    assert((await page.locator('.profile-menu-trigger img').getAttribute('src')) === refreshed.icon, "Uploaded avatar changes reach the active profile");
-    assert((await nameInput.inputValue()) === "Local unsaved name", "Polling preserves unsaved local profile edits");
+    await page.locator(".profile-menu-trigger img").waitFor();
+    assert(
+      (await page.locator(".profile-menu-trigger img").getAttribute("src")) ===
+        refreshed.icon,
+      "Uploaded avatar changes reach the active profile",
+    );
+    assert(
+      (await nameInput.inputValue()) === "Local unsaved name",
+      "Polling preserves unsaved local profile edits",
+    );
     await context.close();
-    console.log("PASS: active WebUI refreshes remote profile name/avatar every five minutes and preserves drafts");
+    console.log(
+      "PASS: active WebUI refreshes remote profile name/avatar every five minutes and preserves drafts",
+    );
   }
 
   // Browser fixtures verify visibility without changing any persistent profile.
@@ -2692,33 +3169,71 @@ const noWorkers = async (unreleased = () => 0) => {
         const context = await browser.newContext();
         const page = await context.newPage();
         await login(page);
-        const profiles = await (await page.request.get(url + "/api/profiles")).json();
-        const profile = { ...profiles[0], name: "A deliberately long household profile name for header layout", role: profileRole };
-        await page.addInitScript(id => localStorage.setItem("alreadyon.currentUserId", String(id)), profile.id);
-        await page.route("**/api/auth/status", route => route.fulfill({json: {
-          setupRequired: false, authenticated: true, role: accountRole,
-          username: "menu-fixture", mustChangePassword: false,
-        }}));
-        await page.route("**/api/profiles", route => route.fulfill({json: [profile]}));
-        const expected = ["Switch Profile", "Profile",
+        const profiles = await (
+          await page.request.get(url + "/api/profiles")
+        ).json();
+        const profile = {
+          ...profiles[0],
+          name: "A deliberately long household profile name for header layout",
+          role: profileRole,
+        };
+        await page.addInitScript(
+          (id) => localStorage.setItem("alreadyon.currentUserId", String(id)),
+          profile.id,
+        );
+        await page.route("**/api/auth/status", (route) =>
+          route.fulfill({
+            json: {
+              setupRequired: false,
+              authenticated: true,
+              role: accountRole,
+              username: "menu-fixture",
+              mustChangePassword: false,
+            },
+          }),
+        );
+        await page.route("**/api/profiles", (route) =>
+          route.fulfill({ json: [profile] }),
+        );
+        const expected = [
+          "Switch Profile",
+          "Profile",
           ...(profileRole === "admin" ? ["Settings"] : []),
-          ...(accountRole === "owner" ? ["Server"] : []), "Sign Out"];
-        const routes = ["/", "/profile",
+          ...(accountRole === "owner" ? ["Server"] : []),
+          "Sign Out",
+        ];
+        const routes = [
+          "/",
+          "/profile",
           ...(profileRole === "admin" ? ["/account"] : []),
-          ...(accountRole === "owner" ? ["/admin/accounts"] : [])];
+          ...(accountRole === "owner" ? ["/admin/accounts"] : []),
+        ];
         // Check real navigation, both hit targets, keyboard access and long-name
         // containment. Fixtures change browser responses, never stored profiles.
         for (const width of [1280, 360]) {
-          await page.setViewportSize({width, height: 900});
+          await page.setViewportSize({ width, height: 900 });
           for (const route of routes) {
             await page.goto(url + route);
             const trigger = page.locator(".profile-menu-trigger");
             await trigger.waitFor();
-            assert(await trigger.count() === 1, "One profile trigger per page");
-            assert(await trigger.locator(".profile-menu-trigger-name").textContent() === profile.name, "Selected name remains visible");
+            assert(
+              (await trigger.count()) === 1,
+              "One profile trigger per page",
+            );
+            assert(
+              (await trigger
+                .locator(".profile-menu-trigger-name")
+                .textContent()) === profile.name,
+              "Selected name remains visible",
+            );
             await trigger.locator("span").first().click();
-            const actual = (await page.locator(".profile-menu-item").allTextContents()).map(s => s.trim());
-            assert(JSON.stringify(actual) === JSON.stringify(expected), `${accountRole}/${profileRole} ${route} menu: ${actual}`);
+            const actual = (
+              await page.locator(".profile-menu-item").allTextContents()
+            ).map((s) => s.trim());
+            assert(
+              JSON.stringify(actual) === JSON.stringify(expected),
+              `${accountRole}/${profileRole} ${route} menu: ${actual}`,
+            );
             await page.keyboard.press("Escape");
             await trigger.locator(".profile-menu-trigger-name").click();
             await page.locator(".profile-menu-panel").waitFor();
@@ -2726,18 +3241,34 @@ const noWorkers = async (unreleased = () => 0) => {
             await trigger.focus();
             await trigger.press("Enter");
             await page.locator(".profile-menu-panel").waitFor();
-            assert(await trigger.getAttribute("aria-expanded") === "true", "Keyboard opens profile menu");
-            assert(await page.evaluate(() => document.documentElement.scrollWidth <= innerWidth + 1), "Long-name header remains viewport-bound");
+            assert(
+              (await trigger.getAttribute("aria-expanded")) === "true",
+              "Keyboard opens profile menu",
+            );
+            assert(
+              await page.evaluate(
+                () => document.documentElement.scrollWidth <= innerWidth + 1,
+              ),
+              "Long-name header remains viewport-bound",
+            );
             await page.keyboard.press("Escape");
           }
         }
         await page.goto(url);
         await page.locator(".profile-menu-trigger").click();
         if (accountRole === "owner") {
-          await page.getByRole("button", {name: "Server", exact: true}).click();
-          await page.waitForURL('**/admin/dashboard');
-          await page.getByRole("heading", {name: "Server Metrics", exact: true}).waitFor();
-          assert((await page.locator('.admin-tab').first().innerText()) === 'Dashboard', 'Dashboard is the first Server tab');
+          await page
+            .getByRole("button", { name: "Server", exact: true })
+            .click();
+          await page.waitForURL("**/admin/dashboard");
+          await page
+            .getByRole("heading", { name: "Server Metrics", exact: true })
+            .waitFor();
+          assert(
+            (await page.locator(".admin-tab").first().innerText()) ===
+              "Dashboard",
+            "Dashboard is the first Server tab",
+          );
         } else {
           await page.goto(url + "/admin/accounts");
           await page.waitForURL(url + "/");
@@ -2745,7 +3276,9 @@ const noWorkers = async (unreleased = () => 0) => {
         await context.close();
       }
     }
-    console.log("PASS: profile menu order, role permissions and owner Dashboard navigation");
+    console.log(
+      "PASS: profile menu order, role permissions and owner Dashboard navigation",
+    );
   }
 
   // Admin: activity cards precede server performance and the settings grid.
@@ -2765,8 +3298,7 @@ const noWorkers = async (unreleased = () => 0) => {
     );
     const headings = await page.locator(".admin-card h3").allTextContents();
     assert(
-      JSON.stringify(headings) ===
-        JSON.stringify(["Profiles", "Sessions"]),
+      JSON.stringify(headings) === JSON.stringify(["Profiles", "Sessions"]),
       `Admin Settings should show the account form with TV Pairing Pin, Profiles, then Sessions: ${JSON.stringify(headings)}`,
     );
     await page
@@ -2790,7 +3322,9 @@ const noWorkers = async (unreleased = () => 0) => {
       "Settings tab order: " + tabs,
     );
     await page.goto(url + "/dashboard");
-    await page.getByRole("heading", { name: "Server Metrics", exact: true }).waitFor();
+    await page
+      .getByRole("heading", { name: "Server Metrics", exact: true })
+      .waitFor();
     assert(
       (
         await page.locator(".admin-card h2, .admin-card h3").allTextContents()
@@ -2799,8 +3333,10 @@ const noWorkers = async (unreleased = () => 0) => {
       "Dashboard card order",
     );
     await page.setViewportSize({ width: 1100, height: 800 });
-    assert(await page.locator(".admin-tabs").count() === 1,
-      "Dashboard belongs to Server navigation");
+    assert(
+      (await page.locator(".admin-tabs").count()) === 1,
+      "Dashboard belongs to Server navigation",
+    );
     const graphLayout = await page
       .locator(".metrics-grid .metric-panel")
       .evaluateAll((panels) =>
@@ -2815,12 +3351,21 @@ const noWorkers = async (unreleased = () => 0) => {
       "Split-screen metrics stack on one aligned column: " +
         JSON.stringify(graphLayout),
     );
-    const chartWidths = await page.locator(".metrics-grid").evaluate(grid => ({
-      available: grid.getBoundingClientRect().width,
-      panels: [...grid.querySelectorAll(".metric-panel")].map(panel => panel.getBoundingClientRect().width),
-    }));
-    assert(chartWidths.panels.every(width => Math.abs(width - chartWidths.available) < 2),
-      "Split-screen charts fill the available card width: " + JSON.stringify(chartWidths));
+    const chartWidths = await page
+      .locator(".metrics-grid")
+      .evaluate((grid) => ({
+        available: grid.getBoundingClientRect().width,
+        panels: [...grid.querySelectorAll(".metric-panel")].map(
+          (panel) => panel.getBoundingClientRect().width,
+        ),
+      }));
+    assert(
+      chartWidths.panels.every(
+        (width) => Math.abs(width - chartWidths.available) < 2,
+      ),
+      "Split-screen charts fill the available card width: " +
+        JSON.stringify(chartWidths),
+    );
     await page.setViewportSize({ width: 1280, height: 800 });
     await page.goto(url + "/admin/channels");
     await page
@@ -2896,8 +3441,12 @@ const noWorkers = async (unreleased = () => 0) => {
       Math.abs(deselectBox.y - selectBox.y) < 2 && deselectBox.x > selectBox.x,
       "Bulk links share one line",
     );
-    assert((await page.locator(".configured-channels-table .table-filter-row").count()) === 0,
-      "Configure Channels has no filter row");
+    assert(
+      (await page
+        .locator(".configured-channels-table .table-filter-row")
+        .count()) === 0,
+      "Configure Channels has no filter row",
+    );
     await selectAll.click();
     const boxes = page.locator(
       '.configured-channels-table tbody input[type="checkbox"]',
@@ -3192,7 +3741,9 @@ const noWorkers = async (unreleased = () => 0) => {
     assert(await save.isDisabled(), "Save Changes should wait for a change");
     await row.locator("select").selectOption("intel");
     await decodeRow.locator("select").selectOption("on");
-    await page.getByLabel("Server Name", { exact: true }).fill("Family E2E Library");
+    await page
+      .getByLabel("Server Name", { exact: true })
+      .fill("Family E2E Library");
     assert(await save.isEnabled(), "Save Changes should enable after a change");
     await Promise.all([page.waitForNavigation(), save.click()]);
     await page.locator(".settings-grid").waitFor();
@@ -3201,11 +3752,20 @@ const noWorkers = async (unreleased = () => 0) => {
         (await decodeRow.locator("select").inputValue()) === "on",
       "Saved Hardware Encoding/Decoding should survive a reload",
     );
-    assert((await page.getByLabel("Server Name", { exact: true }).inputValue()) === "Family E2E Library", "Friendly server name survives a reload");
+    assert(
+      (await page.getByLabel("Server Name", { exact: true }).inputValue()) ===
+        "Family E2E Library",
+      "Friendly server name survives a reload",
+    );
     // Browser fixtures run through a proxy; LAN pairing metadata deliberately rejects proxy headers.
     // Direct HTTPS name propagation is covered by server_name_test.go instead.
-    const namedSettings = await (await page.request.get(url + "/api/settings/server")).json();
-    assert(namedSettings.serverName === "Family E2E Library", "Settings API immediately uses the renamed server");
+    const namedSettings = await (
+      await page.request.get(url + "/api/settings/server")
+    ).json();
+    assert(
+      namedSettings.serverName === "Family E2E Library",
+      "Settings API immediately uses the renamed server",
+    );
     assert(
       await save.isDisabled(),
       "Save Changes should be off again after saving",
@@ -3288,10 +3848,17 @@ const noWorkers = async (unreleased = () => 0) => {
     await login(page);
     // Exercise the width cap with a legitimate long name; intrinsic grid tracks
     // can exceed the capped item when a runner's font metrics are wider.
-    const headerProfiles = await (await page.request.get(url + '/api/profiles')).json();
-    await page.route('**/api/profiles', route => route.fulfill({json: headerProfiles.map(profile => ({
-      ...profile, name: 'An extraordinarily long profile name for layout',
-    }))}));
+    const headerProfiles = await (
+      await page.request.get(url + "/api/profiles")
+    ).json();
+    await page.route("**/api/profiles", (route) =>
+      route.fulfill({
+        json: headerProfiles.map((profile) => ({
+          ...profile,
+          name: "An extraordinarily long profile name for layout",
+        })),
+      }),
+    );
     const assertSettingsHeaders = async (width) => {
       await page.setViewportSize({ width, height: 844 });
       for (const route of [
@@ -3310,18 +3877,37 @@ const noWorkers = async (unreleased = () => 0) => {
         const menu = page.locator(".admin-topbar-inner > .profile-menu");
         await menu.waitFor();
         const trigger = menu.getByRole("button");
-        assert(await trigger.isVisible(), `${route} profile menu trigger is visible`);
-        assert(await page.locator('.profile-menu-panel').count() === 0, `${route} menu starts closed`);
-        assert(await menu.locator('.profile-menu-trigger-name').isVisible(),
-          `${route} header retains the avatar and single-line name`);
-        if (route === '/account' || route === '/admin/accounts') {
-          const table = page.locator(route === '/account' ? '.profiles-table' : '.accounts-table');
-          assert(await table.locator('th').first().evaluate(el => getComputedStyle(el).whiteSpace) === 'nowrap',
-            `${route} table headings keep whole words on compact screens`);
-          assert(await table.locator('..').getAttribute('tabindex') === '0',
-            `${route} table scroll region is keyboard accessible`);
+        assert(
+          await trigger.isVisible(),
+          `${route} profile menu trigger is visible`,
+        );
+        assert(
+          (await page.locator(".profile-menu-panel").count()) === 0,
+          `${route} menu starts closed`,
+        );
+        assert(
+          await menu.locator(".profile-menu-trigger-name").isVisible(),
+          `${route} header retains the avatar and single-line name`,
+        );
+        if (route === "/account" || route === "/admin/accounts") {
+          const table = page.locator(
+            route === "/account" ? ".profiles-table" : ".accounts-table",
+          );
+          assert(
+            (await table
+              .locator("th")
+              .first()
+              .evaluate((el) => getComputedStyle(el).whiteSpace)) === "nowrap",
+            `${route} table headings keep whole words on compact screens`,
+          );
+          assert(
+            (await table.locator("..").getAttribute("tabindex")) === "0",
+            `${route} table scroll region is keyboard accessible`,
+          );
         }
-        const contentBefore = await page.locator(".admin-content").boundingBox();
+        const contentBefore = await page
+          .locator(".admin-content")
+          .boundingBox();
         await trigger.click();
         const panel = page.locator(".profile-menu-panel");
         await panel.waitFor();
@@ -3332,7 +3918,9 @@ const noWorkers = async (unreleased = () => 0) => {
           const menuBox = menu.getBoundingClientRect();
           const panelBox = panel.getBoundingClientRect();
           const headerBox = header.getBoundingClientRect();
-          const contentBox = document.querySelector(".admin-content").getBoundingClientRect();
+          const contentBox = document
+            .querySelector(".admin-content")
+            .getBoundingClientRect();
           return {
             menuRight: menuBox.right,
             headerRight: headerBox.right,
@@ -3361,9 +3949,9 @@ const noWorkers = async (unreleased = () => 0) => {
     await assertSettingsHeaders(390);
     await assertSettingsHeaders(768);
     await assertSettingsHeaders(1280);
-    await page.unroute('**/api/profiles');
+    await page.unroute("**/api/profiles");
     await page.setViewportSize({ width: 1280, height: 720 });
-    await page.goto(url + '/');
+    await page.goto(url + "/");
     await page.locator(".guide-slot-box").first().waitFor();
     assert(
       (await page.locator(".page-header select").count()) === 0,
@@ -3581,6 +4169,15 @@ const noWorkers = async (unreleased = () => 0) => {
         .count()) === 0,
       "Sign-in lifetime no longer needs a Save button",
     );
+    const expirationToggle = page.getByRole("switch", {
+      name: "Never Expire",
+    });
+    const expirationLabel = page.locator(".session-never-label > span");
+    assert(
+      (await expirationToggle.textContent()) === "Off" &&
+        (await expirationLabel.textContent()) === "Expires",
+      "Off state labels the finite sign-in lifetime as Expires",
+    );
     await page.locator("#account-days").fill("45");
     await delay(1000);
     assert(
@@ -3591,24 +4188,37 @@ const noWorkers = async (unreleased = () => 0) => {
       ).days === 30,
       "Number entry waits while the administrator is still typing",
     );
+    const save45 = page.waitForResponse(
+      (response) =>
+        response.url().endsWith("/api/auth/session-lifetime") &&
+        response.request().method() === "PUT",
+    );
+    await page.locator("#account-days").blur();
+    assert((await save45).ok(), "Blur saves the sign-in lifetime");
     await page.waitForFunction(
       async () =>
         (await (await fetch("/api/auth/session-lifetime")).json()).days === 45,
       {},
       { timeout: 6000 },
     );
+    const save30 = page.waitForResponse(
+      (response) =>
+        response.url().endsWith("/api/auth/session-lifetime") &&
+        response.request().method() === "PUT",
+    );
     await page.locator("#account-days").fill("30");
+    await page.locator("#account-days").blur();
+    assert((await save30).ok(), "Blur saves the restored sign-in lifetime");
     await page.waitForFunction(
       async () =>
         (await (await fetch("/api/auth/session-lifetime")).json()).days === 30,
       {},
       { timeout: 6000 },
     );
-    await page.getByRole("switch", { name: "Never Expire" }).click();
+    await expirationToggle.click();
     assert(
-      (await page
-        .getByRole("switch", { name: "Never Expire" })
-        .textContent()) === "On",
+      (await expirationToggle.textContent()) === "On" &&
+        (await expirationLabel.textContent()) === "Never Expire",
       "Never Expire uses the shared On/Off control",
     );
     assert(
@@ -3619,55 +4229,64 @@ const noWorkers = async (unreleased = () => 0) => {
       async () =>
         (await (await fetch("/api/auth/session-lifetime")).json()).days === 0,
     );
-    const lifetimeMessage = page.getByText("New sign-ins no longer expire.", {
+    const lifetimeSaved = page.getByRole("status", {
+      name: "Sign-in lifetime saved",
       exact: true,
     });
-    await lifetimeMessage.waitFor();
+    await lifetimeSaved.waitFor();
     for (const viewport of [
       { width: 390, height: 844 },
       { width: 844, height: 390 },
     ]) {
       await page.setViewportSize(viewport);
       const placement = await page
-        .locator(".session-never-control")
+        .locator(".session-policy-row")
         .evaluate((element) => {
-          const toggle = element
-            .querySelector(".session-never-label")
-            .getBoundingClientRect();
-          const message = element
-            .querySelector(".session-lifetime-message")
-            .getBoundingClientRect();
-          const color = getComputedStyle(
-            element.querySelector(".session-lifetime-message"),
-          )
-            .color.match(/[\d.]+/g)
-            .map(Number);
+          const check = element.querySelector(".session-save-check");
+          const input = element.querySelector("#account-days");
           return {
-            toggleBottom: toggle.bottom,
-            messageTop: message.top,
-            green: color[1] > color[0] && color[1] > color[2],
+            checkRight: check.getBoundingClientRect().right,
+            inputLeft: input.getBoundingClientRect().left,
+            checkText: check.textContent.trim(),
+            visible: Number(getComputedStyle(check).opacity) > 0,
           };
         });
       assert(
-        placement.messageTop >= placement.toggleBottom && placement.green,
-        `Green lifetime confirmation stays below the toggle at ${viewport.width}x${viewport.height}: ${JSON.stringify(placement)}`,
+        placement.checkRight <= placement.inputLeft &&
+          placement.checkText === "✓" &&
+          placement.visible,
+        `Lifetime confirmation stays beside its field at ${viewport.width}x${viewport.height}: ${JSON.stringify(placement)}`,
       );
     }
-    await lifetimeMessage.waitFor({ state: "detached", timeout: 6000 });
-    await page.getByRole("switch", { name: "Never Expire" }).click();
+    await page.setViewportSize({ width: 390, height: 844 });
+    const neverLines = await expirationLabel.evaluate((element) => {
+      const range = document.createRange();
+      range.selectNodeContents(element);
+      return range.getClientRects().length;
+    });
+    assert(
+      neverLines >= 2,
+      "Never Expire wraps on a narrow User tab while enabled",
+    );
+    await lifetimeSaved.waitFor({ state: "detached", timeout: 6000 });
+    await expirationToggle.click();
     await page.waitForFunction(
       async () =>
         (await (await fetch("/api/auth/session-lifetime")).json()).days === 30,
     );
-    await page.setViewportSize({ width: 390, height: 844 });
-    const neverLines = await page
-      .locator(".session-never-label > span")
-      .evaluate((element) => {
-        const range = document.createRange();
-        range.selectNodeContents(element);
-        return range.getClientRects().length;
-      });
-    assert(neverLines >= 2, "Never Expire wraps on a narrow User tab");
+    assert(
+      (await expirationLabel.textContent()) === "Expires",
+      "Off state changes the lifetime label to Expires",
+    );
+    const expiresLines = await expirationLabel.evaluate((element) => {
+      const range = document.createRange();
+      range.selectNodeContents(element);
+      return range.getClientRects().length;
+    });
+    assert(
+      expiresLines === 1,
+      "Expires stays on one line on a narrow User tab",
+    );
     const sessionActions = await page
       .locator(".session-browser-actions .admin-btn")
       .evaluateAll((buttons) =>
@@ -3696,9 +4315,13 @@ const noWorkers = async (unreleased = () => 0) => {
 
     // Account inputs share one left edge, and the two explanatory paragraphs are gone.
     const lefts = await page.evaluate(() =>
-      ["account-current", "account-username", "account-new", "account-confirm"].map(
-        (id) =>
-          Math.round(document.getElementById(id).getBoundingClientRect().left),
+      [
+        "account-current",
+        "account-username",
+        "account-new",
+        "account-confirm",
+      ].map((id) =>
+        Math.round(document.getElementById(id).getBoundingClientRect().left),
       ),
     );
     assert(
@@ -3721,8 +4344,10 @@ const noWorkers = async (unreleased = () => 0) => {
         els.map((e) => Math.round(e.getBoundingClientRect().top)),
       );
     assert(
-      tops.length === 8 && tops.every((top, index) => index === 0 || top > tops[index - 1]),
-      "Desktop Server Settings uses an ordered vertical sidebar: " + tops.join(","),
+      tops.length === 8 &&
+        tops.every((top, index) => index === 0 || top > tops[index - 1]),
+      "Desktop Server Settings uses an ordered vertical sidebar: " +
+        tops.join(","),
     );
 
     // The refresh boxes say when they last ran.
@@ -4013,12 +4638,16 @@ const noWorkers = async (unreleased = () => 0) => {
     if (!only || only.includes("subtitles")) await subtitleDefaults();
     if (!only || only.includes("pause")) await pausedBoundary();
     if (!only || only.includes("alignment")) await guideAlignment();
-    if (!only || only.includes("autofill-policy")) await require("./autofill-policy.cjs")({ browser, login, url, assert });
-    if (!only || only.includes("credential-drafts")) await require("./credential-drafts.cjs")({ browser, login, url, assert });
-    if (!only || only.includes("profile-creation")) await require("./profile-creation.cjs")({ browser, login, url, assert });
+    if (!only || only.includes("autofill-policy"))
+      await require("./autofill-policy.cjs")({ browser, login, url, assert });
+    if (!only || only.includes("credential-drafts"))
+      await require("./credential-drafts.cjs")({ browser, login, url, assert });
+    if (!only || only.includes("profile-creation"))
+      await require("./profile-creation.cjs")({ browser, login, url, assert });
     if (!only || only.includes("profile-menu")) await profileMenuRoles();
     if (!only || only.includes("profile-refresh")) await profileRefresh();
-    if (!only || only.includes("sessions-guide-history")) await sessionsAndGuideHistory();
+    if (!only || only.includes("sessions-guide-history"))
+      await sessionsAndGuideHistory();
     if (!only || only.includes("admin")) await adminTabs();
     if (!only || only.includes("admin-metrics-logs"))
       await require("./admin-metrics-logs.cjs")({

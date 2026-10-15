@@ -203,6 +203,10 @@ a.admin-btn:visited {
   min-width: 520px;
 }
 
+.sessions-table th {
+  text-align: center;
+}
+
 .profiles-table th,
 .profiles-table td,
 .accounts-table th,
