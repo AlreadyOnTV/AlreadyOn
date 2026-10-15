@@ -12,7 +12,7 @@ From this directory run `./gradlew :app:assembleDebug` for mobile or `./gradlew 
 
 The application ID is `io.github.alreadyonapp.alreadyon`. Release signing and distribution belong to the maintainer; see [APK release workflow and signing setup](../../docs/ANDROID_RELEASES.md). The separate [Google TV target](../../docs/GOOGLE_TV.md) shares the phone model/player; automatic signed-update work remains separate.
 
-In fullscreen portrait or landscape, swipe up to the next higher available channel or down to the next lower one. Each deliberate swipe changes one channel; the lineup ends do not wrap. Fullscreen, orientation, mute and quality stay unchanged. Subtitle Off or the selected language carries across channels when a matching track is available.
+In fullscreen portrait or landscape, swipe up to the next higher available channel or down to the next lower one. Each deliberate swipe changes one channel, wrapping at the lineup ends and skipping empty channels. Fullscreen, orientation, mute and quality stay unchanged. Subtitle Off or the selected language carries across channels when a matching track is available.
 
 ## Test
 

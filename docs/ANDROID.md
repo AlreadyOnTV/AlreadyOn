@@ -22,11 +22,7 @@ See [Google TV](GOOGLE_TV.md) and [physical TV review](TV_DEVICE_REVIEW.md).
 
 ## App updates
 
-Signed phone and TV apps check GitHub on startup without delaying viewing. **Update Available** shows installed/available versions and Update/Cancel. APKs with a published stable counterpart receive stable updates; previews also accept alpha/RC releases. Equal APK version codes are not updates, even after promotion.
-
-Updates use the matching device APK and verify checksum, package, target and signing certificate before asking Android to install. Allow installs from AlreadyOn in Android settings when prompted. Approve the system installer; downloads show progress and can be cancelled. Existing login/settings remain intact. After installation the app attempts to reopen and removes its downloaded APK; if necessary select Open or launch it manually. Interrupted installs offer Continue Installation or Cancel on reopening.
-
-Install the first updater-enabled APK manually. Debug packages skip update checks. See [updater tests](ANDROID_UPDATES.md).
+Signed releases offer verified APK updates while preserving settings; debug packages skip update checks. Android installation still requires user approval. See [update behavior and synthetic tests](ANDROID_UPDATES.md) for download, validation, replacement and recovery contracts.
 
 See [subtitle modes](SUBTITLES.md).
 

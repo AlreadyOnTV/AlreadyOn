@@ -22,7 +22,7 @@ For source development, follow [development setup](docs/DEVELOPMENT.md). Run `ma
 
 Read [CONTRIBUTING.md](CONTRIBUTING.md), [the project brief](docs/PROJECT_BRIEF.md) and [delivery guidance](docs/CI_CD.md). API contracts live in [OpenAPI](api/openapi.yaml). [Playback](docs/PLAYBACK.md), [scheduling](docs/SCHEDULING.md) and [security reporting](SECURITY.md) explain the main boundaries.
 
-The [code-quality roadmap](docs/CODE_QUALITY.md) tracks public-release review work.
+Use the [documentation index](docs/README.md) to find contributor guides and subsystem contracts.
 
 Changes should be small, documented and verified with relevant checks. Use isolated synthetic fixtures for destructive or full end-to-end tests. Release and deployment decisions belong to the maintainer.
 

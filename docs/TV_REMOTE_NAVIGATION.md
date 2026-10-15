@@ -14,4 +14,4 @@ After the first profile selection or restoration, a static remote tutorial appea
 
 Background loading has no animated TV status bar; errors remain visible.
 
-TV and phone show centered double-size branding for two seconds while preloading; rotation retains the deadline. The TV guide removes branding, reserves [profile-menu space](TV_PROFILE_SETTINGS.md) and fits at least four rows. Cells use two-line height with a 13-point show title; the preview panel has extra top margin. Up/Down use identical short transitions to reveal clipped rows.
+The guide keeps the player preview mounted across fullscreen changes and reserves space for the profile menu. [TV profile settings](TV_PROFILE_SETTINGS.md) replace the player/guide while editing.

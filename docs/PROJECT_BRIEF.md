@@ -9,7 +9,7 @@ AlreadyOn provides scheduled television-style playback from a server owner's med
 - **Server:** Go HTTP API, SQLite persistence and background library/metadata jobs.
 - **Web:** React and TypeScript guide, player and administration interface.
 - **Media:** FFmpeg/FFprobe inspect and process files; delivery selects direct playback, remuxing or transcoding according to client capabilities.
-- **Clients:** Android phone support is developing; other native clients are experimental.
+- **Clients:** Android phone/tablet and Google TV share the native model and player. Apple clients are not planned.
 
 The main flow is scan → normalized catalog → channel filters → persisted schedule → scoped playback session. [OpenAPI](../api/openapi.yaml) defines the public API; [compatibility](../api/COMPATIBILITY.md) explains changes.
 
@@ -25,7 +25,7 @@ Keep library paths confined to configured roots. Preserve live configuration and
 
 Metadata providers are optional. Provider availability changes channel-generation options; do not pretend unsupported metadata is known. Unknown ratings require conservative filtering. Hardware acceleration and browser codec support must be detected rather than assumed.
 
-[Playback](PLAYBACK.md), [scheduling](SCHEDULING.md), [TLS](TLS.md) and [channel filters](design/channel-filters-and-coverage.md) explain subsystem contracts. [Delivery](CI_CD.md) defines validation and release gates.
+[Playback](PLAYBACK.md), [scheduling](SCHEDULING.md), [TLS](TLS.md) and [channel filters](SCHEDULING.md#channel-filters) explain subsystem contracts. [Delivery](CI_CD.md) defines validation and release gates.
 
 Avoid speculative features, hidden maintenance modes and broad rewrites. Keep changes small enough to review, with tests that demonstrate user-visible behavior.
 

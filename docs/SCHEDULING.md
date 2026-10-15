@@ -13,3 +13,7 @@ Channel filter previews and applied schedules must use the same selection semant
 Do not rebuild published schedules to hide a test failure. Inspect persisted entries, generation inputs and clock handling. Live library investigation must remain non-destructive.
 
 Guides retain real ended airings overlapping the current half-hour column. The API supplies these separately as `previousPrograms`; clients clip them to the viewport without changing original timestamps or real gaps. Ended boxes are grey and do not tune. Text is shown only when the complete time span fits; titles and episode labels truncate to one line. Current/upcoming navigation remains separate.
+
+## Channel filters
+
+Preview and apply share selection semantics. Combine inclusion/exclusion rules explicitly and consistently handle missing metadata, excluded folders and unavailable files. Test empty/overlapping selections and provider-mode differences with synthetic catalogs. Coverage extends future programming without rewriting published airings or rotation state.

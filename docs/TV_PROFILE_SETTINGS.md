@@ -1,6 +1,6 @@
 # TV profile settings
 
-Open the profile menu and choose **Profile Settings**, between **Dashboard** and **Switch Profile**. The full-screen page stops playback and removes the player and guide. It uses the same current-profile API and fields as the WebUI; it does not expose administration of other profiles.
+Open the profile menu and choose **Profile**, below **Switch Profile**. The full-screen page stops playback and removes the player and guide. It uses the same current-profile API and fields as the WebUI; it does not expose administration of other profiles.
 
 Use Up/Down to preview categories automatically. Select or Right focuses Name, the first icon, Set/Clear PIN, the time/audio dropdown or the subtitle-default toggle. Focus starts on **Display Name**. A white outline marks the focused control. Choice menus focus and mark the current value. Name and PIN fields use the TV’s on-screen keyboard.
 
@@ -10,4 +10,4 @@ Categories are Display Name, Icon, PIN, Time Format, Audio Language and Subtitle
 
 Only the current category is mounted; there are no animated assets or background guide refreshes while settings is open.
 
-For a signed-in review device, run `python3 scripts/android/review-tv-profile-settings.py --serial DEVICE_SERIAL --sdk /path/to/Android/Sdk`. It checks menu placement, automatic categories, primary-control focus, subtitle draft toggling and two-stage Back to the sidebar and watched channel. It discards changes without saving or changing the PIN.
+Use the disposable ProfileMenuTest scenario in `scripts/android/test-tv.py --test-class ProfileMenuTest` for menu/settings navigation. Review physical-device focus separately without saving drafts or changing the PIN.
