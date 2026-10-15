@@ -182,8 +182,9 @@ class TvNavigationTest {
             repeat(4) { device.pressBack(); compose.waitForIdle() }
             compose.waitUntil(10000) { exists("CHANNEL") }
             fun guideFocused(number: Int) = compose.onAllNodes(hasContentDescription("Channel $number: TV fixture $number") and isFocused()).fetchSemanticsNodes().isNotEmpty()
-            device.pressBack() // Current airing needs only one Back to open the profile menu.
+            device.pressBack() // A single Back still opens the profile menu.
             compose.waitUntil(10000) { compose.onAllNodes(hasText("Switch Profile") and isFocused()).fetchSemanticsNodes().isNotEmpty() }
+            device.pressDPadDown() // Navigating the menu cancels double-Back exit.
             device.pressBack()
             compose.waitUntil(10000) { guideFocused(110) }
             device.pressDPadUp()
@@ -203,13 +204,21 @@ class TvNavigationTest {
             compose.waitUntil(10000) { guideFocused(111) }
             device.pressBack() // Restore the current preview row.
             compose.waitUntil(10000) { compose.onAllNodes(hasContentDescription("Channel 110: TV fixture 110") and isFocused()).fetchSemanticsNodes().isNotEmpty() }
-            device.pressBack() // Second Back opens the profile menu.
+            device.pressBack() // The watched airing opens the profile menu.
             compose.waitUntil(10000) { compose.onAllNodes(hasText("Switch Profile") and isFocused()).fetchSemanticsNodes().isNotEmpty() }
+            device.pressDPadDown()
             device.pressBack()
-            compose.waitUntil(10000) { compose.onAllNodes(hasContentDescription("Channel 110: TV fixture 110") and isFocused()).fetchSemanticsNodes().isNotEmpty() }
+            compose.waitUntil(10000) { guideFocused(110) }
             compose.onNodeWithContentDescription("Pause").assertDoesNotExist()
             compose.onNodeWithContentDescription("Play").assertDoesNotExist()
             device.takeScreenshot(java.io.File(instrumentation.targetContext.getExternalFilesDir(null), "tv-guide.png"))
+            device.pressDPadRight() // Browsing clears the previous exit attempt.
+            device.pressBack() // Restore the watched airing.
+            compose.waitForIdle()
+            val activity = compose.activity
+            device.pressBack()
+            device.pressBack() // Two quick Back presses close the TV task.
+            compose.waitUntil(10000) { activity.isFinishing || activity.isDestroyed }
             return
         } finally {
             device.takeScreenshot(java.io.File(instrumentation.targetContext.getExternalFilesDir(null), "tv-last-state.png"))

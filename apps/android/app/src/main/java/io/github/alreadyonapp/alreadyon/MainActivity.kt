@@ -33,6 +33,7 @@ import androidx.compose.foundation.text.KeyboardOptions
 import androidx.compose.material3.*
 import androidx.compose.runtime.*
 import androidx.compose.runtime.saveable.rememberSaveable
+import androidx.compose.ui.input.key.*
 import androidx.compose.ui.Modifier
 import androidx.compose.ui.Alignment
 import androidx.compose.ui.graphics.Color
@@ -202,7 +203,7 @@ class MainActivity : ComponentActivity() {
 
 /** Profile administration is separate from the account's Owner authorization. */
 @Composable
-internal fun ProfileMenu(state: PhoneState, model: PhoneModel, modifier: Modifier = Modifier, openSignal: Int = 0, onMenuDismiss: () -> Unit = {}) {
+internal fun ProfileMenu(state: PhoneState, model: PhoneModel, modifier: Modifier = Modifier, openSignal: Int = 0, onExitApp: (() -> Unit)? = null, onMenuBack: (() -> Unit)? = null, onMenuNavigation: () -> Unit = {}, onMenuDismiss: () -> Unit = {}) {
     var open by remember { mutableStateOf(false) }
     var consumedSignal by remember { mutableIntStateOf(openSignal) }
     val switchFocus = remember { FocusRequester() }
@@ -213,10 +214,23 @@ internal fun ProfileMenu(state: PhoneState, model: PhoneModel, modifier: Modifie
     LaunchedEffect(open) { if (open && BuildConfig.IS_TV) { withFrameNanos { }; switchFocus.requestFocus() } }
     Box {
         TextButton(onClick = { open = true }, modifier = modifier) { ProfileName(state.profile!!, model) }
-        DropdownMenu(expanded = open, onDismissRequest = { open = false; onMenuDismiss() }) {
+        DropdownMenu(expanded = open, onDismissRequest = { open = false; onMenuDismiss() },
+            properties = androidx.compose.ui.window.PopupProperties(dismissOnBackPress = onMenuBack == null),
+            modifier = Modifier.onPreviewKeyEvent { event ->
+                if (event.key == Key.Back && onMenuBack != null) {
+                    if (event.type == KeyEventType.KeyUp) { open = false; onMenuBack() }
+                    true
+                } else {
+                    if (event.type == KeyEventType.KeyDown) onMenuNavigation()
+                    false
+                }
+            }) {
             DropdownMenuItem(text = { Text("Switch Profile") }, modifier = Modifier.focusRequester(switchFocus).tvFocusOutline(), onClick = { open = false; model.changeProfile() })
             DropdownMenuItem(text = { Text("Profile") }, modifier = Modifier.tvFocusOutline(), onClick = { open = false; model.openSettings("profile") })
             DropdownMenuItem(text = { Text("Sign Out") }, onClick = { open = false; model.logout() })
+            if (BuildConfig.IS_TV && onExitApp != null) DropdownMenuItem(
+                text = { Text("Exit App") }, modifier = Modifier.tvFocusOutline(),
+                onClick = { open = false; onExitApp() })
         }
     }
 }

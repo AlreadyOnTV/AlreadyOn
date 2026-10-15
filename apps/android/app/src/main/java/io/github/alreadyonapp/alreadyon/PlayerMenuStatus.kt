@@ -21,5 +21,5 @@ internal fun playerMenuLabel(label: String, state: PhoneState): String {
             playback?.subtitleTracks?.any { it.index == state.subtitleIndex } == true) "on" else "off"
         else -> return label
     }
-    return "$label ($status)"
+    return if (label == "Audio Tracks" && status == "unknown") label else "$label ($status)"
 }

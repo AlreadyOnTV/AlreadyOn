@@ -48,6 +48,7 @@ class ProfileMenuTest {
             compose.waitUntil(10000) { compose.onAllNodes(hasText("Switch Profile") and isFocused()).fetchSemanticsNodes().isNotEmpty() }
             compose.onNodeWithText("Profile").assertExists()
             compose.onNodeWithText("Sign Out").assertExists()
+            compose.onNodeWithText("Exit App").assertExists()
             compose.onNodeWithText("Dashboard").assertDoesNotExist()
             compose.onNodeWithText("Settings").assertDoesNotExist()
             compose.onNodeWithText("Server").assertDoesNotExist()

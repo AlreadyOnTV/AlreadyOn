@@ -1,8 +1,8 @@
 # Profile menu
 
-WebUI, phone and Google TV show the profile avatar and name as one top-right control. Long names truncate; WebUI retains an accessible name and tooltip. The control remains visible at compact widths.
+All clients show avatar and name as one top-right control. Long names truncate; WebUI retains an accessible name and tooltip. It stays visible at compact widths.
 
-Menu order is Switch Profile, Profile, Settings, Server, Sign Out. Switch Profile, Profile and Sign Out appear for every signed-in profile. Settings appears only for Admin profiles in WebUI. Server appears only for owner accounts in WebUI. Native menus contain Switch Profile, Profile and Sign Out. API permissions remain independent.
+Menu order is Switch Profile, Profile, Settings, Server, Sign Out. Switch Profile, Profile and Sign Out appear for every signed-in profile. Settings appears only for Admin profiles in WebUI. Server appears only for owner accounts in WebUI. Native menus contain Switch Profile, Profile and Sign Out. TV adds Exit App below Sign Out, retaining the session.
 
 WebUI keyboard Enter/Space opens the menu; Escape or clicking outside closes it. Switching profiles retains profile PIN checks and returns to the Guide. TV opens the menu with Switch Profile focused.
 

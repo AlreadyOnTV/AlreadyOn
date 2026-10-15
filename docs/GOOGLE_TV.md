@@ -2,9 +2,9 @@
 
 [![AlreadyOn](../web/public/branding/header-doc.svg)](../README.md)
 
-The `:tv` target shares networking, profiles, guide, branding, quality, mute, audio and subtitles with mobile `:app`. TV uses landscape and a Leanback launcher. A compact preview sits above the guide. Selection opens fullscreen; Back restores the guide.
+The `:tv` target shares networking, profiles, guide, branding, quality, mute, audio and subtitles with mobile `:app`. TV uses landscape and a Leanback launcher. A preview sits above the guide. Selection opens fullscreen; Back restores the guide.
 
-Fullscreen Up/Down tunes channels. Left/Right reveals and navigates controls; Select activates the cursor. Menu arrows navigate without tuning. Submenus focus the current option. Guide arrows wrap; Back restores the watched airing, then opens the profile menu. The preview has no controls. See [remote navigation](TV_REMOTE_NAVIGATION.md).
+Fullscreen Up/Down tunes channels. Left/Right reveals and navigates controls; Select activates the cursor. Menu arrows navigate without tuning. Submenus focus the current option. Guide arrows wrap; Back restores the watched airing, then opens the profile menu; a second quick Back exits. The preview has no controls. See [remote navigation](TV_REMOTE_NAVIGATION.md).
 
 ## Connect
 
@@ -24,4 +24,4 @@ Use a 3840×2160 Google TV AVD. Run `scripts/android/test-tv.py --serial emulato
 
 The guide fits two hours beside the channel column at every screen width. Remote Left/Right navigation scrolls to programs outside that window. Each program shows its start and end times, a single-line title, and an episode line (`S1E2 - Episode title`) for episodic content. Text is truncated inside the program cell.
 
-The profile menu offers Switch Profile, Profile and Sign Out. Switch Profile receives initial remote focus. The avatar and profile name stay on one line in the header, including Profile settings. Dashboard now lives inside the owner-only Server section in WebUI; native menus do not offer server administration.
+The profile menu offers Switch Profile, Profile, Sign Out and Exit App. Switch Profile receives initial remote focus. The header keeps avatar and name on one line. Dashboard now lives inside the owner-only Server section in WebUI; native menus do not offer server administration.
