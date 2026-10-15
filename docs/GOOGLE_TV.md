@@ -4,15 +4,13 @@
 
 The `:tv` target shares networking, profiles, guide, branding, quality, mute, audio and subtitles with mobile `:app`. TV uses landscape and a Leanback launcher. A compact preview sits above the guide. Selection opens fullscreen; Back restores the guide.
 
-Guide Up/Down changes rows; Left/Right selects programs. Selection opens fullscreen and unmutes.
-
 Fullscreen Up/Down tunes channels. Left/Right reveals and navigates controls; Select activates the cursor. Menu arrows navigate without tuning. Submenus focus the current option. Guide arrows wrap; Back restores the watched airing, then opens the profile menu. The preview has no controls. See [remote navigation](TV_REMOTE_NAVIGATION.md).
 
 ## Connect
 
 First-run WebUI setup asks for **Server Name**, username and password. Owners can rename it under **Server Settings → Server → Server Name**. Discovery reflects changes without restarting.
 
-Accounts manage unique 6–12 digit hashed PINs under **Admin Settings → TV Pairing Pin**. PIN sessions persist until Sign Out or device revocation through **Signed-In Browsers**. Changing/removing a PIN prevents new sign-ins without revoking existing devices.
+Accounts manage unique 6–12 digit hashed PINs under **Admin Settings → TV Pairing Pin**. Native Sign Out retains the encrypted session; selecting the recent server revalidates it before skipping credentials. WebUI **Sessions** revocation, expiry and account restrictions require fresh authentication. Profile PINs still apply. Changing the account PIN affects new sign-ins only.
 
 Apps scan local private IPv4 HTTPS port 19900 for 30 seconds. TV offers manual entry immediately. Bare addresses assume HTTPS and port 19900. Rescan restarts discovery. IPv6-only networks require manual entry. See [Android](ANDROID.md).
 

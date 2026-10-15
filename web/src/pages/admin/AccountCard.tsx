@@ -1,8 +1,8 @@
 import SettingToggle from './SettingToggle';
 import TvPairingField from './TvPairingField';
 import { useTvPairing } from './useTvPairing';
-// The signed-in account: change its password and manage which browsers are
-// signed in, and rename it. A password change signs every other browser out; sessions can also
+// The signed-in account: change its password and manage which sessions are
+// signed in, and rename it. A password change signs every other session out; sessions can also
 // be ended one at a time, or all at once. The server-wide sign-in lifetime is
 // shown to owners only, and a password-locked account sees no password form.
 import { useCallback, useEffect, useRef, useState, type ReactNode, type FormEvent, type ChangeEvent } from 'react';
@@ -65,7 +65,7 @@ export default function AccountCard({ children }: { children: ReactNode }) {
   const [passwordError, setPasswordError] = useState<string | null>(null);
   const [saving, setSaving] = useState(false);
 
-  // Days a browser stays signed in (0 is never); applies to later sign-ins.
+  // Days a session stays signed in (0 is never); applies to later sign-ins.
   const [savedDays, setSavedDays] = useState<number | null>(null);
   const [daysText, setDaysText] = useState(String(DEFAULT_SESSION_DAYS));
   const [never, setNever] = useState(false);
@@ -177,7 +177,7 @@ export default function AccountCard({ children }: { children: ReactNode }) {
         await changePassword(current, next);
         setNext('');
         setConfirm('');
-        done.push('Password changed. Every other browser was signed out.');
+        done.push('Password changed. Every other session was signed out.');
         load();
       }
       if (pairing.pin) { await pairing.save(); done.push('Changes saved.'); }
@@ -198,7 +198,7 @@ export default function AccountCard({ children }: { children: ReactNode }) {
       if (s.current) window.location.assign('/');
       else load();
     } catch (err) {
-      setError(err instanceof Error ? err.message : 'Failed to sign that browser out');
+      setError(err instanceof Error ? err.message : 'Failed to sign that session out');
     }
   };
 
@@ -206,10 +206,10 @@ export default function AccountCard({ children }: { children: ReactNode }) {
     setMessage(null);
     try {
       const n = await revokeSessions('others');
-      setMessage(n === 0 ? 'No other browsers were signed in.' : `Signed out ${n} other ${n === 1 ? 'browser' : 'browsers'}.`);
+      setMessage(n === 0 ? 'No other sessions were signed in.' : `Signed out ${n} other ${n === 1 ? 'session' : 'sessions'}.`);
       load();
     } catch (err) {
-      setError(err instanceof Error ? err.message : 'Failed to sign browsers out');
+      setError(err instanceof Error ? err.message : 'Failed to sign sessions out');
     }
   };
 
@@ -223,7 +223,7 @@ export default function AccountCard({ children }: { children: ReactNode }) {
       window.location.assign('/');
     } catch (err) {
       setConfirming(null);
-      setError(err instanceof Error ? err.message : 'Failed to sign browsers out');
+      setError(err instanceof Error ? err.message : 'Failed to sign sessions out');
     }
   };
 
@@ -288,7 +288,7 @@ export default function AccountCard({ children }: { children: ReactNode }) {
     </div>
     {children}
     <div className="admin-card account-card">
-      <h3>Signed-In Browsers</h3>
+      <h3>Sessions</h3>
       {message && <p className="admin-section-hint" role="status">{message}</p>}
       {isOwner && (
       <div className="admin-field-row session-lifetime-row">
@@ -321,7 +321,7 @@ export default function AccountCard({ children }: { children: ReactNode }) {
       )}
       {isOwner && lifetimeError && <p className="profile-field-error">{lifetimeError}</p>}
       {error && <p className="profile-field-error">{error}</p>}
-      <div className="sessions-table-scroll" role="region" aria-label="Signed-in devices" tabIndex={0}>
+      <div className="sessions-table-scroll" role="region" aria-label="Sessions" tabIndex={0}>
       <table className="admin-table sessions-table">
         <thead>
           <tr>
@@ -338,7 +338,7 @@ export default function AccountCard({ children }: { children: ReactNode }) {
             <tr key={s.id}>
               <td>
                 {s.deviceName || describeAgent(s.userAgent)}
-                {s.current && <span className="admin-badge admin-badge-on session-current-device">This Browser</span>}
+                {s.current && <span className="admin-badge admin-badge-on session-current-device">This Session</span>}
               </td>
               <td>{s.deviceType || 'Web Browser'}</td>
               <td>{s.ipAddress || 'Not recorded yet'}</td>
@@ -363,7 +363,7 @@ export default function AccountCard({ children }: { children: ReactNode }) {
       </div>
       <div className="admin-table-actions session-browser-actions" style={{ marginTop: 12 }}>
         <button className="admin-btn admin-btn-secondary" onClick={() => void signOutOthers()} disabled={others === 0}>
-          Sign Out All Other Browsers
+          Sign Out All Other Sessions
         </button>
         <button className={'admin-btn admin-btn-secondary' + (confirming === 'all' ? ' admin-btn-danger' : '')} onClick={() => void signOutEverywhere()}>
           {confirming === 'all' ? 'Confirm: Sign Out Everywhere?' : 'Sign Out Everywhere'}

@@ -3,7 +3,7 @@ import Brand from '../components/Brand';
 // the same set and per-profile preferences follow the profile. Only the
 // active profile id stays on the device (see deviceStorage.ts).
 //
-// The list is refetched when the window regains focus so a change made on
+// The list is refetched every five visible minutes and on window focus so changes on
 // another device shows up without a reload. Nothing here holds a PIN:
 // checks go to the server and only the result comes back.
 import { createContext, useCallback, useContext, useEffect, useRef, useState, type ReactNode } from 'react';
@@ -71,8 +71,11 @@ export function UsersProvider({ children }: { children: ReactNode }) {
   const inflight = useRef(0);
   // Also discard refreshes that finish after a creation they straddled.
   const creationRevision = useRef(0);
+  const refreshing = useRef(false);
 
   const load = useCallback(async (silent: boolean) => {
+    if (refreshing.current || inflight.current > 0) return;
+    refreshing.current = true;
     try {
       const revision = creationRevision.current;
       const list = await getProfiles();
@@ -82,6 +85,8 @@ export function UsersProvider({ children }: { children: ReactNode }) {
       clearLegacyStorage();
     } catch (err) {
       if (!silent) setLoadError(err instanceof Error ? err.message : 'failed to load profiles');
+    } finally {
+      refreshing.current = false;
     }
   }, []);
 
@@ -90,9 +95,11 @@ export function UsersProvider({ children }: { children: ReactNode }) {
     const refresh = () => {
       if (document.visibilityState === 'visible') void load(true);
     };
+    const timer = window.setInterval(refresh, 5 * 60 * 1000);
     window.addEventListener('focus', refresh);
     document.addEventListener('visibilitychange', refresh);
     return () => {
+      window.clearInterval(timer);
       window.removeEventListener('focus', refresh);
       document.removeEventListener('visibilitychange', refresh);
     };

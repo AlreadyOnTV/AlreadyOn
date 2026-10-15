@@ -23,7 +23,7 @@ import kotlin.coroutines.resumeWithException
 /** API failure exposes only a safe summary, never a credential-bearing request URL. */
 internal class ServerFailure(val status: Int, message: String, val sessionExpired: Boolean = false, val code: String = "") : IOException(message)
 
-/** Exact-origin cookies persist encrypted until server expiry, rejection or explicit sign-out. */
+/** Exact-origin cookies persist encrypted until server expiry or rejection; local server detachment retains them. */
 private class SessionCookies(private val origin: HttpUrl, private val store: SessionStore) : CookieJar {
     private fun accepted(cookie: Cookie) = cookie.secure && cookie.httpOnly && cookie.hostOnly &&
         cookie.path == "/" && cookie.matches(origin) && cookie.expiresAt > System.currentTimeMillis()

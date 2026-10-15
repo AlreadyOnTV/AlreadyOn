@@ -10,15 +10,17 @@ Dashboard is the first/default tab inside Server, followed by Home Users, Media,
 
 See [profile creation](PROFILE_CREATION.md) for the WebUI Admin-only Add Profile shortcut and sorted switch list.
 
-## Signed-in devices
+## Sessions
 
-Settings shows Device, Type, IP Address, Last Active, Expires and Sign Out in the Signed-In Browsers table. The This Browser badge sits below the device name and sizes to its full text on one line. Wide tables scroll within a keyboard-accessible region at narrow widths.
+Settings shows Device, Type, IP Address, Last Active, Expires and Sign Out in the Sessions table. The This Session badge sits below the device name and sizes to its full text on one line. Wide tables scroll within a keyboard-accessible region at narrow widths.
 
-`GET /api/auth/sessions` adds `deviceName`, `deviceType` and `ipAddress` while preserving all existing fields. Names and types are best-effort user-agent descriptions of the browser/OS or native app, not private machine hostnames or security credentials. Device types are Web Browser, Phone and TV. Browser sessions use Web Browser on every operating system; native Android mobile uses Phone and native Google TV uses TV. The This Browser badge appears below the current session’s device name.
+`GET /api/auth/sessions` adds `deviceName`, `deviceType` and `ipAddress` while preserving all existing fields. Names and types are best-effort user-agent descriptions of the browser/OS or native app, not private machine hostnames or security credentials. Device types are Web Browser, Phone and TV.
 
 Migration 0085 adds an empty IP field to existing sessions without changing cookies, users or expiry. Sign-in and authenticated requests record the current server-observed socket peer IP. Untrusted forwarding headers are ignored; reverse-proxy deployments show the observed proxy address. Old sessions say Not recorded yet until they next connect. Last Active and Expires retain existing behavior, and session listing/revocation remain scoped to the signed-in account.
 
 
 See [saved API credential entry](SAVED_CREDENTIALS.md) for draft-only visibility controls.
 
-Compact settings headers right-align capped profile controls across differing font metrics.
+
+
+Active WebUI, phone and TV clients refresh shared profile settings and avatars every five minutes, also refreshing when visible/resumed. Native Sign Out retains the encrypted session for recent-server reconnection; WebUI session revocation remains authoritative. Profile PINs and local drafts remain independent.

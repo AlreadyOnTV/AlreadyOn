@@ -76,23 +76,39 @@ internal class PhoneModel(application: Application) : AndroidViewModel(applicati
 
     init { reconnect() }
 
-    /** Revalidate saved credentials with the server; protected profiles still require their PIN. */
+    /** Startup restores only an attached server; local Sign Out waits for server selection. */
     fun reconnect() = perform {
-        val origin = serverOrigin(state.value.origin) ?: return@perform
+        if (!preferences.getBoolean("server_detached", false)) resumeSavedServer(state.value.origin)
+    }
+
+    /** Revalidate an exact-origin encrypted session before skipping the credentials screen.
+     * A network/TLS failure retains the cookie; server rejection removes it. Profile PINs
+     * remain independent and are never bypassed by restoring the account session.
+     */
+    suspend fun resumeSavedServer(rawOrigin: String): Boolean {
+        val origin = serverOrigin(rawOrigin) ?: return false
+        if (origin != serverOrigin(state.value.origin)) return false
         val api = client ?: ServerClient(origin, sessionStore, state.value.trustedCa).also { client = it }
-        if (!api.hasSession()) return@perform
-        val status = JSONObject(api.request("/api/auth/status"))
-        if (!status.optBoolean("authenticated")) { expireSession(); return@perform }
+        if (!api.hasSession()) return false
+        val status = try { JSONObject(api.request("/api/auth/status")) }
+        catch (error: ServerFailure) {
+            if (!error.sessionExpired) throw error
+            expireSession()
+            return false
+        }
+        if (!status.optBoolean("authenticated")) { expireSession(); return false }
+        val profiles = if (status.optBoolean("mustChangePassword")) emptyList() else api.profiles()
+        preferences.edit().putBoolean("server_detached", false).commit()
         readAccount(status)
-        if (state.value.mustChangePassword) return@perform
-        val profiles = api.profiles()
         update { it.copy(profiles = profiles) }
+        if (state.value.mustChangePassword) return true
         val saved = profiles.find { it.id == preferences.getLong("profile_id", -1) && !it.hasPin }
         if (saved != null) {
             val channels = api.guide(saved)
             update { it.copy(profile = saved, channels = channels, tvTutorial = needsTvTutorial()) }
             restoreChannel(saved, channels)
         }
+        return true
     }
 
     private fun expireSession() {
@@ -111,7 +127,7 @@ internal class PhoneModel(application: Application) : AndroidViewModel(applicati
             JSONObject().put("username", username).put("password", password)))
         if (!status.optBoolean("authenticated")) throw IOException("Sign-in was not accepted.")
         client = api
-        preferences.edit().putString("server_origin", origin).remove("bypass_tls").remove("trusted_ca").commit()
+        preferences.edit().putString("server_origin", origin).putBoolean("server_detached", false).remove("bypass_tls").remove("trusted_ca").commit()
         update { it.copy(origin = origin, trustedCa = null) }
         readAccount(JSONObject(api.request("/api/auth/status")))
         if (state.value.mustChangePassword) return@perform
@@ -130,7 +146,7 @@ internal class PhoneModel(application: Application) : AndroidViewModel(applicati
         val status = JSONObject(api.request("/api/auth/tv-login", "POST", JSONObject().put("username", username.trim()).put("pin", pin)))
         if (!status.optBoolean("authenticated")) throw IOException("TV PIN was not accepted.")
         client = api
-        preferences.edit().putString("server_origin", normalized).remove("bypass_tls")
+        preferences.edit().putString("server_origin", normalized).putBoolean("server_detached", false).remove("bypass_tls")
             .putString("trusted_ca", trustedCa).putString("server_name", serverName).commit()
         update { it.copy(origin = normalized, serverName = serverName, trustedCa = trustedCa) }
         readAccount(status)
@@ -256,11 +272,6 @@ internal class PhoneModel(application: Application) : AndroidViewModel(applicati
         update { it.copy(profiles = profiles, profile = profiles.find { p -> p.id == profile.id }, notice = "PIN updated.") }
     }
 
-    fun refreshProfiles() = perform {
-        val profiles = requireNotNull(client).profiles()
-        update { it.copy(profiles = profiles) }
-    }
-
     fun selectProfile(profile: ViewerProfile, pin: String) = perform {
         val api = requireNotNull(client)
         if (profile.hasPin) {
@@ -330,6 +341,32 @@ internal class PhoneModel(application: Application) : AndroidViewModel(applicati
         return profileSubtitle(media, profile)
     }
 
+    /** Poll shared preferences without retuning for names, avatars or another device's channel.
+     * Explicit playback-track choices stay local; changed profile defaults apply automatically.
+     */
+    fun refreshProfiles() = perform {
+        val api = client ?: return@perform
+        if (!state.value.signedIn) return@perform
+        val current = state.value.profile
+        val profiles = api.profiles()
+        val updated = profiles.find { it.id == current?.id }
+        if (current != null && updated == null) {
+            stopWatching()
+            preferences.edit().remove("profile_id").apply()
+        }
+        val channels = if (current != null && updated != null && current.tier != updated.tier) api.guide(updated) else state.value.channels
+        update { it.copy(profiles = profiles, profile = updated, channels = if (current != null && updated == null) emptyList() else channels) }
+        if (updated != null && state.value.channel != null && channels.none { it.id == state.value.channel?.id }) {
+            stopWatching()
+        }
+        val defaultsChanged = current != null && updated != null &&
+            (current.language != updated.language || current.subtitleMode != updated.subtitleMode || current.subtitleLanguage != updated.subtitleLanguage)
+        if (defaultsChanged) {
+            if (!subtitleOverride) update { it.copy(subtitleFileId = null) }
+            state.value.channel?.let { watch(it, restart = true) }
+        }
+    }
+
     fun refreshGuide() = perform {
         val profile = state.value.profile ?: return@perform
         val channels = requireNotNull(client).guide(profile)
@@ -342,14 +379,15 @@ internal class PhoneModel(application: Application) : AndroidViewModel(applicati
         update { it.copy(profile = null, channels = emptyList(), settings = null, error = null) }
     }
 
+    /** Native Sign Out detaches this server locally, retaining its encrypted session.
+     * Web session revocation remains authoritative when the server is selected again.
+     */
     fun logout() = perform {
         stopWatching()
         viewing?.join()
-        val api = client
-        try { api?.request("/api/auth/logout", "POST") }
-        finally {
-            expireSession()
-        }
+        client = null
+        preferences.edit().remove("profile_id").putBoolean("server_detached", true).commit()
+        update { PhoneState(origin = it.origin, serverName = it.serverName, trustedCa = it.trustedCa) }
     }
 
     fun watch(channel: GuideChannel, restart: Boolean = false) {
@@ -415,7 +453,7 @@ internal class PhoneModel(application: Application) : AndroidViewModel(applicati
                             entryStartsAt = tune.getString("entryStartsAt"),
                             trustedCa = state.value.trustedCa, hlsOriginMs = tune.optString("hlsOrigin").takeIf { it.isNotBlank() }?.let { Instant.parse(it).toEpochMilli() })
                         update { it.copy(playback = media, profile = it.profile?.copy(lastChannel = channel.id),
-                            subtitleIndex = selectedSubtitle(media, profile),
+                            subtitleIndex = selectedSubtitle(media, state.value.profile ?: profile),
                             subtitleFileId = media.mediaFileId) }
                         activityStarted = true
                         reportActivity(api, viewerId, channel.id, token, profile.id, state.value.paused)

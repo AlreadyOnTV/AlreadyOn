@@ -747,17 +747,17 @@ export async function revokeSession(id: number): Promise<void> {
   const res = await fetch(`${API_BASE}/api/auth/sessions/${id}`, {
     method: 'DELETE',
   });
-  if (!res.ok) throw new Error(await parseErrorMessage(res, 'failed to sign that browser out'));
+  if (!res.ok) throw new Error(await parseErrorMessage(res, 'failed to sign that session out'));
 }
 
-// "others" keeps this browser signed in; "all" signs every browser out.
+// "others" keeps this session signed in; "all" signs every session out.
 export async function revokeSessions(scope: 'others' | 'all'): Promise<number> {
   const res = await fetch(`${API_BASE}/api/auth/sessions/revoke`, {
     method: 'POST',
     headers: { 'Content-Type': 'application/json' },
     body: JSON.stringify({ scope }),
   });
-  if (!res.ok) throw new Error(await parseErrorMessage(res, 'failed to sign browsers out'));
+  if (!res.ok) throw new Error(await parseErrorMessage(res, 'failed to sign sessions out'));
   return (await res.json()).signedOut;
 }
 

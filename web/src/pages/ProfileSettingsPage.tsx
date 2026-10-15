@@ -82,6 +82,19 @@ export default function ProfileSettingsPage() {
   const subtitleLanguage = currentUser.subtitleLanguage ?? DEFAULT_SUBTITLE_LANGUAGE;
   const [draftSubtitleLanguage, setDraftSubtitleLanguage] = useState(subtitleLanguage);
 
+  const previousProfile = useRef(currentUser);
+  useEffect(() => {
+    // Keep local edits while rebasing untouched fields on remote profile refreshes.
+    const previous = previousProfile.current;
+    previousProfile.current = currentUser;
+    setDraftName(value => value === previous.name ? currentUser.name : value);
+    setDraftIcon(value => value === previous.icon ? currentUser.icon : value);
+    setDraftTimeFormat(value => value === (previous.guideTimeFormat ?? '12h') ? timeFormat : value);
+    setDraftSubtitleMode(value => value === (previous.subtitleMode ?? (previous.subtitlesEnabled ? 'always' : 'off')) ? subtitleMode : value);
+    setDraftAudioLanguage(value => value === (previous.audioLanguage ?? 'en') ? audioLanguage : value);
+    setDraftSubtitleLanguage(value => value === (previous.subtitleLanguage ?? DEFAULT_SUBTITLE_LANGUAGE) ? subtitleLanguage : value);
+  }, [currentUser, timeFormat, subtitleMode, audioLanguage, subtitleLanguage]);
+
   const hasUnsavedChanges =
     draftName.trim() !== currentUser.name ||
     iconBlob !== null ||

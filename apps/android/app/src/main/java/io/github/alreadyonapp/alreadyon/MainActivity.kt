@@ -51,6 +51,7 @@ import androidx.core.view.WindowCompat
 import androidx.core.view.WindowInsetsCompat
 import androidx.core.view.WindowInsetsControllerCompat
 import androidx.lifecycle.Lifecycle
+import androidx.lifecycle.repeatOnLifecycle
 import androidx.lifecycle.LifecycleEventObserver
 import androidx.lifecycle.compose.LocalLifecycleOwner
 import androidx.lifecycle.compose.collectAsStateWithLifecycle
@@ -82,6 +83,15 @@ class MainActivity : ComponentActivity() {
         setContent {
             val model: PhoneModel = viewModel()
             val state by model.state.collectAsStateWithLifecycle()
+            val lifecycleOwner = LocalLifecycleOwner.current
+            LaunchedEffect(lifecycleOwner, model, state.signedIn) {
+                if (state.signedIn) lifecycleOwner.lifecycle.repeatOnLifecycle(Lifecycle.State.STARTED) {
+                    while (true) {
+                        model.refreshProfiles()
+                        delay(300_000)
+                    }
+                }
+            }
             PhoneTheme { UpdatePrompt(visible = !pip) }
             StartupPreload {
                 if (BuildConfig.IS_TV) {

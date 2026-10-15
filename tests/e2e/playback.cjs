@@ -2517,6 +2517,34 @@ const noWorkers = async (unreleased = () => 0) => {
     );
   }
 
+  async function profileRefresh() {
+    const context = await browser.newContext();
+    const page = await context.newPage();
+    await page.clock.install();
+    await login(page);
+    const list = await (await page.request.get(url + "/api/profiles")).json();
+    const active = list[0];
+    const refreshed = { ...active, name: "Remote profile update", icon: "owl", guideTimeFormat: "24h" };
+    let polls = 0;
+    await page.route("**/api/profiles", route => { polls++; return route.fulfill({ json: list.map(p => p.id === active.id ? refreshed : p) }); });
+    await page.clock.fastForward(5 * 60 * 1000);
+    await page.locator('.profile-menu-trigger').filter({ hasText: refreshed.name }).waitFor();
+    assert(polls >= 1, "Visible WebUI polls profiles at five minutes without a focus event");
+    assert(await page.locator('.profile-menu-trigger').textContent().then(t => t.includes("🦉")), "Remote avatar preset reaches active profile");
+    await page.goto(url + "/profile");
+    const nameInput = page.locator('.admin-card').filter({ has: page.getByRole('heading', {name: 'Display Name', exact: true}) }).locator('input');
+    await nameInput.fill("Local unsaved name");
+    refreshed.name = "Second remote update";
+    refreshed.icon = "/profile-icons/synthetic-refresh.png";
+    await page.route("**/profile-icons/synthetic-refresh.png", route => route.fulfill({ status: 200, contentType: 'image/png', body: Buffer.from('iVBORw0KGgoAAAANSUhEUgAAAAEAAAABCAQAAAC1HAwCAAAAC0lEQVR42mP8/x8AAwMCAO+jWZkAAAAASUVORK5CYII=', 'base64') }));
+    await page.clock.fastForward(5 * 60 * 1000);
+    await page.locator('.profile-menu-trigger img').waitFor();
+    assert((await page.locator('.profile-menu-trigger img').getAttribute('src')) === refreshed.icon, "Uploaded avatar changes reach the active profile");
+    assert((await nameInput.inputValue()) === "Local unsaved name", "Polling preserves unsaved local profile edits");
+    await context.close();
+    console.log("PASS: active WebUI refreshes remote profile name/avatar every five minutes and preserves drafts");
+  }
+
   // Browser fixtures verify visibility without changing any persistent profile.
   async function profileMenuRoles() {
     for (const accountRole of ["owner", "viewer"]) {
@@ -2598,8 +2626,8 @@ const noWorkers = async (unreleased = () => 0) => {
     const headings = await page.locator(".admin-card h3").allTextContents();
     assert(
       JSON.stringify(headings) ===
-        JSON.stringify(["Profiles", "Signed-In Browsers"]),
-      `Admin Settings should show the account form with TV Pairing Pin, Profiles, then Signed-In Browsers: ${JSON.stringify(headings)}`,
+        JSON.stringify(["Profiles", "Sessions"]),
+      `Admin Settings should show the account form with TV Pairing Pin, Profiles, then Sessions: ${JSON.stringify(headings)}`,
     );
     await page
       .getByRole("columnheader", { name: "Last Active", exact: true })
@@ -3849,6 +3877,7 @@ const noWorkers = async (unreleased = () => 0) => {
     if (!only || only.includes("credential-drafts")) await require("./credential-drafts.cjs")({ browser, login, url, assert });
     if (!only || only.includes("profile-creation")) await require("./profile-creation.cjs")({ browser, login, url, assert });
     if (!only || only.includes("profile-menu")) await profileMenuRoles();
+    if (!only || only.includes("profile-refresh")) await profileRefresh();
     if (!only || only.includes("admin")) await adminTabs();
     if (!only || only.includes("admin-metrics-logs"))
       await require("./admin-metrics-logs.cjs")({
