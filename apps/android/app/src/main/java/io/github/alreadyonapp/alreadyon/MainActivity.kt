@@ -235,7 +235,7 @@ internal fun ProfileMenu(state: PhoneState, model: PhoneModel, modifier: Modifie
             }) {
             DropdownMenuItem(text = { Text("Switch Profile") }, modifier = Modifier.focusRequester(switchFocus).tvFocusOutline(), onClick = { open = false; model.changeProfile() })
             DropdownMenuItem(text = { Text("Profile") }, modifier = Modifier.tvFocusOutline(), onClick = { open = false; model.openSettings("profile") })
-            DropdownMenuItem(text = { Text("Sign Out") }, onClick = { open = false; model.logout() })
+            DropdownMenuItem(text = { Text("Sign Out") }, modifier = Modifier.tvFocusOutline(), onClick = { open = false; model.logout() })
             if (BuildConfig.IS_TV && onExitApp != null) DropdownMenuItem(
                 text = { Text("Exit App") }, modifier = Modifier.tvFocusOutline(),
                 onClick = { open = false; onExitApp() })
