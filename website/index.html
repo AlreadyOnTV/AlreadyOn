@@ -1,113 +1,197 @@
 <!doctype html>
 <html lang="en"><head><meta charset="utf-8"><meta name="viewport" content="width=device-width, initial-scale=1"><meta name="description" content="Bring the nostalgic cable-TV experience to your own media library. Meet AlreadyOn, explore its interfaces, and start testing in your homelab."><meta name="theme-color" content="#10151d"><title>Less scrolling. More channel surfing. · AlreadyOn</title><link rel="icon" href="assets/branding/icon.svg" type="image/svg+xml"><link rel="stylesheet" href="assets/site.css"><script src="assets/site.js" defer></script></head><body><a class="skip" href="#main">Skip to content</a>
 <header><a class="brand" href="./" aria-label="AlreadyOn home"><img src="assets/branding/header-doc.svg" alt="AlreadyOn"></a>
-<nav aria-label="Main navigation"><a href="#experience">The experience</a><a href="guides.html">Guides</a><a href="help.html">Get help</a><a class="nav-button" href="guides.html#install">Get started <span aria-hidden="true">↗</span></a></nav></header>
+<nav aria-label="Main navigation"><a href="./">Overview</a><a href="guides.html">Using AlreadyOn</a><a href="technical.html">Homelab guide</a><a href="https://github.com/AlreadyOnTV/AlreadyOn/issues">Issues ↗</a></nav></header>
+
 <main id="main">
+
 
 <section class="hero">
 <div class="hero-copy">
 <p class="eyebrow"><span class="live-dot"></span> YOUR LIBRARY. ALWAYS SOMETHING ON.</p>
+
 <h1>Less scrolling.<br>More <em>channel surfing.</em></h1>
+
 <p class="lead">Remember when you could turn on the TV and just see what was on? AlreadyOn brings that feeling back—with the movies and shows you already own.</p>
-<div class="actions"><a class="button primary" href="guides.html#install">Bring it to your homelab <span aria-hidden="true">↗</span></a><a class="text-link" href="#experience">Take a look ↓</a></div>
-<p class="small">Open source · Self hosted · Made for curious homelab testers</p></div>
+
+<div class="actions"><a class="button primary" href="technical.html#install">Bring it to your homelab <span aria-hidden="true">↗</span></a><a class="text-link" href="#experience">Take a look ↓</a></div>
+<p class="small">Open source · Self hosted · Made for curious homelab testers</p>
+</div>
 <div class="hero-art">
 <div class="screen chrome">
 <div class="screen-top"><span></span><span></span><span></span><b>Tonight, on your own terms</b></div><button class="screenshot" data-image="assets/screenshots/web-guide.png" data-caption="The WebUI guide with synthetic demo channels and original demo media." aria-label="Enlarge the WebUI guide screenshot"><img src="assets/screenshots/web-guide.png" alt="AlreadyOn WebUI showing a playing program and a television-style channel guide" fetchpriority="high"></button></div>
 <div class="on-air"><span class="live-dot"></span> THE GOOD PART IS ALREADY ON</div></div></section>
 
+
+
 <section class="intro section">
 <p class="eyebrow">A LITTLE LESS CHOICE. A LOT MORE TV.</p>
+
 <div class="split">
 <h2>The feeling you remember.<br>The library you love.</h2>
+
 <div>
 <p>Saturday-morning cartoons. An old favorite halfway through. The late-night movie you didn’t plan to watch.</p>
-<p>Cable TV in the ’90s and early 2000s had a rhythm: pick a channel, settle in, and let the evening happen. Today’s endless catalogs can make choosing feel like work. AlreadyOn turns your collection into scheduled channels, so you can spend less time deciding and more time watching.</p></div></div></section>
+
+<p>Cable TV in the ’90s and early 2000s had a rhythm: pick a channel, settle in, and let the evening happen. Today’s endless catalogs can make choosing feel like work. AlreadyOn turns your collection into scheduled channels, so you can spend less time deciding and more time watching.</p>
+</div></div></section>
+
+
 
 <section id="experience" class="section experience">
 <div class="section-heading">
 <div>
 <p class="eyebrow">ONE LIBRARY. THREE WAYS TO TUNE IN.</p>
-<h2>At your desk.<br>In your hand. On your TV.</h2></div>
-<p>Manage and watch in the browser, then take the same channel experience to Android phones, tablets, and Google TV.</p></div>
+
+<h2>At your desk.<br>In your hand. On your TV.</h2>
+</div>
+<p>Manage and watch in the browser, then take the same channel experience to Android phones, tablets, and Google TV.</p>
+</div>
 <div class="tabs" role="tablist" aria-label="Choose an interface"><button role="tab" id="tab-web" aria-controls="panel-web" aria-selected="true">WebUI</button><button role="tab" id="tab-phone" aria-controls="panel-phone" aria-selected="false" tabindex="-1">Android phone</button><button role="tab" id="tab-tv" aria-controls="panel-tv" aria-selected="false" tabindex="-1">Google TV</button></div>
 
 <div class="showcase" id="panel-web" role="tabpanel" aria-labelledby="tab-web">
 <div class="device desktop"><button class="screenshot" data-image="assets/screenshots/web-guide.png" data-caption="WebUI guide. All programs and channels shown are synthetic demo content." aria-label="Enlarge WebUI screenshot"><img src="assets/screenshots/web-guide.png" alt="Browser channel guide with program schedule and video player" loading="lazy"></button></div>
 <div><span class="tag">THE CONTROL ROOM</span>
 <h3>A guide that feels familiar.</h3>
-<p>See what’s playing, switch channels, and build the experience around your library. Owners can manage media and server settings; viewers can settle in and watch.</p><a class="text-link" href="guides.html#watch">Learn your way around →</a></div></div>
+
+<p>See what’s playing, switch channels, and build the experience around your library. Owners can manage media and server settings; viewers can settle in and watch.</p>
+<a class="text-link" href="guides.html#watch">Learn your way around →</a></div></div>
 
 <div class="showcase" id="panel-phone" role="tabpanel" aria-labelledby="tab-phone" hidden>
 <div class="device phone"><button class="screenshot" data-image="assets/screenshots/android-phone-guide.png" data-caption="Native Android phone interface with synthetic demo media." aria-label="Enlarge Android phone screenshot"><img src="assets/screenshots/android-phone-guide.png" alt="AlreadyOn Android phone interface" loading="lazy"></button></div>
 <div><span class="tag">A LITTLE TV, ANYWHERE AT HOME</span>
 <h3>Your channels, in your hand.</h3>
-<p>Browse the guide and tune in from an Android phone or tablet. Connect to your own server and sign in using your account’s pairing PIN.</p><a class="text-link" href="guides.html#android">Set up the Android app →</a></div></div>
+
+<p>Browse the guide and tune in from an Android phone or tablet. Connect to your own server and sign in using your account’s pairing PIN.</p>
+<a class="text-link" href="guides.html#android">Set up the Android app →</a></div></div>
 
 <div class="showcase" id="panel-tv" role="tabpanel" aria-labelledby="tab-tv" hidden>
 <div class="device television"><button class="screenshot" data-image="assets/screenshots/google-tv-guide.png" data-caption="Native Google TV interface with synthetic demo media." aria-label="Enlarge Google TV screenshot"><img src="assets/screenshots/google-tv-guide.png" alt="AlreadyOn Google TV channel guide" loading="lazy"></button></div>
 <div><span class="tag">THE COUCH IS CALLING</span>
 <h3>Made for the remote.</h3>
-<p>Pick a channel with your Google TV remote, open fullscreen playback, and return to the guide without starting the program over.</p><a class="text-link" href="guides.html#android">Get the TV app →</a></div></div>
-<p class="caption">Actual AlreadyOn interfaces. Screenshots use original synthetic demo media; no entertainment titles are bundled. Tap a screenshot to explore.</p></section>
+
+<p>Pick a channel with your Google TV remote, open fullscreen playback, and return to the guide without starting the program over.</p>
+<a class="text-link" href="guides.html#android">Get the TV app →</a></div></div>
+<p class="caption">Actual AlreadyOn interfaces. Screenshots use original synthetic demo media; no entertainment titles are bundled. Tap a screenshot to explore.</p>
+</section>
+
+
 
 <section class="section">
 <p class="eyebrow">YOUR COLLECTION, WITH A DIFFERENT RHYTHM</p>
+
 <h2>Make “what’s on?”<br>an easy question again.</h2>
+
 <div class="features">
 <article><span class="feature-icon" aria-hidden="true">▤</span>
 <h3>A real channel guide</h3>
-<p>Scheduled programs make your collection feel like a lineup. Tune into what’s airing instead of choosing from a wall of titles.</p></article>
+
+<p>Scheduled programs make your collection feel like a lineup. Tune into what’s airing instead of choosing from a wall of titles.</p>
+</article>
+
 <article><span class="feature-icon" aria-hidden="true">◷</span>
 <h3>A shared moment</h3>
-<p>A channel has a current program and position. Join the broadcast in progress—the familiar rhythm of linear TV.</p></article>
+
+<p>A channel has a current program and position. Join the broadcast in progress—the familiar rhythm of linear TV.</p>
+</article>
+
 <article><span class="feature-icon" aria-hidden="true">◎</span>
 <h3>Profiles for your home</h3>
-<p>Switch profiles and keep owner controls separate from everyday viewing. A single server brings your household’s library together.</p></article>
+
+<p>Switch profiles and keep owner controls separate from everyday viewing. Pick preferred audio and subtitle languages, protect profiles with PINs, and keep your household’s library together.</p>
+</article>
+
 <article><span class="feature-icon" aria-hidden="true">⌂</span>
 <h3>Hosted by you</h3>
-<p>Run AlreadyOn in your homelab with Docker Compose. Your media stays on your storage, and persistent configuration stays with your server.</p></article></div></section>
+
+<p>Run AlreadyOn on your own home server. Your media stays on your storage, and persistent configuration stays with your server.</p>
+</article>
+</div></section>
+
+
+
+<section class="section"><p class="eyebrow">MAKE IT YOUR KIND OF TV</p>
+<h2>A lineup with<br>your own personality.</h2>
+<div class="features"><article><h3>Channels you shape</h3>
+<p>Build a channel around favorite genres, eras or parts of your collection. See what is on without choosing an episode every time.</p>
+</article>
+<article><h3>A familiar TV rhythm</h3>
+<p>Add optional breaks using commercial clips you supply, or keep the experience focused on your shows and movies.</p>
+</article>
+<article><h3>Comfortable viewing</h3>
+<p>Choose available audio tracks and captions. Shared profile preferences make moving between screens feel familiar.</p>
+</article>
+<article><h3>Apps that keep up</h3>
+<p>Signed Android and Google TV apps can offer updates while keeping settings and saved sign-in intact.</p>
+</article>
+</div><a class="text-link" href="guides.html">Explore every control and setting →</a></section>
 
 <section class="section start">
 <div>
 <p class="eyebrow">FROM COLLECTION TO CHANNELS</p>
+
 <h2>Start small.<br>Find your favorites.</h2>
-<p>You’ll need your own media, a compatible Docker host, and a little time to explore. The guide walks you through each step.</p><a class="button primary" href="guides.html#install">Open the getting-started guide ↗</a></div>
+
+<p>AlreadyOn is for people who own a media collection and miss the ease of turning on a channel. Run a home server yourself, or join one managed by someone in your household. You bring the content; AlreadyOn brings the schedule.</p>
+<a class="button primary" href="technical.html#install">Open the homelab setup guide ↗</a></div>
 <ol class="steps">
 <li><span>01</span>
 <div>
 <h3>Give it a home</h3>
-<p>Start the server with Docker Compose and keep its configuration in a persistent folder.</p></div></li>
+
+<p>Start the server with Docker Compose and keep its configuration in a persistent folder.</p>
+</div></li>
+
 <li><span>02</span>
 <div>
 <h3>Bring your library</h3>
-<p>Point AlreadyOn at your TV and movie folders, then let it scan your collection.</p></div></li>
+
+<p>Point AlreadyOn at your TV and movie folders, then let it scan your collection.</p>
+</div></li>
+
 <li><span>03</span>
 <div>
 <h3>See what’s on</h3>
-<p>Open the guide in your browser or connect an Android device and pick a channel.</p></div></li></ol></section>
+
+<p>Open the guide in your browser or connect an Android device and pick a channel.</p>
+</div></li>
+</ol></section>
+
+
 
 <section class="section invitation">
 <p class="eyebrow">HELP SHAPE WHAT’S NEXT</p>
+
 <h2>A homelab project.<br>A better TV habit.</h2>
+
 <p>AlreadyOn is looking for real-world testers. Try it with your collection, tell us where you get stuck, and share the small changes that would make it feel more like home.</p>
-<div class="actions"><a class="button primary" href="help.html">Join the testing journey ↗</a><a class="text-link" href="https://github.com/AlreadyOnTV/AlreadyOn">Explore the project on GitHub ↗</a></div></section>
+
+<div class="actions"><a class="button primary" href="https://github.com/AlreadyOnTV/AlreadyOn/issues">See issues &amp; share feedback ↗</a><a class="text-link" href="https://github.com/AlreadyOnTV/AlreadyOn/issues">Ask a question ↗</a><a class="text-link" href="https://github.com/AlreadyOnTV/AlreadyOn">Explore the project on GitHub ↗</a></div></section>
+
+
 
 <section class="section faq">
 <h2>A few things to know.</h2>
+
 <details><summary>Does AlreadyOn include movies or TV shows?</summary>
-<p>No. You provide your own media library. AlreadyOn organizes playback into scheduled channels; it does not supply entertainment content or subscriptions.</p></details>
+<p>No. You provide your own media library. AlreadyOn organizes playback into scheduled channels; it does not supply entertainment content or subscriptions.</p>
+</details>
 <details><summary>Can I use it without an Android device?</summary>
-<p>Yes. The WebUI provides a browser guide and playback. Android phone/tablet and Google TV apps are additional ways to watch. Browser playback depends on your device and media format.</p></details>
+<p>Yes. The WebUI provides a browser guide and playback. Android phone/tablet and Google TV apps are additional ways to watch. Browser playback depends on your device and media format.</p>
+</details>
 <details><summary>Do I need a powerful server?</summary>
-<p>Start with a compatible x86-64 Linux Docker host or NAS. Requirements vary with your media, concurrent viewers, and transcoding needs. CPU-only setup is supported; demanding formats may need more resources. Test with a small library first.</p></details>
+<p>Start with a compatible x86-64 Linux Docker host or NAS. Requirements vary with your media, concurrent viewers, and transcoding needs. CPU-only setup is supported; demanding formats may need more resources. Test with a small library first.</p>
+</details>
 <details><summary>Is this a finished commercial service?</summary>
-<p>AlreadyOn is an open-source project inviting homelab testers. Expect rough edges, check release notes, and help us understand what works on your hardware. There is no guaranteed support response time.</p></details>
+<p>AlreadyOn is an open-source project inviting homelab testers. Expect rough edges, check release notes, and help us understand what works on your hardware. There is no guaranteed support response time.</p>
+</details>
 <details><summary>What devices are supported?</summary>
-<p>The current focus is the WebUI, Android phones and tablets, and Google TV. Apple clients, Google Cast, and VPN-based access are outside the project’s current scope.</p></details></section></main>
-<footer>
-<div><a class="brand" href="./"><img src="assets/branding/header-doc.svg" alt="AlreadyOn"></a>
-<p>Your library, tuned to you.</p></div>
-<div><a href="guides.html">Installation &amp; guides</a><a href="help.html">Tester support</a><a href="https://github.com/AlreadyOnTV/AlreadyOn">Source on GitHub ↗</a><a href="https://github.com/AlreadyOnTV/AlreadyOn/releases/latest">Download Android apps ↗</a></div>
-<p class="fine">An open-source project for your own media. No shows, movies, or streaming subscriptions included. GPL-3.0 licensed.</p></footer><dialog id="lightbox" aria-label="Interface screenshot"><button class="close" aria-label="Close screenshot">Close ×</button><img alt="">
-<p></p></dialog></body></html>
+<p>The current focus is the WebUI, Android phones and tablets, and Google TV. Apple clients and Google Cast are outside the project’s current scope.</p>
+</details></section>
+</main>
+<footer><div><a class="brand" href="./"><img src="assets/branding/header-doc.svg" alt="AlreadyOn"></a><p>Your library, tuned to you.</p>
+</div><div><a href="guides.html">Using AlreadyOn</a><a href="technical.html">Homelab guide</a><a href="https://github.com/AlreadyOnTV/AlreadyOn/issues">Browse issues ↗</a><a href="https://github.com/AlreadyOnTV/AlreadyOn/issues/new/choose">Report an issue ↗</a><a href="https://github.com/AlreadyOnTV/AlreadyOn/issues">Community help ↗</a><a href="https://github.com/AlreadyOnTV/AlreadyOn/releases">Releases &amp; APK downloads ↗</a><a href="help.html">How to ask for help</a><a href="https://github.com/AlreadyOnTV/AlreadyOn">Source on GitHub ↗</a></div><p class="fine">Open source · GPL-3.0 · Bring your own media. No shows, movies or streaming subscriptions included.</p>
+</footer>
+<dialog id="lightbox" aria-label="Interface screenshot"><button class="close" aria-label="Close screenshot">Close ×</button><img alt="">
+<p></p>
+</dialog></body></html>

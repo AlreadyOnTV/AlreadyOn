@@ -1,0 +1,158 @@
+<!doctype html><html lang="en"><head><meta charset="utf-8"><meta name="viewport" content="width=device-width,initial-scale=1"><meta name="description" content="Deploy AlreadyOn with Docker, required HTTPS, GPU transcoding, certificates, DDNS, router rules, reverse proxies, Swagger and maintenance."><meta name="theme-color" content="#10151d"><title>The homelab guide · AlreadyOn</title><link rel="icon" href="assets/branding/icon.svg" type="image/svg+xml"><link rel="stylesheet" href="assets/site.css"><script src="assets/site.js" defer></script></head><body><a class="skip" href="#main">Skip to content</a><header><a class="brand" href="./" aria-label="AlreadyOn home"><img src="assets/branding/header-doc.svg" alt="AlreadyOn"></a><nav aria-label="Main navigation"><a href="./">Overview</a><a href="guides.html">Using AlreadyOn</a><a href="technical.html" aria-current="page">Homelab guide</a><a href="https://github.com/AlreadyOnTV/AlreadyOn/issues">Issues ↗</a></nav></header>
+<main id="main">
+<section class="page-hero"><p class="eyebrow">FOR THE PERSON RUNNING THE SERVER</p>
+<h1>A good home<br><em>for your channels.</em></h1>
+<p class="lead">Understand what runs where, choose a certificate and network layout, and keep your household’s server healthy. Start on the LAN; add complexity when you need it.</p>
+<p class="guide-hint">Jump to a section below, or use your browser’s Find command to look up a setting.</p>
+</section>
+<div class="guide-layout"><aside><nav aria-label="On this page"><a href="#architecture">How the pieces fit</a><a href="#install">Install with Docker Compose</a><a href="#tls">Why HTTPS is required</a><a href="#hardware">Hardware transcoding</a><a href="#network">Ports, firewalls and remote access</a><a href="#ddns">Dynamic DNS</a><a href="#proxy">Nginx Proxy Manager and Traefik</a><a href="#api">Swagger and management API</a><a href="#maintenance">Background work, updates and backups</a></nav></aside>
+<div class="guide-body">
+<section id="architecture"><p class="eyebrow">01 / HOW THE PIECES FIT</p>
+<h2>How the pieces fit</h2>
+<p>One server reads your media, stores library/settings/schedules in SQLite, and serves the WebUI, API and streams over HTTPS. Browsers and native apps connect to that server; GitHub Pages hosts only this informational website. Media is not uploaded to the website.</p>
+<p>The published image targets Linux amd64. Begin with an x86-64 Linux Docker host or a NAS with compatible Compose support, a persistent configuration volume, readable media and a client on a trusted LAN. CPU/RAM/network needs depend on codecs, resolution, tone mapping and concurrent viewers. GPU availability alone does not establish HDR or client compatibility.</p>
+<p>Delivery chooses direct play when supported, remuxing when the container needs changing, or transcoding when media must be converted. Direct-play files do not benefit from a faster video encoder. Test a small representative library before planning capacity.</p>
+</section>
+
+<section id="install"><p class="eyebrow">02 / INSTALL WITH DOCKER COMPOSE</p>
+<h2>Install with Docker Compose</h2>
+<ol><li>Install <a href="https://docs.docker.com/engine/install/">Docker Engine</a> and its Compose plugin. Create a dedicated application directory.</li>
+<li>Save the example as <code>compose.yaml</code>. Replace the media path, timezone and user/group IDs with your host’s values. Use <code>id -u</code> and <code>id -g</code> to inspect IDs; the config directory needs write access and media needs read access.</li>
+<li>Run <code>docker compose config --quiet</code>, then <code>docker compose up -d</code>.</li>
+<li>Open <code>https://YOUR-SERVER-IP:19900</code>, verify the instance/address before trusting its initial certificate, and create the server name and owner account.</li>
+<li>Add container-side media paths and test playback using <a href="guides.html#library">the usage guide</a>.</li>
+</ol><div class="code-heading"><span>compose.yaml · LAN, CPU-only</span><button class="copy" data-copy="compose">Copy</button></div><pre><code id="compose">services:
+  alreadyon:
+    image: ghcr.io/alreadyontv/alreadyon:stable
+    restart: unless-stopped
+    ports:
+      - "19900:19900"
+    environment:
+      PUID: "1000"
+      PGID: "1000"
+      TZ: America/New_York
+    volumes:
+      - ./config:/config
+      - /YOUR/MEDIA/FOLDER:/data/media:ro</code></pre><p><code>:ro</code> protects media from container writes. Do not mount a live library as disposable test data. Persist and back up <code>/config</code>; replacing the container is different from deleting its database. <code>stable</code> is the approved main channel, <code>latest</code> is test, and <code>nightly</code> is development. Use a known image digest for an exactly reproducible deployment.</p>
+<p>The <a href="https://github.com/AlreadyOnTV/AlreadyOn/blob/main/deploy/docker-compose.example.yml">repository Compose example</a> also covers GPU devices and optional transcode scratch storage. Size a RAM-backed scratch directory for your workload; it consumes host memory.</p>
+</section>
+
+<section id="tls"><p class="eyebrow">03 / WHY HTTPS IS REQUIRED</p>
+<h2>Why HTTPS is required</h2>
+<p>UI, API and media share the encrypted application listener on TCP 19900 by default. Login sessions, profile actions and playback credentials need protection on every connection. Plain HTTP upstream termination is unsupported for browser sessions; a reverse proxy must use verified HTTPS upstream or pass TLS through.</p>
+<p>A fresh installation creates its own instance CA. For browser access, import that CA only on devices you control and use a hostname covered by the certificate. Check the selected instance before trusting it. A browser warning does not justify turning off validation globally.</p>
+<p>Native Android/TV onboarding saves trust inside the app for the selected server; it does not install a device-wide CA. Saved trust failures block connections and require an explicit CA replacement decision. Initial trust on an untrusted network cannot detect an impersonated server, so perform first connection on your trusted LAN.</p>
+<div class="table-scroll" tabindex="0" role="region" aria-label="Certificate mode reference"><table><thead><tr><th scope="col">Certificate mode</th><th scope="col">Setup and trust</th><th scope="col">Renewal</th></tr>
+</thead><tbody><tr><td>Self-Signed (Default)</td><td>Use the instance CA; browsers/other clients need appropriate trust. Download CA Certificate in Server settings.</td><td>Managed instance certificate lifecycle; monitor trust/expiry.</td></tr>
+<tr><td>User Uploaded Cert</td><td>Upload PEM certificate chain (leaf first, then intermediates), matching unencrypted private key, and issuing CA bundle. Use covered DNS names. PFX/P12/DER require external conversion.</td><td>You renew and upload replacements before expiry.</td></tr>
+<tr><td>Let’s Encrypt</td><td>Enter public hostname/contact email, accept terms, then Save Changes. The built-in flow uses HTTP-01 validation.</td><td>Automatic renewal while validation remains reachable; failure retains the current certificate.</td></tr>
+</tbody></table></div><p>Uploaded certificates apply to new connections immediately and persist across restarts. Make sure the hostname you will use works before switching; an uncovered localhost/IP URL may stop validating. A certificate downloaded from a proxy is not a substitute for its private key and issuing chain.</p>
+<p>AlreadyOn’s current WebUI ACME flow uses HTTP-01. If you obtain a DNS-01 certificate with an external client, use the uploaded-certificate flow and manage renewal yourself. <a href="https://letsencrypt.org/docs/challenge-types/">Let’s Encrypt documents the challenge differences</a>.</p>
+</section>
+
+<section id="hardware"><p class="eyebrow">04 / HARDWARE TRANSCODING</p>
+<h2>Hardware transcoding</h2>
+<p>Start with Software Only and a working playback baseline. Under <strong>Server → Server</strong>, Hardware Encoding offers Intel, AMD and NVIDIA; Hardware Decoding is separate and requires a hardware encoder. The Test actions report the chosen path. Save the setting, then test real representative files and clients.</p>
+<h3>Intel and AMD</h3>
+<p>Install the host’s appropriate GPU driver and expose the render device to the container. Add this inside the AlreadyOn service:</p>
+<pre><code>devices:
+  - /dev/dri:/dev/dri</code></pre><p>Check host device permissions with <code>stat -c '%g %n' /dev/dri/*</code>. An explicit non-root container user may require matching supplemental groups; use the actual host GIDs, not copied examples. Intel can use QSV where the tested hardware supports it, with VA-API fallback; AMD uses VA-API. Confirm the Test result rather than inferring capability from the vendor name.</p>
+<h3>NVIDIA</h3>
+<p>Install a compatible host driver and <a href="https://docs.nvidia.com/datacenter/cloud-native/container-toolkit/latest/install-guide.html">NVIDIA Container Toolkit</a>, then reserve a video-capable GPU. This service fragment follows the app’s GPU setup:</p>
+<pre><code>deploy:
+  resources:
+    reservations:
+      devices:
+        - driver: nvidia
+          count: 1
+          capabilities: [gpu, video]</code></pre><p>See <a href="https://docs.docker.com/compose/how-tos/gpu-support/">Docker’s GPU reservation reference</a> for host/Compose requirements.</p>
+<h3>Encoding is not the whole pipeline</h3>
+<p>Encoding alone leaves decoding, scaling and HDR-to-SDR tone mapping on the CPU. Hardware Decoding attempts to move those stages to the GPU too, with per-file fallback. Unsupported codecs, drivers and HDR conversions can still consume CPU. Monitor Dashboard and test direct play, conversion, channel changes and multiple viewers separately. A passing synthetic encoder test is not complete hardware certification.</p>
+</section>
+
+<section id="network"><p class="eyebrow">05 / PORTS, FIREWALLS AND REMOTE ACCESS</p>
+<h2>Ports, firewalls and remote access</h2>
+<p>First make LAN playback work. Give the server a stable LAN address. If you choose public access, point your domain at the public IP, create only the needed firewall/NAT rules and test from a separate external network. DDNS updates DNS; it does not make a blocked port reachable.</p>
+<div class="table-scroll" tabindex="0" role="region" aria-label="Use reference"><table><thead><tr><th scope="col">Use</th><th scope="col">Public / host side</th><th scope="col">Container destination</th></tr>
+</thead><tbody><tr><td>LAN apps and discovery</td><td>Host TCP 19900</td><td>HTTPS TCP 19900</td></tr>
+<tr><td>Direct public viewing</td><td>WAN TCP 443 → host TCP 443</td><td>HTTPS TCP 19900, using mapping 443:19900</td></tr>
+<tr><td>Built-in HTTP-01 validation</td><td>WAN TCP 80 → host TCP 80</td><td>Challenge TCP 19902, using mapping 80:19902</td></tr>
+</tbody></table></div><p>For direct public hosting, add <code>443:19900</code> and, if using the app’s HTTP-01 certificate flow, <code>80:19902</code> to Compose ports. Keep <code>19900:19900</code> for native LAN discovery/sign-in. The challenge listener serves ACME validation only; it is not a normal HTTP site or redirect. <a href="https://letsencrypt.org/docs/challenge-types/#http-01-challenge">HTTP-01 requires public port 80</a>, even though its container-side port is different.</p>
+<p>Keep the validation route for renewal. Check both A and AAAA records; a stale IPv6 record can send clients/validation to another host. Carrier-grade NAT, ISP filtering or double NAT can prevent inbound access even when Compose is correct. Fix that network boundary before retrying certificate issuance.</p>
+<p>If a proxy already owns host ports 80/443, do not bind a second service to them. Choose which service owns public TLS and ACME, then route validation and traffic consistently. Native account-PIN sign-in still requires a direct LAN peer; publishing the WebUI does not turn it into an internet pairing endpoint.</p>
+</section>
+
+<section id="ddns"><p class="eyebrow">06 / DYNAMIC DNS</p>
+<h2>Dynamic DNS</h2>
+<p>In <strong>Server → Server → Dynamic DNS</strong>, choose None, Cloudflare or No-IP. None disables the app’s updater; a router or other external DDNS service can still manage your hostname.</p>
+<ol><li>Create the hostname/provider account and make sure the domain or DNS zone is active.</li>
+<li>For Cloudflare, use a zone-scoped token with DNS Edit and Zone Read. AlreadyOn discovers the zone and creates/updates the IPv4 A record in <strong>DNS-only</strong> mode; it disables proxying on that record.</li>
+<li>For No-IP, enter the actual full hostname and update credentials/DDNS Key. A provider group alias is not the hostname.</li>
+<li>Save Changes to store the configuration and trigger an initial sync. Review last attempt, success/failure and next retry in the status.</li>
+</ol><p>Checks run about every five minutes and failures back off. The updater manages IPv4 A records; inspect existing AAAA records separately. Provider account obligations, such as No-IP hostname confirmation, remain yours. Stored credentials are not returned to the form; reveal controls expose only a replacement draft.</p>
+<p>DNS and certificate names should agree with the URL viewers use. DDNS neither opens firewall ports nor installs a publicly trusted certificate.</p>
+</section>
+
+<section id="proxy"><p class="eyebrow">07 / NGINX PROXY MANAGER AND TRAEFIK</p>
+<h2>Nginx Proxy Manager and Traefik</h2>
+<p>A proxy is optional; direct HTTPS works without one. Two architectures preserve the application’s encrypted upstream:</p>
+<ol><li><strong>TLS passthrough:</strong> route the TCP connection unchanged to AlreadyOn:19900. AlreadyOn presents the certificate; the proxy does not decrypt the stream.</li>
+<li><strong>TLS termination plus HTTPS upstream:</strong> the proxy presents its public certificate and creates a second, verified HTTPS connection to AlreadyOn:19900. Mount the instance CA into the proxy and validate the upstream certificate’s name.</li>
+</ol><h3>Nginx Proxy Manager (NPM)</h3>
+<p>Create a Proxy Host with Forward Scheme <strong>https</strong>, the AlreadyOn service/address and port <strong>19900</strong>. Configure the public certificate at NPM. For verified private-CA upstreams, mount the CA read-only and configure trusted CA, SNI and certificate-name verification in the effective nginx proxy configuration. Preserve the external Host header. An nginx example of the required upstream settings is:</p>
+<pre><code>proxy_set_header Host $http_host;
+proxy_ssl_verify on;
+proxy_ssl_trusted_certificate /etc/nginx/alreadyon-ca.pem;
+proxy_ssl_server_name on;
+proxy_ssl_name alreadyon.internal.example;</code></pre><p>Replace the example name with one covered by the upstream certificate; it can differ from the Docker service hostname. NPM generates location blocks, so inspect its effective configuration: do not blindly paste a duplicate Host directive into a context that already sets it. A green public certificate indicator alone does not prove upstream validation. See <a href="https://nginxproxymanager.com/advanced-config/">NPM advanced configuration</a> and <a href="https://nginx.org/en/docs/http/ngx_http_proxy_module.html#proxy_ssl_verify">nginx upstream TLS directives</a>.</p>
+<h3>Traefik</h3>
+<p>For passthrough, use a TCP router with TLS passthrough and an SNI rule that sends to port 19900; AlreadyOn owns the viewer-facing certificate. For HTTP routing, use an HTTPS load-balancer server, preserve the external Host, and attach a ServersTransport that supplies the upstream certificate name and trusted CA. A file-provider transport/service fragment looks like:</p>
+<pre><code>http:
+  serversTransports:
+    alreadyon:
+      serverName: alreadyon.internal.example
+      rootCAs:
+        - /etc/traefik/alreadyon-ca.pem
+  services:
+    alreadyon:
+      loadBalancer:
+        passHostHeader: true
+        serversTransport: alreadyon
+        servers:
+          - url: https://alreadyon:19900</code></pre><p>This is not a complete router/entrypoint/certificate-resolver configuration. Match the transport name/provider and mount the CA in your deployment; do not use insecureSkipVerify as a workaround. Consult <a href="https://doc.traefik.io/traefik/reference/routing-configuration/http/load-balancing/serverstransport/">Traefik ServersTransport</a> and <a href="https://doc.traefik.io/traefik/reference/routing-configuration/tcp/tls/">TCP TLS passthrough</a>.</p>
+<h3>Identity and throttling behind a proxy</h3>
+<p>AlreadyOn ignores Forwarded, X-Forwarded-For/Host/Proto and X-Real-IP for client identity and does not support PROXY protocol. Authorization uses credentials; throttling uses the socket peer. HTTP-proxied viewers therefore share the proxy’s throttle bucket. TLS passthrough also normally exposes the proxy as the peer unless transparent routing preserves addresses. Keep direct LAN native sign-in available and restrict upstream access with your firewall.</p>
+</section>
+
+<section id="api"><p class="eyebrow">08 / SWAGGER AND MANAGEMENT API</p>
+<h2>Swagger and management API</h2>
+<p>Open <strong>Server → API → Open Swagger UI</strong>, or the authenticated <code>/api/docs/</code> route on your own server. The schema is available at <code>/api/openapi.yaml</code>. These are instance URLs, not pages on this website.</p>
+<ol><li>Read the endpoint description, authentication and request/response schema.</li>
+<li>Start with a read-only GET on your own instance. Try it out sends a real request, not a simulation.</li>
+<li>For integrations, create a named API key in the API tab, copy it privately and revoke it when no longer needed. Keep it out of URLs and screenshots.</li>
+<li>Review write/delete operations carefully; do not experiment against live accounts/media to learn a schema.</li>
+</ol><p>Management API keys have owner authority. Playback tokens are separately scoped; never hand a management key to a player or external receiver. Swagger visibility does not bypass account/profile permissions. Use a temporary synthetic instance for destructive tests.</p>
+</section>
+
+<section id="maintenance"><p class="eyebrow">09 / BACKGROUND WORK, UPDATES AND BACKUPS</p>
+<h2>Background work, updates and backups</h2>
+<p>Dashboard shows Active Background Processes and playback sessions. Library polling finds changes, metadata jobs enrich catalog items, and scheduling extends future coverage while preserving published airings. Refresh Media requests an immediate scan; a large first scan can take time.</p>
+<p>Optional Loudness Detection analyzes episode/movie/commercial audio using background workers, then applies normalization during playback. It does not rewrite originals or save normalized copies. Background work yields under sampled CPU, RAM, swap and disk pressure; these policies are not operating-system hard limits. Network-mounted media may need host traffic shaping if you require strict bandwidth limits.</p>
+<p>Other maintenance includes automatic certificate renewal for managed modes, DDNS checks and inactive-session cleanup. Inspect their actual status and error timestamps rather than assuming a scheduled task succeeded. Missing metrics history after restart is unavailable data, not zero utilization.</p>
+<h3>Update the container</h3>
+<p>Read <a href="https://github.com/AlreadyOnTV/AlreadyOn/releases">release notes</a>, record the installed digest and back up persistent configuration/database with an application-consistent backup procedure. Coordinate downtime, then run:</p>
+<pre><code>docker compose pull
+docker compose up -d
+docker compose ps</code></pre><p>Verify HTTPS, container health, mounts, sign-in, a representative channel and background status afterward. Keep the existing config volume. An old image digest is not a database downgrade plan; check schema compatibility before attempting rollback. App APK updates follow their <a href="guides.html#updates">own signed update flow</a>.</p>
+<h3>Troubleshooting order</h3>
+<ol><li>Check host storage, permissions, container health and logs.</li>
+<li>Check local HTTPS, certificate names/trust and the media path.</li>
+<li>Test a known file and a second client; distinguish unsupported codecs from network or authorization failures.</li>
+<li>For remote problems, compare LAN access, DNS resolution and outside-network connectivity before changing the application.</li>
+<li>Share sanitized observations through <a href="https://github.com/AlreadyOnTV/AlreadyOn/issues">Issues</a> or ask a setup question there. Keep credentials, database exports and personal media private.</li>
+</ol></section>
+</div></div></main><footer><div><a class="brand" href="./"><img src="assets/branding/header-doc.svg" alt="AlreadyOn"></a><p>Your library, tuned to you.</p>
+</div><div><a href="guides.html">Using AlreadyOn</a><a href="technical.html">Homelab guide</a><a href="https://github.com/AlreadyOnTV/AlreadyOn/issues">Browse issues ↗</a><a href="https://github.com/AlreadyOnTV/AlreadyOn/issues/new/choose">Report an issue ↗</a><a href="https://github.com/AlreadyOnTV/AlreadyOn/issues">Community help ↗</a><a href="https://github.com/AlreadyOnTV/AlreadyOn/releases">Releases &amp; APK downloads ↗</a><a href="help.html">How to ask for help</a><a href="https://github.com/AlreadyOnTV/AlreadyOn">Source on GitHub ↗</a></div><p class="fine">Open source · GPL-3.0 · Bring your own media. No shows, movies or streaming subscriptions included.</p>
+</footer>
+<dialog id="lightbox" aria-label="Interface screenshot"><button class="close" aria-label="Close screenshot">Close ×</button><img alt=""><p></p>
+</dialog></body></html>
