@@ -90,6 +90,8 @@ func NewRouterWithSessionCookie(webDir, uploadDir string, db *sql.DB, cookieName
 	mux.HandleFunc("POST /api/auth/setup", credentialHandler(handleAuthSetup(db, cookieName)))
 	mux.HandleFunc("POST /api/auth/login", credentialHandler(handleAuthLogin(db, loginLimiter, cookieName)))
 	mux.HandleFunc("POST /api/auth/logout", handleAuthLogout(db, cookieName))
+	mux.HandleFunc("GET /api/auth/session-inactivity", handleInactiveSessionPolicy(db))
+	mux.HandleFunc("PUT /api/auth/session-inactivity", handleInactiveSessionPolicy(db))
 	mux.HandleFunc("GET /api/auth/session-lifetime", handleGetSessionLifetime(db))
 	mux.HandleFunc("PUT /api/auth/session-lifetime", handlePutSessionLifetime(db))
 	mux.HandleFunc("GET /api/auth/sessions", handleListSessions(db))

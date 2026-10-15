@@ -406,6 +406,41 @@ paths:
                 $ref: '#/components/schemas/SessionLifetime'
         '400':
           description: Days outside 0 to 3650
+  /api/auth/session-inactivity:
+    get:
+      x-alreadyon-roles: [owner]
+      operationId: getInactiveSessionPolicy
+      tags: [auth]
+      summary: Read inactivity cleanup settings for all session types
+      responses:
+        '200':
+          description: Enabled by default with a 14-day threshold
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/InactiveSessionPolicy'
+    put:
+      x-alreadyon-roles: [owner]
+      operationId: setInactiveSessionPolicy
+      tags: [auth]
+      summary: Configure automatic inactive session removal
+      description: Applies to existing and future sessions, including native sessions. Inactivity strictly greater than the threshold invalidates cookies and scoped playback principals. Enabling cleanup removes already inactive sessions immediately. Cleanup also runs on startup and hourly. Disabling cleanup does not restore removed sessions.
+      requestBody:
+        required: true
+        content:
+          application/json:
+            schema:
+              $ref: '#/components/schemas/InactiveSessionPolicy'
+      responses:
+        '200':
+          description: Saved policy
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/InactiveSessionPolicy'
+        '400':
+          description: Missing enabled/days or days outside 1 to 3650
+
   /api/auth/sessions:
     get:
       x-alreadyon-roles: [owner, viewer]
@@ -3727,7 +3762,7 @@ components:
           type: integer
           minimum: 0
           maximum: 3650
-          description: 0 means signed-in browsers never expire.
+          description: 0 disables absolute browser expiry; enabled inactivity cleanup still applies.
     BrowserSession:
       type: object
       required: [id, userAgent, createdAt, lastActiveAt, expiresAt, current]
@@ -3735,6 +3770,15 @@ components:
         id:
           type: integer
           format: int64
+        deviceName:
+          type: string
+          description: OS/native device label (Windows, Linux, Mac, Google TV, Android Phone); unknown systems use Unknown Device. Not a computer hostname.
+        deviceType:
+          type: string
+          description: Retained compatibility category; Settings omits its Type column.
+        ipAddress:
+          type: string
+          description: Server-observed socket peer IP; forwarding headers are ignored.
         userAgent:
           type: string
         createdAt:
@@ -3747,7 +3791,7 @@ components:
         expiresAt:
           type: [string, 'null']
           format: date-time
-          description: Null when the session never expires.
+          description: Null when there is no absolute expiry; enabled inactivity cleanup still applies.
         current:
           type: boolean
     User:
@@ -3856,6 +3900,24 @@ components:
           type: array
           items:
             $ref: '#/components/schemas/GuideProgram'
+        previousPrograms:
+          type: array
+          description: Real ended airings overlapping the last 30 minutes, for non-interactive clipped guide history. Original timestamps are preserved; current/upcoming programs remain in programs.
+          items:
+            $ref: '#/components/schemas/GuideProgram'
+
+    InactiveSessionPolicy:
+      type: object
+      required: [enabled, days]
+      properties:
+        enabled:
+          type: boolean
+          default: true
+        days:
+          type: integer
+          minimum: 1
+          maximum: 3650
+          default: 14
 
     PreviewResponse:
       type: object

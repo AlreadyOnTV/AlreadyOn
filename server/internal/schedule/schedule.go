@@ -452,3 +452,32 @@ func queryCommercialPool(ctx context.Context, db *sql.DB, policy commercial.Chan
 	}
 	return items, nil
 }
+
+// Previous returns bounded real ended airings overlapping a recent display window.
+// Read newest first so short schedules cannot exhaust the budget before current-slot history.
+func Previous(ctx context.Context, db *sql.DB, clock Clock, channelID int64, lookback time.Duration, limit int) ([]Entry, error) {
+	if limit <= 0 {
+		return nil, nil
+	}
+	now := clock.Now().UTC()
+	rows, err := db.QueryContext(ctx, `SELECT channel_id,media_file_id,kind,source_offset_seconds,duration_seconds,starts_at_unix,ends_at_unix FROM schedule_entries WHERE channel_id=? AND ends_at_unix>? AND ends_at_unix<=? ORDER BY starts_at_unix DESC LIMIT ?`, channelID, now.Add(-lookback).Unix(), now.Unix(), limit)
+	if err != nil {
+		return nil, err
+	}
+	defer rows.Close()
+	var entries []Entry
+	for rows.Next() {
+		entry, err := scanEntry(rows)
+		if err != nil {
+			return nil, err
+		}
+		entries = append(entries, entry)
+	}
+	if err := rows.Err(); err != nil {
+		return nil, err
+	}
+	for left, right := 0, len(entries)-1; left < right; left, right = left+1, right-1 {
+		entries[left], entries[right] = entries[right], entries[left]
+	}
+	return entries, nil
+}

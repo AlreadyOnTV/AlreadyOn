@@ -67,8 +67,9 @@ type channelGuideResponse struct {
 	Name      string `json:"name"`
 	// AudienceTier is the audience the channel's filter is set for
 	// (young_child, teen or adult); omitted for a channel without a filter.
-	AudienceTier string            `json:"audienceTier,omitempty"`
-	Programs     []programResponse `json:"programs"`
+	AudienceTier     string            `json:"audienceTier,omitempty"`
+	Programs         []programResponse `json:"programs"`
+	PreviousPrograms []programResponse `json:"previousPrograms,omitempty"`
 }
 
 type previewResponse struct {
@@ -120,7 +121,7 @@ func handleGuide(db *sql.DB) http.HandlerFunc {
 			return
 		}
 		audienceTierRaw := r.URL.Query().Get("audienceTier")
-		clock := schedule.SystemClock{}
+		clock := schedule.FixedClock{Time: time.Now().UTC()}
 		resp := make([]channelGuideResponse, 0, len(channels))
 		for _, c := range channels {
 			// c.Hidden is a persisted, admin-controlled flag (also kept in
@@ -145,21 +146,27 @@ func handleGuide(db *sql.DB) http.HandlerFunc {
 					continue
 				}
 			}
-			programs, err := guide.Window(r.Context(), db, clock, c.ID, window)
+			programs, err := guide.DisplayWindow(r.Context(), db, clock, c.ID, window)
 			if err != nil && !errors.Is(err, schedule.ErrEmptyLineup) {
 				writeJSONError(w, http.StatusInternalServerError, err.Error())
 				return
 			}
 			progResp := make([]programResponse, 0, len(programs))
+			var previous []programResponse
 			for _, p := range programs {
-				progResp = append(progResp, toProgramResponse(p))
+				if !p.EndsAt.After(clock.Now()) {
+					previous = append(previous, toProgramResponse(p))
+				} else {
+					progResp = append(progResp, toProgramResponse(p))
+				}
 			}
 			resp = append(resp, channelGuideResponse{
-				ChannelID:    c.ID,
-				Number:       c.Number,
-				Name:         c.Name,
-				AudienceTier: filters[c.ID].AudienceTier,
-				Programs:     progResp,
+				ChannelID:        c.ID,
+				Number:           c.Number,
+				Name:             c.Name,
+				AudienceTier:     filters[c.ID].AudienceTier,
+				Programs:         progResp,
+				PreviousPrograms: previous,
 			})
 		}
 		writeJSON(w, http.StatusOK, resp)

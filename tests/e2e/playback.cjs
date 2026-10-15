@@ -2517,6 +2517,65 @@ const noWorkers = async (unreleased = () => 0) => {
     );
   }
 
+  async function sessionsAndGuideHistory() {
+    const context = await browser.newContext({ timezoneId: 'America/New_York' });
+    const page = await context.newPage();
+    await login(page);
+    await page.goto(url + '/account');
+    await page.getByRole('heading', {name:'Sessions',exact:true}).waitFor();
+    assert(await page.getByRole('columnheader',{name:'Type',exact:true}).count() === 0, 'Session Type column is removed');
+    assert(await page.getByRole('cell',{name:'Linux',exact:true}).count() > 0, 'Web sessions use operating system labels');
+    const toggle = page.getByRole('switch',{name:'Remove Inactive Sessions',exact:true});
+    const days = page.locator('#inactive-session-days');
+    await page.waitForFunction(() => document.querySelector('#inactive-session-days')?.value === '14');
+    assert(await toggle.getAttribute('aria-checked') === 'true', 'Inactivity removal defaults On');
+    const saved = async action => {
+      const response = page.waitForResponse(r => r.url().endsWith('/api/auth/session-inactivity') && r.request().method() === 'PUT');
+      await action();
+      const result = await response;
+      assert(result.ok(), 'Inactivity policy saves successfully');
+      return result.json();
+    };
+    assert((await saved(() => toggle.click())).enabled === false, 'Cleanup can be disabled');
+    assert(await days.isDisabled(), 'Inactive days are disabled with cleanup Off');
+    assert((await saved(() => toggle.click())).enabled === true, 'Cleanup can be enabled');
+    assert((await saved(() => days.fill('21'))).days === 21, 'Inactive days are configurable');
+    await saved(() => days.fill('14'));
+    await page.screenshot({path:'/tmp/alreadyon-sessions-settings.png'});
+    const channels = await (await page.request.get(url + '/api/guide')).json();
+    const base = channels[0];
+    const fixed = Date.parse('2026-10-15T01:48:00Z');
+    const stamp = (hour,minute) => new Date(Date.parse('2026-10-15T00:00:00Z') + hour*3600000 + minute*60000).toISOString();
+    const program = (title,start,end) => ({...base.programs[0],kind:'program',mediaType:'episode',title,seriesTitle:title,episodeTitle:'An exceptionally long previous episode title for clipping',seasonNumber:1,episodeNumber:2,startsAt:start,endsAt:end});
+    const rows = [
+      {...base,number:998,previousPrograms:[program('Wide ended show with a long title',stamp(1,15),stamp(1,45))],programs:[program('Current show',stamp(1,46),stamp(2,15))]},
+      {...base,number:999,previousPrograms:[program('Skinny ended show',stamp(1,0),stamp(1,31))],programs:[program('Current second show',stamp(1,32),stamp(2,2))]},
+    ];
+    await page.clock.install({time:fixed});
+    await page.route('**/api/guide**',route => route.fulfill({json:rows}));
+    await page.goto(url);
+    await page.locator('.guide-slot-history').first().waitFor();
+    const cells = page.locator('.guide-slot-history');
+    assert(await cells.count() === 2, 'Ended airings have separate display cells');
+    assert((await cells.nth(0).textContent()).includes('Wide ended show'), 'Wide history cell includes title');
+    assert((await cells.nth(0).locator('.guide-slot-episode').textContent()).includes('S01E02'), 'Wide ended episode includes season/episode text');
+    assert((await cells.nth(1).textContent()).trim() === '', 'Skinny history cell omits all text');
+    const metrics = await page.evaluate(() => {
+      const cells = [...document.querySelectorAll('.guide-slot-history')];
+      const slot = document.querySelector('.guide-head-slot');
+      const time = cells[0].querySelector('.guide-slot-time');
+      return {origin:Number(slot.dataset.startMs),slotWidth:slot.getBoundingClientRect().width, widths:cells.map(c=>c.getBoundingClientRect().width),left:cells.map(c=>parseFloat(c.style.left)),timeFits:time.scrollWidth<=time.clientWidth,grey:getComputedStyle(cells[0]).backgroundColor,current:getComputedStyle(document.querySelector('.guide-slot-box')).backgroundColor};
+    });
+    assert(metrics.origin === Date.parse(stamp(1,30)), 'First column remains the current half hour');
+    assert(Math.abs(metrics.widths[0] - (Math.round(metrics.slotWidth/2)-6)) <= 2, 'Wide history is clipped to fifteen real minutes');
+    assert(metrics.widths[1] < metrics.widths[0]/4, 'Skinny ended airing preserves its real narrow width');
+    assert(metrics.left.every(left=>left===3), 'Ended cells clip at the visible slot origin');
+    assert(metrics.timeFits && metrics.grey !== metrics.current, 'Ended time fits and grey distinguishes history');
+    await page.screenshot({path:'/tmp/alreadyon-guide-history-web.png'});
+    await context.close();
+    console.log('PASS: device labels, inactivity settings and grey clipped previous airings with width-based text');
+  }
+
   async function profileRefresh() {
     const context = await browser.newContext();
     const page = await context.newPage();
@@ -3878,6 +3937,7 @@ const noWorkers = async (unreleased = () => 0) => {
     if (!only || only.includes("profile-creation")) await require("./profile-creation.cjs")({ browser, login, url, assert });
     if (!only || only.includes("profile-menu")) await profileMenuRoles();
     if (!only || only.includes("profile-refresh")) await profileRefresh();
+    if (!only || only.includes("sessions-guide-history")) await sessionsAndGuideHistory();
     if (!only || only.includes("admin")) await adminTabs();
     if (!only || only.includes("admin-metrics-logs"))
       await require("./admin-metrics-logs.cjs")({

@@ -10,6 +10,8 @@ import {
   changePassword,
   changeUsername,
   getSessionLifetime,
+  getInactiveSessionPolicy,
+  setInactiveSessionPolicy,
   getSessions,
   revokeSession,
   revokeSessions,
@@ -23,20 +25,12 @@ import './AdminShared.css';
 const MIN_PASSWORD = 4;
 
 function describeAgent(ua: string): string {
-  if (!ua) return 'Unknown Device';
-  const browser = /Edg\//.test(ua) ? 'Edge' : /Firefox\//.test(ua) ? 'Firefox' : /Chrome\//.test(ua) ? 'Chrome' : /Safari\//.test(ua) ? 'Safari' : 'Browser';
-  const os = /Windows/.test(ua)
-    ? 'Windows'
-    : /Android/.test(ua)
-      ? 'Android'
-      : /iPhone|iPad/.test(ua)
-        ? 'iOS'
-        : /Mac OS X/.test(ua)
-          ? 'macOS'
-          : /Linux/.test(ua)
-            ? 'Linux'
-            : 'unknown system';
-  return `${browser} on ${os}`;
+  if (ua === 'AlreadyOn-Android/TV') return 'Google TV';
+  if (/Android/.test(ua)) return 'Android Phone';
+  if (/Windows/.test(ua)) return 'Windows';
+  if (/Mac OS X/.test(ua)) return 'Mac';
+  if (/Linux/.test(ua)) return 'Linux';
+  return 'Unknown Device';
 }
 
 const when = (iso: string | null) => (iso === null ? 'Never' : new Date(iso).toLocaleString());
@@ -73,6 +67,12 @@ export default function AccountCard({ children }: { children: ReactNode }) {
   const [lifetimeMessage, setLifetimeMessage] = useState<string | null>(null);
   const [lifetimeSaving, setLifetimeSaving] = useState(false);
   const lifetimeRequest = useRef(0);
+  const [inactiveEnabled, setInactiveEnabled] = useState(true);
+  const [inactiveDays, setInactiveDays] = useState('14');
+  const [savedInactive, setSavedInactive] = useState<{ enabled: boolean; days: number } | null>(null);
+  const [inactiveSaving, setInactiveSaving] = useState(false);
+  const [inactiveError, setInactiveError] = useState<string | null>(null);
+
 
   const load = useCallback(() => {
     getSessions()
@@ -88,6 +88,9 @@ export default function AccountCard({ children }: { children: ReactNode }) {
       load();
       return;
     }
+    getInactiveSessionPolicy().then(policy => {
+      setInactiveEnabled(policy.enabled); setInactiveDays(String(policy.days)); setSavedInactive(policy);
+    }).catch((err: Error) => setInactiveError(err.message));
     getSessionLifetime()
       .then((days) => {
         setSavedDays(days);
@@ -97,6 +100,22 @@ export default function AccountCard({ children }: { children: ReactNode }) {
       .catch((err: Error) => setLifetimeError(err.message));
     load();
   }, [isOwner, load]);
+
+  useEffect(() => {
+    if (!isOwner || !savedInactive) return;
+    const days = Number(inactiveDays);
+    if (!Number.isInteger(days) || days < 1 || days > MAX_SESSION_DAYS) {
+      setInactiveError('Enter a whole number from 1 to 3650.'); return;
+    }
+    if (savedInactive.enabled === inactiveEnabled && savedInactive.days === days) return;
+    const timer = window.setTimeout(() => {
+      setInactiveSaving(true); setInactiveError(null);
+      void setInactiveSessionPolicy({ enabled: inactiveEnabled, days }).then(policy => {
+        setSavedInactive(policy); load();
+      }).catch((err: Error) => setInactiveError(err.message)).finally(() => setInactiveSaving(false));
+    }, 1500);
+    return () => window.clearTimeout(timer);
+  }, [isOwner, savedInactive, inactiveEnabled, inactiveDays, load]);
 
   const wantedDays = never ? 0 : Number(daysText);
   const daysValid = never || (Number.isInteger(wantedDays) && wantedDays >= 1 && wantedDays <= MAX_SESSION_DAYS);
@@ -319,6 +338,15 @@ export default function AccountCard({ children }: { children: ReactNode }) {
         </div>
       </div>
       )}
+      {isOwner && <div className="admin-field-row">
+        <label htmlFor="inactive-session-days">Remove Inactive Sessions</label>
+        <SettingToggle checked={inactiveEnabled} onChange={setInactiveEnabled} label="Remove Inactive Sessions" text />
+        <input id="inactive-session-days" type="number" min={1} max={MAX_SESSION_DAYS} value={inactiveDays}
+          disabled={!inactiveEnabled} onChange={event => setInactiveDays(event.target.value)} style={{width: 100}} />
+        <span>Days</span>
+        {inactiveSaving && <span role="status">Saving…</span>}
+      </div>}
+      {isOwner && inactiveError && <p className="profile-field-error">{inactiveError}</p>}
       {isOwner && lifetimeError && <p className="profile-field-error">{lifetimeError}</p>}
       {error && <p className="profile-field-error">{error}</p>}
       <div className="sessions-table-scroll" role="region" aria-label="Sessions" tabIndex={0}>
@@ -326,7 +354,6 @@ export default function AccountCard({ children }: { children: ReactNode }) {
         <thead>
           <tr>
             <th>Device</th>
-            <th>Type</th>
             <th title="Last address seen by the server; a reverse proxy may supply its own address.">IP Address</th>
             <th>Last Active</th>
             <th>Expires</th>
@@ -340,7 +367,6 @@ export default function AccountCard({ children }: { children: ReactNode }) {
                 {s.deviceName || describeAgent(s.userAgent)}
                 {s.current && <span className="admin-badge admin-badge-on session-current-device">This Session</span>}
               </td>
-              <td>{s.deviceType || 'Web Browser'}</td>
               <td>{s.ipAddress || 'Not recorded yet'}</td>
               <td>{s.lastActiveAt ? when(s.lastActiveAt) : "Not recorded yet"}</td>
               <td>{when(s.expiresAt)}</td>
@@ -353,7 +379,7 @@ export default function AccountCard({ children }: { children: ReactNode }) {
           ))}
           {sessions.length === 0 && !error && (
             <tr>
-              <td colSpan={6} className="admin-section-hint">
+              <td colSpan={5} className="admin-section-hint">
                 Loading…
               </td>
             </tr>

@@ -111,6 +111,11 @@ internal fun TvGuide(state: PhoneState, palette: PhonePalette, modifier: Modifie
                 val programs = remember(channel.programs) { channel.programs.map {
                     Triple(it, Instant.parse(it.startsAt).toEpochMilli(), Instant.parse(it.endsAt).toEpochMilli())
                 } }
+                val drawnPrograms = remember(channel.programs, channel.previousPrograms) {
+                    (channel.previousPrograms + channel.programs).map {
+                        Triple(it, Instant.parse(it.startsAt).toEpochMilli(), Instant.parse(it.endsAt).toEpochMilli())
+                    }
+                }
                 BoxWithConstraints(Modifier.fillMaxWidth()) {
                     val windowMs = 120 * 60_000L
                     fun selectionIndex(at: Long = selectedTime): Int = programs.indexOfFirst { at >= it.second && at < it.third }
@@ -188,17 +193,19 @@ internal fun TvGuide(state: PhoneState, palette: PhonePalette, modifier: Modifie
                             Canvas(Modifier.fillMaxSize()) {
                                 val scale = minuteWidth.toPx() / 60_000
                                 val gap = 3.dp.toPx()
-                                programs.forEach { (program, start, end) ->
+                                drawnPrograms.forEach { (program, start, end) ->
                                     val left = ((start - origin) * scale).coerceAtLeast(0f) + gap
                                     val right = ((end - origin) * scale).coerceAtMost(size.width)
                                     if (right <= left) return@forEach
                                     val current = now >= start && now < end
-                                    val fill = if (current) palette.now else palette.surface
+                                    val past = end <= now
+                                    val fill = if (past) Color.Gray.copy(alpha = 0.28f).compositeOver(palette.background) else if (current) palette.now else palette.surface
                                     drawRoundRect(fill, androidx.compose.ui.geometry.Offset(left, 0f), androidx.compose.ui.geometry.Size(right-left, size.height), androidx.compose.ui.geometry.CornerRadius(6.dp.toPx()))
-                                    labelPaint.color = (if (current) palette.nowText else palette.text).toArgb()
+                                    labelPaint.color = (if (past) palette.muted else if (current) palette.nowText else palette.text).toArgb()
                                     val available = (right-left-8.dp.toPx()).coerceAtLeast(0f)
                                     labelPaint.textSize = 11.dp.toPx()
                                     val label = "${format.format(Instant.ofEpochMilli(start))} - ${format.format(Instant.ofEpochMilli(end))}"
+                                    if (past && labelPaint.measureText(label) > available) return@forEach
                                     drawIntoCanvas { canvas ->
                                         canvas.nativeCanvas.drawText(TextUtils.ellipsize(label, labelPaint, available, TextUtils.TruncateAt.END).toString(), left+4.dp.toPx(), 17.dp.toPx(), labelPaint)
                                         canvas.nativeCanvas.drawText(TextUtils.ellipsize(program.title, labelPaint, available, TextUtils.TruncateAt.END).toString(), left+4.dp.toPx(), 33.dp.toPx(), labelPaint)

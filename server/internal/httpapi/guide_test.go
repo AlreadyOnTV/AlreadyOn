@@ -337,3 +337,25 @@ func TestGuideAPI_CarriesYearRatingAndAirDate(t *testing.T) {
 		t.Errorf("program = %+v, want year 1998, rating PG, date 1998-06-19", p)
 	}
 }
+
+func TestGuideAPISeparatesEndedHistory(t *testing.T) {
+	db := openTestDB(t)
+	a := insertTestMediaFile(t, db, "/synthetic/previous.mkv", 600)
+	b := insertTestMediaFile(t, db, "/synthetic/current.mkv", 600)
+	channel := insertTestChannelWithContent(t, db, 1000, "history", a, b)
+	now := time.Now().Unix()
+	for _, e := range []struct{ file, start, end int64 }{{a, now - 600, now - 60}, {b, now - 30, now + 600}} {
+		if _, err := db.Exec(`INSERT INTO schedule_entries(channel_id,media_file_id,kind,source_offset_seconds,duration_seconds,starts_at_unix,ends_at_unix) VALUES(?,?,'program',0,?,?,?)`, channel, e.file, e.end-e.start, e.start, e.end); err != nil {
+			t.Fatal(err)
+		}
+	}
+	w := httptest.NewRecorder()
+	NewRouter(t.TempDir(), t.TempDir(), db).ServeHTTP(w, httptest.NewRequest("GET", "/api/guide", nil))
+	var response []channelGuideResponse
+	if err := json.Unmarshal(w.Body.Bytes(), &response); err != nil || len(response) != 1 {
+		t.Fatal(w.Body.String(), err)
+	}
+	if len(response[0].PreviousPrograms) != 1 || response[0].PreviousPrograms[0].MediaFileID != a || len(response[0].Programs) != 1 || response[0].Programs[0].MediaFileID != b {
+		t.Fatal(response)
+	}
+}

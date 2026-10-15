@@ -25,12 +25,14 @@ func TestSessionDevicesAndObservedIP(t *testing.T) {
 		t.Fatalf("unexpected address/current session: %+v", sessions[0])
 	}
 	for _, tc := range []struct{ agent, name, kind string }{
-		{"AlreadyOn-Android/TV", "AlreadyOn for Google TV", "TV"},
-		{"AlreadyOn-Android/Mobile", "AlreadyOn for Android", "Phone"},
-		{"Mozilla Android Mobile Chrome/140", "Chrome on Android", "Web Browser"},
-		{"Mozilla Android Chrome/140", "Chrome on Android", "Web Browser"},
-		{"Mozilla Windows Edg/140 Chrome/140", "Edge on Windows", "Web Browser"},
-		{"", "Unknown device", "Web Browser"},
+		{"AlreadyOn-Android/TV", "Google TV", "TV"},
+		{"AlreadyOn-Android/Mobile", "Android Phone", "Phone"},
+		{"Mozilla Android Mobile Chrome/140", "Android Phone", "Web Browser"},
+		{"Mozilla Android Chrome/140", "Android Phone", "Web Browser"},
+		{"Mozilla Windows Edg/140 Chrome/140", "Windows", "Web Browser"},
+		{"Mozilla Mac OS X Safari/140", "Mac", "Web Browser"},
+		{"Mozilla Linux Firefox/140", "Linux", "Web Browser"},
+		{"", "Unknown Device", "Web Browser"},
 	} {
 		name, kind := sessionDevice(tc.agent)
 		if name != tc.name || kind != tc.kind {

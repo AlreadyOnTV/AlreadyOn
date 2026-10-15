@@ -135,24 +135,27 @@ internal class ServerClient(val origin: String, store: SessionStore, trustedCa: 
         val data = JSONArray(request("/api/guide?hours=12&audienceTier=$tier"))
         List(data.length()) { index ->
             val c = data.getJSONObject(index)
-            val programs = c.getJSONArray("programs")
-            val visible = List(programs.length()) { programs.getJSONObject(it) }
-                .filter { !BuildConfig.IS_TV || it.optString("kind") != "commercial" }.map { p ->
-                    GuideProgram(guideTitle(if (p.optString("mediaType") == "movie") p.getString("title") else p.optString("seriesTitle").takeUnless { it.isBlank() || it == "null" } ?: p.getString("title")), p.getString("startsAt"), p.getString("endsAt"),
-                        episodeTitle = guideTitle(p.optString("title")), seasonNumber = p.optInt("seasonNumber"), episodeNumber = p.optInt("episodeNumber"),
-                        overview = p.optString("overview"), year = p.optInt("year"), rating = p.optString("contentRating"), airDate = p.optString("airDate"),
-                        mediaFileId = p.optLong("mediaFileId", -1), sourceOffset = p.optDouble("sourceOffsetSeconds"))
+            fun readPrograms(key: String): List<GuideProgram> {
+                val programs = c.optJSONArray(key) ?: JSONArray()
+                val visible = List(programs.length()) { programs.getJSONObject(it) }
+                    .filter { !BuildConfig.IS_TV || it.optString("kind") != "commercial" }.map { p ->
+                        GuideProgram(guideTitle(if (p.optString("mediaType") == "movie") p.getString("title") else p.optString("seriesTitle").takeUnless { it.isBlank() || it == "null" } ?: p.getString("title")), p.getString("startsAt"), p.getString("endsAt"),
+                            episodeTitle = guideTitle(p.optString("title")), seasonNumber = p.optInt("seasonNumber"), episodeNumber = p.optInt("episodeNumber"),
+                            overview = p.optString("overview"), year = p.optInt("year"), rating = p.optString("contentRating"), airDate = p.optString("airDate"),
+                            mediaFileId = p.optLong("mediaFileId", -1), sourceOffset = p.optDouble("sourceOffsetSeconds"))
+                    }
+                // An interrupted show is one guide stop; a fresh airing of the same file remains separate.
+                val cells = if (!BuildConfig.IS_TV) visible else buildList {
+                    visible.forEach { program ->
+                        val previous = lastOrNull()
+                        if (previous != null && program.mediaFileId >= 0 && previous.mediaFileId == program.mediaFileId && program.sourceOffset > 0) {
+                            set(lastIndex, previous.copy(endsAt = program.endsAt))
+                        } else add(program)
+                    }
                 }
-            // An interrupted show is one guide stop; a fresh airing of the same file remains separate.
-            val cells = if (!BuildConfig.IS_TV) visible else buildList {
-                visible.forEach { program ->
-                    val previous = lastOrNull()
-                    if (previous != null && program.mediaFileId >= 0 && previous.mediaFileId == program.mediaFileId && program.sourceOffset > 0) {
-                        set(lastIndex, previous.copy(endsAt = program.endsAt))
-                    } else add(program)
-                }
+                return cells
             }
-            GuideChannel(c.getLong("channelId"), c.getInt("number"), c.getString("name"), cells)
+            GuideChannel(c.getLong("channelId"), c.getInt("number"), c.getString("name"), readPrograms("programs"), readPrograms("previousPrograms"))
         }.sortedBy { it.number }
     }
 
@@ -190,7 +193,7 @@ internal data class GuideProgram(val title: String, val startsAt: String, val en
     val episodeTitle: String = "", val seasonNumber: Int = 0, val episodeNumber: Int = 0,
     val overview: String = "", val year: Int = 0, val rating: String = "", val airDate: String = "",
     val mediaFileId: Long = -1, val sourceOffset: Double = 0.0)
-internal data class GuideChannel(val id: Long, val number: Int, val name: String, val programs: List<GuideProgram>)
+internal data class GuideChannel(val id: Long, val number: Int, val name: String, val programs: List<GuideProgram>, val previousPrograms: List<GuideProgram> = emptyList())
 
 /** Match web display cleanup without changing server metadata or source filenames. */
 private fun guideTitle(title: String) = title.replace(Regex("\\[[^\\]]*\\]"), "")

@@ -14,13 +14,13 @@ See [profile creation](PROFILE_CREATION.md) for the WebUI Admin-only Add Profile
 
 Settings shows Device, Type, IP Address, Last Active, Expires and Sign Out in the Sessions table. The This Session badge sits below the device name and sizes to its full text on one line. Wide tables scroll within a keyboard-accessible region at narrow widths.
 
-`GET /api/auth/sessions` adds `deviceName`, `deviceType` and `ipAddress` while preserving all existing fields. Names and types are best-effort user-agent descriptions of the browser/OS or native app, not private machine hostnames or security credentials. Device types are Web Browser, Phone and TV.
+Web browsers do not expose a reliable computer hostname. Device labels use Windows, Linux or Mac; native clients use Google TV or Android Phone. Type is omitted from the table; the API retains its compatibility field. IP addresses come from the socket peer, never untrusted forwarding headers.
 
-Migration 0085 adds an empty IP field to existing sessions without changing cookies, users or expiry. Sign-in and authenticated requests record the current server-observed socket peer IP. Untrusted forwarding headers are ignored; reverse-proxy deployments show the observed proxy address. Old sessions say Not recorded yet until they next connect. Last Active and Expires retain existing behavior, and session listing/revocation remain scoped to the signed-in account.
+Owner-only **Remove Inactive Sessions** defaults to On and 14 days. It applies to existing and future sessions even with Never Expire enabled. Activity includes authenticated API and media requests; missing historical activity falls back to creation time. Sessions idle longer than the threshold are invalid immediately and removed on startup, hourly, when listing sessions, or after policy changes. Turning cleanup off does not restore removed sessions.
 
 
 See [saved API credential entry](SAVED_CREDENTIALS.md) for draft-only visibility controls.
 
 
 
-Active WebUI, phone and TV clients refresh shared profile settings and avatars every five minutes, also refreshing when visible/resumed. Native Sign Out retains the encrypted session for recent-server reconnection; WebUI session revocation remains authoritative. Profile PINs and local drafts remain independent.
+Active WebUI, phone and TV clients refresh shared profile settings and avatars every five minutes and when visible/resumed. Native Sign Out retains the encrypted session for recent-server reconnection; WebUI session revocation remains authoritative. Profile PINs and local drafts remain independent.

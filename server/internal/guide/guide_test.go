@@ -241,3 +241,59 @@ func TestForEntryUsesSelectedMedia(t *testing.T) {
 		t.Fatalf("commercial metadata: %+v, %v", got, err)
 	}
 }
+
+func TestDisplayWindowIncludesEndedAiringWithoutChangingCurrentWindow(t *testing.T) {
+	db := openTestDB(t)
+	a := insertMediaFile(t, db, "media", "/synthetic/show1.mkv", 1800)
+	b := insertMediaFile(t, db, "media", "/synthetic/show2.mkv", 1740)
+	channel := insertChannel(t, db, 1000, "history fixture", a, b)
+	anchor := time.Date(2026, 10, 14, 21, 0, 0, 0, time.UTC)
+	entries := []struct {
+		file       int64
+		start, end time.Time
+	}{
+		{a, anchor.Add(15 * time.Minute), anchor.Add(45 * time.Minute)},
+		{b, anchor.Add(46 * time.Minute), anchor.Add(75 * time.Minute)},
+	}
+	for _, e := range entries {
+		if _, err := db.Exec(`INSERT INTO schedule_entries(channel_id,media_file_id,kind,source_offset_seconds,duration_seconds,starts_at_unix,ends_at_unix) VALUES(?,?,'program',0,?,?,?)`, channel, e.file, e.end.Sub(e.start).Seconds(), e.start.Unix(), e.end.Unix()); err != nil {
+			t.Fatal(err)
+		}
+	}
+	clock := schedule.FixedClock{Time: anchor.Add(48 * time.Minute)}
+	display, err := DisplayWindow(t.Context(), db, clock, channel, time.Hour)
+	if err != nil || len(display) != 2 {
+		t.Fatal(display, err)
+	}
+	if !display[0].StartsAt.Equal(entries[0].start) || !display[0].EndsAt.Equal(entries[0].end) || !display[1].StartsAt.Equal(entries[1].start) {
+		t.Fatal("original times/gap changed", display)
+	}
+	current, err := Window(t.Context(), db, clock, channel, time.Hour)
+	if err != nil || len(current) != 1 || current[0].MediaFileID != b {
+		t.Fatal("tuning window changed", current, err)
+	}
+}
+
+func TestDisplayWindowHistoryBudgetKeepsCurrentPrograms(t *testing.T) {
+	db := openTestDB(t)
+	a := insertMediaFile(t, db, "media", "/synthetic/past.mkv", 1)
+	b := insertMediaFile(t, db, "media", "/synthetic/now.mkv", 600)
+	channel := insertChannel(t, db, 1000, "short history", a, b)
+	now := time.Unix(1_000_000, 0).UTC()
+	for i := 600; i > 0; i-- {
+		start := now.Add(-time.Duration(i) * 2 * time.Second).Unix()
+		if _, err := db.Exec(`INSERT INTO schedule_entries(channel_id,media_file_id,kind,source_offset_seconds,duration_seconds,starts_at_unix,ends_at_unix) VALUES(?,?,'program',0,1,?,?)`, channel, a, start, start+1); err != nil {
+			t.Fatal(err)
+		}
+	}
+	if _, err := db.Exec(`INSERT INTO schedule_entries(channel_id,media_file_id,kind,source_offset_seconds,duration_seconds,starts_at_unix,ends_at_unix) VALUES(?,?,'program',0,600,?,?)`, channel, b, now.Unix(), now.Add(10*time.Minute).Unix()); err != nil {
+		t.Fatal(err)
+	}
+	display, err := DisplayWindow(t.Context(), db, schedule.FixedClock{Time: now}, channel, time.Hour)
+	if err != nil || len(display) != windowBatchLimit+1 {
+		t.Fatal(len(display), err)
+	}
+	if display[len(display)-1].MediaFileID != b || display[len(display)-2].EndsAt.Unix() != now.Unix()-1 {
+		t.Fatal("history budget dropped newest/current airings")
+	}
+}

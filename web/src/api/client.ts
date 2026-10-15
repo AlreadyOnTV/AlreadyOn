@@ -440,6 +440,7 @@ export interface GuideProgram {
 }
 
 export interface GuideChannel {
+  previousPrograms?: GuideProgram[];
   channelId: number;
   number: number;
   name: string;
@@ -982,4 +983,12 @@ export async function deleteAccount(id: number): Promise<void> {
 // Sets a new password and signs the account out of every browser and app.
 export async function resetAccountPassword(id: number, password: string, mustChangePassword: boolean): Promise<void> {
   return apiRequest<void>(`/api/users/${id}/password`, jsonInit('PUT', { password, mustChangePassword }), 'failed to reset the password');
+}
+
+export interface InactiveSessionPolicy { enabled: boolean; days: number }
+export async function getInactiveSessionPolicy(): Promise<InactiveSessionPolicy> {
+  return apiRequest('/api/auth/session-inactivity', { cache: 'no-store' }, 'failed to load inactivity policy');
+}
+export async function setInactiveSessionPolicy(policy: InactiveSessionPolicy): Promise<InactiveSessionPolicy> {
+  return apiRequest('/api/auth/session-inactivity', jsonInit('PUT', policy), 'failed to save inactivity policy');
 }

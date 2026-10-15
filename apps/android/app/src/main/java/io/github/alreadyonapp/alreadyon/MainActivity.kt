@@ -1,5 +1,8 @@
 package io.github.alreadyonapp.alreadyon
 
+import androidx.compose.foundation.clickable
+import androidx.compose.ui.text.rememberTextMeasurer
+import androidx.compose.ui.graphics.compositeOver
 import androidx.compose.foundation.Image
 import androidx.compose.ui.res.painterResource
 import androidx.compose.ui.layout.ContentScale
@@ -310,6 +313,8 @@ internal fun ChannelGuide(state: PhoneState, model: PhoneModel, palette: PhonePa
     }
     val scroll = rememberScrollState()
     // Labels and program geometry share a local half-hour anchor, while Now uses the actual clock.
+    val textMeasurer = rememberTextMeasurer()
+    val density = LocalDensity.current
     var now by remember { mutableLongStateOf(System.currentTimeMillis()) }
     LaunchedEffect(Unit) {
         while (true) { now = System.currentTimeMillis(); delay(30_000) }
@@ -356,22 +361,28 @@ internal fun ChannelGuide(state: PhoneState, model: PhoneModel, palette: PhonePa
                     }
                     Box(Modifier.weight(1f).horizontalScroll(scroll)) {
                         Box(Modifier.width(width).fillMaxHeight()) {
-                            channel.programs.forEach { program ->
+                            (channel.previousPrograms + channel.programs).forEach { program ->
                                 val begin = Instant.parse(program.startsAt).toEpochMilli()
                                 val end = Instant.parse(program.endsAt).toEpochMilli()
                                 val left = ((begin - origin).coerceAtLeast(0) / 60_000f * minutesToDp).dp
                                 val block = ((end.coerceAtMost(origin + 12 * 60 * 60_000L) - begin.coerceAtLeast(origin)) / 60_000f * minutesToDp).coerceAtLeast(0f).dp
                                 if (block.value > 0) {
                                     val current = begin <= now && end > now
-                                    Surface(onClick = { onTune(channel) }, modifier = Modifier.offset(x = left).width(block).fillMaxHeight().padding(start = 3.dp)
+                                    val past = end <= now
+                                    val range = "${format.format(Instant.ofEpochMilli(begin))} - ${format.format(Instant.ofEpochMilli(end))}"
+                                    val showText = !past || textMeasurer.measure(range, style = MaterialTheme.typography.labelSmall).size.width <= with(density) { (block - 11.dp).toPx() }
+                                    Surface(modifier = Modifier.offset(x = left).width(block).fillMaxHeight().padding(start = 3.dp)
                                             .then(if (channel.id == focusChannel?.id && program == focusProgram) Modifier.focusRequester(currentProgramFocus) else Modifier)
                                             .tvFocusOutline()
-                                            .then(if (current && channel.id == focusChannel?.id) Modifier.border(2.dp, Color.Red, MaterialTheme.shapes.small) else Modifier),
-                                        color = if (current) palette.now else palette.surface, shape = MaterialTheme.shapes.small) {
-                                        Column(Modifier.padding(4.dp), verticalArrangement = Arrangement.spacedBy(4.dp)) {
-                                            Text("${format.format(Instant.ofEpochMilli(begin))} - ${format.format(Instant.ofEpochMilli(end))}",
-                                                color = if (current) palette.nowText else palette.muted, style = MaterialTheme.typography.labelSmall, maxLines = 1)
-                                            Text(program.title, color = if (current) palette.nowText else palette.text, maxLines = 2, overflow = androidx.compose.ui.text.style.TextOverflow.Ellipsis, style = MaterialTheme.typography.bodyMedium)
+                                            .then(if (current && channel.id == focusChannel?.id) Modifier.border(2.dp, Color.Red, MaterialTheme.shapes.small) else Modifier)
+                                            .then(if (past) Modifier else Modifier.clickable { onTune(channel) }),
+                                        color = if (past) Color.Gray.copy(alpha = 0.28f).compositeOver(palette.background) else if (current) palette.now else palette.surface, shape = MaterialTheme.shapes.small) {
+                                        if (showText) Column(Modifier.padding(4.dp), verticalArrangement = Arrangement.spacedBy(4.dp)) {
+                                            Text(range,
+                                                color = if (current) palette.nowText else palette.muted, style = MaterialTheme.typography.labelSmall, maxLines = 1, softWrap = false)
+                                            Text(program.title, color = if (past) palette.muted else if (current) palette.nowText else palette.text, maxLines = 1, overflow = androidx.compose.ui.text.style.TextOverflow.Ellipsis, style = MaterialTheme.typography.bodyMedium)
+                                            if (program.episodeNumber > 0) Text("S${program.seasonNumber}E${program.episodeNumber} - ${program.episodeTitle}", color = palette.muted,
+                                                maxLines = 1, overflow = androidx.compose.ui.text.style.TextOverflow.Ellipsis, style = MaterialTheme.typography.labelSmall)
                                         }
                                     }
                                 }

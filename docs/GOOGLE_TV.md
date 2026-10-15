@@ -10,7 +10,7 @@ Fullscreen Up/Down tunes channels. Left/Right reveals and navigates controls; Se
 
 First-run WebUI setup asks for **Server Name**, username and password. Owners can rename it under **Server Settings → Server → Server Name**. Discovery reflects changes without restarting.
 
-Accounts manage unique 6–12 digit hashed PINs under **Admin Settings → TV Pairing Pin**. Native Sign Out retains the encrypted session; selecting the recent server revalidates it before skipping credentials. WebUI **Sessions** revocation, expiry and account restrictions require fresh authentication. Profile PINs still apply. Changing the account PIN affects new sign-ins only.
+Accounts manage 6–12 digit hashed PINs under **Admin Settings → TV Pairing Pin**. Native Sign Out retains the encrypted session; selecting the recent server revalidates it before skipping credentials. WebUI **Sessions** revocation, expiry, inactivity cleanup and account restrictions require fresh authentication. Profile PINs still apply. Changing the account PIN affects new sign-ins only.
 
 Apps scan local private IPv4 HTTPS port 19900 for 30 seconds. TV offers manual entry immediately. Bare addresses assume HTTPS and port 19900. Rescan restarts discovery. IPv6-only networks require manual entry. See [Android](ANDROID.md).
 

@@ -57,7 +57,7 @@ func CreateSession(ctx context.Context, db *sql.DB, now time.Time, userID int64,
 	return createSession(ctx, db, now, userID, userAgent, SessionDays(ctx, db))
 }
 
-// CreateNativeSession persists PIN-paired devices until explicit session revocation.
+// CreateNativeSession has no absolute expiry; revocation and inactivity still apply.
 // Browser lifetime settings do not silently sign a living-room device out.
 func CreateNativeSession(ctx context.Context, db *sql.DB, now time.Time, userID int64, userAgent string) (string, int64, time.Time, error) {
 	return createSession(ctx, db, now, userID, userAgent, 0)
@@ -78,7 +78,7 @@ func createSession(ctx context.Context, db *sql.DB, now time.Time, userID int64,
 		userAgent = userAgent[:200]
 	}
 	// Expired rows are dropped as new ones are added, so the table stays small.
-	if _, err = db.ExecContext(ctx, `DELETE FROM browser_sessions WHERE expires_at_unix <= ?`, now.Unix()); err != nil {
+	if err = PruneSessions(ctx, db, now); err != nil {
 		return "", 0, time.Time{}, fmt.Errorf("auth: create session: %w", err)
 	}
 	err = db.QueryRowContext(ctx, `
@@ -102,7 +102,7 @@ func LookupSession(ctx context.Context, db *sql.DB, token string, now time.Time)
 	err := db.QueryRowContext(ctx, `
 		SELECT s.id, s.last_active_at_unix, u.id, u.username, u.role, u.disabled, u.must_change_password, u.password_locked, u.max_streams, u.created_at_unix, u.updated_at_unix
 		FROM browser_sessions s JOIN users u ON u.id = s.user_id
-		WHERE s.token_hash = ? AND s.expires_at_unix > ? AND u.disabled = 0`, hashToken(token), now.Unix()).
+		WHERE s.token_hash = ? AND s.expires_at_unix > ? AND u.disabled = 0`+activeSessionSQL, hashToken(token), now.Unix(), now.Unix()).
 		Scan(&id, &active, &u.ID, &u.Username, &role, &u.Disabled, &u.MustChangePassword, &u.PasswordLocked, &u.MaxStreams, &u.CreatedAtUnix, &u.UpdatedAtUnix)
 	u.Role = Role(role)
 	if errors.Is(err, sql.ErrNoRows) {
@@ -141,7 +141,7 @@ func PrincipalActive(ctx context.Context, db *sql.DB, principal int64, now time.
 		var active sql.NullInt64
 		if db.QueryRowContext(ctx, `
 			SELECT s.last_active_at_unix FROM browser_sessions s JOIN users u ON u.id = s.user_id
-			WHERE s.id = ? AND s.expires_at_unix > ? AND u.disabled = 0`, -principal, now.Unix()).Scan(&active) != nil {
+			WHERE s.id = ? AND s.expires_at_unix > ? AND u.disabled = 0`+activeSessionSQL, -principal, now.Unix(), now.Unix()).Scan(&active) != nil {
 			return false
 		}
 		recordSessionActivity(ctx, db, -principal, now, active)
@@ -171,6 +171,9 @@ type SessionInfo struct {
 
 // ListSessions returns a user's live browser sessions, newest first.
 func ListSessions(ctx context.Context, db *sql.DB, userID int64, now time.Time) ([]SessionInfo, error) {
+	if err := PruneSessions(ctx, db, now); err != nil {
+		return nil, err
+	}
 	rows, err := db.QueryContext(ctx, `
 		SELECT id, user_agent, created_at_unix, expires_at_unix, last_active_at_unix, ip_address FROM browser_sessions
 		WHERE user_id = ? AND expires_at_unix > ? ORDER BY created_at_unix DESC, id DESC`, userID, now.Unix())
