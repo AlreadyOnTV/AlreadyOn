@@ -4,6 +4,8 @@
 
 `make test-e2e` runs the full browser suite against an isolated synthetic server. The harness prepares generated fixtures and temporary application storage; it must not target a live preview or production installation.
 
+Player menu checks require a detected audio language when known and omit the suffix for untagged audio.
+
 The suite covers authentication, guide navigation, tuning and playback behavior across synthetic media scenarios. Fixtures and clocks should make failures reproducible. Preserve useful assertions when fixing timing problems; waiting for a real readiness signal is preferable to hiding a failure with arbitrary sleeps.
 
 Subtitle defaults select the language and mode by their visible labels. The profile scenario saves German with Always on, then checks playback captions and the C shortcut; selector order must not determine the setting being changed.

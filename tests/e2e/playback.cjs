@@ -242,6 +242,7 @@ const noWorkers = async (unreleased = () => 0) => {
     const player = page.locator(".playback-player");
     await player.hover();
     await player.getByRole("button", { name: "Settings", exact: true }).click();
+    await page.getByRole("menuitem", { name: "Audio Tracks (eng)", exact: true }).waitFor();
     await page.getByRole("menuitem", { name: /^Audio Tracks/ }).click();
     await page.getByRole("menuitemradio", { name: /Japanese/ }).click();
     for (let i = 0; i < 100 && sessions.at(-1)?.plan.audioTrackIndex !== 1; i++)
@@ -1529,8 +1530,8 @@ const noWorkers = async (unreleased = () => 0) => {
       "Quality row reports active Auto mode",
     );
     assert(
-      /^Audio Tracks \((?:[a-z]{2,3}|unknown)\)$/.test(statusRows[1]),
-      "Audio row reports detected language or unknown",
+      statusRows[1] === "Audio Tracks",
+      "Untagged audio omits the unknown language suffix",
     );
     assert(
       /^Subtitles \(on|off\)$/.test(statusRows[2]),
