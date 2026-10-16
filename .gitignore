@@ -48,3 +48,9 @@ apps/android/**/build/
 
 # Generated GitHub Pages product website.
 /_site/
+
+# Release descriptions live on GitHub; temporary review captures stay local.
+/docs/release-notes/
+/docs/release-known-issues.md
+review-snapshots/
+review-screenshots/

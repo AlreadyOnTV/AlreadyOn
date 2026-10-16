@@ -84,7 +84,7 @@ def main():
     tree = snapshot()
     labels = texts(tree)
     assert any(t.startswith('Quality (') for t in labels), 'Quality status is present'
-    assert any(t.startswith('Audio Tracks (') for t in labels), 'Audio status is present'
+    assert any(t == 'Audio Tracks' or t.startswith('Audio Tracks (') for t in labels), 'Audio menu is present with optional detected language'
     assert any(t in ('Subtitles (on)', 'Subtitles (off)') for t in labels), 'Subtitle status is present'
     key(23)
     assert '‹ Quality' in texts(snapshot()), 'Quality submenu opens'

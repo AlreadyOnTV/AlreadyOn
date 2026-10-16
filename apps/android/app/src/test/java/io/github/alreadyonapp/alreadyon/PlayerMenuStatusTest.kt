@@ -14,7 +14,11 @@ class PlayerMenuStatusTest {
         assertEquals("Audio Tracks (eng)", playerMenuLabel("Audio Tracks", state))
         assertEquals("Subtitles (on)", playerMenuLabel("Subtitles", state))
         assertEquals("Subtitles (off)", playerMenuLabel("Subtitles", state.copy(subtitleFileId = 8)))
-        assertEquals("Audio Tracks (unknown)", playerMenuLabel("Audio Tracks", state.copy(playback = media.copy(selectedAudioIndex = 3))))
+        assertEquals("Audio Tracks", playerMenuLabel("Audio Tracks", state.copy(playback = media.copy(selectedAudioIndex = 3))))
+        for (language in listOf(null, "", "und", "zxx", "mul", "English")) {
+            assertEquals("Audio Tracks", playerMenuLabel("Audio Tracks", state.copy(playback = media.copy(
+                audioTracks = listOf(PhoneTrack(2, "Unknown", language ?: ""))))))
+        }
         assertEquals("Quality (720p)", playerMenuLabel("Quality", state.copy(quality = 720)))
         assertEquals("unknown", playerLanguage("und"))
         assertEquals("unknown", playerLanguage("English"))

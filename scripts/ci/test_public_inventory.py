@@ -41,7 +41,7 @@ class PublicInventory(unittest.TestCase):
             manifest['subjects'][name] = {'name': subject, 'sha256': checksum}
         (directory / 'sbom-manifest.json').write_text(json.dumps(manifest))
         with patch.object(release, 'publish'), patch.object(release, 'releases', return_value=[]), \
-                patch.object(release, 'changelog', return_value='# New Features\n\n- Synthetic feature.'):
+                patch.object(release, 'candidate_changes', return_value='# New Features\n\n- Synthetic feature.'):
             release.candidate('owner/repo', '26.10.11-RC2', SHA, 200000001, directory)
 
     def test_verified_inventory_matches_exact_apk_image_and_source(self):

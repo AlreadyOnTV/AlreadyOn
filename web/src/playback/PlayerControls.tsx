@@ -62,7 +62,7 @@ type Menu = null | 'captions' | 'settings' | 'quality' | 'audio';
 
 const playerLanguage = (code?: string) => {
   const language = (code ?? '').trim().toLowerCase().replaceAll('_', '-').split('-')[0];
-  return /^[a-z]{2,3}$/.test(language) && !['und', 'zxx', 'mul'].includes(language) ? language : 'unknown';
+  return /^[a-z]{2,3}$/.test(language) && !['und', 'zxx', 'mul'].includes(language) ? ` (${language})` : '';
 };
 
 const qualityLabel = (height: number) => (height === 0 ? 'Auto' : height === 2160 ? '4K' : `${height}p`);
@@ -197,7 +197,7 @@ export function PlayerControls(p: ControlsProps) {
           <button {...noFocus} role="menuitem" onClick={() => setMenu('quality')}>
             Quality ({p.quality === 0 ? 'auto' : qualityLabel(p.quality)})
           </button>
-          <button {...noFocus} role="menuitem" onClick={() => setMenu('audio')}>Audio Tracks ({playerLanguage(selectedAudio?.language)})</button>
+          <button {...noFocus} role="menuitem" onClick={() => setMenu('audio')}>Audio Tracks{playerLanguage(selectedAudio?.language)}</button>
           <button {...noFocus} role="menuitem" onClick={() => setMenu('captions')}>
             Subtitles ({captionsOn ? 'on' : 'off'})
           </button>

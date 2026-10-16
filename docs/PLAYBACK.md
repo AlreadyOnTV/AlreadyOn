@@ -26,4 +26,6 @@ Browser settings checks verify friendly server-name persistence through the sett
 
 See [channel navigation](CHANNEL_NAVIGATION.md) for wraparound controls and edge cases.
 
-Use [device display settings](DISPLAY.md) for brightness and text sizing.
+Brightness and text sizing use device controls, browser zoom and system accessibility settings. Current clients ignore legacy nullable `fontLevel` and `brightnessLevel` profile fields; the API retains them for older clients without deleting saved preferences. Android typography respects system font scaling.
+
+External FFmpeg processes reopen validated media pathnames. Read-only media mounts and trusted host writers remain necessary because root-confined direct reads do not eliminate that subprocess pathname race.

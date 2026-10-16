@@ -4,10 +4,8 @@ Release cycles use `YY.MM.DD`, for example `26.10.18`. Two-digit years mean 2000
 
 The local/remote cycle branch, `release-date.txt`, source Git tag, GHCR date tag, APK version name for new builds and GitHub Release tag share that label. Titles append `-alphaN`, `-rcN` or `-stable`. Existing stage-tag casing (`RCN`, `Stable`) stays compatible; this migration shortens the year and changes date separators to periods. The product, repository, container package and installed Android application IDs retain their names.
 
-The October 18 migration renames all existing public date labels directly, without compatibility aliases, as approved by the sole installed-app tester. Older APK updaters only accept four-digit dates; manually install a new client before using the short-tag updater. New clients recognize dotted labels and historical hyphenated formats in signed metadata.
+Clients recognize dotted labels and historical hyphenated formats in signed metadata. Older APK updaters that accept only four-digit dates need a manual signed update, preserving app data.
 
 Never rebuild or edit previously signed APKs, checksums or inventories to rename a release. Their original version strings, source commits and hashes are immutable audit identifiers. Rename the public release and its links, retaining release IDs and asset IDs/bytes. Retag container manifests with identical digests; never delete a digest still serving another tag. Validate short-name parsing, ordering, candidate allocation, retention, promotion and update URLs. Read historical source policy dates without weakening provenance gates.
-
-The manual **Migrate release image date labels** workflow previews by default. Its approved apply mode moves obsolete aliases onto empty, unique placeholders, deletes only those placeholders, and verifies the new tags retain the original digest. This avoids deleting shared channel images. If a new validated alpha has advanced the short date alias, preserve it and retain the older digest through its existing source tag.
 
 See [delivery](CI_CD.md) and [Android releases](ANDROID_RELEASES.md).

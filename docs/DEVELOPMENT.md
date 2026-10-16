@@ -26,4 +26,4 @@ Store machine-specific notes in ignored `.private/`. Do not commit home paths, h
 
 Run `make lint` and relevant Go tests. Use isolated [browser tests](../tests/e2e/README.md) and [runtime tests](../tests/integration/README.md) when requested. [Delivery](CI_CD.md) describes release checks. Never point destructive tests at your preview or a live server.
 
-The [profile menu](PROFILE_MENU.md) lists Switch Profile, Profile and Sign Out on every device. WebUI inserts Settings for Admin profiles and Server for owner accounts before Sign Out. Dashboard is the first/default tab inside Server; its WebUI navigation is owner-only. The avatar and profile name stay on one line at every width.
+Use the [documentation index](README.md) for subsystem contracts, platform guidance and release procedures.

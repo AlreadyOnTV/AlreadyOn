@@ -1,36 +1,24 @@
-# Release notes
+# Release descriptions
 
-GitHub Release titles contain only `YY.MM.DD-alphaN`, `YY.MM.DD-rcN` or `YY.MM.DD-stable`. Tags also use two-digit years; preserve their existing stage casing. Naming migrations keep released APK bytes, version codes, signatures, hashes and provenance intact. Embedded historical version names are audit data, not mutable release labels.
+Release descriptions live in GitHub Releases; PRs and issues supply their content. Do not write `docs/release-notes/` fragments or a repository known-issue list. Implementation notes belong in issues/PRs; review captures stay outside Git.
 
-Each description always renders exactly these sections, in this order:
+Titles are only `YY.MM.DD-alphaN`, `YY.MM.DD-rcN` or `YY.MM.DD-stable`. Preserve tag casing, installed APK versions, exact signed artifacts and hidden provenance.
 
-```markdown
-# Download Now
+Every published description starts with `# Download Now`, linking that release’s phone/tablet and TV APKs, followed by `# New Features`, `# Bugfixes` and `# Known Issues`, in that order. Empty sections use “No new features in this release.”, “No bugfixes in this release.” and “No known issues are currently listed for this release.” Bugfixes and known issues link exact GitHub issue titles; a fix may append a brief explanation after the link.
 
-- [Phone / tablet APK](https://github.com/AlreadyOnTV/AlreadyOn/releases/download/YY.MM.DD-alphaN/alreadyon-android.apk)
-- [Google TV APK](https://github.com/AlreadyOnTV/AlreadyOn/releases/download/YY.MM.DD-alphaN/alreadyon-tv.apk)
+## Generate a candidate
 
-# New Features
+The helper compares the predecessor release tag with the exact candidate SHA using Git ancestry. It reads PRs associated with commits in that range and includes a PR only when its merged commit is in the range. First releases use reachable history; merge dates do not determine inclusion.
 
-- Connect to a nearby server without typing its address.
+Maintain product metadata in GitHub:
 
-# Bugfixes
+- Label feature PRs/issues `feature` or `enhancement`; conventional `feat:`/`Feature:` titles also identify features. A feature PR without a linked feature issue uses its title and PR link.
+- Link resolved bugs using GitHub closing issue references. Bugfix entries use the linked bug issue’s exact title and URL, even before branch promotion. Bug-labelled PRs without a closing bug issue fail generation rather than producing unlinked fixes.
+- Mark internal PRs with `documentation`, `dependencies`, `chore`, `ci` or `release:skip` to omit them. Unclassified PRs without product issue references do not become feature claims.
+- Known Issues uses currently open bugs, excluding bugs resolved by included PRs and issues marked duplicate, invalid, wontfix or release:skip. P0/critical, P1/high and P2/medium priority labels sort first; otherwise issue number determines order. Feature requests are excluded.
 
-- [Bug: Guide fails to tune the selected channel](https://github.com/AlreadyOnTV/AlreadyOn/issues/123)
+Metadata reads paginate and API failures stop generation. Review the resulting descriptions during normal release acceptance; no handwritten draft or repository fragment is required. GitHub state is captured when the candidate is built. Built-candidate reruns reuse their description after checking source/predecessor provenance, so later issue edits do not rewrite that snapshot.
 
-# Known Issues
+Publication follows maintainer-approved [delivery gates](CI_CD.md).
 
-No known issues are currently listed for this release.
-```
-
-Empty sections say “No new features in this release.”, “No bugfixes in this release.” or the Known Issues sentence above. Download Now links both APKs for that release’s exact tag. There are no introductory release sentences or visible build-details block. Invisible source/version/baseline metadata supports safe reruns and promotions; signed asset provenance remains independently verified.
-
-For user-facing changes, add a uniquely named Markdown file under `docs/release-notes/` in the same commit. Use `# New Features` for new capabilities and improvements, and `# Bugfixes` for addressed defects. Bugfix bullets must link the included GitHub issue and use its exact title. Historical Features, Improvements and Bug fixes fragment headings remain readable. Use single-line bullets, omit development-only maintenance, and leave published fragments intact.
-
-Bugfix bullets may append a concise description after the linked issue title, separated by `:`.
-
-Candidate notes include product fragments changed since the previous published release tag, including server and WebUI changes. They read the exact source commit, not the working tree. When no predecessor exists, notes include the available source fragments. Legacy unlinked bugfix fragments must be reviewed and linked before publication; the generator refuses untracked bugfix bullets.
-
-Maintain `docs/release-known-issues.md` with `# Known Issues` and linked issue-title bullets for confirmed remaining bugs prioritized for the next few builds/releases. Remove entries when fixed. The generator reads this reviewed list from the artifact source commit; it does not infer bugs from feature requests or retrospective reports. Historical descriptions list only bugs supported by evidence at their release date.
-
-RC and Stable promotions reuse tested APK bytes, checksums, signatures and provenance. An unchanged promoted artifact has no new features or bugfixes relative to its predecessor, and retains the candidate’s reviewed Known Issues. See [release policy](ANDROID_RELEASES.md). Editing release descriptions never rebuilds APKs or changes tags.
+RC/Stable promotion reads the tested candidate’s published description and preserves its known issues and exact artifact bytes. Identical-artifact promotions add no new changes. Never regenerate an APK to edit a description.

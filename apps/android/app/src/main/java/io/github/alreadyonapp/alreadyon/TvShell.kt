@@ -1,6 +1,8 @@
 package io.github.alreadyonapp.alreadyon
 
 import androidx.activity.compose.BackHandler
+import androidx.activity.compose.LocalActivity
+import android.os.SystemClock
 import androidx.compose.foundation.focusable
 import androidx.compose.foundation.layout.*
 import androidx.compose.material3.*
@@ -27,6 +29,9 @@ import androidx.compose.ui.semantics.contentDescription
 /** TV navigation is fixed-position presentation; tuning never rotates or remounts the shell. */
 @Composable
 internal fun TvShell(state: PhoneState, model: PhoneModel) {
+    val activity = LocalActivity.current
+    var exitBackAt by remember { mutableStateOf<Long?>(null) }
+    fun exitApp() { model.suspendWatching(); activity?.finishAndRemoveTask() }
     var fullscreen by rememberSaveable { mutableStateOf(false) }
     var controlsSignal by remember { mutableIntStateOf(0) }
     var controlsVisible by remember { mutableStateOf(false) }
@@ -34,16 +39,22 @@ internal fun TvShell(state: PhoneState, model: PhoneModel) {
     var guideAtCurrent by remember { mutableStateOf(false) }
     var playerMenuOpen by remember { mutableStateOf(false) }
     val playerActions = remember { Channel<PlayerRemoteAction>(Channel.BUFFERED) }
-    var guideReset by remember { mutableIntStateOf(0) }
     var profileOpenSignal by remember { mutableIntStateOf(0) }
+    var guideReset by remember { mutableIntStateOf(0) }
     val selection = remember { mutableStateOf<Pair<GuideChannel, GuideProgram?>?>(null) }
     val scope = rememberCoroutineScope()
     val profileFocus = remember { FocusRequester() }
-    fun returnToGuide() { region = "guide"; guideAtCurrent = true; guideReset++; model.refreshGuide() }
+    fun returnToGuide() { exitBackAt = null; region = "guide"; guideAtCurrent = true; guideReset++; model.refreshGuide() }
     fun guideBack() {
-        if (region == "profile") returnToGuide()
-        else if (!guideAtCurrent) returnToGuide()
-        else { region = "profile"; guideAtCurrent = false; profileFocus.requestFocus(); profileOpenSignal++ }
+        if (region == "profile" && exitBackAt?.let { SystemClock.elapsedRealtime() - it <= 2_000 } == true) exitApp()
+        else if (region == "profile" || !guideAtCurrent) returnToGuide()
+        else {
+            exitBackAt = SystemClock.elapsedRealtime()
+            region = "profile"
+            guideAtCurrent = false
+            profileFocus.requestFocus()
+            profileOpenSignal++
+        }
     }
     val focus = remember { FocusRequester() }
     val manager = LocalFocusManager.current
@@ -76,6 +87,7 @@ internal fun TvShell(state: PhoneState, model: PhoneModel) {
         Column(Modifier.fillMaxSize().padding(horizontal = if (fullscreen) 0.dp else 16.dp, vertical = if (fullscreen) 0.dp else 16.dp)
             .padding(top = if (fullscreen) 0.dp else 12.dp)
             .onPreviewKeyEvent { event ->
+                if (event.key != Key.Back && event.type == KeyEventType.KeyDown) exitBackAt = null
                 if (state.tvTutorial) {
                     if (event.key == Key.Back) {
                         if (event.type == KeyEventType.KeyUp) model.finishTvTutorial()
@@ -84,7 +96,7 @@ internal fun TvShell(state: PhoneState, model: PhoneModel) {
                     return@onPreviewKeyEvent false
                 }
                 if (!fullscreen) {
-                    if (event.key == Key.Back && state.profile != null && state.settings == null && region == "guide") {
+                    if (event.key == Key.Back && state.profile != null && state.settings == null && (region == "guide" || exitBackAt != null)) {
                         if (event.type == KeyEventType.KeyUp) guideBack()
                         return@onPreviewKeyEvent true
                     }
@@ -128,7 +140,13 @@ internal fun TvShell(state: PhoneState, model: PhoneModel) {
                 verticalAlignment = Alignment.CenterVertically, horizontalArrangement = Arrangement.SpaceBetween) {
                 PhoneBrand()
                 ProfileMenu(state, model, Modifier.focusRequester(profileFocus).onFocusChanged { if (it.isFocused) region = "profile" },
-                    openSignal = profileOpenSignal, onMenuDismiss = {
+                    onExitApp = ::exitApp, openSignal = profileOpenSignal,
+                    onMenuNavigation = { exitBackAt = null },
+                    onMenuBack = {
+                        // The popup owns the second Back after the guide opens it.
+                        if (exitBackAt?.let { SystemClock.elapsedRealtime() - it <= 2_000 } == true) exitApp()
+                        else returnToGuide()
+                    }, onMenuDismiss = {
                         scope.launch { withFrameNanos { }; returnToGuide() }
                     })
             }

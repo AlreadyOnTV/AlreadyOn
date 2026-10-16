@@ -11,3 +11,7 @@ This project is actively developing; no independent security certification or fo
 Security fixes should include focused regression tests and a review of related entry points. Dependency, authorization, path confinement and media-processing boundaries require ongoing maintenance.
 
 See [vulnerability scanning](docs/VULNERABILITY_SCANNING.md) for private reports, exact-image scans, coverage limits and proposed triage policy.
+
+## Live diagnostics
+
+Owner-provided API access authorizes only the requested diagnostics. It does not authorize account resets, deployment, deletion or destructive fixtures. Prefer read-only API/health checks and record the running revision. Keep keys in restricted files outside Git, never in URLs, logs or issue bodies. Management keys must not reach external playback receivers. Use HTTPS for the actual hostname and isolate destructive reproductions in temporary synthetic instances.

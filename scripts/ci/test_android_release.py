@@ -18,7 +18,7 @@ class AndroidReleaseTests(unittest.TestCase):
         (directory / release.ASSETS[0]).write_bytes(b"synthetic signed APK")
         (directory / release.ASSETS[3]).write_bytes(b"synthetic signed TV APK")
         with patch.object(release, "publish"), patch.object(release, "releases", return_value=[]), \
-                patch.object(release, "changelog", return_value="## Features\n\n- Synthetic feature."):
+                patch.object(release, "candidate_changes", return_value="## Features\n\n- Synthetic feature."):
             release.candidate("owner/repo", tag, "a" * 40, 200000000, directory)
 
     def test_short_year_20_is_not_confused_with_a_century_prefix(self):
@@ -81,6 +81,17 @@ class AndroidReleaseTests(unittest.TestCase):
         with self.assertRaisesRegex(ValueError, "is stable"):
             release.next_dev_tag(entries, "26.10.10")
 
+    def test_reserved_rc1_draft_skips_alpha_without_replacing_published_rc(self):
+        entries = [{"tag_name": "26.10.10-alpha4", "draft": False},
+                   {"tag_name": "26.10.10-RC1", "draft": True}]
+        self.assertEqual(release.next_dev_tag(entries, "26.10.10"), "26.10.10-RC1")
+        self.assertEqual(release.next_dev_tag(entries, "26.10.11"), "26.10.11-alpha1")
+        entries[-1]["draft"] = False
+        self.assertEqual(release.next_dev_tag(entries, "26.10.10"), "26.10.10-RC2")
+        entries.append({"tag_name": "26.10.10-Stable", "draft": False})
+        with self.assertRaisesRegex(ValueError, "is stable"):
+            release.next_dev_tag(entries, "26.10.10")
+
     def test_cleanup_removes_only_legacy_betas_for_same_date(self):
         entries = [{"tag_name": "26.10.10-beta", "draft": False},
                    {"tag_name": "26.10.10-beta2", "draft": False},
@@ -112,10 +123,10 @@ class AndroidReleaseTests(unittest.TestCase):
             prior = {"tag_name": "26.10.09-rc3", "draft": False}
             with patch.object(release, "releases", return_value=[prior]), \
                     patch.object(release, "api", return_value={"sha": "b" * 40}), \
-                    patch.object(release, "changelog_since", return_value="## Features\n\n- Enter a server address immediately.") as notes, \
+                    patch.object(release, "candidate_changes", return_value="## Features\n\n- Enter a server address immediately.") as notes, \
                     patch.object(release, "publish") as published:
                 release.candidate("owner/repo", "26.10.10-alpha1", "a" * 40, 200000000, directory)
-                notes.assert_called_once_with("a" * 40, "b" * 40)
+                notes.assert_called_once_with("owner/repo", [prior], "26.10.10-alpha1", "a" * 40, "26.10.09-rc3")
                 self.assertIn("Changelog baseline: `26.10.09-rc3`", published.call_args.args[4])
 
     def test_new_plan_selects_alpha1_even_with_legacy_betas(self):

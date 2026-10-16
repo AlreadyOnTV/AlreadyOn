@@ -1,112 +1,169 @@
-<!doctype html>
-<html lang="en"><head><meta charset="utf-8"><meta name="viewport" content="width=device-width, initial-scale=1"><meta name="description" content="Practical AlreadyOn installation, hosting, Android setup, and viewing guides for homelab testers."><meta name="theme-color" content="#10151d"><title>Get from setup to channel surfing · AlreadyOn</title><link rel="icon" href="assets/branding/icon.svg" type="image/svg+xml"><link rel="stylesheet" href="assets/site.css"><script src="assets/site.js" defer></script></head><body><a class="skip" href="#main">Skip to content</a>
-<header><a class="brand" href="./" aria-label="AlreadyOn home"><img src="assets/branding/header-doc.svg" alt="AlreadyOn"></a>
-<nav aria-label="Main navigation"><a href="./#experience">The experience</a><a href="guides.html">Guides</a><a href="help.html">Get help</a><a class="nav-button" href="guides.html#install">Get started <span aria-hidden="true">↗</span></a></nav></header>
+<!doctype html><html lang="en"><head><meta charset="utf-8"><meta name="viewport" content="width=device-width,initial-scale=1"><meta name="description" content="A complete walkthrough of AlreadyOn viewing, keyboard and remote controls, profiles, channels, commercials and Android app updates."><meta name="theme-color" content="#10151d"><title>Using AlreadyOn · AlreadyOn</title><link rel="icon" href="assets/branding/icon.svg" type="image/svg+xml"><link rel="stylesheet" href="assets/site.css"><script src="assets/site.js" defer></script></head><body><a class="skip" href="#main">Skip to content</a><header><a class="brand" href="./" aria-label="AlreadyOn home"><img src="assets/branding/header-doc.svg" alt="AlreadyOn"></a><nav aria-label="Main navigation"><a href="./">Overview</a><a href="guides.html" aria-current="page">Using AlreadyOn</a><a href="technical.html">Homelab guide</a><a href="https://github.com/AlreadyOnTV/AlreadyOn/issues">Issues ↗</a></nav></header>
 <main id="main">
-
-<section class="page-hero">
-<p class="eyebrow">THE FIELD GUIDE</p>
-<h1>From setup<br>to <em>“what’s on?”</em></h1>
-<p class="lead">A small, LAN-first setup is the best place to begin. Get one server and one screen working, then build from there.</p></section>
-<div class="guide-layout">
-<aside>
-<nav aria-label="Guide sections"><a href="#before">Before you begin</a><a href="#install">Install the server</a><a href="#library">Add your library</a><a href="#watch">Start watching</a><a href="#android">Phone &amp; TV apps</a><a href="#hosting">Hosting &amp; updates</a><a href="#troubleshooting">Common snags</a></nav></aside>
+<section class="page-hero"><p class="eyebrow">THE EVERYDAY GUIDE</p>
+<h1>Make yourself<br><em>at home.</em></h1>
+<p class="lead">From the first channel change to building your own lineup: learn what each screen does and which settings belong to the viewer or the server owner.</p>
+<p class="guide-hint">Jump to a section below, or use your browser’s Find command to look up a setting.</p>
+</section>
+<div class="guide-layout"><aside><nav aria-label="On this page"><a href="#before">Find your way around</a><a href="#watch">The guide and player</a><a href="#keyboard">Keyboard and touch controls</a><a href="#tv">Google TV remote</a><a href="#profiles">Profiles and subtitle preferences</a><a href="#accounts">Accounts, PINs and sessions</a><a href="#library">Media and metadata</a><a href="#channels">Build and configure channels</a><a href="#commercials">Commercial breaks</a><a href="#android">Install and connect the apps</a><a href="#updates">APK auto-update</a><a href="#server">Server tabs and daily operations</a><a href="#troubleshooting">Get help and report issues</a><a href="#install">Looking for installation?</a><a href="#hosting">Looking for hosting?</a></nav></aside>
 <div class="guide-body">
+<section id="before"><p class="eyebrow">01 / FIND YOUR WAY AROUND</p>
+<h2>Find your way around</h2>
+<p>AlreadyOn turns a library you supply into scheduled channels. Choose a channel to join its current airing; you may arrive partway through a program. Everyone watching that channel follows its schedule rather than starting a separate on-demand episode.</p>
+<p>This guide covers the WebUI, Android phone/tablet app and Google TV app. The browser is also where you manage your server. First-time host? Start with <a href="technical.html#install">the server installation walkthrough</a>, then return here.</p>
+<div class="note"><strong>Which version are you using?</strong>These guides describe the current development cycle. Compare your installed version with <a href="https://github.com/AlreadyOnTV/AlreadyOn/releases">GitHub Releases</a>; an older Stable app may not include every option yet.</div></section>
 
-<section id="before">
-<p class="eyebrow">01 / PREPARE</p>
-<h2>Before you begin.</h2>
-<p>You’ll need a compatible <strong>x86-64 Linux host or NAS with Docker Engine and Docker Compose</strong>, your own TV/movie files, and a browser on the same trusted home network. The published server image targets Linux amd64.</p>
-<p>If your NAS uses a container app manager, use its Compose support or follow the same image, port, and folder mappings below. Exact menus differ between NAS vendors.</p>
-<div class="note"><strong>Start with a small collection.</strong> Media formats, CPU resources, and device capabilities affect playback. A few familiar files make the first scan and playback test easier.</div>
-<p>New to Docker? Follow <a href="https://docs.docker.com/engine/install/">Docker’s installation instructions</a> for your host, then its <a href="https://docs.docker.com/compose/gettingstarted/">Compose getting-started guide</a>.</p></section>
+<section id="watch"><p class="eyebrow">02 / THE GUIDE AND PLAYER</p>
+<h2>The guide and player</h2>
+<ol><li>Sign in, select a profile and open the Guide. Current and upcoming programs are arranged beside each channel.</li>
+<li>Select an airing/channel to tune in. Grey ended airings are history, not replay buttons. Real gaps can remain when no program was scheduled.</li>
+<li>Use the small player while browsing. Expand it or enter fullscreen when you want to watch; return to the guide to see what is next.</li>
+<li>Open the three-dot menu for <strong>Quality</strong>, <strong>Audio Tracks</strong> and <strong>Subtitles</strong>. Only tracks supplied by the current file are offered.</li>
+</ol><p>Quality shows Auto or your selected resolution. Audio Tracks shows a language only when it can be determined. Subtitles shows on/off. A quality choice still depends on the server’s delivery path and the media; selecting a high resolution cannot add detail that is absent from the source.</p>
+<p>Channel surfing follows the visible, playable lineup, skipping empty channels and wrapping at either end. Player settings carry across channel changes where matching tracks are available. Opening a menu changes what arrows do: they navigate the menu instead of tuning another channel.</p>
+<p>Use playback details when investigating a stall: <strong>Local Buffer</strong> is playable media already buffered locally; <strong>Live Delay</strong> is the distance from the live stream edge. These describe different things.</p>
+</section>
 
-<section id="install">
-<p class="eyebrow">02 / INSTALL</p>
-<h2>Give AlreadyOn a home.</h2>
-<ol>
-<li>Create a folder for AlreadyOn on your server. Save the example below in that folder as <code>compose.yaml</code>.</li>
-<li>Replace <code>/YOUR/MEDIA/FOLDER</code> with your host’s real media folder. Replace the timezone and user/group IDs with values appropriate for your host. On Linux, <code>id -u</code> and <code>id -g</code> show your current user and group IDs. The configuration folder needs write access; the media folder needs read access.</li>
-<li>Open a terminal in that folder and run <code>docker compose up -d</code>.</li>
-<li>Open <code>https://YOUR-SERVER-IP:19900</code> in a browser on the same network. Substitute your server’s local IP address.</li></ol>
-<div class="code-heading"><span>compose.yaml · CPU-only starting point</span><button class="copy" data-copy="compose">Copy</button></div>
-<pre><code id="compose">services:
-  alreadyon:
-    image: ghcr.io/alreadyontv/alreadyon:stable
-    restart: unless-stopped
-    ports:
-      - "19900:19900"
-    environment:
-      PUID: "1000"
-      PGID: "1000"
-      TZ: America/New_York
-    volumes:
-      - ./config:/config
-      - /YOUR/MEDIA/FOLDER:/data/media:ro</code></pre>
-<p><code>./config</code> keeps settings and the database outside the container. <code>:ro</code> makes the media mount read-only. Don’t remove the configuration folder when updating.</p>
-<div class="note"><strong>About the first browser certificate warning.</strong> A fresh server uses its own certificate. Confirm that the address belongs to your server on your trusted home network before continuing through the browser’s warning. Don’t disable certificate checks globally or accept an unexpected server.</div>
-<p>Complete the first-run page: choose a server name, then create the owner username and password. Keep these credentials private. The owner manages the library and server.</p>
-<p>For hardware transcoding and advanced options, read the <a href="https://github.com/AlreadyOnTV/AlreadyOn/blob/main/deploy/README.md">deployment reference</a> and <a href="https://github.com/AlreadyOnTV/AlreadyOn/blob/main/deploy/docker-compose.example.yml">complete Compose example</a>.</p></section>
+<section id="keyboard"><p class="eyebrow">03 / KEYBOARD AND TOUCH CONTROLS</p>
+<h2>Keyboard and touch controls</h2>
+<div class="table-scroll" tabindex="0" role="region" aria-label="Where / input reference"><table><thead><tr><th scope="col">Where / input</th><th scope="col">What happens</th></tr>
+</thead><tbody><tr><td>Expanded/fullscreen WebUI: <kbd>↑</kbd> / <kbd>↓</kbd></td><td>Surf channels in the current lineup.</td></tr>
+<tr><td>Expanded/fullscreen: <kbd>←</kbd> / <kbd>→</kbd></td><td>Reveal the player overlay and move between its controls.</td></tr>
+<tr><td>Player: <kbd>Enter</kbd> / <kbd>Space</kbd></td><td>Activate the highlighted control.</td></tr>
+<tr><td>Player: <kbd>Esc</kbd></td><td>Back out of a submenu, close the dot menu, or hide the overlay, one level at a time.</td></tr>
+<tr><td>Player: <kbd>C</kbd></td><td>Toggle available captions.</td></tr>
+<tr><td>Small-player Guide</td><td>Arrows browse; selecting a channel tunes it. Browsing alone does not retune playback.</td></tr>
+<tr><td>Phone/tablet fullscreen: swipe up / down</td><td>Tune the next higher / lower playable channel, including in landscape.</td></tr>
+<tr><td>Touch controls</td><td>Tap the player controls and menus. Use device volume controls as appropriate.</td></tr>
+</tbody></table></div><h3>Player shortcuts in any player size</h3>
+<p><kbd>Space</kbd> toggles Play/Pause when no highlighted overlay control handles it. <kbd>M</kbd> toggles mute, <kbd>F</kbd> toggles fullscreen, <kbd>T</kbd> toggles the large player where available, <kbd>C</kbd> toggles captions and <kbd>S</kbd> toggles playback details. Modifier shortcuts and text-entry fields are left to the browser/form.</p>
+<p>Keyboard shortcuts apply while navigating playback, not while typing into a settings field. Use browser zoom and your operating system’s text/accessibility controls for readability; AlreadyOn does not include brightness or font-size sliders.</p>
+</section>
 
-<section id="library">
-<p class="eyebrow">03 / LIBRARY</p>
-<h2>Bring the shows and movies.</h2>
-<ol>
-<li>Open the WebUI’s media settings as the owner.</li>
-<li>Add your <strong>TV Show Folders</strong> and <strong>Movie Folders</strong>. Use paths inside the container, such as <code>/data/media/TV</code> and <code>/data/media/Movies</code>—not the host-side path.</li>
-<li>Use <strong>Refresh Media</strong> to scan. Large libraries can take time.</li>
-<li>Open the guide and check the resulting channels. The lineup depends on the media and metadata available; empty channels may be hidden.</li></ol>
-<p>Folder organization and usable metadata help scheduling. If something is missing, check the folder mapping and container permissions before rescanning. Optional metadata integrations are described in the project’s <a href="https://github.com/AlreadyOnTV/AlreadyOn/tree/main/docs">reference documentation</a>.</p></section>
+<section id="tv"><p class="eyebrow">04 / GOOGLE TV REMOTE</p>
+<h2>Google TV remote</h2>
+<p>The guide opens with the watched airing focused. D-pad arrows browse programs and channels and wrap at the ends. Program details follow the highlighted selection; Select tunes it and opens fullscreen. The preview itself has no selectable playback controls.</p>
+<div class="table-scroll" tabindex="0" role="region" aria-label="Remote input reference"><table><thead><tr><th scope="col">Remote input</th><th scope="col">Guide</th><th scope="col">Fullscreen</th></tr>
+</thead><tbody><tr><td>Up / Down</td><td>Browse channel rows.</td><td>Tune channels, even when player controls are hidden.</td></tr>
+<tr><td>Left / Right</td><td>Browse programs and scroll the timeline.</td><td>Reveal and navigate player controls.</td></tr>
+<tr><td>Select</td><td>Tune the selected channel.</td><td>Activate the highlighted control; menus navigate without tuning.</td></tr>
+<tr><td>Back</td><td>Restore the watched airing; once there, open the profile menu.</td><td>Return through submenu, dot menu and controls before returning to the guide.</td></tr>
+</tbody></table></div><h3>Single Back, double Back and Exit App</h3>
+<p>When the watched airing is already focused, one Back opens the profile menu with Switch Profile selected. A second Back within two seconds exits to Google TV Home. A later Back closes the menu and restores the guide. Navigating the menu cancels quick exit. <strong>Exit App</strong>, below Sign Out, also returns Home without signing out. Every menu option has the same white focus outline.</p>
+<p>A one-time remote tutorial appears after profile selection. Choose Got it or press Back to dismiss it.</p>
+</section>
 
-<section id="watch">
-<p class="eyebrow">04 / WATCH</p>
-<h2>Pick a channel. Settle in.</h2>
-<p>Choose your profile and open the channel guide. Select a channel to join the currently airing program. AlreadyOn follows a scheduled, linear-TV rhythm, so tuning in may start partway through a show.</p>
-<p>Use the guide to see what’s on and what’s coming next. Switch channels when the mood changes. Owners can adjust their library and settings; everyday viewers can focus on watching.</p><a class="inline-image" href="./#experience"><img src="assets/screenshots/web-guide.png" alt="Example WebUI guide populated with synthetic demo channels" loading="lazy"></a>
-<p class="caption">Synthetic demo lineup shown. Your lineup depends on your library.</p></section>
+<section id="profiles"><p class="eyebrow">05 / PROFILES AND SUBTITLE PREFERENCES</p>
+<h2>Profiles and subtitle preferences</h2>
+<p>Open the top-right avatar/name control. <strong>Switch Profile</strong> changes the viewer and respects profile PINs; <strong>Profile</strong> edits the current profile. WebUI also shows <strong>Settings</strong> to Admin profiles and <strong>Server</strong> to owner accounts. Google TV adds Exit App. Profile roles and account ownership are separate.</p>
+<p>Switch Profile lists the current profile first, then other names alphabetically. In the WebUI, an Admin profile can choose <strong>Add Profile</strong>, enter a name, select Admin/Viewer and Kids/Teen/Unrestricted, then Create. The new profile becomes available without replacing the current selection.</p>
+<p>Profile settings include display name, icon, PIN, time format, preferred audio language, subtitle language and subtitle mode. Save Changes saves the edited preferences; Cancel discards drafts. PIN changes/removal have separate actions. On TV, Up/Down previews categories, Select/Right enters their controls, and Back moves to the category before leaving settings. Upload custom profile images in the WebUI.</p>
+<div class="table-scroll" tabindex="0" role="region" aria-label="Subtitle mode reference"><table><thead><tr><th scope="col">Subtitle mode</th><th scope="col">Use it when…</th></tr>
+</thead><tbody><tr><td>Always on</td><td>You want available captions in your chosen subtitle language.</td></tr>
+<tr><td>For other audio</td><td>You want captions when the playing audio differs from your preferred audio language.</td></tr>
+<tr><td>Off</td><td>You want to select captions manually in the player.</td></tr>
+</tbody></table></div><p>For example, preferred English audio plus English subtitles in For other audio mode enables captions for Japanese audio, then turns automatic captions off when you choose English audio. Unknown audio or missing subtitles leaves playback uninterrupted. English appears first in language selectors; other languages follow alphabetically. Shared profile preferences refresh across active clients and on resume while preserving local drafts.</p>
+</section>
 
-<section id="android">
-<p class="eyebrow">05 / MORE SCREENS</p>
-<h2>Connect a phone or Google TV.</h2>
-<ol>
-<li>Open the <a href="https://github.com/AlreadyOnTV/AlreadyOn/releases/latest">latest Stable release</a> on GitHub. Download <code>alreadyon-android.apk</code> for Android phones/tablets or <code>alreadyon-tv.apk</code> for Google TV. Use the signed release apps, not development builds.</li>
-<li>Install the APK on your device. Android may ask you to allow installation from the app or file source you’re using; approve only that source for this installation.</li>
-<li>In WebUI <strong>Admin Settings</strong>, set the account’s <strong>TV Pairing PIN</strong> (6–12 digits).</li>
-<li>Open AlreadyOn on the device. Let it find the server on your trusted LAN, or enter your server’s HTTPS address manually.</li>
-<li>Sign in with the account username and pairing PIN. Pick a profile and channel.</li></ol>
-<p>On Google TV, use the remote to navigate the guide, select a channel for fullscreen playback, and press Back to return to the guide. The current channel keeps playing.</p>
-<div class="note"><strong>No device-wide certificate import.</strong> For your own self-signed server, the Android apps establish server trust within the app on first connection. Start on a trusted network and confirm you are connecting to your server. If a later connection reports a trust problem, investigate the server/address change instead of blindly dismissing it.</div>
-<p>Discovery scans the local IPv4 network for about 30 seconds. Guest Wi-Fi isolation, firewall rules, or separate networks can prevent discovery. Manual entry also supports addresses outside that discovery scope. See the <a href="https://github.com/AlreadyOnTV/AlreadyOn/blob/main/docs/GOOGLE_TV.md">Android and Google TV reference</a> for details.</p>
-<p>The signed apps can offer updates from GitHub. Stable apps follow Stable releases, and Android asks you to approve installation. Reopen the app if necessary; normal updates preserve its settings.</p></section>
+<section id="accounts"><p class="eyebrow">06 / ACCOUNTS, PINS AND SESSIONS</p>
+<h2>Accounts, PINs and sessions</h2>
+<p>Use WebUI <strong>Settings</strong> for the account’s username/password, TV Pairing PIN and Sessions. The account’s 6–12 digit TV PIN signs native apps into the server; it is different from a profile PIN, which protects switching to a profile. Changing the account PIN affects new sign-ins rather than disconnecting existing sessions.</p>
+<p>Sessions shows Device, IP Address, Last Active, Expires and Sign Out. The current session appears first with This Session; the remaining sessions sort by recent activity. Scroll wide tables horizontally on a phone. Sign out an individual device when it should no longer have access; Sign Out All Other Sessions and Sign Out Everywhere have wider effects.</p>
+<h3>Manage household accounts and profiles</h3>
+<p>Owners use <strong>Server → Home Users → Add Account</strong> to give another person their own username/password and Owner/Viewer account role. Edit their enabled status, password policy and Simultaneous Streams limit when needed; 0 means unlimited. A closed device can take up to five minutes to release its stream slot. Account deletion and broad sign-out affect real access, so confirm the intended person before applying them.</p>
+<p>The WebUI Settings page also lists profiles with Name, Role, Audience and PIN. Add/edit profiles there or use the Admin-only Add Profile shortcut in Switch Profile. Admin/Viewer here is a profile role, separate from the account’s Owner/Viewer role. Profile deletion removes that viewer profile; it does not delete media.</p>
+<p>Stay Signed In For (Days) and Never Expire control browser session expiry. Owner-only Remove Inactive Sessions defaults to On and 14 days, including sessions that otherwise never expire. Day fields save on blur with a brief confirmation; toggles apply immediately.</p>
+<p>Native Sign Out detaches the selected server but retains its encrypted session. Selecting that recent server revalidates it and can skip account credentials; revocation, expiry or account restrictions require sign-in again. Profile PINs still apply. Exit App simply closes the TV app.</p>
+</section>
 
-<section id="hosting">
-<p class="eyebrow">06 / KEEP IT RUNNING</p>
-<h2>Your server, your pace.</h2>
-<p>Keep the first installation on your home network. Preserve and back up the configuration folder using your normal homelab backup process. Keep media mounted read-only where possible.</p>
-<h3>Update the server</h3>
-<p>Read the <a href="https://github.com/AlreadyOnTV/AlreadyOn/releases">release notes</a>, then run these commands in the folder containing <code>compose.yaml</code>:</p>
-<pre><code>docker compose pull
-docker compose up -d</code></pre>
-<p>Your persistent <code>./config</code> folder is reused. Test a channel afterward. Don’t delete the database or create a fresh configuration just to troubleshoot an update.</p>
-<h3>Access beyond your home network</h3>
-<p>Public hosting is an advanced, optional step. Use a domain and a valid HTTPS certificate, protect account credentials, and understand your network exposure before enabling access. Follow the project’s <a href="https://github.com/AlreadyOnTV/AlreadyOn/blob/main/docs/TLS.md">HTTPS reference</a>; don’t expose a quick test setup without reviewing it. VPN-based access is outside current support scope.</p></section>
+<section id="library"><p class="eyebrow">07 / MEDIA AND METADATA</p>
+<h2>Media and metadata</h2>
+<p>Owners open <strong>Server → Media</strong>. Add TV Show Folders and Movie Folders using paths inside the container, such as <code>/data/media/TV</code>. Host paths only work when mounted into the container. Folder status and item counts help identify missing paths or permissions problems.</p>
+<p><strong>Refresh Media</strong> scans now. New files enter the catalog, missing files leave it, and future schedules are updated without treating a refresh as permission to reset current airings. Polling Interval controls automatic checks, from 15 minutes to 24 hours; the default is one hour.</p>
+<p>Under <strong>Server → Server</strong>, Free Metadata Sources can provide metadata without a TMDb key. For TMDb, enter an API Read Access Token—the long token, not the short API key—and use Set. Setting it disables the free-source option. Clear removes the integration credential. Metadata availability changes which genre, rating and era filters can match; a key does not repair an unreadable media path.</p>
+<p>Saved provider secrets stay masked and are not returned to the form. Eye controls reveal only a replacement draft you have entered. Keep tokens private.</p>
+</section>
 
-<section id="troubleshooting">
-<p class="eyebrow">WHEN SOMETHING GETS IN THE WAY</p>
-<h2>A few quick checks.</h2>
-<dl>
-<dt>The page won’t open</dt>
-<dd>Check that the container is running, you used <code>https://</code> and port <code>19900</code>, and the browser can reach your server’s network.</dd>
-<dt>The library is empty</dt>
-<dd>Check the host folder mapping, container paths, read permissions, and scan completion. Try one small known media folder first.</dd>
-<dt>The app can’t find the server</dt>
-<dd>Try manual entry. Check guest-network isolation and firewall rules. Confirm the server is reachable from that device.</dd>
-<dt>Playback fails or stutters</dt>
-<dd>Try another file and device. Note the media format, server resources, app/browser version, and whether other viewers are active.</dd></dl>
-<p>Still stuck? <a href="help.html">Our issue guide</a> explains what information helps us investigate.</p></section></div></div></main>
-<footer>
-<div><a class="brand" href="./"><img src="assets/branding/header-doc.svg" alt="AlreadyOn"></a>
-<p>Your library, tuned to you.</p></div>
-<div><a href="guides.html">Installation &amp; guides</a><a href="help.html">Tester support</a><a href="https://github.com/AlreadyOnTV/AlreadyOn">Source on GitHub ↗</a><a href="https://github.com/AlreadyOnTV/AlreadyOn/releases/latest">Download Android apps ↗</a></div>
-<p class="fine">An open-source project for your own media. No shows, movies, or streaming subscriptions included. GPL-3.0 licensed.</p></footer><dialog id="lightbox" aria-label="Interface screenshot"><button class="close" aria-label="Close screenshot">Close ×</button><img alt="">
-<p></p></dialog></body></html>
+<section id="channels"><p class="eyebrow">08 / BUILD AND CONFIGURE CHANNELS</p>
+<h2>Build and configure channels</h2>
+<ol><li>Open <strong>Server → Channels</strong> and review the current lineup. Built-in channels depend on available media and metadata; empty channels may be hidden.</li>
+<li>Choose Create Custom Channel, or Edit beside an existing channel. Set its number and name; numbers 100–199 are reserved, so custom channels start at 200.</li>
+<li>Choose the audience/rating restriction, Shows Or Movies, included Genres, Excluded Genres, Era and optional Title Contains phrases. Excluded genres win when rules overlap. Require Known Premiere Year removes items with missing years.</li>
+<li>Limit Included Media Paths if this channel should use only selected folders. Check the live preview/match count before saving; zero matches means there is nothing eligible to schedule.</li>
+<li>Set per-channel commercial enablement and paths if needed, then save. Use the Guide Schedule update action when you need to refresh future coverage and watch its Last Updated status.</li>
+</ol><h3>Visibility and reusable filters</h3>
+<p>A channel’s visibility cycles through Hide, Show and Auto. Hide removes it from the guide, Show requests visibility, and Auto shows it when media matches. Select rows for Hide Selected, Show Selected or Set to Auto. These actions change the lineup display rather than deleting source files.</p>
+<p>Configure Filters defines reusable Age Restrictions and Eras. Set rating inclusion and unknown-rating handling for restrictions, or start/end years for eras. Give each a clear name, then choose it in channel editors. Drag rows to reorder; touch uses a long press, and focused reorder controls support Up/Down. Restore Default restores the default order. Review which channels use a filter before changing or deleting it.</p>
+<p>Restricted lineups need usable ratings; missing metadata must not be treated as known-safe content. The built-in Classic/Modern split uses the series premiere year, with Classic ending in 2009. Avoid overlapping custom numbers and give channels clear names.</p>
+<p>Changing a filter shapes eligible programming; it is not a way to edit or replay an already published airing. If a channel is empty, check metadata, path selection and exclusions before widening every rule.</p>
+</section>
+
+<section id="commercials"><p class="eyebrow">09 / COMMERCIAL BREAKS</p>
+<h2>Commercial breaks</h2>
+<p>Commercials are optional clips you supply. Under <strong>Server → Commercials</strong>, add Commercial Folders, then enable Commercial Breaks. AlreadyOn does not download advertising or provide a commercial library.</p>
+<div class="table-scroll" tabindex="0" role="region" aria-label="Setting reference"><table><thead><tr><th scope="col">Setting</th><th scope="col">Effect</th></tr>
+</thead><tbody><tr><td>Mode</td><td>Between Episodes/Movies Only, or breaks every 15, 30 or 60 minutes.</td></tr>
+<tr><td>TV / Movie Commercials Per Break</td><td>Choose separate numbers of clips for TV episodes and movies.</td></tr>
+<tr><td>Commercial Volume Offset (dB)</td><td>Adjust commercial playback relative to program audio; the control accepts −30 to +12 dB.</td></tr>
+<tr><td>Per-channel Enable Commercials / Commercial Paths</td><td>Enable or disable breaks for that channel and restrict the clip pool; timing, count and volume are global.</td></tr>
+</tbody></table></div><p>Save Changes applies the global draft. Folder edits have their own saving/status behavior. An inherited per-channel enablement uses the server default; an unrestricted commercial path selection uses the configured pool. If no eligible clips exist, check folder scanning before changing timing. Original media files are not edited, and playback has no Delete Commercial action.</p>
+</section>
+
+<section id="android"><p class="eyebrow">10 / INSTALL AND CONNECT THE APPS</p>
+<h2>Install and connect the apps</h2>
+<ol><li>Open <a href="https://github.com/AlreadyOnTV/AlreadyOn/releases">GitHub Releases</a>. Select the release you intend to test and download <code>alreadyon-android.apk</code> for phone/tablet or <code>alreadyon-tv.apk</code> for Google TV.</li>
+<li>Install the signed APK. Allow installation from the app/file source you are using when Android requests it.</li>
+<li>Set your account’s TV Pairing PIN in WebUI Settings, then launch the native app.</li>
+<li>Choose a discovered server. Discovery scans the local private IPv4 network for about 30 seconds; manual entry remains available while it runs.</li>
+<li>For manual entry, enter only Hostname / IP and a separate Port. IP addresses suggest 19900; hostnames do not. An empty port means HTTPS 443, not a hidden fallback to 19900. IPv6 accepts optional brackets.</li>
+<li>Connect on a trusted LAN, sign in with username and account PIN, then choose a profile. Guest Wi-Fi isolation and firewall rules can block discovery or sign-in.</li>
+</ol><p>The apps save the selected instance’s certificate trust locally, without a device-wide CA import. If saved trust later fails, Review Server CA offers an explicit replacement decision; investigate the change before accepting a new CA. PIN sign-in requires a direct LAN peer; an internet-facing proxy does not replace that requirement.</p>
+</section>
+
+<section id="updates"><p class="eyebrow">11 / APK AUTO-UPDATE</p>
+<h2>APK auto-update</h2>
+<p>Signed phone and TV apps check GitHub at startup without blocking viewing. Update Available shows installed/available versions and Update/Cancel. Stable installs follow Stable releases; preview installs can accept alpha/RC/Stable. A preview APK promoted unchanged to Stable follows Stable once its matching artifact is published there. Reused version codes do not prompt again.</p>
+<ol><li>Choose Update to download the APK for your device. The app checks its checksum, package, phone/TV target and signing certificate.</li>
+<li>Allow AlreadyOn to install updates if Android requests that permission, then approve the system installer.</li>
+<li>After replacement, the app attempts to reopen and removes the downloaded APK. Use Open or launch manually if the operating system does not reopen it.</li>
+</ol><p>Cancel stops the download/install preparation. An interrupted staged install can offer Continue Installation or Cancel on reopening. A failed or offline update check stays quiet. Normal signed updates preserve settings and saved sessions; debug apps skip production update checks. Install the first updater-capable release manually.</p>
+<p>Server container updates are separate: see <a href="technical.html#maintenance">maintenance and backups</a>.</p>
+</section>
+
+<section id="server"><p class="eyebrow">12 / SERVER TABS AND DAILY OPERATIONS</p>
+<h2>Server tabs and daily operations</h2>
+<p>The owner’s Server menu opens Dashboard first, followed by Home Users, Media, Commercials, Channels, Server, Logs and API.</p>
+<div class="table-scroll" tabindex="0" role="region" aria-label="Tab / setting reference"><table><thead><tr><th scope="col">Tab / setting</th><th scope="col">When to use it</th></tr>
+</thead><tbody><tr><td>Dashboard</td><td>Review Server Details, active playback sessions, background processes and CPU/memory/disk/network charts. Missing history is not zero usage.</td></tr>
+<tr><td>Home Users</td><td>Manage household accounts and their access. Account ownership is separate from the current profile’s Admin/Viewer role.</td></tr>
+<tr><td>Server Name</td><td>Give the instance a recognizable name; app discovery reflects it.</td></tr>
+<tr><td>Hardware Encoding / Decoding</td><td>Choose and test the supported GPU path. See the homelab guide before enabling it.</td></tr>
+<tr><td>Loudness Detection</td><td>Optionally analyze program/commercial audio in the background and normalize playback; source files are not changed.</td></tr>
+<tr><td>DDNS / TLS Certificates</td><td>Configure your hostname and encrypted listener using the technical guide.</td></tr>
+<tr><td>Logs</td><td>Inspect failures with timestamps; remove credentials and personal paths before sharing excerpts.</td></tr>
+<tr><td>API</td><td>Open Swagger UI or create/revoke management API keys. Requests can change real data; start with reads.</td></tr>
+</tbody></table></div><h3>Loudness Detection</h3>
+<p>This is off by default. Enable it to analyze playback audio, then use Run Now to process outstanding files or retry failures. Current File, Workers, Processed, Pending, Skipped, Failed and Limited By explain its progress. Missing measurements play at their original volume. Measured audio is normalized during playback, which can use additional CPU and a streaming worker and add startup time; original media stays intact. Disabling stops background analysis while retaining measurements, and playback changes apply at the next tune or program transition.</p>
+<p>Use Save Changes for page drafts unless a setting supplies an immediate action, such as Set/Clear, a session toggle or a folder edit. Read the displayed status and More Info text rather than assuming every page saves the same way. Restart controls interrupt active use; coordinate with other viewers.</p>
+</section>
+
+<section id="troubleshooting"><p class="eyebrow">13 / GET HELP AND REPORT ISSUES</p>
+<h2>Get help and report issues</h2>
+<p>Check the container/app version, media path permissions, selected device and relevant timestamps first. For a playback problem, include the codec/container, browser/device, whether transcoding was active and the exact visible error. A synthetic reproduction is helpful; never upload your database or media.</p>
+<div class="actions"><a class="button primary" href="https://github.com/AlreadyOnTV/AlreadyOn/issues">Review existing issues ↗</a><a class="button secondary" href="https://github.com/AlreadyOnTV/AlreadyOn/issues/new/choose">Create an issue ↗</a><a class="text-link" href="https://github.com/AlreadyOnTV/AlreadyOn/issues">Ask the community ↗</a></div><p>Use <a href="help.html">the support guide</a> for a useful report and the <a href="https://github.com/AlreadyOnTV/AlreadyOn/security/advisories">private security route</a> for suspected vulnerabilities.</p>
+</section>
+
+<section id="install"><p class="eyebrow">14 / LOOKING FOR INSTALLATION?</p>
+<h2>Looking for installation?</h2>
+<p>The full Compose setup, certificate choices, network rules and upgrades now live in the <a href="technical.html#install">homelab installation guide</a>.</p>
+</section>
+
+<section id="hosting"><p class="eyebrow">15 / LOOKING FOR HOSTING?</p>
+<h2>Looking for hosting?</h2>
+<p>Continue to <a href="technical.html#network">ports and public access</a> or <a href="technical.html#maintenance">updates and backups</a>.</p>
+</section>
+</div></div></main><footer><div><a class="brand" href="./"><img src="assets/branding/header-doc.svg" alt="AlreadyOn"></a><p>Your library, tuned to you.</p>
+</div><div><a href="guides.html">Using AlreadyOn</a><a href="technical.html">Homelab guide</a><a href="https://github.com/AlreadyOnTV/AlreadyOn/issues">Browse issues ↗</a><a href="https://github.com/AlreadyOnTV/AlreadyOn/issues/new/choose">Report an issue ↗</a><a href="https://github.com/AlreadyOnTV/AlreadyOn/issues">Community help ↗</a><a href="https://github.com/AlreadyOnTV/AlreadyOn/releases">Releases &amp; APK downloads ↗</a><a href="help.html">How to ask for help</a><a href="https://github.com/AlreadyOnTV/AlreadyOn">Source on GitHub ↗</a></div><p class="fine">Open source · GPL-3.0 · Bring your own media. No shows, movies or streaming subscriptions included.</p>
+</footer>
+<dialog id="lightbox" aria-label="Interface screenshot"><button class="close" aria-label="Close screenshot">Close ×</button><img alt=""><p></p>
+</dialog></body></html>

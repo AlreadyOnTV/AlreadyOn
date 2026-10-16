@@ -1,12 +1,9 @@
 """Changelog tests isolate Git history and never publish a release."""
-import os
-from pathlib import Path
-import subprocess
-import tempfile
 import unittest
 from unittest.mock import patch
+import subprocess
 
-from release_notes import changelog, changelog_since, published_changelog, release_body, render_fragments, promotion_changes
+from release_notes import candidate_changes, generated_changes, source_commits, published_changelog, release_body, render_fragments, promotion_changes
 
 
 class ReleaseNotesTests(unittest.TestCase):
@@ -82,48 +79,75 @@ class ReleaseNotesTests(unittest.TestCase):
         self.assertIn('No new features in this release.', result)
         self.assertIn('[Remaining bug]', result)
 
-    def test_git_range_uses_reachable_stable_and_release_snapshot(self):
-        with tempfile.TemporaryDirectory() as temp:
-            root = Path(temp)
-            def git(*args):
-                return subprocess.check_output(['git', *args], cwd=root, text=True).strip()
-            git('init', '-q')
-            git('config', 'user.name', 'Synthetic test')
-            git('config', 'user.email', 'test@example.invalid')
-            directory = root / 'docs/release-notes'
-            directory.mkdir(parents=True)
-            (directory / 'first.md').write_text('## Features\n\n- Old feature.\n')
-            git('add', '.')
-            git('commit', '-qm', 'First feature')
-            git('tag', '26.10.08-stable')
-            (directory / 'second.md').write_text('<!-- android-release -->\n\n## Bug fixes\n\n- New fix.\n')
-            (directory / 'server.md').write_text('## Bug fixes\n\n- Server-only fix.\n')
-            (root / 'docs/release-known-issues.md').write_text(
-                '# Known Issues\n\n- [Known bug](https://github.com/owner/repo/issues/2)\n')
-            git('add', '.')
-            git('commit', '-qm', 'New fix')
-            sha = git('rev-parse', 'HEAD')
-            baseline = git('rev-parse', '26.10.08-stable')
-            # A dirty working tree cannot leak unreleased changes into this APK's notes.
-            (directory / 'second.md').write_text('## Features\n\n- Future feature.\n')
-            (root / 'docs/release-known-issues.md').write_text('# Known Issues\n\n- Future bug.\n')
-            previous = os.getcwd()
-            try:
-                os.chdir(root)
-                result = changelog(sha, ['26.10.08-stable'])
-                self.assertIn('New fix.', result)
-                self.assertNotIn('Old feature.', result)
-                self.assertNotIn('Future feature.', result)
-                candidate = changelog_since(sha, baseline)
-                self.assertIn('New fix.', candidate)
-                self.assertIn('[Known bug]', candidate)
-                self.assertNotIn('Future bug.', candidate)
-                self.assertNotIn('Old feature.', candidate)
-                self.assertIn('Server-only fix.', candidate)
-                self.assertNotIn('Future feature.', candidate)
-                with self.assertRaisesRegex(ValueError, 'ancestor'):
-                    changelog_since(baseline, sha)
-                self.assertIn('Old feature.', changelog(sha, []))
-                self.assertIn('No new features in this release.', changelog('26.10.08-stable', ['26.10.08-stable']))
-            finally:
-                os.chdir(previous)
+    def issue(self, number, label='bug', title='Bug title'):
+        return {'number': number, 'title': title, 'html_url': f'https://github.com/owner/repo/issues/{number}',
+                'labels': [{'name': label}], 'created_at': '2026-10-01T00:00:00Z'}
+
+    def test_generated_notes_scope_deduplicate_and_prioritize_issues(self):
+        bug = self.issue(2, title='[Bug] Fix guide')
+        remaining = self.issue(3)
+        high = {**self.issue(4), 'labels': [{'name': 'bug'}, {'name': 'priority:high'}]}
+        excluded = {**self.issue(5), 'labels': [{'name': 'bug'}, {'name': 'duplicate'}]}
+        pr = {'number': 10, 'merged_at': 'date', 'merge_commit_sha': 'a'}
+        pages = [[pr, {**pr, 'number': 11, 'merge_commit_sha': 'future'}], [pr],
+                 [bug, remaining, high, excluded, self.issue(6, 'enhancement'), self.issue(7, 'bug', 'Feature Request: A new option')]]
+        detail = {'number': 10, 'title': 'Fix guide', 'labels': [], 'url': 'https://github.com/owner/repo/pull/10',
+                  'closingIssuesReferences': [{'number': 2, 'url': bug['html_url']}]}
+        with patch('release_notes.source_commits', return_value=['a', 'b']), \
+             patch('release_notes.github_pages', side_effect=pages), \
+             patch('release_notes.github_json', side_effect=[detail, bug]), \
+             patch('release_notes.subprocess.check_output', return_value='2026-10-15T00:00:00+00:00'):
+            notes = generated_changes('owner/repo', 'sha', 'baseline')
+        self.assertEqual(notes.count('[Bug] Fix guide'), 1)
+        self.assertIn('/issues/3', notes)
+        self.assertLess(notes.index('/issues/4'), notes.index('/issues/3'))
+        self.assertNotIn('/issues/5', notes)
+        self.assertNotIn('/issues/6', notes)
+        self.assertNotIn('/issues/7', notes)
+        self.assertNotIn('Fix guide', notes.split('# Known Issues')[1])
+
+    def test_features_and_internal_prs(self):
+        detail = {'title': 'Add captions', 'url': 'https://github.com/owner/repo/pull/10',
+                  'labels': [{'name': 'enhancement'}], 'closingIssuesReferences': []}
+        for label, expected in [('enhancement', True), ('documentation', False), ('dependencies', False)]:
+            with patch('release_notes.source_commits', return_value=['a']), \
+                 patch('release_notes.github_pages', side_effect=[[{'number': 10, 'merged_at': 'date', 'merge_commit_sha': 'a'}], []]), \
+                 patch('release_notes.github_json', return_value={**detail, 'labels': [{'name': label}]}), \
+                 patch('release_notes.subprocess.check_output', return_value='2026-10-15T00:00:00+00:00'):
+                self.assertEqual('Add captions' in generated_changes('owner/repo', 'sha', None), expected)
+
+    def test_bug_pr_without_issue_and_api_errors_fail_closed(self):
+        with patch('release_notes.source_commits', return_value=['a']), \
+             patch('release_notes.github_pages', return_value=[{'number': 10, 'merged_at': 'date', 'merge_commit_sha': 'a'}]), \
+             patch('release_notes.github_json', return_value={'labels': [{'name': 'bug'}], 'closingIssuesReferences': []}):
+            with self.assertRaisesRegex(ValueError, 'closing bug issue'):
+                generated_changes('owner/repo', 'sha', None)
+        with patch('release_notes.source_commits', return_value=['a']), \
+             patch('release_notes.github_pages', side_effect=subprocess.CalledProcessError(1, 'gh')):
+            with self.assertRaises(subprocess.CalledProcessError):
+                generated_changes('owner/repo', 'sha', None)
+
+    def test_git_range_rejects_non_ancestor_before_querying_github(self):
+        with patch('release_notes.subprocess.run', side_effect=subprocess.CalledProcessError(1, 'git')), \
+             patch('release_notes.github_pages') as api:
+            with self.assertRaises(subprocess.CalledProcessError):
+                source_commits('sha', 'unrelated')
+            api.assert_not_called()
+
+    def test_built_candidate_snapshot_survives_later_issue_changes(self):
+        body = release_body('owner/repo', '26.10.18-alpha1', 'a' * 40, 23, render_fragments([]),
+                            changelog_baseline='26.10.09-rc3')
+        entry = {'tag_name': '26.10.18-alpha1', 'body': body}
+        with patch('release_notes.generated_changes') as generate:
+            self.assertEqual(candidate_changes('owner/repo', [entry], entry['tag_name'], 'a' * 40,
+                                               '26.10.09-rc3'), render_fragments([]))
+            generate.assert_not_called()
+            with self.assertRaises(ValueError):
+                candidate_changes('owner/repo', [entry], entry['tag_name'], 'b' * 40, '26.10.09-rc3')
+            with self.assertRaises(ValueError):
+                candidate_changes('owner/repo', [entry], entry['tag_name'], 'a' * 40, 'another')
+
+    def test_new_candidate_needs_no_handwritten_draft(self):
+        with patch('release_notes.generated_changes', return_value='generated') as generate:
+            self.assertEqual(candidate_changes('owner/repo', [], 'tag', 'sha', 'baseline'), 'generated')
+            generate.assert_called_once_with('owner/repo', 'sha', 'baseline')

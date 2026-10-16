@@ -17,7 +17,7 @@ from public_inventory import NAMES as SBOM_NAMES, verify_bundle
 SBOM_ASSETS = (*SBOM_NAMES, 'sbom-manifest.json')
 
 from release_dates import release_day
-from release_notes import changelog, changelog_since, promotion_changes, release_body
+from release_notes import candidate_changes, promotion_changes, release_body
 
 # New lifecycle: alphaN on dev, RCN on test, Stable on main. Accept old tags for history.
 ALPHA = re.compile(r"((?:\d{2}\.\d{2}\.\d{2}|(?:20)?\d{2}-\d{2}-\d{2}))-alpha([1-9]\d*)\Z")
@@ -77,6 +77,11 @@ def next_dev_tag(entries, day):
            if tag and tag[0] == day and tag[1] == "rc" and not entry.get("draft", False)]
     if rcs:
         return f"{day}-RC{max(rcs) + 1}"
+    # An explicitly reserved RC1 draft permits approved direct-RC publication or
+    # replacement without allocating another alpha. Published assets remain immutable.
+    if any(tag and tag[0] == day and tag[1:] == ("rc", 1) and entry.get("draft", False)
+           for entry, tag in parsed):
+        return f"{day}-RC1"
     alphas = [tag[2] for entry, tag in parsed
               if tag and tag[0] == day and tag[1] == "alpha" and not entry.get("draft", False)]
     return f"{day}-alpha{max(alphas, default=0) + 1}"
@@ -291,13 +296,7 @@ def candidate(repo, tag, sha, code, directory):
     verify_assets(directory, sha)
     entries = releases(repo)
     baseline_tag = changelog_baseline(entries, tag)
-    if baseline_tag:
-        baseline_sha = api(f"repos/{repo}/commits/{baseline_tag}")["sha"]
-        changes = changelog_since(sha, baseline_sha)
-    else:
-        stable_tags = [entry['tag_name'] for entry in entries
-                       if not entry['draft'] and not entry['prerelease']]
-        changes = changelog(sha, stable_tags)
+    changes = candidate_changes(repo, entries, tag, sha, baseline_tag)
     notes = release_body(repo, tag, sha, code, changes, changelog_baseline=baseline_tag)
     publish_now = parsed[1] in {"alpha", "beta"}
     publish(repo, tag, sha, directory, notes, True, publish_now=publish_now)

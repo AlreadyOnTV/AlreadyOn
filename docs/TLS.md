@@ -20,4 +20,4 @@ Use TCP TLS passthrough to HTTPS port 19900, or HTTPS re-encryption with upstrea
 
 Forwarded, X-Forwarded-For/Host/Proto and X-Real-IP are ignored. No proxy address is authorized to supply client identity: authorization uses credentials and throttling uses the socket peer. Behind an HTTP proxy, users share that peer's throttle bucket; TLS passthrough also retains the proxy peer unless transparent routing preserves source addresses. Do not enable PROXY protocol or depend on forwarded headers. Restrict direct upstream access with the firewall. Plain HTTP upstream termination is unsupported for secure browser sessions; use HTTPS upstream or passthrough.
 
-For testing, scoped loopback certificate exceptions are acceptable in tooling; they must not become a product-wide insecure mode. Consult [live testing](AGENT_LIVE_TESTING.md) and [deployment](../deploy/README.md).
+For testing, scoped loopback certificate exceptions are acceptable in tooling; they must not become a product-wide insecure mode. See [security](../SECURITY.md) and [deployment](../deploy/README.md).

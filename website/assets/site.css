@@ -45,6 +45,8 @@ header {
 .brand img {
   width:205px;
   height:auto}
+header .brand img {
+  width:256.25px}
 .brand {
   display:inline-block}
 header nav {
@@ -570,6 +572,8 @@ dialog p {
   display:block}
 .brand img {
   width:170px}
+header .brand img {
+  width:212.5px}
 header nav {
   margin-top:18px;
   justify-content:space-between;
@@ -676,3 +680,19 @@ footer>div:nth-child(2) {
   transition:none!important;
   animation:none!important}
 }
+
+/* Long-form guides share the existing site palette and stay usable on phones. */
+header a[aria-current="page"] { color:var(--blue); text-decoration:underline; text-underline-offset:8px; }
+.guide-hint { color:var(--muted); font-size:14px; max-width:650px; }
+.guide-layout aside nav { max-height:calc(100vh - 50px); overflow-y:auto; padding-bottom:16px; }
+.guide-layout aside a[aria-current="location"] { color:var(--ink); font-weight:700; }
+.guide-body h3 { margin-top:30px; }
+.table-scroll { overflow-x:auto; margin:24px 0; border:1px solid var(--line); border-radius:8px; }
+.table-scroll:focus-visible { outline:3px solid var(--warm); outline-offset:3px; }
+table { width:100%; border-collapse:collapse; font-size:14px; }
+th,td { text-align:left; vertical-align:top; padding:14px 16px; border-bottom:1px solid var(--line); }
+th { background:var(--panel); color:var(--ink); }
+td { color:#bdc9d5; min-width:140px; }
+tr:last-child td { border-bottom:0; }
+kbd { display:inline-block; font:12px ui-monospace,monospace; border:1px solid #60748b; border-bottom-width:3px; border-radius:4px; padding:2px 6px; color:var(--ink); white-space:nowrap; }
+@media(max-width:650px) { .guide-layout aside nav { max-height:none; overflow:visible; } th,td { padding:12px; } }

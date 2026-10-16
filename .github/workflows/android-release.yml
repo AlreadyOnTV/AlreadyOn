@@ -47,6 +47,7 @@ jobs:
       contents: write
       packages: read
       pull-requests: read
+      issues: read
     outputs:
       tag: ${{ steps.version.outputs.tag }}
       stage: ${{ steps.version.outputs.stage }}

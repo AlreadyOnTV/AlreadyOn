@@ -1,5 +1,6 @@
-"""Render reviewed release changes and the source snapshot of known issues."""
+"""Generate source-scoped product notes from GitHub PRs/issues; preserve built snapshots."""
 import re
+import json
 import subprocess
 
 SECTIONS = ('New Features', 'Bugfixes', 'Known Issues')
@@ -7,15 +8,9 @@ ALIASES = {'Features': 'New Features', 'Improvements': 'New Features', 'Bug fixe
 EMPTY = {'New Features': 'No new features in this release.',
          'Bugfixes': 'No bugfixes in this release.',
          'Known Issues': 'No known issues are currently listed for this release.'}
-KNOWN_ISSUES = 'docs/release-known-issues.md'
 START = '<!-- end-user-changelog:start -->'
 END = '<!-- end-user-changelog:end -->'
-DIRECTORY = 'docs/release-notes/'
 ANDROID_RELEASE_MARKER = '<!-- android-release -->'
-
-
-def git(*args):
-    return subprocess.check_output(['git', *args], text=True).strip()
 
 
 def render_fragments(fragments):
@@ -43,13 +38,6 @@ def render_fragments(fragments):
                          for section, entries in groups.items())
 
 
-def known_issues(sha):
-    """Read the reviewed list at the artifact source, never from a dirty checkout."""
-    if not git('ls-tree', '--name-only', sha, '--', KNOWN_ISSUES):
-        return ''
-    return git('show', f'{sha}:{KNOWN_ISSUES}')
-
-
 def promotion_changes(body):
     """Identical promoted artifacts add no changes; retain their reviewed known issues."""
     notes = render_fragments([published_changelog(body)])
@@ -57,44 +45,118 @@ def promotion_changes(body):
     return render_fragments(['# Known Issues\n\n' + known])
 
 
-def changelog(sha, stable_tags):
-    """Read notes at the release commit; unrelated branches cannot alter the baseline."""
-    bases = []
-    for tag in stable_tags:
-        if not re.fullmatch(r'\d{2}\.\d{2}\.\d{2}-[Ss]table', tag):
-            continue
-        result = subprocess.run(['git', 'merge-base', '--is-ancestor', tag, sha],
-                                capture_output=True)
-        if result.returncode == 0:
-            bases.append((int(git('rev-list', '--count', f'{tag}..{sha}')), tag))
-        elif result.returncode != 1:
-            raise ValueError(f'Cannot resolve stable release baseline {tag}')
-    if bases:
-        base = min(bases)[1]
-        files = git('diff', '--name-only', '--diff-filter=AM', base, sha, '--', DIRECTORY).splitlines()
-    else:
-        files = git('ls-tree', '-r', '--name-only', sha, '--', DIRECTORY).splitlines()
-    fragments = [git('show', f'{sha}:{name}') for name in sorted(files) if name.endswith('.md')]
-    return render_fragments(fragments + [known_issues(sha)])
+def github_json(*args):
+    """Read metadata through the workflow token; errors must stop publication."""
+    return json.loads(subprocess.check_output(['gh', *args], text=True))
 
 
-def changelog_since(sha, baseline_sha):
-    """Render product notes changed since the previous published release source."""
-    result = subprocess.run(['git', 'merge-base', '--is-ancestor', baseline_sha, sha],
-                            capture_output=True)
-    if result.returncode == 1:
-        raise ValueError('Changelog baseline must be an ancestor of the release source')
-    if result.returncode != 0:
-        raise subprocess.CalledProcessError(result.returncode, result.args)
-    files = git('diff', '--name-only', '--diff-filter=AM', baseline_sha, sha,
-                '--', DIRECTORY).splitlines()
-    fragments = []
-    for name in sorted(files):
-        if not name.endswith('.md'):
+def github_pages(endpoint):
+    pages = github_json('api', '--paginate', '--slurp', endpoint)
+    return [item for page in pages for item in page]
+
+
+def labels(item):
+    return {label['name'].lower() for label in item.get('labels', [])}
+
+
+def kind(item):
+    names = labels(item)
+    title = item.get('title', '').lower()
+    if re.match(r'(?:\[feature\]|feature(?: request)?:|feat(?:\([^)]*\))?:)', title):
+        return 'New Features'
+    if names & {'bug', 'type:bug'} or re.match(r'(?:\[bug\]|bug:|fix(?:\([^)]*\))?:)', title):
+        return 'Bugfixes'
+    if names & {'feature', 'enhancement', 'type:feature'} or re.match(r'(?:\[feature\]|feature:|feat(?:\([^)]*\))?:)', title):
+        return 'New Features'
+    return None
+
+
+def issue_line(issue):
+    # Preserve exact issue titles while keeping each generated entry on one line.
+    title = ' '.join(issue['title'].split())
+    return f"- [{title}]({issue['html_url']})"
+
+
+def priority(issue):
+    names = labels(issue)
+    for rank, aliases in enumerate([{'p0', 'priority:critical', 'critical'},
+                                    {'p1', 'priority:high', 'high'},
+                                    {'p2', 'priority:medium', 'medium'}]):
+        if names & aliases:
+            return rank, issue['number']
+    return 3, issue['number']
+
+
+def source_commits(sha, baseline_tag):
+    """Use Git ancestry, not merge dates, to exclude future and unrelated work."""
+    if baseline_tag:
+        subprocess.run(['git', 'merge-base', '--is-ancestor', baseline_tag, sha], check=True)
+    revision = f'{baseline_tag}..{sha}' if baseline_tag else sha
+    return subprocess.check_output(['git', 'rev-list', '--reverse', revision], text=True).splitlines()
+
+
+def generated_changes(repo, sha, baseline_tag):
+    commits = source_commits(sha, baseline_tag)
+    commit_set = set(commits)
+    prs = {}
+    for commit in commits:
+        for pr in github_pages(f'repos/{repo}/commits/{commit}/pulls?per_page=100'):
+            if pr.get('merged_at') and pr.get('merge_commit_sha') in commit_set:
+                prs[pr['number']] = pr
+    groups = {section: [] for section in SECTIONS}
+    fixed = set()
+    emitted = set()
+    for number in sorted(prs):
+        pr = github_json('pr', 'view', str(number), '--repo', repo,
+                         '--json', 'number,title,url,labels,closingIssuesReferences')
+        # Internal/dependency PRs never become product claims just because they merged.
+        if labels(pr) & {'dependencies', 'documentation', 'release:skip', 'chore', 'ci'}:
             continue
-        fragment = git('show', f'{sha}:{name}')
-        fragments.append(fragment)
-    return render_fragments(fragments + [known_issues(sha)])
+        linked_features = False
+        linked_bug = False
+        for ref in pr.get('closingIssuesReferences', []):
+            # Cross-repository issues cannot be fetched using a local issue number.
+            url = ref['url']
+            if not re.fullmatch(r'https://github\.com/' + re.escape(repo) + r'/issues/\d+', url):
+                continue
+            issue = github_json('api', f"repos/{repo}/issues/{ref['number']}")
+            section = kind(issue)
+            if section == 'Bugfixes':
+                fixed.add(issue['number'])
+                linked_bug = True
+            if section == 'New Features':
+                linked_features = True
+            if section and issue['number'] not in emitted:
+                groups[section].append(issue_line(issue))
+                emitted.add(issue['number'])
+        section = kind(pr)
+        if section == 'Bugfixes' and not linked_bug:
+            raise ValueError(f'Bugfix PR #{number} must link a closing bug issue for release notes')
+        if section == 'New Features' and not linked_features:
+            groups[section].append(f"- [{' '.join(pr['title'].split())}]({pr['url']})")
+    issues = github_pages(f'repos/{repo}/issues?state=open&per_page=100')
+    for issue in sorted(issues, key=priority):
+        if 'pull_request' in issue or kind(issue) != 'Bugfixes' or issue['number'] in fixed:
+            continue
+        if labels(issue) & {'duplicate', 'invalid', 'wontfix', 'release:skip'}:
+            continue
+        groups['Known Issues'].append(issue_line(issue))
+    return render_fragments(['# ' + section + '\n\n' + '\n'.join(lines)
+                             for section, lines in groups.items()])
+
+
+def candidate_changes(repo, entries, tag, sha, baseline_tag):
+    """Freeze metadata at the built candidate so later issue edits cannot alter reruns."""
+    entry = next((entry for entry in entries if entry['tag_name'] == tag), None)
+    body = (entry or {}).get('body') or ''
+    if START in body:
+        if re.findall(r'Source commit: `([0-9a-f]{40})`', body) != [sha]:
+            raise ValueError('Existing candidate notes belong to another source')
+        baseline = re.findall(r'Changelog baseline: `([^`]+)`', body)
+        if baseline != ([baseline_tag] if baseline_tag else []):
+            raise ValueError('Existing candidate notes belong to another predecessor')
+        return render_fragments([published_changelog(body)])
+    return generated_changes(repo, sha, baseline_tag)
 
 
 def published_changelog(body):

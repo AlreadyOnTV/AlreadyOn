@@ -224,6 +224,7 @@ jobs:
       contents: write
       packages: read
       pull-requests: read
+      issues: read
     uses: ./.github/workflows/android-release.yml
     with:
       operation: candidate

@@ -1,3 +1,4 @@
+// Phone and TV share release promotion prompts and APK installation progress.
 package io.github.alreadyonapp.alreadyon
 
 import androidx.compose.foundation.layout.Arrangement
@@ -27,6 +28,7 @@ import androidx.lifecycle.compose.LocalLifecycleOwner
 import androidx.lifecycle.compose.collectAsStateWithLifecycle
 import androidx.lifecycle.viewmodel.compose.viewModel
 
+/** The shared phone/TV prompt distinguishes APK installation from accepting a promoted release. */
 @Composable
 internal fun UpdatePrompt(visible: Boolean = true) {
     val model: AppUpdateModel = viewModel()
@@ -56,15 +58,16 @@ internal fun UpdateDialog(state: AppUpdateState, onUpdate: () -> Unit, onCancel:
         title = { Text(if (state.phase == UpdatePhase.ERROR) "Update could not finish" else "Update Available") },
         text = {
             Column(verticalArrangement = Arrangement.spacedBy(12.dp)) {
-                Text("Current version: ${BuildConfig.VERSION_NAME}")
+                Text("Current version: ${state.currentRelease.lowercase()}")
                 state.update?.let {
-                    Text("Available version: ${it.version}")
-                    if (it.release != it.version) Text("Release: ${it.release}")
+                    Text("Available version: ${it.release.lowercase()}")
                 }
                 when (state.phase) {
-                    UpdatePhase.AVAILABLE -> Text("Download and install the new version of AlreadyOn?")
+                    UpdatePhase.AVAILABLE -> Text(if (state.promotion)
+                        "This release uses your installed build. Update the app version shown to match this release?"
+                        else "Download and install the new version of AlreadyOn?")
                     UpdatePhase.DOWNLOADING -> {
-                        Text("Downloading… ${(state.progress * 100).toInt()}%")
+                        Text(if (state.promotion) "Updating release…" else "Downloading… ${(state.progress * 100).toInt()}%")
                         LinearProgressIndicator(progress = { state.progress }, modifier = Modifier.fillMaxWidth())
                     }
                     UpdatePhase.PERMISSION -> Text("Allow AlreadyOn to install apps in Android settings. Installation will continue when you return.")
