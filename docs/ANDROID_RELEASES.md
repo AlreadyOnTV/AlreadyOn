@@ -12,7 +12,7 @@ Use the active dated branch in one checkout; see [development setup](DEVELOPMENT
 | Merge tested date commit from `dev` to `test` | `YY.MM.DD-RCN` | `YY.MM.DD-rcN` | Retag image `latest`; publish/copy tested APK bytes |
 | Merge current `test` release into `main` | `YY.MM.DD-Stable` | `YY.MM.DD-stable` | Retag image `stable`; publish the latest RC APK bytes |
 
-RC1 reuses alpha APK bytes. Later dev hotfixes build a draft for the next RC; test promotion publishes it. RC drafts include product notes since the prior stage; identical-artifact promotions add no new changes and retain known issues. Stable reuses the latest RC APKs and locks the date.
+RC1 normally reuses alpha APK bytes. For a maintainer-approved direct RC1 build, reserve an unpublished `YY.MM.DD-RC1` draft targeting the exact dev source before candidate allocation. The dev pipeline builds that draft after full validation, then test promotion publishes its exact assets. Replacing an existing RC1 requires explicit approval, removal of its release/tag, and reservation of the replacement draft with a new version code; the publisher never overwrites published assets. Later dev hotfixes build a draft for the next RC; test promotion publishes it. RC drafts include product notes since the prior stage; identical-artifact promotions add no new changes and retain known issues. Stable reuses the latest RC APKs and locks the date.
 
 The date tag advances after dev validation. Alpha changelogs include all product notes since the predecessor tag, including server/WebUI changes. Promotions reuse the tested image digest and signed APKs; no rebuild/re-sign occurs.
 

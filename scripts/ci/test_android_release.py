@@ -81,6 +81,17 @@ class AndroidReleaseTests(unittest.TestCase):
         with self.assertRaisesRegex(ValueError, "is stable"):
             release.next_dev_tag(entries, "26.10.10")
 
+    def test_reserved_rc1_draft_skips_alpha_without_replacing_published_rc(self):
+        entries = [{"tag_name": "26.10.10-alpha4", "draft": False},
+                   {"tag_name": "26.10.10-RC1", "draft": True}]
+        self.assertEqual(release.next_dev_tag(entries, "26.10.10"), "26.10.10-RC1")
+        self.assertEqual(release.next_dev_tag(entries, "26.10.11"), "26.10.11-alpha1")
+        entries[-1]["draft"] = False
+        self.assertEqual(release.next_dev_tag(entries, "26.10.10"), "26.10.10-RC2")
+        entries.append({"tag_name": "26.10.10-Stable", "draft": False})
+        with self.assertRaisesRegex(ValueError, "is stable"):
+            release.next_dev_tag(entries, "26.10.10")
+
     def test_cleanup_removes_only_legacy_betas_for_same_date(self):
         entries = [{"tag_name": "26.10.10-beta", "draft": False},
                    {"tag_name": "26.10.10-beta2", "draft": False},

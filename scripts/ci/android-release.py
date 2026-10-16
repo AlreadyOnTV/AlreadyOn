@@ -77,6 +77,11 @@ def next_dev_tag(entries, day):
            if tag and tag[0] == day and tag[1] == "rc" and not entry.get("draft", False)]
     if rcs:
         return f"{day}-RC{max(rcs) + 1}"
+    # An explicitly reserved RC1 draft permits approved direct-RC publication or
+    # replacement without allocating another alpha. Published assets remain immutable.
+    if any(tag and tag[0] == day and tag[1:] == ("rc", 1) and entry.get("draft", False)
+           for entry, tag in parsed):
+        return f"{day}-RC1"
     alphas = [tag[2] for entry, tag in parsed
               if tag and tag[0] == day and tag[1] == "alpha" and not entry.get("draft", False)]
     return f"{day}-alpha{max(alphas, default=0) + 1}"
