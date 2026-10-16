@@ -42,4 +42,23 @@ class UpdatePolicyTest {
             "https://github.com/AlreadyOnTV/AlreadyOn/releases/download/../a.apk")) assertFalse(validUpdateAsset(url))
         assertTrue(validUpdateAsset(update.url))
     }
+
+    @Test fun identicalApkPromotionsAdvanceStagesOnly() {
+        val rc = update.copy(release = "26.10.11-RC1")
+        assertTrue(eligibleUpdate(rc, 24, "tv", update.release, update.hash))
+        assertFalse(eligibleUpdate(rc, 24, "tv", rc.release, update.hash))
+        assertFalse(eligibleUpdate(rc, 24, "tv", "26.10.11-Stable", update.hash))
+        assertFalse(eligibleUpdate(rc, 24, "tv", update.release, "b".repeat(64)))
+        assertFalse(eligibleUpdate(rc, 24, "tv", update.release, null))
+        assertFalse(eligibleUpdate(rc, 24, "phone", update.release, update.hash))
+        assertFalse(eligibleUpdate(rc, 25, "tv", update.release, update.hash))
+    }
+    @Test fun releaseStagesSortNumericallyAcrossLegacyNames() {
+        assertTrue(newerRelease("26.10.11-RC10", "26.10.11-rc9"))
+        assertTrue(newerRelease("26.10.11-Stable", "2026-10-11-RC10"))
+        assertTrue(newerRelease("26.10.11-alpha10", "26.10.11-alpha9"))
+        assertFalse(newerRelease("26.10.11-rc1", "26.10.11-Stable"))
+        assertFalse(newerRelease("26.10.11-rc1", "2026-10-11-RC1"))
+        assertFalse(newerRelease("invalid", "26.10.11-alpha1"))
+    }
 }

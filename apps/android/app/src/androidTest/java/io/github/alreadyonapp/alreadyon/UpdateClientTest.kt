@@ -90,7 +90,7 @@ class UpdateClientTest {
         val store = UpdateInstallStore(context)
         try {
             InstrumentationRegistry.getInstrumentation().context.assets.open(if (BuildConfig.IS_TV) "update-tv-test.apk" else "update-phone-test.apk").use { input -> store.apk.outputStream().use { input.copyTo(it) } }
-            val update = AppUpdate("test", "updater-test-24", 24, if (BuildConfig.IS_TV) "tv" else "phone",
+            val update = AppUpdate("test", "26.10.11-alpha5", 24, if (BuildConfig.IS_TV) "tv" else "phone",
                 "https://github.com/$UPDATE_REPOSITORY/releases/download/test/a.apk", "0".repeat(64), store.apk.length())
             verifyUpdateApk(context, store.apk, update)
             for (bad in listOf(update.copy(target = if (BuildConfig.IS_TV) "phone" else "tv"), update.copy(code = 23), update.copy(version = "wrong"))) {
@@ -104,7 +104,7 @@ class UpdateClientTest {
         unrelated.edit().putString("server", "https://synthetic.invalid").commit()
         try {
             InstrumentationRegistry.getInstrumentation().context.assets.open(if (BuildConfig.IS_TV) "update-tv-test.apk" else "update-phone-test.apk").use { input -> store.apk.outputStream().use { input.copyTo(it) } }
-            val update = AppUpdate("test", "updater-test-24", 24, if (BuildConfig.IS_TV) "tv" else "phone", "", "", store.apk.length())
+            val update = AppUpdate("test", "26.10.11-alpha5", 24, if (BuildConfig.IS_TV) "tv" else "phone", "", "", store.apk.length())
             val id = stageUpdate(context, update)
             assertEquals(id, store.session()!!.sessionId)
             assertFalse(store.completeIfInstalled())
@@ -114,5 +114,44 @@ class UpdateClientTest {
             assertFalse(store.apk.exists())
             assertEquals("https://synthetic.invalid", unrelated.getString("server", null))
         } finally { store.clear(); unrelated.edit().clear().commit() }
+    }
+
+    @Test fun identicalPromotionsSelectLatestStageAndStopAfterAcceptance() = runBlocking {
+        val checker = service { url -> when {
+            url.contains("api.github.com") -> JSONArray().put(entry("26.10.11-alpha4", 24))
+                .put(entry("26.10.11-RC9", 24)).put(entry("26.10.11-RC10", 24)).toString()
+            else -> manifest(24, "26.10.11-alpha4").toString()
+        } }
+        for (tv in listOf(false, true)) {
+            val update = checker.check("26.10.11-alpha4", 24, tv, installedHash = hash(bytes))!!
+            assertEquals("26.10.11-RC10", update.release)
+            assertNull(checker.check("26.10.11-alpha4", 24, tv, update.release, hash(bytes)))
+            assertNull(checker.check("26.10.11-alpha4", 24, tv, installedHash = "0".repeat(64)))
+        }
+        val stable = service { url -> if (url.contains("api.github.com"))
+            JSONArray().put(entry("26.10.11-Stable", 24, preview = false)).toString()
+            else manifest(24, "26.10.11-alpha4").toString() }
+        assertEquals("26.10.11-Stable", stable.check("26.10.11-alpha4", 24, false,
+            "26.10.11-RC10", hash(bytes))!!.release)
+    }
+    @Test fun acceptedReleaseSurvivesInstallerCleanupAndRejectsDifferentApks() {
+        val prefs = context.getSharedPreferences("accepted-release", 0)
+        val accepted = AcceptedRelease(context)
+        val embedded = context.packageManager.getPackageInfo(context.packageName, 0).versionName.orEmpty()
+        val hash = installedApkHash(context)
+        val update = AppUpdate("26.10.11-RC1", embedded, installedVersionCode(context),
+            if (BuildConfig.IS_TV) "tv" else "phone", "", hash, 1)
+        try {
+            assertEquals(embedded, accepted.current(hash))
+            accepted.accept(update)
+            UpdateInstallStore(context).clear()
+            assertEquals("26.10.11-RC1", AcceptedRelease(context).current(hash))
+            accepted.accept(update.copy(release = "26.10.11-Stable"))
+            assertEquals("26.10.11-Stable", AcceptedRelease(context).current(hash))
+            assertEquals(embedded, AcceptedRelease(context).current("different APK"))
+            try { accepted.accept(update.copy(hash = "0".repeat(64))); fail("Different APK accepted") }
+            catch (_: IllegalStateException) { }
+            assertEquals("26.10.11-Stable", prefs.getString("release", null))
+        } finally { prefs.edit().clear().commit() }
     }
 }

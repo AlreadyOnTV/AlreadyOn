@@ -73,17 +73,20 @@ def main():
             files = run(*adb, "shell", "run-as", PACKAGE, "find", "files", "-name", "update.apk", capture=True)
             if files.strip():
                 raise SystemExit("Downloaded APK was not cleaned up after replacement")
+            accepted = run(*adb, "shell", "run-as", PACKAGE, "cat", "shared_prefs/accepted-release.xml", capture=True)
+            if "26.10.11-RC2" not in accepted:
+                raise SystemExit("Accepted RC release label was lost after APK replacement")
             focus = run(*adb, "shell", "dumpsys", "window", capture=True)
             automatic = any(PACKAGE in line for line in focus.splitlines() if "mCurrentFocus=" in line)
-            print(f"PASS: APK 23 -> 24, Android approval, settings preserved, download cleaned; automatic relaunch={automatic}")
+            print(f"PASS: APK 23 -> 24, Android approval, settings and RC label preserved, download cleaned; automatic relaunch={automatic}")
             run(*adb, "shell", "rm", "-f", "/sdcard/alreadyon-update-test.xml")
         try:
-            run(*gradle, "-PandroidVersionCode=24", "-PandroidVersionName=updater-test-24",
+            run(*gradle, "-PandroidVersionCode=24", "-PandroidVersionName=26.10.11-alpha5",
                 ":app:assembleDebug", ":tv:assembleDebug")
             for target, module in (("phone", "app"), ("tv", "tv")):
                 shutil.copyfile(ROOT / f"apps/android/{module}/build/outputs/apk/debug/{module}-debug.apk",
                                 assets / f"update-{target}-test.apk")
-            run(*gradle, "-PandroidVersionCode=23", "-PandroidVersionName=updater-test-23",
+            run(*gradle, "-PandroidVersionCode=23", "-PandroidVersionName=26.10.11-alpha4",
                 f"-PandroidUpdateTestAssetsDirectory={assets}", ":app:testDebugUnitTest",
                 ":app:assembleDebug", ":app:assembleDebugAndroidTest", ":tv:assembleDebug", ":tv:assembleDebugAndroidTest")
             for module in ("app", "tv"):
@@ -97,7 +100,7 @@ def main():
                     args.screenshots.mkdir(parents=True, exist_ok=True)
                     with (args.screenshots / f"updater-{module}.png").open("wb") as screenshot:
                         subprocess.run([*adb, "exec-out", "run-as", PACKAGE, "cat", "cache/update-dialog.png"], check=True, stdout=screenshot)
-                if "FAILURES" in output or "INSTRUMENTATION_FAILED" in output or "OK (9 tests)" not in output:
+                if "FAILURES" in output or "INSTRUMENTATION_FAILED" in output or "OK (12 tests)" not in output:
                     raise SystemExit(f"{module} updater instrumentation failed")
                 verify_install_cycle()
                 run(*adb, "uninstall", f"{PACKAGE}.test")

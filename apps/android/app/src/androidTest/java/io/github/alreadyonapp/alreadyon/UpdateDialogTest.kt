@@ -60,4 +60,19 @@ class UpdateDialogTest {
         compose.runOnIdle { assertTrue(cancelled) }
     }
 
+
+    @Test fun promotionDialogShowsReleaseLabelsAndExplainsNoInstall() {
+        var accepted = false
+        compose.runOnUiThread { compose.activity.setContent { PhoneTheme {
+            UpdateDialog(AppUpdateState(AppUpdate("26.10.11-Stable", "26.10.11-alpha4", 24,
+                if (BuildConfig.IS_TV) "tv" else "phone", "", "", 1),
+                currentRelease = "26.10.11-RC1", promotion = true),
+                { accepted = true }, {}, {}, {})
+        } } }
+        compose.onNodeWithText("Current version: 26.10.11-rc1").assertIsDisplayed()
+        compose.onNodeWithText("Available version: 26.10.11-stable").assertIsDisplayed()
+        compose.onNodeWithText("This release uses your installed build. Update the app version shown to match this release?").assertIsDisplayed()
+        compose.onNodeWithText("Update").performClick()
+        compose.runOnIdle { assertTrue(accepted) }
+    }
 }

@@ -17,7 +17,8 @@ class UpdateInstallationFixture {
         instrumentation.context.assets.open(if (BuildConfig.IS_TV) "update-tv-test.apk" else "update-phone-test.apk").use { input ->
             store.apk.outputStream().use { input.copyTo(it) }
         }
-        val update = AppUpdate("test", "updater-test-24", 24, if (BuildConfig.IS_TV) "tv" else "phone", "", "", store.apk.length())
+        val hash = java.security.MessageDigest.getInstance("SHA-256").digest(store.apk.readBytes()).joinToString("") { "%02x".format(it) }
+        val update = AppUpdate("26.10.11-RC2", "26.10.11-alpha5", 24, if (BuildConfig.IS_TV) "tv" else "phone", "", hash, store.apk.length())
         verifyUpdateApk(context, store.apk, update)
         stageUpdate(context, update)
         Unit

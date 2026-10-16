@@ -50,7 +50,7 @@ internal class GitHubUpdates(private val client: OkHttpClient = updateHttpClient
         }
     }
 
-    suspend fun check(version: String, code: Long, tv: Boolean): AppUpdate? {
+    suspend fun check(version: String, code: Long, tv: Boolean, release: String = version, installedHash: String? = null): AppUpdate? {
         val releases = mutableListOf<JSONObject>()
         // Bound startup work while including prereleases and multiple pages of published history.
         for (page in 1..10) {
@@ -63,7 +63,7 @@ internal class GitHubUpdates(private val client: OkHttpClient = updateHttpClient
         }
         // Stable promotion reuses the alpha/RC APK bytes and versionName. Once those
         // installed bytes have a stable counterpart, keep this installation on stable.
-        var stableTrack = version.endsWith("-stable", ignoreCase = true)
+        var stableTrack = release.endsWith("-stable", ignoreCase = true)
         if (!stableTrack) {
             for (entry in releases.filter { acceptsUpdateRelease("-stable", it.optString("tag_name"), false, it.optBoolean("prerelease")) }) {
                 val hint = Regex("Android versionCode: `(\\d+)`").find(entry.optString("body"))?.groupValues?.get(1)?.toLongOrNull()
@@ -85,7 +85,7 @@ internal class GitHubUpdates(private val client: OkHttpClient = updateHttpClient
         for (entry in releases.filter { acceptsUpdateRelease(if (stableTrack) "-stable" else version, it.optString("tag_name"), false, it.optBoolean("prerelease")) }.sortedByDescending { it.getString("tag_name").lowercase() }) {
             // The description is only a fetch optimization; manifest and APK verification are authoritative.
             val hint = Regex("Android versionCode: `(\\d+)`").find(entry.optString("body"))?.groupValues?.get(1)?.toLongOrNull()
-            if (hint != null && hint <= maxOf(code, newest?.code ?: 0)) continue
+            if (hint != null && hint < maxOf(code, newest?.code ?: 0)) continue
             val assets = entry.optJSONArray("assets") ?: continue
             fun asset(name: String): JSONObject? = (0 until assets.length()).map { assets.getJSONObject(it) }.singleOrNull { it.optString("name") == name }
             val descriptor = asset("android-release.json") ?: continue
@@ -99,7 +99,10 @@ internal class GitHubUpdates(private val client: OkHttpClient = updateHttpClient
             val update = AppUpdate(entry.getString("tag_name"), metadata.getString("version_name"),
                 metadata.getLong("version_code"), target, apk.getString("browser_download_url"),
                 artifact.getString("sha256"), apk.getLong("size"))
-            if (verifiedUpdateMetadata(update, maxOf(code, newest?.code ?: 0), target)) newest = update
+            if ((update.code != code || update.version == version) &&
+                eligibleUpdate(update, code, target, release, installedHash) &&
+                (newest == null || update.code > newest.code ||
+                    (update.code == newest.code && newerRelease(update.release, newest.release)))) newest = update
         }
         return newest
     }
