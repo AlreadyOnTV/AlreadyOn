@@ -202,6 +202,85 @@ class AndroidReleaseTests(unittest.TestCase):
                     release.candidate("owner/repo", "26.10.10-Stable", "a" * 40, 1, directory)
                 publish.assert_not_called()
 
+    def test_direct_stable_requires_exact_source_image_evidence(self):
+        with patch.object(release, "image_source", return_value="ghcr.io/owner/repo:sha-unvalidated"), \
+                patch.object(release, "publish") as publish:
+            with self.assertRaisesRegex(ValueError, "validated image digest"):
+                release.candidate("owner/repo", "26.10.10-Stable", "a" * 40, 1, Path("unused"), direct_stable=True)
+            publish.assert_not_called()
+
+    def test_direct_stable_build_publishes_stable_bytes_and_notes(self):
+        with tempfile.TemporaryDirectory() as temp:
+            directory = Path(temp)
+            (directory / release.ASSETS[0]).write_bytes(b"signed phone")
+            (directory / release.ASSETS[3]).write_bytes(b"signed TV")
+            with patch.object(release, "image_source", return_value="ghcr.io/owner/repo@sha256:" + "d" * 64), \
+                    patch.object(release, "releases", return_value=[{"tag_name": "26.10.10-RC1", "draft": False}]), \
+                    patch.object(release, "candidate_changes", return_value="# New Features\n\n- Open guide directly.") as changes, \
+                    patch.object(release, "publish") as publish:
+                release.candidate("owner/repo", "26.10.10-Stable", "a" * 40, 200000001, directory, direct_stable=True)
+                manifest = release.verify_assets(directory, "a" * 40)
+                self.assertEqual(manifest["version_name"], "26.10.10-Stable")
+                self.assertEqual(manifest["version_code"], 200000001)
+                self.assertEqual(changes.call_args.args[-1], "26.10.10-RC1")
+                self.assertFalse(publish.call_args.args[-1])
+                self.assertTrue(publish.call_args.kwargs["publish_now"])
+                self.assertIn("Open guide directly", publish.call_args.args[-2])
+
+    def test_direct_stable_allocation_does_not_allocate_an_rc(self):
+        with patch.object(release, "image_source", return_value="ghcr.io/owner/repo@sha256:" + "d" * 64), \
+                patch.object(release, "releases", return_value=[{"tag_name": "26.10.10-RC1", "draft": False}]), \
+                patch.object(release, "run", return_value="") as run, patch("builtins.print") as output:
+            release.plan_stable("owner/repo", "a" * 40, "26.10.10")
+            output.assert_any_call("tag=26.10.10-Stable")
+            output.assert_any_call("stage=stable")
+            output.assert_any_call("existing=false")
+            run.assert_called_once_with("git", "tag", "--list", "26.10.10-Stable")
+
+    def test_direct_stable_draft_cannot_replace_another_source(self):
+        entry = {"tag_name": "26.10.10-Stable", "draft": True, "body": "Source commit: `" + "b" * 40 + "`"}
+        with patch.object(release, "image_source", return_value="ghcr.io/owner/repo@sha256:" + "d" * 64), \
+                patch.object(release, "releases", return_value=[entry]), patch.object(release, "run") as run:
+            with self.assertRaisesRegex(ValueError, "different source"):
+                release.plan_stable("owner/repo", "a" * 40, "26.10.10")
+            run.assert_not_called()
+
+    def test_complete_stable_draft_resumes_without_rebuilding(self):
+        sha = "a" * 40
+        entry = {"tag_name": "26.10.10-Stable", "draft": True, "target_commitish": sha,
+                 "body": f"Source commit: `{sha}`\nAndroid versionCode: `200000001`",
+                 "assets": [{"name": name} for name in release.ASSETS]}
+        with patch.object(release, "image_source", return_value="ghcr.io/owner/repo@sha256:" + "d" * 64), \
+                patch.object(release, "releases", return_value=[entry]), \
+                patch.object(release, "download"), patch.object(release, "verify_assets", return_value={"inventory": {}, "version_name": "26.10.10-Stable", "version_code": 200000001}) as verify, \
+                patch.object(release, "run") as run, patch("builtins.print") as output:
+            release.plan_stable("owner/repo", sha, "26.10.10")
+            self.assertEqual(verify.call_args.args[1], sha)
+            output.assert_any_call("existing=true")
+            output.assert_any_call("version_code=200000001")
+            run.assert_called_once_with("gh", "release", "edit", "26.10.10-Stable", "--repo", "owner/repo",
+                                        "--draft=false", "--prerelease=false", "--latest=true")
+
+    def test_stable_branch_sync_reuses_assets_without_an_rc(self):
+        sha = "a" * 40
+        entry = {"tag_name": "26.10.09-Stable", "draft": False, "body": f"Source commit: `{sha}`"}
+        with patch.object(release, "releases", return_value=[entry]), \
+                patch.object(release, "api", return_value={"sha": sha}), \
+                patch.object(release, "download", side_effect=lambda repo, tag, directory: self.fixture(directory)), \
+                patch.object(release, "publish") as publish:
+            self.assertEqual(release.promote_test("owner/repo", "26.10.09", sha), entry["tag_name"])
+            self.assertEqual(release.promote_stable("owner/repo", "26.10.09", sha), entry["tag_name"])
+            publish.assert_not_called()
+
+    def test_branch_sync_rejects_a_stable_from_another_source(self):
+        entry = {"tag_name": "26.10.09-Stable", "draft": False, "body": "Source commit: `" + "b" * 40 + "`"}
+        with patch.object(release, "releases", return_value=[entry]), patch.object(release, "publish") as publish:
+            for promote in (release.promote_test, release.promote_stable):
+                with self.assertRaisesRegex(ValueError, "different source"):
+                    promote("owner/repo", "26.10.09", "a" * 40)
+            publish.assert_not_called()
+
+
     def test_stable_reuses_exact_candidate_bytes_and_commit(self):
         def download(repo, tag, directory):
             self.fixture(directory)

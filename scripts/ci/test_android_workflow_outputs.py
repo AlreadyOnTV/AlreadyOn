@@ -11,6 +11,18 @@ SHA = 'a' * 40
 
 
 class PromotionOutputs(unittest.TestCase):
+    def test_direct_stable_only_runs_through_validated_manual_dev_build(self):
+        workflow = yaml.safe_load((ROOT / '.github/workflows/android-release.yml').read_text())
+        guard = workflow['jobs']['candidate']['if']
+        for condition in ("inputs.operation == 'direct-stable'", "github.event_name == 'workflow_dispatch'",
+                          "github.ref == 'refs/heads/dev'", "github.workflow == 'Build Date Release Image'"):
+            self.assertIn(condition, guard)
+        parent = yaml.safe_load((ROOT / '.github/workflows/rebuild.yml').read_text())
+        self.assertIn("inputs.publication == 'stable'", parent['jobs']['android']['with']['operation'])
+        self.assertIn('tests', parent['jobs']['android']['needs'])
+        self.assertIn('publish', parent['jobs']['android']['needs'])
+        self.assertIn('codeql', parent['jobs']['publish']['needs'])
+
     def test_push_and_dispatch_outputs_are_machine_readable(self):
         workflow = yaml.safe_load((ROOT / '.github/workflows/android-release.yml').read_text())
         for job, step_name in [('promote_test', 'Select tested source and release date'),
