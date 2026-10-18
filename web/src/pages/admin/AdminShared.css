@@ -1386,6 +1386,9 @@ button.admin-badge:disabled {
 .disk-metric-row > :not(:first-child) {
   text-align: right;
 }
+.disk-metric-row > :first-child {
+  text-align: left;
+}
 .disk-metric-header {
   font-weight: 700;
 }
