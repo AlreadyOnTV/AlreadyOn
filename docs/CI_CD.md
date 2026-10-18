@@ -6,9 +6,9 @@ Maintainers control releases; keep credentials private. [Release notes](RELEASE_
 
 ## Development and releases
 
-`release-date.txt` pins the active cycle to `26.10.18`. Reuse until Stable on main, then begin another.
+`release-date.txt` pins the active cycle to `26.10.25`. Reuse until Stable on main, then begin another.
 
-Use the primary checkout, `26.10.18`, and HTTPS preview on port 5173. Dated dev PRs run full quality, source/browser/runtime and security gates. Explicit active-date dispatches run these gates and publish alpha artifacts without merging or deleting the branch. Dev merges republish date/`nightly` images and Android candidates, advance the date tag and delete the merged branch. Hotfixes repeat the gates.
+Use the primary checkout, `26.10.25`, and HTTPS preview on port 5173. Dated dev PRs run full quality, source/browser/runtime and security gates. Explicit active-date dispatches run these gates and publish alpha artifacts without merging or deleting the branch. Dev merges republish date/`nightly` images and Android candidates, advance the date tag and delete the merged branch. Hotfixes repeat the gates.
 
 Local checks: `make lint`, documentation and syntax checks.
 
@@ -40,4 +40,4 @@ PR validation scans the exact patched candidate with read-only credentials; publ
 
 CodeQL analyzes Go/TypeScript on dev/test/main; Pages uses its independent organization-site workflow. Android automation builds alpha on dev, RC on test and Stable from RC artifacts on main; see [Android policy](ANDROID_RELEASES.md).
 
-New images use `ghcr.io/alreadyontv/alreadyon`. Go module and Android package identities stay compatible. Stable is intended for October 18, 2026, after alpha/RC acceptance; no automatic deployment is scheduled. **Refresh Base Images** rebuilds shared bases; CI bases pin their runtime digest. Promotions reuse digests.
+New images use `ghcr.io/alreadyontv/alreadyon`. Go module and Android package identities stay compatible. Stable is intended for October 25, 2026, after alpha/RC acceptance; no automatic deployment is scheduled. **Refresh Base Images** rebuilds shared bases; CI bases pin their runtime digest. Promotions reuse digests.
