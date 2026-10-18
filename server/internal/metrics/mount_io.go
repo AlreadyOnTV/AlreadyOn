@@ -1,3 +1,4 @@
+// This file resolves container mount paths to device-level resource counters.
 package metrics
 
 import (

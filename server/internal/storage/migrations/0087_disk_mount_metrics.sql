@@ -1,4 +1,5 @@
 -- +goose Up
+-- Store sampled container I/O metrics separately for config and media mounts.
 CREATE TABLE server_disk_mount_metrics (
  at_unix INTEGER NOT NULL REFERENCES server_metrics(at_unix) ON DELETE CASCADE,
  mount TEXT NOT NULL CHECK (mount IN ('config','media')),
