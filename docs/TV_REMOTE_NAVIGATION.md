@@ -8,7 +8,7 @@ Guide arrows update the details beside the preview using the selected program’
 
 The guide receives default focus. Arrows wrap between channels and programs. Back restores the watched airing; when already focused there, Back opens the profile menu with Switch Profile focused. A second Back within two seconds exits to Google TV Home. Otherwise Back closes the menu and restores the watched airing. Menu arrows stay within the popup and cancel double-Back exit. Exit App below Sign Out also closes the app, preserving the saved session.
 
-After the first profile selection or restoration, a static remote tutorial appears once per installation. **Got it** or Back dismisses it and opens the guide. The acknowledgement survives updates and sign-out; uninstalling resets it. The tutorial mounts no player/guide and has no animations or timers.
+After profile selection or restoration, the guide opens directly with the saved channel or first available channel.
 
 **AlreadyOn TV Test** updates preserve its encrypted session; uninstalling removes it. See [device review](TV_DEVICE_REVIEW.md) for the physical remote checks.
 
