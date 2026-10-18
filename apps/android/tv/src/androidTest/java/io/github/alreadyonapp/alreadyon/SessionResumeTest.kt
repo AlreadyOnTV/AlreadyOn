@@ -47,7 +47,6 @@ class SessionResumeTest {
         val selected = model.state.value.profiles.first()
         compose.runOnIdle { model.selectProfile(selected, "") }
         compose.waitUntil(15000) { model.state.value.profile != null && !model.state.value.busy }
-        compose.runOnIdle { model.finishTvTutorial() }
 
         // A separate in-memory WebUI session exercises server revocation without replacing native cookies.
         val jar = object : CookieJar {

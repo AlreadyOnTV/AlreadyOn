@@ -75,7 +75,6 @@ internal fun TvShell(state: PhoneState, model: PhoneModel) {
     }
     BackHandler(enabled = fullscreen || state.settings != null || state.profile != null) {
         when {
-            state.tvTutorial -> model.finishTvTutorial()
             fullscreen -> { fullscreen = false; returnToGuide(); manager.clearFocus() }
             state.settings != null -> model.closeSettings()
             else -> guideBack()
@@ -88,13 +87,6 @@ internal fun TvShell(state: PhoneState, model: PhoneModel) {
             .padding(top = if (fullscreen) 0.dp else 12.dp)
             .onPreviewKeyEvent { event ->
                 if (event.key != Key.Back && event.type == KeyEventType.KeyDown) exitBackAt = null
-                if (state.tvTutorial) {
-                    if (event.key == Key.Back) {
-                        if (event.type == KeyEventType.KeyUp) model.finishTvTutorial()
-                        return@onPreviewKeyEvent true
-                    }
-                    return@onPreviewKeyEvent false
-                }
                 if (!fullscreen) {
                     if (event.key == Key.Back && state.profile != null && state.settings == null && (region == "guide" || exitBackAt != null)) {
                         if (event.type == KeyEventType.KeyUp) guideBack()
@@ -162,7 +154,6 @@ internal fun TvShell(state: PhoneState, model: PhoneModel) {
                 state.settings == "profile" -> ProfileSettingsScreen(state, model)
                 state.settings == "dashboard" -> DashboardScreen(state, model, Modifier.weight(1f))
                 state.profile == null -> ProfileScreen(state, model, Modifier.weight(1f))
-                state.tvTutorial -> TvNavigationTutorial(Modifier.weight(1f), model::finishTvTutorial)
                 else -> {
                     if (state.channel != null) {
                         // One player call site keeps the stream/settings alive when returning to the guide.
