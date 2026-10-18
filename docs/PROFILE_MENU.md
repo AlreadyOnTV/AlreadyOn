@@ -20,9 +20,6 @@ Day fields save on blur independently of Save Changes. Successful saves show a g
 
 Owner-only **Remove Inactive Sessions** defaults to On and 14 days. It applies to existing and future sessions even with Never Expire enabled. Activity includes authenticated API and media requests; missing historical activity falls back to creation time. Sessions idle longer than the threshold are invalid immediately and removed on startup, hourly, when listing sessions, or after policy changes. Turning cleanup off does not restore removed sessions.
 
-
 See [saved API credential entry](SAVED_CREDENTIALS.md) for draft-only visibility controls.
-
-
 
 Active WebUI, phone and TV clients refresh shared profile settings and avatars every five minutes and when visible/resumed. Native Sign Out retains the encrypted session for recent-server reconnection; WebUI session revocation remains authoritative. Profile PINs and local drafts remain independent.

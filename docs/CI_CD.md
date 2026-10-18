@@ -12,7 +12,6 @@ Use the primary checkout, `26.10.18`, and HTTPS preview on port 5173. Dated dev 
 
 Local checks: `make lint`, documentation and syntax checks.
 
-
 ## Approved release validation
 
 `make release-check` requires a clean checkout and performs:
@@ -22,8 +21,6 @@ Local checks: `make lint`, documentation and syntax checks.
 3. Go regressions using patched production FFmpeg (`make test-go-runtime`).
 4. Full synthetic browser suite (`make test-e2e`).
 5. Disposable packaged-runtime checks (`make test-container`).
-
-
 
 Resolve failures. Record the commit, image ID/digest and actual results. Live checks are non-destructive; synthetic suites use isolated data.
 
