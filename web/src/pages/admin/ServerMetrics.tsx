@@ -490,9 +490,7 @@ export default function ServerMetrics({ actions }: { actions?: ReactNode }) {
                 style={{ color: palette[0] }}
               >
                 Load:{" "}
-                {current?.cpuLoad == null
-                  ? "N/A"
-                  : current.cpuLoad.toFixed(2)}
+                {current?.cpuLoad == null ? "N/A" : current.cpuLoad.toFixed(2)}
               </span>
               <span
                 className="metric-help"
@@ -819,9 +817,7 @@ export default function ServerMetrics({ actions }: { actions?: ReactNode }) {
               <>
                 <span>
                   Load:{" "}
-                  {nearest.cpuLoad == null
-                    ? "N/A"
-                    : nearest.cpuLoad.toFixed(2)}
+                  {nearest.cpuLoad == null ? "N/A" : nearest.cpuLoad.toFixed(2)}
                 </span>
                 <span>Pressure: {format(nearest.cpuPressure, "%")}</span>
                 <span>Utilization: {format(nearest.cpu, "%")}</span>
@@ -878,10 +874,12 @@ export default function ServerMetrics({ actions }: { actions?: ReactNode }) {
                   <div className="metric-tooltip-volume" key={mount}>
                     <strong>{mount === "config" ? "Config" : "Media"}</strong>
                     <span>
-                      Bandwidth (r/w): {formatPair(metric?.readMBps, metric?.writeMBps, "MB/s")}
+                      Bandwidth (r/w):{" "}
+                      {formatPair(metric?.readMBps, metric?.writeMBps, "MB/s")}
                     </span>
                     <span>
-                      IOPS (r/w): {formatPair(metric?.readIOPS, metric?.writeIOPS, "IOPS")}
+                      IOPS (r/w):{" "}
+                      {formatPair(metric?.readIOPS, metric?.writeIOPS, "IOPS")}
                     </span>
                     <span>
                       Latency: {format(metric?.averageLatencyMs, "ms")}
