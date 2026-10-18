@@ -5,7 +5,7 @@ on:
   workflow_call:
     inputs:
       operation:
-        description: Build an alpha/draft RC or promote exact tested APK artifacts
+        description: Build a validated candidate/direct Stable or promote exact tested APK artifacts
         type: string
         required: true
       release_date:
@@ -40,7 +40,7 @@ concurrency:
   cancel-in-progress: false
 jobs:
   candidate:
-    if: inputs.operation == 'candidate' && (github.ref == 'refs/heads/dev' || (github.ref_name == inputs.release_date && github.workflow == 'Build Date Release Image'))
+    if: (inputs.operation == 'candidate' || (inputs.operation == 'direct-stable' && github.event_name == 'workflow_dispatch' && github.ref == 'refs/heads/dev' && github.workflow == 'Build Date Release Image')) && (github.ref == 'refs/heads/dev' || (github.ref_name == inputs.release_date && github.workflow == 'Build Date Release Image'))
     runs-on: ubuntu-24.04
     timeout-minutes: 30
     permissions:
@@ -83,7 +83,9 @@ jobs:
         run: |
           day=$(python3 scripts/ci/release-context.py date --sha "$SOURCE_SHA" --date "$RELEASE_DATE")
           echo "release_date=$day" >> "$GITHUB_OUTPUT"
-          python3 scripts/ci/android-release.py plan --sha "$SOURCE_SHA" --day "$day" >> "$GITHUB_OUTPUT"
+          operation=plan
+          if [ "${{ inputs.operation }}" = direct-stable ]; then operation=plan-stable; fi
+          python3 scripts/ci/android-release.py "$operation" --sha "$SOURCE_SHA" --day "$day" >> "$GITHUB_OUTPUT"
       - name: Require permanent maintainer signing credentials
         if: steps.version.outputs.existing != 'true'
         env:
@@ -107,7 +109,7 @@ jobs:
         if: steps.version.outputs.existing != 'true'
         with:
           packages: 'platform-tools platforms;android-37.0 build-tools;36.0.0'
-      - name: Build release APK with candidate version
+      - name: Build release APK with allocated version
         if: steps.version.outputs.existing != 'true'
         env:
           VERSION_NAME: ${{ steps.version.outputs.tag }}
@@ -152,7 +154,7 @@ jobs:
             --image "$image" --revision "$SOURCE_SHA" \
             --phone "$RUNNER_TEMP/android-assets/alreadyon-android.apk" \
             --tv "$RUNNER_TEMP/android-assets/alreadyon-tv.apk" --output "$RUNNER_TEMP/android-assets"
-      - name: Publish verified APK and provenance as a prerelease
+      - name: Publish verified APK and provenance
         if: steps.version.outputs.existing != 'true'
         env:
           GH_TOKEN: ${{ github.token }}
@@ -160,9 +162,11 @@ jobs:
           VERSION_NAME: ${{ steps.version.outputs.tag }}
           VERSION_CODE: ${{ steps.version.outputs.version_code }}
         run: |
-          python3 scripts/ci/android-release.py candidate --sha "$SOURCE_SHA" \
+          operation=candidate
+          if [ "${{ inputs.operation }}" = direct-stable ]; then operation=direct-stable; fi
+          python3 scripts/ci/android-release.py "$operation" --sha "$SOURCE_SHA" \
             --tag "$VERSION_NAME" --version-code "$VERSION_CODE" --directory "$RUNNER_TEMP/android-assets" --require-inventory
-      - name: Summarize alpha or draft RC
+      - name: Summarize Android publication
         env:
           CANDIDATE_TAG: ${{ steps.version.outputs.tag }}
           RELEASE_STAGE: ${{ steps.version.outputs.stage }}
