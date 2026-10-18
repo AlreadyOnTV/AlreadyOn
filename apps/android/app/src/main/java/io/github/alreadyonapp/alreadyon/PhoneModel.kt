@@ -36,7 +36,7 @@ internal data class PhoneState(
     val profile: ViewerProfile? = null, val channels: List<GuideChannel> = emptyList(),
     val channel: GuideChannel? = null, val playback: PhonePlayback? = null,
     val quality: Int = 0, val subtitleIndex: Int? = null, val subtitleFileId: Long? = null, val audioIndex: Int? = null, val audioFileId: Long? = null,
-    val paused: Boolean = false, val muted: Boolean = false, val tvTutorial: Boolean = false,
+    val paused: Boolean = false, val muted: Boolean = false,
 )
 
 /** Owns the phone session and single playback lease independently of Activity rotations. */
@@ -105,7 +105,7 @@ internal class PhoneModel(application: Application) : AndroidViewModel(applicati
         val saved = profiles.find { it.id == preferences.getLong("profile_id", -1) && !it.hasPin }
         if (saved != null) {
             val channels = api.guide(saved)
-            update { it.copy(profile = saved, channels = channels, tvTutorial = needsTvTutorial()) }
+            update { it.copy(profile = saved, channels = channels) }
             restoreChannel(saved, channels)
         }
         return true
@@ -283,22 +283,11 @@ internal class PhoneModel(application: Application) : AndroidViewModel(applicati
         val current = profiles.find { it.id == profile.id } ?: throw IOException("Profile is no longer available.")
         val channels = api.guide(current)
         preferences.edit().putLong("profile_id", current.id).apply()
-        update { it.copy(profile = current, profiles = profiles, channels = channels, tvTutorial = needsTvTutorial()) }
+        update { it.copy(profile = current, profiles = profiles, channels = channels) }
         restoreChannel(current, channels)
     }
 
-    private fun needsTvTutorial() = BuildConfig.IS_TV && !preferences.getBoolean("tv_navigation_seen", false)
-
-    /** A local once-per-install acknowledgement; the guide/player are not mounted during onboarding. */
-    fun finishTvTutorial() {
-        if (!state.value.tvTutorial) return
-        preferences.edit().putBoolean("tv_navigation_seen", true).apply()
-        update { it.copy(tvTutorial = false) }
-        state.value.profile?.let { restoreChannel(it, state.value.channels) }
-    }
-
     private fun restoreChannel(profile: ViewerProfile, channels: List<GuideChannel>) {
-        if (state.value.tvTutorial) return
         subtitleOverride = false
         preferredSubtitle = null
         update { it.copy(muted = true, paused = false, audioIndex = null, audioFileId = null, subtitleIndex = null, subtitleFileId = null) }
@@ -495,7 +484,6 @@ internal class PhoneModel(application: Application) : AndroidViewModel(applicati
         update { it.copy(playback = null) }
     }
     fun resumeWatching() {
-        if (state.value.tvTutorial) return
         if (viewing?.isActive != true && state.value.profile != null && state.value.settings == null) enterGuide()
     }
 

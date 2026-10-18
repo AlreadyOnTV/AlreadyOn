@@ -115,10 +115,9 @@ class TvNavigationTest {
             click("Connect")
             compose.waitUntil(10000) { compose.onAllNodes(hasText("Admin") and isFocused()).fetchSemanticsNodes().isNotEmpty() }
             device.pressDPadCenter()
-            compose.waitUntil(10000) { exists("Your remote, at a glance") }
-            compose.onNodeWithText("Got it").assertIsFocused()
-            device.pressDPadCenter()
             compose.waitUntil(10000) { exists("CHANNEL") }
+            compose.onNodeWithText("Your remote, at a glance").assertDoesNotExist()
+            compose.onNodeWithText("Got it").assertDoesNotExist()
             assertTrue("Compact guide on first entry", exists("CHANNEL"))
             assertTrue("Guide channel 110", exists("110"))
             compose.waitUntil(10000) { compose.onAllNodes(hasContentDescription("Channel 110: TV fixture 110") and isFocused()).fetchSemanticsNodes().isNotEmpty() }
