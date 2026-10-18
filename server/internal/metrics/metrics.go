@@ -14,31 +14,32 @@ import (
 )
 
 type Sample struct {
-	CPUCores         []CoreSample `json:"cpuCores"`
-	CPULoad          *float64     `json:"cpuLoad"`
-	CPUPressure      *float64     `json:"cpuPressure"`
-	MemoryUsedBytes  *int64       `json:"memoryUsedBytes"`
-	MemoryLimitBytes *int64       `json:"memoryLimitBytes"`
-	MemoryLimited    bool         `json:"memoryLimited"`
-	DiskReadMBps     *float64     `json:"diskReadMBps"`
-	DiskWriteMBps    *float64     `json:"diskWriteMBps"`
-	IOPressure       *float64     `json:"ioPressure"`
-	Disk             *float64     `json:"disk"`
-	DiskUsedBytes    *int64       `json:"diskUsedBytes"`
-	DiskTotalBytes   *int64       `json:"diskTotalBytes"`
-	DiskPath         string       `json:"diskPath"`
-	MediaUsedBytes   *int64       `json:"mediaUsedBytes"`
-	MediaTotalBytes  *int64       `json:"mediaTotalBytes"`
-	DiskScope        string       `json:"diskScope"`
-	IngressMbps      *float64     `json:"ingressMbps"`
-	EgressMbps       *float64     `json:"egressMbps"`
-	NetworkInterface string       `json:"networkInterface"`
-	NetworkScope     string       `json:"networkScope"`
-	At               int64        `json:"at"`
-	CPU              *float64     `json:"cpu"`
-	GPU              *float64     `json:"gpu"`
-	RAM              *float64     `json:"ram"`
-	GPUSource        string       `json:"gpuSource"`
+	CPUCores         []CoreSample      `json:"cpuCores"`
+	CPULoad          *float64          `json:"cpuLoad"`
+	CPUPressure      *float64          `json:"cpuPressure"`
+	MemoryUsedBytes  *int64            `json:"memoryUsedBytes"`
+	MemoryLimitBytes *int64            `json:"memoryLimitBytes"`
+	MemoryLimited    bool              `json:"memoryLimited"`
+	DiskReadMBps     *float64          `json:"diskReadMBps"`
+	DiskWriteMBps    *float64          `json:"diskWriteMBps"`
+	IOPressure       *float64          `json:"ioPressure"`
+	DiskMounts       []DiskMountSample `json:"diskMounts"`
+	Disk             *float64          `json:"disk"`
+	DiskUsedBytes    *int64            `json:"diskUsedBytes"`
+	DiskTotalBytes   *int64            `json:"diskTotalBytes"`
+	DiskPath         string            `json:"diskPath"`
+	MediaUsedBytes   *int64            `json:"mediaUsedBytes"`
+	MediaTotalBytes  *int64            `json:"mediaTotalBytes"`
+	DiskScope        string            `json:"diskScope"`
+	IngressMbps      *float64          `json:"ingressMbps"`
+	EgressMbps       *float64          `json:"egressMbps"`
+	NetworkInterface string            `json:"networkInterface"`
+	NetworkScope     string            `json:"networkScope"`
+	At               int64             `json:"at"`
+	CPU              *float64          `json:"cpu"`
+	GPU              *float64          `json:"gpu"`
+	RAM              *float64          `json:"ram"`
+	GPUSource        string            `json:"gpuSource"`
 }
 type History struct {
 	Interval int      `json:"intervalSeconds"`
@@ -54,6 +55,7 @@ type Sampler struct {
 	media                 []string
 	cpu                   cpuCounter
 	io                    ioCounter
+	mountIO               mountIOCounter
 	network               networkCounter
 }
 
@@ -87,6 +89,7 @@ func (s *Sampler) Read(now time.Time) Sample {
 		out.RAM = percent(100 * float64(m.used) / float64(m.limit))
 	}
 	out.NetworkInterface, out.IngressMbps, out.EgressMbps = s.network.read(now)
+	diskstats, _ := os.ReadFile(filepath.Join(s.proc, "diskstats"))
 	read, write, ok := uint64(0), uint64(0), false
 	if container {
 		if read, write, ok = cgroupIO(s.cgroup); ok {
@@ -94,11 +97,16 @@ func (s *Sampler) Read(now time.Time) Sample {
 		}
 	}
 	if !ok {
-		raw, _ := os.ReadFile(filepath.Join(s.proc, "diskstats"))
-		read, write = physicalIO(string(raw), physicalDisks("/sys/block"))
+		read, write = physicalIO(string(diskstats), physicalDisks("/sys/block"))
 	}
 	out.DiskReadMBps, out.DiskWriteMBps = s.io.sample(now, out.DiskScope, read, write)
 	out.IOPressure = pressure(filepath.Join(s.proc, "pressure", "io"))
+	if container {
+		mountInfo, _ := os.ReadFile(filepath.Join(s.proc, "self", "mountinfo"))
+		cgroupIO, _ := os.ReadFile(filepath.Join(s.cgroup, "io.stat"))
+		paths := map[string][]string{"config": {s.storage}, "media": s.media}
+		out.DiskMounts = s.mountIO.sample(now, mountDevices(string(mountInfo), paths, filepath.Join("/sys", "class", "block"), string(cgroupIO), string(diskstats)), string(cgroupIO), string(diskstats))
+	}
 	s.readCapacity(&out)
 	return out
 }
@@ -205,6 +213,11 @@ func storeSample(ctx context.Context, db *sql.DB, s Sample) error {
 			return err
 		}
 	}
+	for _, disk := range s.DiskMounts {
+		if _, err = tx.ExecContext(ctx, `INSERT INTO server_disk_mount_metrics(at_unix,mount,read_mbps,write_mbps,read_iops,write_iops,average_latency_ms) VALUES(?,?,?,?,?,?,?)`, s.At, disk.Mount, disk.ReadMBps, disk.WriteMBps, disk.ReadIOPS, disk.WriteIOPS, disk.AverageLatencyMs); err != nil {
+			return err
+		}
+	}
 	return tx.Commit()
 }
 func BucketSeconds(minutes int) (int, bool) {
@@ -226,14 +239,14 @@ func readPoints(ctx context.Context, db *sql.DB, minutes int, now time.Time) (Hi
 	interval, _ := BucketSeconds(minutes)
 	out := History{Interval: interval, Points: []Sample{}}
 	from := now.Add(-time.Duration(minutes) * time.Minute).Unix()
-	rows, err := db.QueryContext(ctx, `SELECT (at_unix / ?) * ?,AVG(cpu),AVG(gpu),AVG(ram),AVG(ingress_mbps),AVG(egress_mbps),AVG(disk_read_mbps),AVG(disk_write_mbps),AVG(io_pressure),network_interface,network_scope FROM server_metrics WHERE at_unix>=? AND at_unix<=? GROUP BY at_unix / ?,network_interface,network_scope ORDER BY 1,network_interface,network_scope`, interval, interval, from, now.Unix(), interval)
+	rows, err := db.QueryContext(ctx, `SELECT (at_unix / ?) * ?,AVG(cpu),AVG(gpu),AVG(ram),AVG(ingress_mbps),AVG(egress_mbps),AVG(disk_read_mbps),AVG(disk_write_mbps),AVG(io_pressure),network_interface,network_scope,AVG(cpu_load),AVG(cpu_pressure),CAST(AVG(memory_used_bytes) AS INTEGER),CAST(AVG(memory_limit_bytes) AS INTEGER),MAX(memory_limited),CAST(AVG(disk_capacity) AS INTEGER),CAST(AVG(disk_used_bytes) AS INTEGER),CAST(AVG(disk_total_bytes) AS INTEGER),MAX(disk_path),MAX(disk_scope),CAST(AVG(media_used_bytes) AS INTEGER),CAST(AVG(media_total_bytes) AS INTEGER) FROM server_metrics WHERE at_unix>=? AND at_unix<=? GROUP BY at_unix / ?,network_interface,network_scope ORDER BY 1,network_interface,network_scope`, interval, interval, from, now.Unix(), interval)
 	if err != nil {
 		return out, err
 	}
 	byTime := map[int64][]int{}
 	for rows.Next() {
 		var p Sample
-		if err := rows.Scan(&p.At, &p.CPU, &p.GPU, &p.RAM, &p.IngressMbps, &p.EgressMbps, &p.DiskReadMBps, &p.DiskWriteMBps, &p.IOPressure, &p.NetworkInterface, &p.NetworkScope); err != nil {
+		if err := rows.Scan(&p.At, &p.CPU, &p.GPU, &p.RAM, &p.IngressMbps, &p.EgressMbps, &p.DiskReadMBps, &p.DiskWriteMBps, &p.IOPressure, &p.NetworkInterface, &p.NetworkScope, &p.CPULoad, &p.CPUPressure, &p.MemoryUsedBytes, &p.MemoryLimitBytes, &p.MemoryLimited, &p.Disk, &p.DiskUsedBytes, &p.DiskTotalBytes, &p.DiskPath, &p.DiskScope, &p.MediaUsedBytes, &p.MediaTotalBytes); err != nil {
 			rows.Close()
 			return out, err
 		}
@@ -242,6 +255,26 @@ func readPoints(ctx context.Context, db *sql.DB, minutes int, now time.Time) (Hi
 	}
 	err = rows.Err()
 	rows.Close()
+	if err != nil {
+		return out, err
+	}
+	diskRows, err := db.QueryContext(ctx, `SELECT (at_unix / ?) * ?,mount,AVG(read_mbps),AVG(write_mbps),AVG(read_iops),AVG(write_iops),AVG(average_latency_ms) FROM server_disk_mount_metrics WHERE at_unix>=? AND at_unix<=? GROUP BY at_unix / ?,mount ORDER BY 1,mount`, interval, interval, from, now.Unix(), interval)
+	if err != nil {
+		return out, err
+	}
+	for diskRows.Next() {
+		var at int64
+		var disk DiskMountSample
+		if err := diskRows.Scan(&at, &disk.Mount, &disk.ReadMBps, &disk.WriteMBps, &disk.ReadIOPS, &disk.WriteIOPS, &disk.AverageLatencyMs); err != nil {
+			diskRows.Close()
+			return out, err
+		}
+		for _, index := range byTime[at] {
+			out.Points[index].DiskMounts = append(out.Points[index].DiskMounts, disk)
+		}
+	}
+	err = diskRows.Err()
+	diskRows.Close()
 	if err != nil {
 		return out, err
 	}
@@ -285,7 +318,22 @@ func readCurrent(ctx context.Context, db *sql.DB) (Sample, error) {
 		}
 		out.CPUCores = append(out.CPUCores, core)
 	}
-	return out, rows.Err()
+	diskRows, err := db.QueryContext(ctx, `SELECT mount,read_mbps,write_mbps,read_iops,write_iops,average_latency_ms FROM server_disk_mount_metrics WHERE at_unix=? ORDER BY mount`, out.At)
+	if err != nil {
+		return out, err
+	}
+	defer diskRows.Close()
+	for diskRows.Next() {
+		var disk DiskMountSample
+		if err := diskRows.Scan(&disk.Mount, &disk.ReadMBps, &disk.WriteMBps, &disk.ReadIOPS, &disk.WriteIOPS, &disk.AverageLatencyMs); err != nil {
+			return out, err
+		}
+		out.DiskMounts = append(out.DiskMounts, disk)
+	}
+	if err := rows.Err(); err != nil {
+		return out, err
+	}
+	return out, diskRows.Err()
 }
 
 func ReadHistory(ctx context.Context, db *sql.DB, minutes int, now time.Time) (History, error) {

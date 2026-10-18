@@ -836,6 +836,14 @@ export interface MetricSample {
   diskReadMBps?: number | null;
   diskWriteMBps?: number | null;
   ioPressure?: number | null;
+  diskMounts?: {
+    mount: string;
+    readMBps: number | null;
+    writeMBps: number | null;
+    readIOPS: number | null;
+    writeIOPS: number | null;
+    averageLatencyMs: number | null;
+  }[] | null;
   disk?: number | null;
   diskUsedBytes?: number | null;
   diskTotalBytes?: number | null;
