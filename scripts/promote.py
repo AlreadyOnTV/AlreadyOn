@@ -112,11 +112,14 @@ def main():
     ensure_image_record(repo, selected)
     context = load('release-context')
     day = context.date_for_source(selected)
-    if args.target == 'test':
+    release = load('android-release')
+    stable_ready = release.published_stable(repo, day, selected) is not None
+    if stable_ready:
+        print(f'Verified exact-source {day} Stable APKs; no candidate release is needed')
+    elif args.target == 'test':
         date_tag = run('git', 'rev-parse', f'refs/tags/{day}^{{commit}}')
         if date_tag != selected:
             raise ValueError(f'Date tag {day} does not point to the selected dev commit')
-        release = load('android-release')
         candidate = next((entry for entry in release.releases(repo)
                           if (match := (release.ALPHA.fullmatch(entry['tag_name'])
                                         or release.RC.fullmatch(entry['tag_name'])))
