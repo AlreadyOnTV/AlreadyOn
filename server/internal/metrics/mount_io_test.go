@@ -1,3 +1,4 @@
+// These tests exercise volume-to-device resolution and per-mount counter sampling.
 package metrics
 
 import (

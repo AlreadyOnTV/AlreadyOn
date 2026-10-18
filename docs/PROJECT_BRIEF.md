@@ -11,6 +11,8 @@ AlreadyOn provides scheduled television-style playback from a server owner's med
 - **Media:** FFmpeg/FFprobe inspect and process files; delivery selects direct playback, remuxing or transcoding according to client capabilities.
 - **Clients:** Android phone/tablet and Google TV share the native model and player. Apple clients are not planned.
 
+Dashboard disk readings are container-scoped; each mount shows bandwidth, IOPS, latency, capacity, or `N/A`.
+
 The main flow is scan → normalized catalog → channel filters → persisted schedule → scoped playback session. [OpenAPI](../api/openapi.yaml) defines the public API; [OpenAPI](../api/openapi.yaml) explains changes.
 
 ## Invariants
