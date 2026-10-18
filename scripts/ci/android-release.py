@@ -16,6 +16,7 @@ sys.path.insert(0, str(Path(__file__).parents[1] / 'security'))
 from public_inventory import NAMES as SBOM_NAMES, verify_bundle
 SBOM_ASSETS = (*SBOM_NAMES, 'sbom-manifest.json')
 
+from image_registry import release_source as image_source
 from release_dates import release_day
 from release_notes import candidate_changes, promotion_changes, release_body
 
@@ -119,7 +120,8 @@ def changelog_baseline(entries, tag):
             continue
         before = (previous[1] == "alpha" and current[1] == "alpha" and previous[2] < current[2]
                   or previous[1] == "alpha" and current[1] == "rc"
-                  or previous[1] == "rc" and current[1] == "rc" and previous[2] < current[2])
+                  or previous[1] == "rc" and current[1] == "rc" and previous[2] < current[2]
+                  or current[1] == "stable" and previous[1] in {"alpha", "rc"})
         if before:
             rank = {"alpha": 0, "rc": 1}[previous[1]]
             same_day.append((rank, previous[2], entry["tag_name"]))
@@ -143,7 +145,8 @@ def verify_assets(directory, source=None):
         raise ValueError("Unexpected Android application identity")
     if source is not None and manifest.get("source_sha") != source:
         raise ValueError("Candidate source revision does not match its tag")
-    if not CANDIDATE.fullmatch(manifest.get("version_name", "")):
+    if not (CANDIDATE.fullmatch(manifest.get("version_name", ""))
+            or STABLE.fullmatch(manifest.get("version_name", ""))):
         raise ValueError("Invalid candidate version")
     expected = digest(directory / ASSETS[0])
     if manifest.get("apk_sha256") != expected:
@@ -274,12 +277,74 @@ def plan(repo, sha, day=None):
     print(f"release_date={day}")
 
 
-def candidate(repo, tag, sha, code, directory):
+def published_stable(repo, day, sha, entries=None):
+    """Verify an already published exact-source Stable before branch synchronization."""
+    entry = next((item for item in (entries if entries is not None else releases(repo))
+                  if stage_tag(item["tag_name"]) == (day, "stable", 0) and not item["draft"]), None)
+    if entry is None:
+        return None
+    if release_source(entry) != sha or api(f"repos/{repo}/commits/{entry['tag_name']}")["sha"] != sha:
+        raise ValueError("Published Stable belongs to a different source; refusing replacement")
+    with tempfile.TemporaryDirectory() as temp:
+        directory = Path(temp)
+        download(repo, entry["tag_name"], directory)
+        manifest = verify_assets(directory)
+        if STABLE.fullmatch(manifest["version_name"]) and (manifest["source_sha"] != sha
+                or manifest["version_name"] != entry["tag_name"]):
+            raise ValueError("Direct Stable APK source does not match its release")
+    return entry["tag_name"]
+
+
+def require_tested_image(repo, sha):
+    if "@sha256:" not in image_source(repo, sha):
+        raise ValueError("Direct Stable requires a validated image digest for the exact source")
+
+
+def plan_stable(repo, sha, day):
+    """Explicit Stable allocation never creates or allocates an alpha/RC release."""
+    day = release_day(day)
+    require_tested_image(repo, sha)
+    entries = releases(repo)
+    existing = published_stable(repo, day, sha, entries)
+    tag = existing or f"{day}-Stable"
+    if existing:
+        print("existing=true")
+    else:
+        draft = next((entry for entry in entries if entry["tag_name"] == tag), None)
+        if draft and (not draft["draft"] or release_source(draft) != sha
+                      or draft.get("target_commitish") != sha):
+            raise ValueError("Stable draft belongs to a different source; refusing replacement")
+        if not draft and run("git", "tag", "--list", tag):
+            raise ValueError("Stable tag exists without its release; investigate before rebuilding")
+        complete = bool(draft and set(ASSETS).issubset({asset["name"] for asset in draft.get("assets", [])}))
+        if complete:
+            with tempfile.TemporaryDirectory() as temp:
+                download(repo, tag, Path(temp))
+                manifest = verify_assets(Path(temp), sha)
+                if ("inventory" not in manifest or manifest["version_name"] != tag
+                        or manifest["version_code"] != tag_version_code(draft)):
+                    raise ValueError("Direct Stable draft inventory/version does not match its release")
+            # A cancelled upload can leave a complete draft. Publish its verified bytes,
+            # preserving the original version code and signatures instead of rebuilding.
+            run("gh", "release", "edit", tag, "--repo", repo, "--draft=false",
+                "--prerelease=false", "--latest=true")
+        print(f"existing={'true' if complete else 'false'}")
+        code = tag_version_code(draft) if draft else int(time.time()) - 1577836800
+        print(f"version_code={code}")
+    print(f"tag={tag}")
+    print("stage=stable")
+    print(f"release_date={day}")
+
+
+def candidate(repo, tag, sha, code, directory, *, direct_stable=False):
     parsed = stage_tag(tag)
     if parsed is not None and not tag.startswith(parsed[0] + "-"):
         raise ValueError("New candidate tags must use YY.MM.DD")
-    if parsed is None or parsed[1] not in {"alpha", "rc", "beta"} or not 0 < code <= 2100000000:
+    allowed = {"stable"} if direct_stable else {"alpha", "rc", "beta"}
+    if parsed is None or parsed[1] not in allowed or not 0 < code <= 2100000000:
         raise ValueError("Invalid Android release version")
+    if direct_stable:
+        require_tested_image(repo, sha)
     manifest = {"source_sha": sha, "version_name": tag, "version_code": code,
                 "package": "io.github.alreadyonapp.alreadyon",
                 "apk_sha256": digest(directory / ASSETS[0]),
@@ -298,8 +363,8 @@ def candidate(repo, tag, sha, code, directory):
     baseline_tag = changelog_baseline(entries, tag)
     changes = candidate_changes(repo, entries, tag, sha, baseline_tag)
     notes = release_body(repo, tag, sha, code, changes, changelog_baseline=baseline_tag)
-    publish_now = parsed[1] in {"alpha", "beta"}
-    publish(repo, tag, sha, directory, notes, True, publish_now=publish_now)
+    publish_now = parsed[1] in {"alpha", "beta", "stable"}
+    publish(repo, tag, sha, directory, notes, not direct_stable, publish_now=publish_now)
 
 
 def release_source(entry):
@@ -310,6 +375,9 @@ def release_source(entry):
 def promote_test(repo, day, sha):
     """Publish the next RC by reusing the matching alpha or already-built RC draft."""
     entries = releases(repo)
+    if stable := published_stable(repo, day, sha, entries):
+        print(f"Verified {stable}; test synchronization creates no RC release")
+        return stable
     published_rcs = [(int(match[2]), entry) for entry in entries
                      if not entry["draft"] and (match := RC.fullmatch(entry["tag_name"]))
                      and match[1] == day]
@@ -357,8 +425,12 @@ def promote_test(repo, day, sha):
 
 def promote_stable(repo, day, selected_sha):
     """Promote the newest published RC in the selected source history without rebuilding."""
+    entries = releases(repo)
+    if stable := published_stable(repo, day, selected_sha, entries):
+        print(f"Verified existing {stable} without rebuilding APKs")
+        return stable
     candidates = []
-    for entry in releases(repo):
+    for entry in entries:
         match = RC.fullmatch(entry["tag_name"])
         source = release_source(entry)
         if entry["draft"] or match is None or release_day(match[1], historical=True) != day or not source:
@@ -407,7 +479,7 @@ def promote_selected_stable(repo, day, sha):
 
 def main():
     parser = argparse.ArgumentParser(description=__doc__)
-    parser.add_argument("operation", choices=("plan", "candidate", "promote", "promote-test", "promote-stable", "cleanup-legacy"))
+    parser.add_argument("operation", choices=("plan", "plan-stable", "candidate", "direct-stable", "promote", "promote-test", "promote-stable", "cleanup-legacy"))
     parser.add_argument("--repo", default=os.environ.get("GITHUB_REPOSITORY"), required=False)
     parser.add_argument("--sha")
     parser.add_argument("--day")
@@ -424,10 +496,15 @@ def main():
         if not args.sha:
             parser.error("plan requires --sha")
         plan(args.repo, args.sha, args.day)
-    elif args.operation == "candidate":
+    elif args.operation == "plan-stable":
+        if not all((args.sha, args.day)):
+            parser.error("plan-stable requires --sha and --day")
+        plan_stable(args.repo, args.sha, args.day)
+    elif args.operation in {"candidate", "direct-stable"}:
         if not all((args.tag, args.sha, args.version_code, args.directory)):
             parser.error("candidate requires --tag, --sha, --version-code and --directory")
-        candidate(args.repo, args.tag, args.sha, args.version_code, args.directory)
+        candidate(args.repo, args.tag, args.sha, args.version_code, args.directory,
+                  direct_stable=args.operation == "direct-stable")
     elif args.operation == "promote":
         if not args.tag:
             parser.error("promote requires --tag")

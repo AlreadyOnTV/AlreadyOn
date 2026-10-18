@@ -8,28 +8,24 @@ Use the active dated branch and [development setup](DEVELOPMENT.md). Test at <ht
 
 | Promotion | Artifact tag | Release title | Publication |
 | --- | --- | --- | --- |
-| Merged date PR into `dev` | `YY.MM.DD-alphaN` | `YY.MM.DD-alphaN` | Fresh signed APKs and image tagged `nightly` plus `YY.MM.DD` |
-| Merge tested date commit from `dev` to `test` | `YY.MM.DD-RCN` | `YY.MM.DD-rcN` | Retag image `latest`; publish/copy tested APK bytes |
-| Merge current `test` release into `main` | `YY.MM.DD-Stable` | `YY.MM.DD-stable` | Retag image `stable`; publish the latest RC APK bytes |
+| Dated PR into `dev` | `YY.MM.DD-alphaN` | `YY.MM.DD-alphaN` | Signed APKs; image `nightly` and date tags |
+| Tested `dev` source into `test` | `YY.MM.DD-RCN` | `YY.MM.DD-rcN` | Image `latest`; exact tested APKs |
+| Current `test` into `main` | `YY.MM.DD-Stable` | `YY.MM.DD-stable` | Image `stable`; latest RC APKs |
 
-RC1 normally reuses alpha APKs. For an approved direct RC1 build, reserve an unpublished `YY.MM.DD-RC1` draft targeting the exact dev source before allocation. Replacing RC1 requires explicit approval, removal of its release/tag, and a replacement draft with a new version code. Dev builds the draft after validation; test publishes its exact assets. Later hotfixes draft the next RC. Stable copies the latest RC and locks the date.
+RC1 normally reuses alpha APKs. Approved direct RC1 builds require an unpublished draft targeting the exact dev source. Replacing RC1 requires explicit approval, removing its release/tag, and reserving a replacement draft with a new version code. Later hotfixes draft the next RC. Stable locks the date.
 
-The date tag advances after dev validation. Changelogs compare predecessor tags, including server/WebUI changes. Identical-artifact promotions retain known issues without new change claims. Promotions never rebuild/re-sign.
+## Approved direct Stable
 
-Each new release attaches both APKs, `SHA256SUMS`, `android-release.json`, three inventory-only CycloneDX SBOMs and `sbom-manifest.json`. Inventories bind the runtime digest and signed APK hashes to the source; Android provenance binds their manifest. Promotions preserve these bytes. Older releases without inventories remain compatible. Promotions retain the APK `versionName`/`versionCode`; titles do not rename tags.
+Dispatch **Build Date Release Image** on `dev` with `publication=stable`. Full validation and signed-image gates precede building/signing both Stable APKs once. Only the Stable release/tag is allocated; no alpha or RC is created.
 
-Approved active-date dispatches validate/publish alpha without merging or deleting the branch; see [identity/cycle](ORGANIZATION.md).
+Reconcile historical promotion ancestry on the dated branch before its dev PR. After publication, fast-forward `test` and `main` to the identical validated dev commit; their Android workflows verify existing Stable assets without rebuilding or creating an RC. Cancel the automatic candidate build before publication when selecting this path. Retire the retained dated branch after delivery verification.
 
-## Automation and gates
+## Artifacts and gates
 
-Review [Stable readiness](STABLE_READINESS.md) before main promotion.
+The date tag advances after dev validation. [Generated changelogs](RELEASE_NOTES.md) compare predecessor tags; identical-artifact promotions preserve tested descriptions.
 
-Date PRs run quality, CodeQL and full Go/browser e2e. Dev merge validation publishes the date image and alpha APKs, advances the date tag, then removes the merged date branch. `python3 scripts/promote.py test YY.MM.DD` verifies image/alpha APK provenance before merging to test; `python3 scripts/promote.py main` verifies an RC before merging to main. Helpers reuse tested artifacts and allow exact-tree merges. Resolve conflicts on dev; never bypass branch protection.
+Releases attach phone/tablet and TV APKs, `SHA256SUMS`, `android-release.json`, three inventory-only CycloneDX SBOMs and `sbom-manifest.json`. Inventories bind the image digest, signed APK hashes and source. Promotions preserve bytes, signing identity and embedded versions; titles never rename artifacts. Older releases without inventories remain compatible.
 
-## Signing and scope
+Date PRs require quality, CodeQL, full Go/browser tests, packaged-runtime and security checks. [Promotion helpers](CI_CD.md) verify provenance and exact trees. Review [Stable readiness](STABLE_READINESS.md); preserve branch protection and live data.
 
-Phone/tablet and [TV](GOOGLE_TV.md) APKs share signing credentials and provenance. Validate debug identities and physical devices. See [signing](ANDROID_SIGNING.md), [release notes](RELEASE_NOTES.md) and [delivery](CI_CD.md).
-
-## Application identity
-
-The AlreadyOn TV rename preserves application IDs and signing. Older apps may need one manual signed APK update over the existing installation; preserve data. See [identity](ORGANIZATION.md).
+See [signing](ANDROID_SIGNING.md), [TV](GOOGLE_TV.md) and [identity](ORGANIZATION.md). Existing application IDs/signing remain compatible; older updaters may require one manual signed installation preserving data.

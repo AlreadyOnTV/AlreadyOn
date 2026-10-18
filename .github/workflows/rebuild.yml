@@ -9,6 +9,11 @@ on:
         description: Optional exact commit; empty selects the dispatched dev or active dated branch
         type: string
         default: ''
+      publication:
+        description: Android publication after all validation gates (Stable requires explicit approval)
+        type: choice
+        options: [candidate, stable]
+        default: candidate
       release_date:
         description: Optional YY.MM.DD release branch date; push runs derive it from the merged PR
         type: string
@@ -41,6 +46,7 @@ jobs:
           GH_TOKEN: ${{ github.token }}
           RELEASE_DATE: ${{ inputs.release_date }}
         run: |
+          if [ "${{ inputs.publication }}" = stable ]; then test "$GITHUB_REF_NAME" = dev; fi
           revision=$(git rev-parse HEAD)
           current=$(gh api "repos/$GITHUB_REPOSITORY/git/ref/heads/$GITHUB_REF_NAME" --jq .object.sha)
           test "$revision" = "$current"
@@ -207,7 +213,7 @@ jobs:
           RELEASE_DATE: ${{ needs.select.outputs.release_date }}
         run: python3 scripts/ci/release-context.py tag --sha "$CI_REVISION" --date "$RELEASE_DATE"
       - name: Delete the merged date branch after successful release
-        if: github.ref_name == 'dev'
+        if: github.ref_name == 'dev' && inputs.publication != 'stable'
         env:
           GH_TOKEN: ${{ github.token }}
           CI_REVISION: ${{ needs.select.outputs.revision }}
@@ -218,7 +224,7 @@ jobs:
           GH_TOKEN: ${{ github.token }}
         run: python3 scripts/ci/clean-images.py --apply --only-untagged
   android:
-    name: Build and publish Android alpha after full validation
+    name: Build and publish signed Android release after full validation
     needs: [select, quality, tests, publish]
     permissions:
       contents: write
@@ -227,7 +233,7 @@ jobs:
       issues: read
     uses: ./.github/workflows/android-release.yml
     with:
-      operation: candidate
+      operation: ${{ inputs.publication == 'stable' && 'direct-stable' || 'candidate' }}
       release_date: ${{ needs.select.outputs.release_date }}
       source_sha: ${{ needs.select.outputs.revision }}
     secrets: inherit
