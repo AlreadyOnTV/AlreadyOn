@@ -465,13 +465,13 @@
   background: var(--now-highlight) !important;
   color: var(--now-highlight-text);
   border-color: var(--accent);
+  outline: 3px solid #ff2020;
+  outline-offset: -3px;
 }
 
-/* "Focused" = the arrow-key browsing cursor. Fixed red, deliberately not
-   theme-tinted, so it's always identifiable against the dark palette.
-   Independent of "tuned" — you can browse without changing what's on. */
-.guide-slot-box-focused {
-  outline: 3px solid #ff2020;
+/* Browsing focus stays separate from the red watched-airing indicator. */
+.guide-slot-box-focused:not(.guide-slot-box-tuned) {
+  outline: 3px solid var(--text);
   outline-offset: -3px;
 }
 

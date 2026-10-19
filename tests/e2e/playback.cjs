@@ -4658,6 +4658,8 @@ const noWorkers = async (unreleased = () => 0) => {
     if (!only || only.includes("subtitles")) await subtitleDefaults();
     if (!only || only.includes("pause")) await pausedBoundary();
     if (!only || only.includes("alignment")) await guideAlignment();
+    if (!only || only.includes("guide-live"))
+      cp.execFileSync(process.execPath, [path.join(__dirname, "guide-live.cjs"), url], { stdio: "inherit" });
     if (!only || only.includes("autofill-policy"))
       await require("./autofill-policy.cjs")({ browser, login, url, assert });
     if (!only || only.includes("credential-drafts"))
