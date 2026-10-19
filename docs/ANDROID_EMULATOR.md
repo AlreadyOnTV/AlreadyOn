@@ -16,4 +16,15 @@ For focused TV onboarding coverage, run `scripts/android/test-tv.py --serial <em
 
 Emulator success does not establish physical-device codec, HDR, hardware-decoder or television behavior. Record those checks separately.
 
+Both targets explicitly use Espresso 3.7.0 alongside AndroidX Test runner/rules 1.7.0. Compose's older transitive Espresso uses removed input-manager APIs on API 37. Keep the test-runtime dependency aligned in both targets; do not bypass Espresso synchronization or hidden-API enforcement. Run `GuideRestorationTest` on API 37 phone and API 36 TV emulators after test-framework changes.
+
+From `apps/android`, select the emulator and test class explicitly:
+
+```sh
+ANDROID_SERIAL=<serial> ./gradlew :app:connectedDebugAndroidTest \
+  -Pandroid.testInstrumentationRunnerArguments.class=io.github.alreadyonapp.alreadyon.GuideRestorationTest
+```
+
+Use `:tv:connectedDebugAndroidTest` for TV. Run additional classes separately; verify test counts and failures in Gradle's XML reports.
+
 See [manual connection](SERVER_CONNECTION.md) for the separate hostname/port fields and device numeric keyboard for server PIN entry.
