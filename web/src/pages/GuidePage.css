@@ -364,11 +364,12 @@
   z-index: 4;
 }
 
-/* Higher specificity than .guide-col-channel's align-items:stretch below. */
+/* Match the channel numbers’ 10px left inset while centering vertically. */
 .guide-col-channel.guide-head-channel {
   align-items: center;
-  justify-content: center;
-  text-align: center;
+  justify-content: flex-start;
+  padding-left: 10px;
+  text-align: left;
 }
 
 .guide-row:nth-child(even) {
