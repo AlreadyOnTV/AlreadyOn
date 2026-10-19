@@ -12,6 +12,8 @@ Use synthetic media and a disposable server for destructive tests. Validate auth
 
 For Google TV, enable the AVD hardware keyboard and use arrows, Enter/Select and Back as a remote. Use [TV setup and fixtures](GOOGLE_TV.md), [remote navigation](TV_REMOTE_NAVIGATION.md) and [manual connection](SERVER_CONNECTION.md) for current behavior. Enable a touch screen only if mouse clicks are wanted; TV profiles normally disable touch. If the emulator window stops updating or reports color-buffer errors, cold boot with software graphics. These are emulator settings, not TV app requirements.
 
+For focused TV onboarding coverage, run `scripts/android/test-tv.py --serial <emulator-serial> --sdk <sdk-path> --pairing-only`. This uses a disposable server and synthetic account, checks both discovery and manual entry through profile selection, and stops before playback checks. Omit `--pairing-only` for the broader navigation/playback test. `ServerPinFieldTest` separately exercises the installed numeric keyboard; its TV remote sequence targets the Google TV emulator’s numeric grid.
+
 Emulator success does not establish physical-device codec, HDR, hardware-decoder or television behavior. Record those checks separately.
 
-See [manual connection](SERVER_CONNECTION.md) for the separate hostname/port fields and smaller TV server PIN keypad.
+See [manual connection](SERVER_CONNECTION.md) for the separate hostname/port fields and device numeric keyboard for server PIN entry.

@@ -75,6 +75,8 @@ class TvNavigationTest {
             } else {
                 compose.waitUntil(60000) { compose.onAllNodes(hasText("10.0.2.2:19900", substring = true)).fetchSemanticsNodes().isNotEmpty() }
                 val server = hasText("10.0.2.2:19900", substring = true)
+                // Leave touch mode after other UI tests before assigning remote focus.
+                device.pressDPadDown()
                 // Establish a known start below the discovered server, then navigate with the remote.
                 compose.onNodeWithText("Rescan").performSemanticsAction(SemanticsActions.RequestFocus) { it() }
                 compose.waitUntil(10000) { compose.onAllNodes(hasText("Rescan") and isFocused()).fetchSemanticsNodes().isNotEmpty() }
@@ -119,6 +121,10 @@ class TvNavigationTest {
             compose.onNodeWithText("Got it").assertDoesNotExist()
             assertTrue("Compact guide on first entry", exists("CHANNEL"))
             assertTrue("Guide channel 110", exists("110"))
+            if (InstrumentationRegistry.getArguments().getString("pairingOnly") == "true") {
+                device.takeScreenshot(java.io.File(instrumentation.targetContext.getExternalFilesDir(null), "tv-guide.png"))
+                return
+            }
             compose.waitUntil(10000) { compose.onAllNodes(hasContentDescription("Channel 110: TV fixture 110") and isFocused()).fetchSemanticsNodes().isNotEmpty() }
             compose.onNodeWithText("Admin").performClick()
             compose.onNodeWithText("Switch Profile").assertExists()
