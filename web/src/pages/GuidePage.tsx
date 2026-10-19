@@ -23,6 +23,30 @@ import ProfileMenu from './ProfileMenu';
 import { Player } from '../playback/Player';
 import './GuidePage.css';
 
+// Keep the A1 clock independent of guide fetching and aligned to minute boundaries.
+function GuideClock({ format }: { format: TimeFormat }) {
+  const [now, setNow] = useState(() => new Date());
+  useEffect(() => {
+    let timer: number;
+    const refresh = () => {
+      const current = new Date();
+      setNow(current);
+      window.clearTimeout(timer);
+      timer = window.setTimeout(refresh, 60_000 - (current.getTime() % 60_000));
+    };
+    refresh();
+    window.addEventListener('focus', refresh);
+    document.addEventListener('visibilitychange', refresh);
+    return () => {
+      window.clearTimeout(timer);
+      window.removeEventListener('focus', refresh);
+      document.removeEventListener('visibilitychange', refresh);
+    };
+  }, []);
+  const label = formatClock(now.getHours() * 60 + now.getMinutes(), format);
+  return <time dateTime={now.toISOString()} aria-label={`Current time: ${label}`} title="Current time">{label}</time>;
+}
+
 // The guide always shows this many hours ahead.
 const GUIDE_HOURS = 12;
 const DEFAULT_PREVIEW_WIDTH = 360;
@@ -748,7 +772,7 @@ export default function GuidePage() {
         {!guideHasContent && <StartupNotice status={startupStatus} variant="panel" />}
         <div className="guide-scroll no-scrollbar" ref={scrollRef} tabIndex={0}>
           <div className="guide-head-row" ref={headRef} style={{ gridTemplateColumns }}>
-            <div className="guide-col-channel guide-head-channel">Channel</div>
+            <div className="guide-col-channel guide-head-channel"><GuideClock format={timeFormat} /></div>
             {slotLabels.map((label, i) => (
               <div key={i} className="guide-head-slot" data-start-ms={(gridStartMs ?? 0) + i * SLOT_MINUTES * 60_000}>
                 {label}
