@@ -10,7 +10,7 @@ Use [the app guide](../apps/android/README.md) to build. Keep `io.github.already
 
 Management calls use authenticated sessions; media delivery uses scoped credentials. Profile and account permissions remain server-enforced. Persist only necessary session state and review storage, backup and logout behavior before release.
 
-Native onboarding accepts the instance certificate on first connection without a fingerprint confirmation screen and validates subsequent HTTPS requests against that instance certificate. PIN sign-in requires a direct LAN connection.
+Native onboarding accepts the instance certificate on first connection without a fingerprint confirmation screen and validates subsequent HTTPS requests against that instance certificate. PIN sign-in requires a direct LAN connection. Phone/tablet and TV request the device’s numeric password keyboard for the account PIN. The installed keyboard controls its layout; entry remains limited to 12 ASCII digits. Username Next moves to the PIN; PIN Done dismisses the keyboard and focuses Connect when the form is valid.
 
 ## Validation
 
