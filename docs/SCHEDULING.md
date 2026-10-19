@@ -17,3 +17,5 @@ Guides retain real ended airings overlapping the current half-hour column. The A
 ## Channel filters
 
 Preview and apply share selection semantics. Combine inclusion/exclusion rules explicitly and consistently handle missing metadata, excluded folders and unavailable files. Test empty/overlapping selections and provider-mode differences with synthetic catalogs. Coverage extends future programming without rewriting published airings or rotation state.
+
+The WebUI guide’s top-left header cell shows the current device-local time using the profile’s time format. It updates on each minute boundary and refreshes when the tab becomes visible or regains focus, independently of guide-data polling.
