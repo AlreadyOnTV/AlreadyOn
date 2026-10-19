@@ -53,8 +53,7 @@ class TvNavigationTest {
             fun click(text: String) {
                 compose.waitUntil(60000) { exists(text) }
                 val node = compose.onAllNodesWithText(text).onFirst()
-                // The centered keypad fits in its dialog and has no scroll container.
-                if (!exists("✓ Done")) node.performScrollTo()
+                node.performScrollTo()
                 node.performClick()
             }
             if (manual) {
@@ -106,12 +105,12 @@ class TvNavigationTest {
             assertFalse("Server fingerprint confirmation is skipped", exists("Confirm Server"))
             compose.onNode(hasSetTextAction() and hasText("Username")).performTextInput("tv-fixture")
             compose.onNode(hasSetTextAction() and hasText("Username")).performImeAction()
-            compose.waitUntil(10000) { exists("✓ Done") }
-            compose.waitUntil(10000) { compose.onAllNodes(hasText("1") and isFocused()).fetchSemanticsNodes().isNotEmpty() }
+            val pinField = hasSetTextAction() and hasText("TV PIN")
+            compose.onNode(pinField).assertIsFocused()
             // Synthetic account PIN set by the isolated test fixture, never a live account.
-            "123456".forEach { click(it.toString()) }
-            click("✓ Done")
-            compose.waitUntil(10000) { !exists("✓ Done") }
+            compose.onNode(pinField).performTextInput("123456")
+            compose.onNode(pinField).performImeAction()
+            compose.onNodeWithText("Connect").assertIsFocused()
             click("Connect")
             compose.waitUntil(10000) { compose.onAllNodes(hasText("Admin") and isFocused()).fetchSemanticsNodes().isNotEmpty() }
             device.pressDPadCenter()

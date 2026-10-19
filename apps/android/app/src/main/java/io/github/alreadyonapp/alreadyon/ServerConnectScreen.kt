@@ -7,22 +7,16 @@ import androidx.compose.foundation.layout.*
 import androidx.compose.material3.*
 import androidx.compose.runtime.*
 import androidx.compose.ui.Modifier
-import androidx.compose.ui.platform.testTag
-import androidx.compose.ui.platform.LocalDensity
-import androidx.compose.ui.unit.Density
 import androidx.compose.ui.platform.LocalContext
-import androidx.compose.ui.platform.LocalView
 import androidx.compose.ui.unit.dp
 import androidx.compose.foundation.text.KeyboardActions
 import androidx.compose.ui.Alignment
 import androidx.compose.ui.focus.FocusDirection
 import androidx.compose.ui.focus.FocusRequester
 import androidx.compose.ui.focus.focusRequester
-import androidx.compose.ui.focus.onFocusChanged
 import androidx.compose.ui.platform.LocalSoftwareKeyboardController
 import androidx.compose.ui.platform.LocalFocusManager
 import androidx.compose.ui.text.input.ImeAction
-import androidx.compose.ui.window.Dialog
 import androidx.compose.ui.input.key.*
 import androidx.compose.foundation.text.KeyboardOptions
 import androidx.compose.ui.text.input.KeyboardType
@@ -104,10 +98,9 @@ internal fun ServerConnectScreen(state: PhoneState, model: PhoneModel, modifier:
     LaunchedEffect(trust) { if (trust != null) usernameFocus.requestFocus() }
     val pinFocus = remember { FocusRequester() }
     val connectFocus = remember { FocusRequester() }
-    var pinKeypad by remember { mutableStateOf(false) }
-    fun enterPin() { keyboard?.hide(); pinFocus.requestFocus(); pinKeypad = true }
+    fun enterPin() { pinFocus.requestFocus(); keyboard?.show() }
     fun closePin() {
-        pinKeypad = false
+        keyboard?.hide()
         focusManager.clearFocus(force = true)
         if (username.isNotBlank() && pin.length in 6..12) connectFocus.requestFocus()
     }
@@ -183,8 +176,8 @@ internal fun ServerConnectScreen(state: PhoneState, model: PhoneModel, modifier:
 
                 OutlinedTextField(username, { username = it }, label = { Text("Username") },
                     singleLine = true,
-                    keyboardOptions = KeyboardOptions(imeAction = if (BuildConfig.IS_TV) ImeAction.Next else ImeAction.Default),
-                    keyboardActions = KeyboardActions(onNext = { if (BuildConfig.IS_TV) enterPin() }, onDone = { if (BuildConfig.IS_TV) enterPin() }),
+                    keyboardOptions = KeyboardOptions(imeAction = ImeAction.Next),
+                    keyboardActions = KeyboardActions(onNext = { enterPin() }, onDone = { enterPin() }),
                     modifier = Modifier.fillMaxWidth(if (BuildConfig.IS_TV) 0.6f else 1f).focusRequester(usernameFocus).onPreviewKeyEvent {
                         if (BuildConfig.IS_TV && (it.key == Key.Enter || it.key == Key.NumPadEnter)) {
                             if (it.type == KeyEventType.KeyUp) enterPin()
@@ -192,16 +185,9 @@ internal fun ServerConnectScreen(state: PhoneState, model: PhoneModel, modifier:
                         } else false
                     }, enabled = !state.busy)
                 Text("Enter your 6–12 digit TV PIN")
-                if (!BuildConfig.IS_TV) OutlinedTextField(pin, { pin = it.filter { digit -> digit in '0'..'9' }.take(12) },
-                    label = { Text("TV PIN") }, singleLine = true,
-                    visualTransformation = if (pinVisible) VisualTransformation.None else PasswordVisualTransformation(),
-                    trailingIcon = { PinVisibilityButton(pinVisible, !state.busy) { pinVisible = !pinVisible } },
-                    keyboardOptions = KeyboardOptions(keyboardType = KeyboardType.NumberPassword), modifier = Modifier.fillMaxWidth(), enabled = !state.busy)
-                else OutlinedTextField(pin, {}, label = { Text("TV PIN") }, readOnly = true,
-                    singleLine = true, visualTransformation = PasswordVisualTransformation(),
-                    modifier = Modifier.fillMaxWidth(0.6f).focusRequester(pinFocus).onFocusChanged {
-                        if (it.isFocused) { keyboard?.hide(); pinKeypad = true }
-                    }, enabled = !state.busy)
+                ServerPinField(pin, { pin = it }, pinVisible, { pinVisible = !pinVisible },
+                    enabled = !state.busy, onDone = ::closePin,
+                    modifier = Modifier.fillMaxWidth(if (BuildConfig.IS_TV) 0.6f else 1f).focusRequester(pinFocus))
                 Button(modifier = Modifier.focusRequester(connectFocus).tvFocusOutline(), onClick = { model.signInWithPIN(selected!!.origin, username, pin, trust!!.certificate, trust!!.name); pin = ""; pinVisible = false },
                     enabled = !changedCa && username.isNotBlank() && pin.length in 6..12 && !state.busy) { Text("Connect") }
             }
@@ -211,41 +197,18 @@ internal fun ServerConnectScreen(state: PhoneState, model: PhoneModel, modifier:
         if (BuildConfig.IS_TV) state.error?.let { Text(it, color = MaterialTheme.colorScheme.error) }
     }
     }
-    if (BuildConfig.IS_TV && pinKeypad) Dialog(onDismissRequest = { closePin() }) {
-        val firstDigit = remember { FocusRequester() }
-        val keypadView = LocalView.current
-        // The dialog must own window focus before assigning focus to its first key.
-        LaunchedEffect(Unit) {
-            while (!keypadView.hasWindowFocus()) delay(16)
-            firstDigit.requestFocus()
-        }
-        ServerPinKeypad(pin, firstDigit, { pin = it }, ::closePin)
-
-    }
 }
 
-/** Scaling density reduces measured dimensions and typography together, preserving system font scale. */
+/** Request the installed IME's numeric layout; each device owns its keyboard presentation. */
 @Composable
-internal fun ServerPinKeypad(pin: String, firstDigit: FocusRequester, onPin: (String) -> Unit, onDone: () -> Unit, scale: Float = 0.7f) {
-    val density = LocalDensity.current
-    CompositionLocalProvider(LocalDensity provides Density(density.density * scale, density.fontScale)) {
-        Surface(modifier = Modifier.testTag("server-pin-keypad"), shape = MaterialTheme.shapes.large) {
-            Column(Modifier.width(360.dp).padding(20.dp), horizontalAlignment = Alignment.CenterHorizontally,
-                verticalArrangement = Arrangement.spacedBy(8.dp)) {
-                Text("TV PIN", style = MaterialTheme.typography.headlineSmall)
-                Text("●".repeat(pin.length), style = MaterialTheme.typography.headlineMedium)
-                listOf(listOf("1", "2", "3"), listOf("4", "5", "6"), listOf("7", "8", "9"), listOf("Clear", "0", "Delete")).forEach { row ->
-                    Row(horizontalArrangement = Arrangement.spacedBy(8.dp)) {
-                        row.forEach { digit ->
-                            Button(onClick = { onPin(when (digit) { "Clear" -> ""; "Delete" -> pin.dropLast(1); else -> (pin + digit).take(12) }) },
-                                modifier = Modifier.width(100.dp).then(if (digit == "1") Modifier.focusRequester(firstDigit) else Modifier).tvFocusOutline()) { Text(digit) }
-                        }
-                    }
-                }
-                Button(onClick = onDone, modifier = Modifier.tvFocusOutline()) { Text("✓ Done") }
-            }
-        }
-    }
+internal fun ServerPinField(pin: String, onPin: (String) -> Unit, visible: Boolean,
+    onToggleVisibility: () -> Unit, enabled: Boolean, onDone: () -> Unit, modifier: Modifier = Modifier) {
+    OutlinedTextField(pin, { onPin(it.filter { digit -> digit in '0'..'9' }.take(12)) },
+        label = { Text("TV PIN") }, singleLine = true,
+        visualTransformation = if (visible) VisualTransformation.None else PasswordVisualTransformation(),
+        trailingIcon = { PinVisibilityButton(visible, enabled, onToggleVisibility) },
+        keyboardOptions = KeyboardOptions(keyboardType = KeyboardType.NumberPassword, imeAction = ImeAction.Done),
+        keyboardActions = KeyboardActions(onDone = { onDone() }), modifier = modifier, enabled = enabled)
 }
 
 /** Match the WebUI eye control without adding an icon library for two paths. */
