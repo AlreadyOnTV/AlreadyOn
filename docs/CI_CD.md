@@ -28,7 +28,7 @@ Before image builds, `scripts/local-bases.py` checks base recipes, parent and ag
 
 ## Delivery
 
-On approval, deploy the exact tested image and verify revision, health, service count, mounts and relevant playback. `scripts/deploy-production.sh <ssh-host> [compose-directory]` transfers it with the updater paused. Preserve live data.
+On approval, deploy the exact tested image and verify revision, health, service count, mounts and relevant playback. `scripts/deploy-production.sh <ssh-host> [compose-directory]` transfers it with the updater paused, using the host's configured Compose image tag without changing its configuration. Digest-pinned references require maintainer review. Preserve live data.
 
 After alpha approval run `python3 scripts/promote.py test YY.MM.DD`; after RC approval run `python3 scripts/promote.py main`. These create fast-forward or exact-tree merge commits only, require image/APK provenance, and reuse artifacts without e2e reruns. Resolve conflicts on dev; preserve branch protection.
 
