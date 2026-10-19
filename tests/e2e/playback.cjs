@@ -268,7 +268,8 @@ const noWorkers = async (unreleased = () => 0) => {
       "Profile default must be English",
     );
     await page.getByLabel("Preferred Audio Language").selectOption("ja");
-    await page.getByRole("button", { name: "Save Changes" }).click();
+    await page.getByRole("status", { name: "audioLanguage saved", exact: true }).waitFor();
+    await page.getByRole("button", { name: /Back To Guide/ }).click();
     await playing(page);
     assert(
       sessions.at(-1).plan.audioTrackIndex === 1,
@@ -326,7 +327,8 @@ const noWorkers = async (unreleased = () => 0) => {
     // Missing language falls back to the default audio, never silence or a subtitle index.
     await page.goto(url + "/profile");
     await page.getByLabel("Preferred Audio Language").selectOption("fr");
-    await page.getByRole("button", { name: "Save Changes" }).click();
+    await page.getByRole("status", { name: "audioLanguage saved", exact: true }).waitFor();
+    await page.getByRole("button", { name: /Back To Guide/ }).click();
     await playing(page);
     assert(
       sessions.at(-1).plan.audioTrackIndex === 1,
@@ -334,7 +336,8 @@ const noWorkers = async (unreleased = () => 0) => {
     );
     await page.goto(url + "/profile");
     await page.getByLabel("Preferred Audio Language").selectOption("en");
-    await page.getByRole("button", { name: "Save Changes" }).click();
+    await page.getByRole("status", { name: "audioLanguage saved", exact: true }).waitFor();
+    await page.getByRole("button", { name: /Back To Guide/ }).click();
     await playing(page);
     await leave(page);
     await noWorkers();
@@ -2558,7 +2561,9 @@ const noWorkers = async (unreleased = () => 0) => {
       .getByLabel("Subtitle language", { exact: true })
       .selectOption("de");
     await card.getByLabel("Subtitles", { exact: true }).selectOption("always");
-    await page.getByRole("button", { name: "Save Changes" }).click();
+    await page.getByRole("status", { name: "subtitleLanguage saved", exact: true }).waitFor();
+    await page.getByRole("status", { name: "subtitleMode saved", exact: true }).waitFor();
+    await page.getByRole("button", { name: /Back To Guide/ }).click();
     await page.locator(".guide-slot-box").first().waitFor();
     await playing(page);
     await caption("E2E UNTERTITEL");
@@ -3148,7 +3153,7 @@ const noWorkers = async (unreleased = () => 0) => {
         has: page.getByRole("heading", { name: "Display Name", exact: true }),
       })
       .locator("input");
-    await nameInput.fill("Local unsaved name");
+    await nameInput.fill(""); // Incomplete input is not autosaved.
     refreshed.name = "Second remote update";
     refreshed.icon = "/profile-icons/synthetic-refresh.png";
     await page.route("**/profile-icons/synthetic-refresh.png", (route) =>
@@ -3169,8 +3174,8 @@ const noWorkers = async (unreleased = () => 0) => {
       "Uploaded avatar changes reach the active profile",
     );
     assert(
-      (await nameInput.inputValue()) === "Local unsaved name",
-      "Polling preserves unsaved local profile edits",
+      (await nameInput.inputValue()) === "",
+      "Polling preserves incomplete local profile edits",
     );
     await context.close();
     console.log(
@@ -3987,12 +3992,11 @@ const noWorkers = async (unreleased = () => 0) => {
     const timeSelect = field("Time Format");
     const currentTime = await timeSelect.inputValue();
     await timeSelect.selectOption(currentTime === "24h" ? "12h" : "24h");
-    await page.getByRole("button", { name: "Save Changes" }).click();
-    await page.locator(".guide-slot-box").first().waitFor();
-    await page.goto(url + "/profile");
+    await page.getByRole("status", { name: "guideTimeFormat saved", exact: true }).waitFor();
+    await page.reload();
+    assert((await field("Time Format").inputValue()) !== currentTime, "Time format autosave survives reload");
     await field("Time Format").selectOption(currentTime);
-    await page.getByRole("button", { name: "Save Changes" }).click();
-    await page.locator(".guide-slot-box").first().waitFor();
+    await page.getByRole("status", { name: "guideTimeFormat saved", exact: true }).waitFor();
 
     await page.goto(url + "/admin/channels");
     await page.locator("table.admin-table").last().waitFor();

@@ -23,3 +23,9 @@ Owner-only **Remove Inactive Sessions** defaults to On and 14 days. It applies t
 See [saved API credential entry](SAVED_CREDENTIALS.md) for draft-only visibility controls.
 
 Active WebUI, phone and TV clients refresh shared profile settings and avatars every five minutes and when visible/resumed. Native Sign Out retains the encrypted session for recent-server reconnection; WebUI session revocation remains authoritative. Profile PINs and local drafts remain independent.
+
+## WebUI profile autosave
+
+WebUI Profile Settings saves each changed setting independently and stays on the page. Dropdowns and icon choices save immediately. Name edits save after a short typing pause or on blur; blank names remain unsaved. The PIN editor retains Save PIN and Cancel: only Save PIN commits a valid matching 4–6 digit PIN, and Cancel returns to the pre-edit view without saving. PIN removal still requires confirmation. The page-level Save Changes and Cancel buttons are removed.
+
+A green check beside the saved setting appears only after server success, stays visible for five seconds, then fades away. Failures show a field error without a success check. Unchanged values do not write again. Writes are serialized and queued intermediate edits to the same setting are coalesced, preserving the newest choice without overwriting unrelated settings. Remote refreshes update untouched fields while preserving incomplete edits. Phone and TV retain their existing save flows until their separate review.
