@@ -22,4 +22,4 @@ Use the [PR template](.github/PULL_REQUEST_TEMPLATE.md). Explain the problem, re
 
 Report vulnerabilities privately through [SECURITY.md](SECURITY.md). AlreadyOn uses [GNU GPLv3](LICENSE); licensing and third-party redistribution obligations apply to every contribution.
 
-Keep documentation focused on current setup, public contracts, operating procedures and non-obvious decisions. Record completed implementation checklists, one-off measurements and validation transcripts in their issue or PR. Keep release descriptions on GitHub and review snapshots outside Git. Prefer updating an existing guide over creating a feature-by-feature work log.
+Keep documentation focused on current setup, public contracts, operating procedures and non-obvious decisions. Contributor guides have a 500-word limit; the standard Code of Conduct is exempt, but its links are still checked. Record completed implementation checklists, one-off measurements and validation transcripts in their issue or PR. Keep release descriptions on GitHub and review snapshots outside Git. Prefer updating an existing guide over creating a feature-by-feature work log.
