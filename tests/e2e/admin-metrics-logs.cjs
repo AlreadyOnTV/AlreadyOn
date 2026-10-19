@@ -17,13 +17,17 @@ module.exports = async function adminMetricsAndLogs({browser, login, url, assert
     const now=Math.floor(Date.now()/1000);
     const point=(i)=>({at:now-(60-i)*15,cpu:20+i%40,ram:40,networkInterface:'eth0',networkScope:'host',ingressMbps:2,egressMbps:4,
       cpuCores:Array.from({length:8},(_,j)=>({core:j,utilization:i===30?null:(i*3+j*10)%100})),cpuLoad:1.5,cpuPressure:2.25,
-      memoryUsedBytes:4e9,memoryLimitBytes:8e9,memoryLimited:true,diskReadMBps:i===30?null:i/2,diskWriteMBps:i/4,ioPressure:i%100,
+      memoryUsedBytes:4e9,memoryLimitBytes:8e9,memoryLimited:true,
+      diskMounts:[
+        {mount:'config',readMBps:i===30?null:i/2,writeMBps:i/4,readIOPS:i*2,writeIOPS:i,averageLatencyMs:1.5},
+        {mount:'media',readMBps:i/3,writeMBps:i/6,readIOPS:i*3,writeIOPS:i/2,averageLatencyMs:null},
+      ],
       disk:41.2,diskUsedBytes:32e9,diskTotalBytes:128e9,diskPath:'/config',diskScope:'container',mediaUsedBytes:12.2e12,mediaTotalBytes:16e12});
     return route.fulfill({json:{intervalSeconds:15,points:[point(-10), ...Array.from({length:60},(_,i)=>point(i))],current:point(60)}});
   });
   await page.route('**/api/server/activity',route=>route.fulfill({json:{sessions:[],processes:[]}}));
   await page.goto(url+'/admin/dashboard');
-  await page.locator('[data-metric="disk"] .metric-stats').getByText('Config: 32GB / 128GB').waitFor();
+  await page.getByRole('table',{name:'Disk performance by mount'}).getByRole('cell',{name:'32GB / 128GB',exact:true}).waitFor();
   const panels=page.locator('.metrics-grid .metric-panel');
   assert(JSON.stringify(await panels.evaluateAll(es=>es.map(e=>e.dataset.metric)))===JSON.stringify(['cpu','ram','disk','bandwidth']),'Performance panel order');
   const positions=await panels.evaluateAll(es=>es.map(e=>({x:e.getBoundingClientRect().x,y:e.getBoundingClientRect().y})));
@@ -45,14 +49,20 @@ module.exports = async function adminMetricsAndLogs({browser, login, url, assert
   assert(JSON.stringify(await statRows('cpu'))===JSON.stringify(['Load: 1.50  Pressure: 2.3%  Utilization: 40%']),'CPU stat row: '+JSON.stringify(await statRows('cpu')));
   assert(!/°C|Temperature/i.test(await page.locator('.metrics-grid').innerText()),'CPU temperatures are removed');
   assert(JSON.stringify(await statRows('ram'))===JSON.stringify(['Usage: 4.0GB / 8.0GB  Utilization: 40%']),'RAM stat row: '+JSON.stringify(await statRows('ram')));
-  assert(JSON.stringify(await statRows('disk'))===JSON.stringify(['Read: 30.0MB/s  Write: 15.0MB/s','Utilization: 41%  IO Pressure: 60.0%','Config: 32GB / 128GB  Media: 12.2TB / 16TB']),'Disk stat rows: '+JSON.stringify(await statRows('disk')));
+  const diskRows=await page.getByRole('table',{name:'Disk performance by mount'}).getByRole('row').evaluateAll(es=>es.map(e=>[...e.children].map(c=>c.textContent).join('  ')));
+  assert(JSON.stringify(diskRows)===JSON.stringify(['  Config  Media','Bandwidth (r/w)  30.0 / 15.0 MB/s  20.0 / 10.0 MB/s','IOPS (r/w)  120 / 60 IOPS  180 / 30 IOPS','Latency  1.5 ms  N/A','Storage  32GB / 128GB  12.2TB / 16TB']),'Disk stat rows: '+JSON.stringify(diskRows));
   for (const metric of ['cpu','ram','disk']) assert(await page.locator(`[data-metric="${metric}"] .metric-title span`).count()===0,'Utilization moved out of the title');
-  await page.waitForFunction(()=>/Latency: (<1|\d+)ms/.test(document.querySelector('.bandwidth-latency')?.textContent||''),null,{timeout:5000});
+  await page.waitForFunction(()=>/Connection: (<1|\d+)ms/.test(document.querySelector('.bandwidth-latency')?.textContent||''),null,{timeout:5000});
   const disk=page.locator('[data-metric="disk"]');
-  assert(await disk.locator('.metric-line').count()===3,'Disk read, write and I/O pressure lines');
-  assert((await disk.locator('path.metric-line-diskRead').getAttribute('d')).split('M').length===3,'Missing disk samples should break the line');
+  assert(await disk.locator('.metric-line').count()===4,'Config and media each need read and write lines');
+  for (const series of ['configRead','configWrite','mediaRead','mediaWrite']) {
+    assert(await disk.locator(`path.metric-line-${series}`).count()===1,`Missing disk series ${series}`);
+  }
+  assert((await disk.locator('path.metric-line-configRead').getAttribute('d')).split('M').length===3,'Missing disk samples should break the line');
+  const diskColors=await disk.locator('.metric-line').evaluateAll(es=>es.map(e=>getComputedStyle(e).stroke));
+  assert(new Set(diskColors).size===4,'Mount read/write lines should be distinguishable');
   const checkDiskLegend = async panel => {
-    const legendBottom = await panel.locator('.metric-stats').evaluate(e => e.getBoundingClientRect().bottom);
+    const legendBottom = await panel.getByRole('table',{name:'Disk performance by mount'}).evaluate(e => e.getBoundingClientRect().bottom);
     const plotTop = await panel.locator('.metric-gridline').evaluateAll(es=>Math.min(...es.map(e=>e.getBoundingClientRect().top)));
     assert(legendBottom < plotTop, 'Disk legend should stay above plotted history');
   };
