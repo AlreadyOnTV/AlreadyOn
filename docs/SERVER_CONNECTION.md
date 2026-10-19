@@ -8,4 +8,4 @@ An empty port uses ordinary HTTPS port 443, including for IP addresses. It never
 
 Discovery remains active while typing. Check Server uses the existing app-local server trust flow; username and account TV PIN are requested only after checking the selected server. No device-wide CA import is needed. Saved trust failures still require explicit replacement acceptance.
 
-The compact Google TV server PIN pad supports remote focus, Clear, Delete, a 12-digit limit and Done. System font scaling remains respected; profile PIN dialogs are separate.
+Phone/tablet and Google TV use the device’s installed numeric password keyboard for the server PIN. Entry accepts up to 12 ASCII digits and remains masked unless Show PIN is selected. Username Next moves to the PIN; keyboard Done dismisses input and focuses Connect when username and the 6–12 digit PIN are valid. The device keyboard controls its layout and editing controls; profile PIN dialogs are separate.
