@@ -247,14 +247,43 @@ export default function GuidePage() {
   const { status: startupStatus, completions: startupCompletions } = useStartupStatus();
   const [channels, setChannels] = useState<GuideChannel[] | null>(null);
   const [loadError, setLoadError] = useState<string | null>(null);
-  // Captured once per fetch, floored to the current half-hour — the
-  // anchor every column/label position is computed relative to, same
-  // idea as the old mock data's fixed GRID_START_MINUTES, just re-based
-  // on the real current time instead of a fixed 7pm.
-  const [gridStartMs, setGridStartMs] = useState<number | null>(null);
+  const [nowMs, setNowMs] = useState(Date.now);
+  const gridOrigin = new Date(nowMs);
+  gridOrigin.setMinutes(gridOrigin.getMinutes() - (gridOrigin.getMinutes() % SLOT_MINUTES), 0, 0);
+  const gridStartMs = gridOrigin.getTime();
 
   const [focused, setFocused] = useState<Selected | null>(null);
-  const [tuned, setTuned] = useState<Selected | null>(null);
+  const [tunedSelection, setTuned] = useState<Selected | null>(null);
+  const tuned = useMemo(() => {
+    const watchedChannel = channels?.find((c) => c.number === tunedSelection?.channelNumber);
+    return watchedChannel?.programs.length
+      ? { channelNumber: watchedChannel.number, programStartsAt: currentProgramStartsAt(watchedChannel.programs, nowMs) }
+      : tunedSelection;
+  }, [channels, tunedSelection, nowMs]);
+  const restoreGuideRef = useRef(true);
+  const [guideEntry, setGuideEntry] = useState(0);
+  useEffect(() => {
+    let timer: number;
+    const refresh = () => {
+      const stamp = Date.now();
+      setNowMs(stamp);
+      const nextEnd = channels?.flatMap(c => c.programs)
+        .map(p => Date.parse(p.endsAt)).filter(end => end > stamp)
+        .reduce((next, end) => Math.min(next, end), Infinity) ?? Infinity;
+      window.clearTimeout(timer);
+      timer = window.setTimeout(refresh, Math.max(1, Math.min(
+        30_000, SLOT_MINUTES * 60_000 - stamp % (SLOT_MINUTES * 60_000), nextEnd - stamp,
+      )));
+    };
+    refresh();
+    window.addEventListener('focus', refresh);
+    document.addEventListener('visibilitychange', refresh);
+    return () => {
+      window.clearTimeout(timer);
+      window.removeEventListener('focus', refresh);
+      document.removeEventListener('visibilitychange', refresh);
+    };
+  }, [channels]);
   // The address carries the tuned channel (?channel=124) so a refresh or bookmark returns to it.
   const [searchParams, setSearchParams] = useSearchParams();
   // Capture an explicit link once; discard it after selection or fallback.
@@ -296,7 +325,15 @@ export default function GuidePage() {
   }, []);
   const [fullscreen, setFullscreen] = useState(false);
   useEffect(() => {
-    const sync = () => setFullscreen(document.fullscreenElement !== null);
+    const sync = () => {
+      const active = document.fullscreenElement !== null;
+      setFullscreen(active);
+      if (!active) {
+        restoreGuideRef.current = true;
+        setNowMs(Date.now());
+        setGuideEntry(value => value + 1);
+      }
+    };
     document.addEventListener('fullscreenchange', sync);
     return () => document.removeEventListener('fullscreenchange', sync);
   }, []);
@@ -335,8 +372,6 @@ export default function GuidePage() {
 
     const loadGuide = () => {
       const nowMs = Date.now();
-      const gridOrigin = new Date(nowMs);
-      gridOrigin.setMinutes(gridOrigin.getMinutes() - (gridOrigin.getMinutes() % SLOT_MINUTES), 0, 0);
 
       Promise.all([getGuide(GUIDE_HOURS, audienceTier), getProfile(currentUser.id)])
         .then(([data, viewer]) => {
@@ -354,12 +389,7 @@ export default function GuidePage() {
             .map((c) => ({ ...c, programs: mergeIntervalSegments(c.programs.filter((p) => p.kind !== 'commercial')), previousPrograms: mergeIntervalSegments((c.previousPrograms ?? []).filter(p => p.kind !== 'commercial')) }))
             .sort((a, b) => a.number - b.number);
           setChannels(sortedData);
-          // The rounded-down current half-hour — the grid's true left
-          // edge. A program already airing when the page loads renders
-          // clipped to this edge instead of at its own real (earlier)
-          // start — see layoutPrograms' displayStartMinutes — rather than
-          // showing any already-aired time before it.
-          setGridStartMs(gridOrigin.getTime());
+          setNowMs(Date.now());
           setLoadError(null);
           setFocused((sel) => reconcileSelection(sel, sortedData, nowMs));
           setTuned((sel) => reconcileSelection(sel, sortedData, nowMs));
@@ -399,9 +429,13 @@ export default function GuidePage() {
     // only ever fetching once on mount, so a guide left open stays live
     // instead of looking frozen/stale.
     const intervalId = window.setInterval(loadGuide, GUIDE_POLL_INTERVAL_MS);
+    window.addEventListener('focus', loadGuide);
+    document.addEventListener('visibilitychange', loadGuide);
     return () => {
       cancelled = true;
       window.clearInterval(intervalId);
+      window.removeEventListener('focus', loadGuide);
+      document.removeEventListener('visibilitychange', loadGuide);
     };
   }, [currentUser.id, audienceTier, startupCompletions]);
 
@@ -472,24 +506,12 @@ export default function GuidePage() {
   const gridTemplateColumns = `${channelColWidth}px repeat(${slotCount}, ${slotPixelWidth}px)`;
   const rowGridTemplateColumns = `${channelColWidth}px ${timelineWidthPx}px`;
 
-  // The grid's left edge moves forward every half hour; scroll back by the same
-  // amount so the guide stays on the same moment instead of jumping ahead.
-  const previousGridStartMs = useRef<number | null>(null);
-  useLayoutEffect(() => {
-    const before = previousGridStartMs.current;
-    previousGridStartMs.current = gridStartMs;
-    const container = scrollRef.current;
-    if (before === null || gridStartMs === null || gridStartMs === before || !container) return;
-    const shift = ((gridStartMs - before) / (SLOT_MINUTES * 60_000)) * slotPixelWidth;
-    container.scrollLeft = Math.max(0, container.scrollLeft - shift);
-  }, [gridStartMs, slotPixelWidth]);
-
   // Keyboard nav works immediately on load, with no click needed first.
   useEffect(() => {
     scrollRef.current?.focus();
   }, []);
 
-  useEffect(() => {
+  useLayoutEffect(() => {
     if (!focused) return;
     const key = `${focused.channelNumber}-${focused.programStartsAt}`;
     const el = slotRefs.current.get(key);
@@ -563,6 +585,24 @@ export default function GuidePage() {
     // `sorted` is included so a poll that changes which channel is first
     // re-evaluates atTopEdge too.
   }, [focused, slotPixelWidth, sorted, metrics, channelColWidth]);
+
+  const previousGridStartMs = useRef(gridStartMs);
+  useLayoutEffect(() => {
+    const container = scrollRef.current;
+    if (!container) return;
+    if (previousGridStartMs.current !== gridStartMs) container.scrollLeft = 0;
+    previousGridStartMs.current = gridStartMs;
+    if (fullscreen || !restoreGuideRef.current || !tuned) return;
+    const cell = slotRefs.current.get(`${tuned.channelNumber}-${tuned.programStartsAt}`);
+    const row = cell?.closest('.guide-row');
+    if (!row) return;
+    restoreGuideRef.current = false;
+    setFocused(tuned);
+    container.scrollLeft = 0;
+    container.scrollTop += row.getBoundingClientRect().top - container.getBoundingClientRect().top
+      - (headRef.current?.getBoundingClientRect().height ?? 0);
+    container.focus({ preventScroll: true });
+  }, [fullscreen, guideEntry, tuned, gridStartMs, metrics]);
 
   // The info/preview text tracks whatever's *focused* (the keyboard/click
   // cursor), separately from `tuned` — browsing ahead into the future
@@ -746,7 +786,14 @@ export default function GuidePage() {
             <Player
               channelId={sorted.find((c) => c.number === tuned?.channelNumber)?.channelId ?? null}
               large={playerLarge}
-              onToggleLarge={mobilePlayer ? undefined : () => setLargePlayer((v) => !v)}
+              onToggleLarge={mobilePlayer ? undefined : () => {
+                if (largePlayer) {
+                  restoreGuideRef.current = true;
+                  setNowMs(Date.now());
+                  setGuideEntry(value => value + 1);
+                }
+                setLargePlayer(value => !value);
+              }}
             />
           </div>
         </div>
@@ -807,6 +854,7 @@ export default function GuidePage() {
                 }}
               />
             ))}
+          <div aria-hidden="true" style={{ height: `max(0px, calc(100% - ${rowMinHeight}px - 40px))` }} />
         </div>
       </div>
     </div>
@@ -876,7 +924,7 @@ function GuideChannelRow({
       <div className="guide-row-timeline">
         {(() => {
           const history = (channel.previousPrograms ?? []).filter(program => new Date(program.endsAt).getTime() > gridStartMs);
-          const displayed = [...history, ...channel.programs];
+          const displayed = [...history, ...channel.programs.filter(program => Date.parse(program.endsAt) > gridStartMs)];
           const layout = layoutPrograms(displayed, gridStartMs, slotPixelWidth, timelineWidthPx);
           return displayed.map((program, index) => {
             const { leftPx, widthPx } = layout[index];

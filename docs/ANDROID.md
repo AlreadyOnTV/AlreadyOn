@@ -31,3 +31,5 @@ Phone/TV Sign Out retains the encrypted session. Selecting the recent server rev
 Active clients refresh shared profile settings and avatars every five minutes and on app resume, preserving local settings drafts and playback choices.
 
 Phone and TV guide headers show the current device-local time in the profile’s time format. The clock updates on minute boundaries and immediately on resume. Its left inset matches the channel numbers below.
+
+Fullscreen guides stay current. Returning restores the watched row at top, current slot leftmost and live airing in red.

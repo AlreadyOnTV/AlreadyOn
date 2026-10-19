@@ -19,6 +19,7 @@ import androidx.compose.foundation.lazy.rememberLazyListState
 import androidx.compose.material3.*
 import androidx.compose.runtime.*
 import androidx.compose.ui.Modifier
+import androidx.compose.ui.platform.testTag
 import androidx.compose.ui.focus.*
 import androidx.compose.ui.graphics.*
 import androidx.compose.ui.graphics.drawscope.drawIntoCanvas
@@ -27,7 +28,6 @@ import androidx.compose.ui.semantics.contentDescription
 import androidx.compose.ui.semantics.semantics
 import androidx.compose.ui.semantics.stateDescription
 import androidx.compose.ui.unit.dp
-import kotlinx.coroutines.delay
 import kotlinx.coroutines.launch
 import java.time.Instant
 import java.time.ZoneId
@@ -37,43 +37,28 @@ import java.util.Locale
 /** One focus target per channel avoids hundreds of invisible Compose focus/layout nodes on small TVs. */
 @OptIn(ExperimentalFoundationApi::class)
 @Composable
-internal fun TvGuide(state: PhoneState, palette: PhonePalette, modifier: Modifier, resetSignal: Int = 0, onNavigation: () -> Unit = {}, onSelection: (GuideChannel, GuideProgram?) -> Unit = { _, _ -> }, onChannelFocus: (Long, Boolean) -> Unit = { _, _ -> }, onTune: (GuideChannel) -> Unit) {
+internal fun TvGuide(state: PhoneState, palette: PhonePalette, modifier: Modifier, now: Long, resetSignal: Int = 0, onNavigation: () -> Unit = {}, onSelection: (GuideChannel, GuideProgram?) -> Unit = { _, _ -> }, onChannelFocus: (Long, Boolean) -> Unit = { _, _ -> }, onTune: (GuideChannel) -> Unit) {
     val channels = state.channels
-    val rows = rememberLazyListState()
+    val rows = rememberLazyListState(initialFirstVisibleItemIndex = channels.indexOfFirst { it.id == state.channel?.id }.coerceAtLeast(0))
     val scope = rememberCoroutineScope()
     var movingRow by remember { mutableStateOf(false) }
     val targets = remember(channels.map { it.id }) { channels.associate { it.id to FocusRequester() } }
-    var now by remember { mutableLongStateOf(System.currentTimeMillis()) }
     var selectedTime by remember { mutableLongStateOf(now) }
-    var origin by remember { mutableLongStateOf(now / 1_800_000 * 1_800_000) }
+    var origin by remember { mutableLongStateOf(guideHalfHour(now)) }
     val format = remember(state.profile?.timeFormat) {
         DateTimeFormatter.ofPattern(when (state.profile?.timeFormat) { "24h" -> "HH:mm"; "12h-padded" -> "hh:mma"; else -> "h:mma" }, Locale.US).withZone(ZoneId.systemDefault())
     }
-    // Wake at the actual boundary; a delayed/backgrounded coroutine catches up once.
-    LaunchedEffect(Unit) {
-        while (true) {
-            val stamp = System.currentTimeMillis()
-            val slot = guideHalfHour(stamp)
-            if (guideHalfHour(now) != slot) {
-                origin = slot
-                if (selectedTime < slot) selectedTime = stamp
-            }
-            now = stamp
-            delay((slot + 1_800_000 - stamp).coerceIn(1, 30_000))
-        }
+    LaunchedEffect(guideHalfHour(now)) {
+        origin = guideHalfHour(now)
+        if (selectedTime < origin) selectedTime = now
     }
     // Restoring the guide always restores the selected channel, independent of stream readiness.
     LaunchedEffect(channels.isNotEmpty(), state.profile?.id, state.channel?.id, resetSignal) {
         if (channels.isNotEmpty()) {
             val index = channels.indexOfFirst { it.id == state.channel?.id }.coerceAtLeast(0)
             val channel = channels[index]
-            // The preview can be paused or delayed across a schedule boundary. Restore its
-            // actual airing, rather than whichever show the wall clock now points at.
-            val playingAt = state.playback?.entryStartsAt?.let { Instant.parse(it).toEpochMilli() }
-            selectedTime = playingAt?.takeIf { at -> channel.programs.any {
-                it.mediaFileId == state.playback?.mediaFileId && at >= Instant.parse(it.startsAt).toEpochMilli() && at < Instant.parse(it.endsAt).toEpochMilli()
-            } } ?: System.currentTimeMillis()
-            origin = guideHalfHour(System.currentTimeMillis())
+            selectedTime = now
+            origin = guideHalfHour(now)
             onChannelFocus(channel.id, true)
             onSelection(channel, channel.programs.find { selectedTime >= Instant.parse(it.startsAt).toEpochMilli() && selectedTime < Instant.parse(it.endsAt).toEpochMilli() }
                 ?: channel.programs.firstOrNull())
@@ -85,8 +70,9 @@ internal fun TvGuide(state: PhoneState, palette: PhonePalette, modifier: Modifie
     BoxWithConstraints(modifier) {
     // Fit exactly two hours beside the fixed channel column at every viewport width.
     val minuteWidth = ((maxWidth.value - 100).coerceAtLeast(1f) / 120).dp
+    val bottomPadding = (maxHeight - 34.dp - 56.dp).coerceAtLeast(0.dp)
     Column(Modifier.fillMaxSize()) {
-        Row(Modifier.fillMaxWidth().background(palette.alternate)) {
+        Row(Modifier.fillMaxWidth().background(palette.alternate).testTag("guide-timeline").semantics { stateDescription = origin.toString() }) {
             GuideClock(state.profile?.timeFormat, palette, Modifier.width(100.dp).padding(4.dp))
             Canvas(Modifier.weight(1f).height(34.dp)) {
                 val paint = Paint(Paint.ANTI_ALIAS_FLAG).apply { color = palette.muted.toArgb(); textSize = 14.dp.toPx() }
@@ -104,7 +90,9 @@ internal fun TvGuide(state: PhoneState, palette: PhonePalette, modifier: Modifie
                 override fun calculateScrollDistance(offset: Float, size: Float, containerSize: Float) = 0f
             }
         }) {
-        LazyColumn(state = rows, verticalArrangement = Arrangement.spacedBy(4.dp)) {
+        LazyColumn(state = rows, verticalArrangement = Arrangement.spacedBy(4.dp),
+            modifier = Modifier.testTag("guide-rows"),
+            contentPadding = PaddingValues(bottom = bottomPadding)) {
             if (channels.isEmpty()) item { Text("No channels are available for this profile.") }
             itemsIndexed(channels, key = { _, channel -> channel.id }) { index, channel ->
                 var focused by remember { mutableStateOf(false) }
@@ -130,20 +118,18 @@ internal fun TvGuide(state: PhoneState, palette: PhonePalette, modifier: Modifie
                             selectedTime = selectedTime.coerceIn(chosen.second, (chosen.third - 1).coerceAtLeast(chosen.second))
                             reveal(chosen.second, chosen.third)
                         }
-                        val playingAt = state.playback?.entryStartsAt?.let { Instant.parse(it).toEpochMilli() } ?: System.currentTimeMillis()
-                        val current = chosen != null && chosen == programs.getOrNull(selectionIndex(playingAt))
+                        val current = chosen != null && chosen.first == channel.liveProgram(now)
                         onChannelFocus(channel.id, current)
                         onSelection(channel, chosen?.first)
                     }
                     LaunchedEffect(programs, now) {
                         if (focused) {
                             val chosen = programs.getOrNull(selectionIndex())
-                            val playingAt = state.playback?.entryStartsAt?.let { Instant.parse(it).toEpochMilli() } ?: now
-                            onChannelFocus(channel.id, chosen != null && chosen == programs.getOrNull(selectionIndex(playingAt)))
+                            onChannelFocus(channel.id, chosen != null && chosen.first == channel.liveProgram(now))
                             onSelection(channel, chosen?.first)
                         }
                     }
-                    Box(Modifier.fillMaxWidth().height(56.dp).focusRequester(targets.getValue(channel.id))
+                    Box(Modifier.fillMaxWidth().height(56.dp).testTag("guide-channel-${channel.id}").focusRequester(targets.getValue(channel.id))
                             .onFocusChanged { focused = it.hasFocus; if (it.isFocused) reportFocus() }
                             .semantics(mergeDescendants = true) { contentDescription = "Channel ${channel.number}: ${channel.name}"; stateDescription = programs.getOrNull(selectionIndex())?.let { "${it.first.title} · ${it.first.startsAt}" }.orEmpty() }
                             .onPreviewKeyEvent { event ->
@@ -190,7 +176,8 @@ internal fun TvGuide(state: PhoneState, palette: PhonePalette, modifier: Modifie
                             }
                             val labelPaint = remember { TextPaint(Paint.ANTI_ALIAS_FLAG) }
                             Box(Modifier.weight(1f).fillMaxHeight()) {
-                            Canvas(Modifier.fillMaxSize()) {
+                            Canvas(Modifier.fillMaxSize().then(if (channel.id == state.channel?.id && channel.liveProgram(now) != null)
+                                Modifier.testTag("guide-watched-airing").semantics { stateDescription = channel.liveProgram(now)?.startsAt.orEmpty() } else Modifier)) {
                                 val scale = minuteWidth.toPx() / 60_000
                                 val gap = 3.dp.toPx()
                                 drawnPrograms.forEach { (program, start, end) ->
@@ -220,12 +207,18 @@ internal fun TvGuide(state: PhoneState, palette: PhonePalette, modifier: Modifie
                             Canvas(Modifier.fillMaxSize()) {
                                 val scale = minuteWidth.toPx() / 60_000
                                 val selected = selectionIndex()
-                                if (focused) programs.getOrNull(selected)?.let { (_, start, end) ->
+                                fun outline(start: Long, end: Long, color: Color, inset: Float) {
                                     val left = ((start - origin) * scale).coerceIn(0f, (size.width - 12.dp.toPx()).coerceAtLeast(0f))
                                     val width = (((end - origin) * scale).coerceAtMost(size.width) - left).coerceAtLeast(12.dp.toPx())
-                                    drawRoundRect(Color.White, androidx.compose.ui.geometry.Offset(left + 2, 2f),
-                                        androidx.compose.ui.geometry.Size((width - 4).coerceAtLeast(0f), size.height - 4),
+                                    drawRoundRect(color, androidx.compose.ui.geometry.Offset(left + inset, inset),
+                                        androidx.compose.ui.geometry.Size((width - 2 * inset).coerceAtLeast(0f), size.height - 2 * inset),
                                         androidx.compose.ui.geometry.CornerRadius(6.dp.toPx()), style = androidx.compose.ui.graphics.drawscope.Stroke(2.dp.toPx()))
+                                }
+                                if (channel.id == state.channel?.id) programs.firstOrNull { now >= it.second && now < it.third }?.let { (_, start, end) ->
+                                    if (end > origin && start < origin + 120 * 60_000L) outline(start, end, Color.Red, 2f)
+                                }
+                                if (focused) programs.getOrNull(selected)?.let { (_, start, end) ->
+                                    outline(start, end, Color.White, 5.dp.toPx())
                                 }
                             }
                             }
