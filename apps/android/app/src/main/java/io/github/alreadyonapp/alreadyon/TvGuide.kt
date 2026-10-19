@@ -87,7 +87,7 @@ internal fun TvGuide(state: PhoneState, palette: PhonePalette, modifier: Modifie
     val minuteWidth = ((maxWidth.value - 100).coerceAtLeast(1f) / 120).dp
     Column(Modifier.fillMaxSize()) {
         Row(Modifier.fillMaxWidth().background(palette.alternate)) {
-            Text("CHANNEL", Modifier.width(100.dp).padding(4.dp), color = palette.heading)
+            GuideClock(state.profile?.timeFormat, palette, Modifier.width(100.dp).padding(4.dp))
             Canvas(Modifier.weight(1f).height(34.dp)) {
                 val paint = Paint(Paint.ANTI_ALIAS_FLAG).apply { color = palette.muted.toArgb(); textSize = 14.dp.toPx() }
                 var x = 0f
