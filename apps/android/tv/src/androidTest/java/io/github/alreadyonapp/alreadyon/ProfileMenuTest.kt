@@ -41,7 +41,7 @@ class ProfileMenuTest {
             compose.waitUntil(15000) { compose.onAllNodesWithText("Admin").fetchSemanticsNodes().isNotEmpty() }
             compose.waitUntil(15000) { !model.state.value.busy }
             compose.runOnIdle { model.selectProfile(model.state.value.profiles.first { it.name == "Admin" }, "") }
-            compose.waitUntil(15000) { compose.onAllNodesWithText("CHANNEL").fetchSemanticsNodes().isNotEmpty() }
+            compose.waitUntil(15000) { compose.onAllNodesWithTag("guide-current-time").fetchSemanticsNodes().isNotEmpty() }
             compose.onNodeWithText("Admin").performSemanticsAction(SemanticsActions.OnClick) { it() }
             compose.waitUntil(10000) { compose.onAllNodes(hasText("Switch Profile") and isFocused()).fetchSemanticsNodes().isNotEmpty() }
             compose.onNodeWithText("Profile").assertExists()
@@ -57,7 +57,7 @@ class ProfileMenuTest {
             compose.onNodeWithText("Profile Settings").assertExists()
             compose.onNodeWithText("Admin").assertExists()
             device.pressBack()
-            compose.waitUntil(15000) { compose.onAllNodesWithText("CHANNEL").fetchSemanticsNodes().isNotEmpty() }
+            compose.waitUntil(15000) { compose.onAllNodesWithTag("guide-current-time").fetchSemanticsNodes().isNotEmpty() }
             compose.runOnIdle { assertNull(model.state.value.settings); assertNotNull(model.state.value.profile) }
             device.takeScreenshot(java.io.File(instrumentation.targetContext.getExternalFilesDir(null), "tv-guide.png"))
         } finally {

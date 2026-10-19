@@ -29,3 +29,5 @@ See [subtitle modes](SUBTITLES.md).
 Phone/TV Sign Out retains the encrypted session. Selecting the recent server revalidates it before skipping credentials; profile PINs still apply. WebUI revocation, expiry and account restrictions require fresh authentication. Network/TLS failures retain the cookie.
 
 Active clients refresh shared profile settings and avatars every five minutes and on app resume, preserving local settings drafts and playback choices.
+
+Phone and TV guide headers show the current device-local time in the profile’s time format. The clock updates on minute boundaries and immediately on resume. Its left inset matches the channel numbers below.

@@ -364,7 +364,7 @@ internal fun ChannelGuide(state: PhoneState, model: PhoneModel, palette: PhonePa
     val width = (12 * 60 * minutesToDp).dp
     Column(modifier) {
         Row(Modifier.fillMaxWidth().background(palette.alternate)) {
-            Text("CHANNEL", Modifier.width(100.dp).padding(4.dp), color = palette.heading)
+            GuideClock(state.profile?.timeFormat, palette, Modifier.width(100.dp).padding(4.dp))
             Row(Modifier.horizontalScroll(scroll).width(width)) {
                 repeat(24) { column -> Text(format.format(Instant.ofEpochMilli(origin + column * 30 * 60_000L)),
                     Modifier.width((30 * minutesToDp).dp).padding(4.dp), color = palette.muted) }
