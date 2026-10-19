@@ -13,3 +13,5 @@ Subtitle defaults select the language and mode by their visible labels. The prof
 Full release runs require maintainer approval. Record the exact command, exit status and failing scenario. Store screenshots, logs and transcripts in ignored local locations and sanitize them before sharing.
 
 A browser pass does not certify every device, codec or GPU. Use [packaged-runtime tests](../integration/README.md) for image behavior and separate physical-device validation where necessary. See [delivery](../../docs/CI_CD.md).
+
+For focused WebUI profile autosave checks, start the development preview and run `node tests/e2e/profile-autosave.cjs https://localhost:5173`. Every API request is intercepted with an in-memory synthetic profile; no preview profile or PIN is changed. Coverage includes unchanged-value suppression, PIN confirmation, five-second success feedback and fade, queued edits, failure/retry, and compact layout. This is browser behavior coverage; the existing isolated settings scenario covers persistence against the server.
