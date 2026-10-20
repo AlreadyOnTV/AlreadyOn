@@ -368,6 +368,11 @@ const wait = (ms) => new Promise((resolve) => setTimeout(resolve, ms));
       .getByRole("button", { name: "Edit selected (2)", exact: true })
       .click();
     let dialog = page.getByRole("dialog");
+    const reviewNote = dialog.getByRole("note");
+    await reviewNote.waitFor();
+    assert.ok((await reviewNote.innerText()).includes("Why this needs review:"));
+    assert.equal(await reviewNote.evaluate(el => getComputedStyle(el).marginTop), "24px");
+    assert.equal(await reviewNote.evaluate(el => getComputedStyle(el).marginBottom), "24px");
     assert.equal(await dialog.getByText(/Apply Channels/).count(), 0);
     await dialog
       .getByLabel("Intended audience", { exact: true })

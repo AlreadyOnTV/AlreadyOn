@@ -110,6 +110,7 @@ a.admin-btn:visited {
 
 .admin-icon-btn {
   display: inline-flex;
+  flex-shrink: 0;
   width: 40px;
   height: 40px;
   align-items: center;
@@ -236,7 +237,8 @@ a.admin-btn:visited {
   white-space: nowrap;
 }
 
-.profile-row-actions {
+.profiles-table td.profile-row-actions {
+  min-width: max-content;
   align-items: center;
   flex-wrap: nowrap;
 }
