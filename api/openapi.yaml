@@ -2983,10 +2983,10 @@ paths:
   /api/channel-filter-options:
     get:
       x-alreadyon-roles: [owner]
-      summary: List shared age restrictions and eras
+      summary: List shared age restrictions and date ranges
       responses:
         "200":
-          { description: Catalog keyed by age, era with arrays of definitions }
+          { description: Catalog keyed by age and legacy era with arrays of age restrictions and date ranges }
   /api/channel-filter-options/{kind}/{id}:
     parameters:
       - in: path
@@ -4068,7 +4068,7 @@ components:
         eras:
           type: array
           items: { type: string }
-          description: OR across shared era IDs; empty uses legacy era.
+          description: OR across shared date range IDs; empty uses the legacy era field.
         titlePhrases:
           type: array
           maxItems: 50

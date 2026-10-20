@@ -121,7 +121,7 @@ func filterMismatches(f channel.Filter, it classifiedItem) []string {
 			}
 		}
 		if !match {
-			reasons = append(reasons, fmt.Sprintf("premiere/release year %d is outside selected eras (%s)", it.ReleaseYear, strings.Join(func() []string {
+			reasons = append(reasons, fmt.Sprintf("premiere/release year %d is outside selected date ranges (%s)", it.ReleaseYear, strings.Join(func() []string {
 				var names []string
 				for _, o := range f.EraOptions {
 					names = append(names, o.ID)

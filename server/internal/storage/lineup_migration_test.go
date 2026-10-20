@@ -35,7 +35,7 @@ func TestApprovedLineupMigrationPreservesCustomCatalog(t *testing.T) {
 			t.Fatal(err)
 		}
 	}
-	if err = migrate(db.DB); err != nil {
+	if err = goose.UpTo(db.DB, "migrations", 80); err != nil {
 		t.Fatal(err)
 	}
 	checks := map[string]int{
@@ -58,7 +58,7 @@ func TestApprovedLineupMigrationPreservesCustomCatalog(t *testing.T) {
 			t.Errorf("%s: got %d want %d", q, got, want)
 		}
 	}
-	if err = migrate(db.DB); err != nil {
+	if err = goose.UpTo(db.DB, "migrations", 80); err != nil {
 		t.Fatal(err)
 	}
 }

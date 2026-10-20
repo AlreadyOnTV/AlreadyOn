@@ -68,10 +68,17 @@ func TestDisplayOrderDefaultsMovesAndPersistsOnEdit(t *testing.T) {
 	if err != nil {
 		t.Fatal(err)
 	}
-	if catalog["era"][0].ID != "both" || catalog["era"][1].ID != "modern" || catalog["era"][2].Name != "Classics" || catalog["era"][3].ID != "2020s" {
+	if len(catalog["era"]) != 3 || catalog["era"][0].ID != "both" || catalog["era"][1].ID != "modern" || catalog["era"][2].Name != "Classics" {
 		t.Fatal(catalog["era"])
 	}
-	if err := MoveOption(ctx, db, "era", "2020s", "up"); err != nil {
+	if err := SaveOption(ctx, db, "era", FilterOption{ID: "custom-range", Name: "Custom", StartYear: 2020, EndYear: 2029}); err != nil {
+		t.Fatal(err)
+	}
+	catalog, err = ListOptions(ctx, db)
+	if err != nil {
+		t.Fatal(err)
+	}
+	if err := MoveOption(ctx, db, "era", "custom-range", "up"); err != nil {
 		t.Fatal(err)
 	}
 	option := catalog["era"][3]

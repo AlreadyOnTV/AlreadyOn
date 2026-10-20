@@ -61,7 +61,7 @@ const DEFAULTS: Pick<ServerSettings, 'transcoding' | 'hardwareDecoding' | 'tlsMo
   ddnsProvider: 'none',
 };
 
-type InfoKey = 'name' | 'encoding' | 'decoding' | 'tmdb' | 'free' | 'tls';
+type InfoKey = 'name' | 'encoding' | 'decoding' | 'tmdb' | 'tls';
 
 // A grid row: the wrapper is display: contents, so the three cells (and an
 // optional note beneath them) lay out on the shared grid.
@@ -391,10 +391,6 @@ export default function ServerPage() {
               />
               {metadataLoadError && <p className="profile-field-error setting-note">{metadataLoadError}</p>}
 
-              <hr className="settings-divider" />
-
-              <Row name="Automatic Metadata" control={<span className="setting-control-note">Free sources always enabled</span>}
-                actions={<Button onClick={() => setInfo('free')}>More Info</Button>} />
             </>
           )}
 
@@ -521,25 +517,6 @@ export default function ServerPage() {
           short one won't work here.
         </p>
         <p>This product uses the TMDB API but is not endorsed or certified by TMDB.</p>
-      </InfoModal>
-
-      <InfoModal open={info === 'free'} title="Free Metadata Sources" onClose={() => setInfo(null)}>
-        <p>
-          Free, account-less sources are enabled automatically: TV shows are classified with{' '}
-          <a href="https://www.tvmaze.com" target="_blank" rel="noreferrer">
-            TVmaze
-          </a>{' '}
-          (CC BY-SA) and movies with{' '}
-          <a href="https://www.wikidata.org" target="_blank" rel="noreferrer">
-            Wikidata
-          </a>{' '}
-          (CC0).
-        </p>
-        <p>
-          <strong>Titles from your library are sent to those services.</strong> A configured TMDb token adds richer metadata;
-          free sources fill classification gaps. Manual corrections take precedence. Missing age information never makes a title safe for kids or teens.
-        </p>
-        <p>Channels use the same audience rules with or without a TMDb token. You can review and correct metadata in the Media library.</p>
       </InfoModal>
 
       <InfoModal open={info === 'tls'} title="TLS Certificates" onClose={() => setInfo(null)}>
