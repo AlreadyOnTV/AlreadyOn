@@ -18,6 +18,9 @@ import SettingToggle from './SettingToggle';
 import './AdminShared.css';
 
 const MIN_PASSWORD = 4;
+const streamsHelp = 'Limits how many devices this account can stream to at the same time. Set 0 for unlimited streams. A closed device frees its stream within five minutes.';
+const passwordChangeHelp = 'Requires this account to choose a new password at its next sign-in before continuing. Enabling this turns off Password Locked.';
+const passwordLockedHelp = 'Only a server owner can change this account’s password. Useful for shared demo accounts. Enabling this turns off Require Password Change.';
 const MAX_STREAMS = 32;
 const DEFAULT_VIEWER_STREAMS = 2;
 
@@ -270,20 +273,19 @@ function AccountForm({ account, onSave, onCancel }: { account?: ServerAccount; o
         </select>
       </div>
       <div className="admin-field-row">
-        <label htmlFor="acct-streams">Simultaneous Streams</label>
+        <label htmlFor="acct-streams" title={streamsHelp} style={{ cursor: 'help' }}>Simultaneous Streams</label>
         <input id="acct-streams" type="number" min={0} max={MAX_STREAMS} value={draft.maxStreams} onChange={(e) => set({ maxStreams: e.target.value })} />
       </div>
       <div className="admin-field-row">
-        <label>Require Password Change</label>
+        <label title={passwordChangeHelp} style={{ cursor: 'help' }}>Require Password Change</label>
         <SettingToggle checked={draft.mustChangePassword} onChange={(v) => set(v ? { mustChangePassword: true, passwordLocked: false } : { mustChangePassword: false })} label="Require Password Change" text />
       </div>
       <div className="admin-field-row">
-        <label>Password Locked</label>
+        <label title={passwordLockedHelp} style={{ cursor: 'help' }}>Password Locked</label>
         <SettingToggle checked={draft.passwordLocked} onChange={(v) => set(v ? { passwordLocked: true, mustChangePassword: false } : { passwordLocked: false })} label="Password Locked" text />
       </div>
-      <p className="admin-section-hint">A locked password can only be changed by an owner, so it can't also require a change at sign-in. Use it for shared demo accounts.</p>
       {error && <p className="profile-field-error">{error}</p>}
-      <div className="admin-table-actions">
+      <div className="admin-table-actions account-form-actions">
         <button className="admin-btn" type="submit" disabled={busy}>
           {busy ? 'Saving…' : creating ? 'Create Account' : 'Save Account'}
         </button>
@@ -320,7 +322,7 @@ function ResetPasswordForm({ account, onSave, onCancel }: { account?: ServerAcco
         <PasswordInput id="acct-reset" autoComplete="new-password" value={password} onChange={(e) => setPassword(e.target.value)} autoFocus />
       </div>
       <div className="admin-field-row">
-        <label>Require Password Change</label>
+        <label title="Requires this account to choose a new password at its next sign-in before continuing. Unavailable while Password Locked is enabled." style={{ cursor: 'help' }}>Require Password Change</label>
         <SettingToggle checked={mustChange && !account.passwordLocked} onChange={(v) => setMustChange(v && !account.passwordLocked)} label="Require Password Change" text />
       </div>
       {account.passwordLocked && <p className="admin-section-hint">This account's password is locked, so it can't be required to change it.</p>}

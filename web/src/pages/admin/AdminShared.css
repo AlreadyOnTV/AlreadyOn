@@ -1604,6 +1604,10 @@ button.admin-badge:disabled {
   margin: 12px 0 16px;
 }
 
+.account-form-actions {
+  margin-top: 24px;
+}
+
 .account-form h4 {
   margin: 0 0 12px;
 }
