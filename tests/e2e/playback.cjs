@@ -293,8 +293,7 @@ const noWorkers = async (unreleased = () => 0) => {
     );
     assert(
       (await page
-        .locator(".admin-card")
-        .first()
+        .locator(".commercial-settings")
         .locator(".admin-field-row label")
         .last()
         .textContent()) === "Commercial Volume Offset (dB)",
