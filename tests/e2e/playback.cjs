@@ -3658,7 +3658,15 @@ const noWorkers = async (unreleased = () => 0) => {
         "-3",
       "Cancel discards break draft while keeping saved folders",
     );
-    await page.request.put(url + "/api/settings/folders", {
+    const folderRuns = () => {
+      const log = fs.readFileSync(path.join(root, "server.log"), "utf8");
+      return {
+        started: (log.match(/content folders changed: rescanning/g) ?? []).length,
+        finished: (log.match(/content folders changed: rescan complete/g) ?? []).length,
+      };
+    };
+    const beforeRestore = folderRuns();
+    const restoredFolders = await page.request.put(url + "/api/settings/folders", {
       data: {
         commercials:
           originalFolders.commercials.source === "default"
@@ -3666,6 +3674,17 @@ const noWorkers = async (unreleased = () => 0) => {
             : originalFolders.commercials.paths.map((p) => p.path),
       },
     });
+    assert(restoredFolders.ok(), "Restore the original synthetic folder settings");
+    // A successful folder save queues a debounced rescan. Drain that exact
+    // restore before later scenarios reseed schedules; otherwise it can erase
+    // their guide after login has already started on a slower CI runner.
+    const rescanDeadline = Date.now() + 120000;
+    for (;;) {
+      const runs = folderRuns();
+      if (runs.started > beforeRestore.started && runs.finished >= runs.started) break;
+      assert(Date.now() < rescanDeadline, "Restored folder rescan did not finish");
+      await delay(100);
+    }
     await page.goto(url + "/admin/server");
     await page.locator(".settings-grid").waitFor();
     assert(
