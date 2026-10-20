@@ -230,18 +230,6 @@ const assert = require("node:assert/strict");
       const page = document.querySelector(".guide-page");
       page.scrollTop = page.scrollHeight;
     });
-    const playerWidthTransition = page.locator(".preview-video-wrap").evaluate(
-      (element) =>
-        new Promise((resolve) => {
-          const onTransitionEnd = (event) => {
-            if (event.target !== element || event.propertyName !== "width")
-              return;
-            element.removeEventListener("transitionend", onTransitionEnd);
-            resolve();
-          };
-          element.addEventListener("transitionend", onTransitionEnd);
-        }),
-    );
     await page.keyboard.press("t");
     await page.waitForFunction(
       () =>
@@ -252,7 +240,12 @@ const assert = require("node:assert/strict");
     await page.waitForFunction(
       () => document.querySelector(".guide-page").scrollTop === 0,
     );
-    await playerWidthTransition;
+    // Responsive layouts can keep the same width, so transitionend is not
+    // guaranteed. Wait for active width animations, then assert final geometry.
+    await page.locator(".preview-video-wrap").evaluate(element => Promise.all(
+      element.getAnimations().filter(animation => animation.transitionProperty === "width")
+        .map(animation => animation.finished.catch(() => {})),
+    ));
     await assertRestored(115);
     await page.setViewportSize({ width: 1280, height: 800 });
     await enter();
