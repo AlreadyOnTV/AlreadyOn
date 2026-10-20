@@ -2002,6 +2002,11 @@ button.admin-badge:disabled {
 .library-edit-actions-spacer {
   height: 20px;
 }
+.library-edit-dialog .library-review-notice {
+  margin: 24px 0;
+  line-height: 1.5;
+  color: var(--text-muted);
+}
 .library-edit-actions {
   margin-top: 20px;
   scroll-margin-bottom: 24px;
