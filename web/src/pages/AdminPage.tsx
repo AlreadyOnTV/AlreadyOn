@@ -116,6 +116,8 @@ export default function AdminPage() {
     };
   }, [navigationOpen]);
 
+  const [librarySidebar, setLibrarySidebar] = useState<HTMLDivElement | null>(null);
+
   const openTab = (next: AdminTab) => {
     setNavigationOpen(false);
     navigate(`/admin/${next}`);
@@ -135,10 +137,7 @@ export default function AdminPage() {
           <Brand />
           <div className="admin-nav-back-row">
             <div
-              className={
-                "admin-mobile-nav" +
-                (activeTab === "manage-media" ? " admin-mobile-nav-always" : "")
-              }
+              className="admin-mobile-nav"
               ref={navigationRef}
             >
               <button
@@ -181,7 +180,7 @@ export default function AdminPage() {
           (activeTab === "manage-media" ? " admin-layout-manage-media" : "")
         }
       >
-        {activeTab !== "manage-media" && (
+        <aside className={activeTab === "manage-media" ? "admin-media-sidebar" : "admin-navigation-sidebar"}>
           <nav className="admin-tabs" aria-label="Server Settings">
             {tabs.map((t) => (
               <button
@@ -196,11 +195,12 @@ export default function AdminPage() {
               </button>
             ))}
           </nav>
-        )}
+          {activeTab === "manage-media" && <div id="library-sidebar-filters" ref={setLibrarySidebar} />}
+        </aside>
         <div className="admin-content">
           <StartupNotice status={startupStatus} variant="banner" />
           {activeTab === "manage-media" ? (
-            <ManageMediaPage />
+            <ManageMediaPage filterTarget={librarySidebar} />
           ) : ActiveTab ? (
             <ActiveTab />
           ) : null}
