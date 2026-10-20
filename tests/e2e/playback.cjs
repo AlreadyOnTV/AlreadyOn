@@ -3445,7 +3445,7 @@ const noWorkers = async (unreleased = () => 0) => {
       .waitFor();
     for (const [title, action] of [
       ["Age Restrictions", "+ Add Age Restriction"],
-      ["Eras", "+ Add Era"],
+      ["Date Range", "+ Add Date Range"],
     ]) {
       const card = page.locator(".admin-card").filter({
         has: page.getByRole("heading", { name: title, exact: true }),
@@ -3732,7 +3732,6 @@ const noWorkers = async (unreleased = () => 0) => {
           "Hardware Decoding",
           "Loudness Detection",
           "TMDb API Key",
-          "Automatic Metadata",
           "Dynamic DNS",
           "TLS Certificates",
         ]),
@@ -4506,27 +4505,7 @@ const noWorkers = async (unreleased = () => 0) => {
       "Server controls align about four characters after the longest label: " +
         JSON.stringify(serverAlignment),
     );
-    const metadataInline = await page
-      .locator(".setting-control-with-note")
-      .evaluate((element) => {
-        const note = element.querySelector(".setting-control-note");
-        const buttonBox = element
-          .querySelector("button")
-          .getBoundingClientRect();
-        const noteBox = note?.getBoundingClientRect();
-        return {
-          wrap: getComputedStyle(element).flexWrap,
-          button: Math.round(buttonBox.top + buttonBox.height / 2),
-          note: noteBox ? Math.round(noteBox.top + noteBox.height / 2) : null,
-        };
-      });
-    assert(
-      metadataInline.wrap === "nowrap" &&
-        (metadataInline.note === null ||
-          Math.abs(metadataInline.button - metadataInline.note) < 3),
-      "Free Metadata status stays inline with its toggle: " +
-        JSON.stringify(metadataInline),
-    );
+    assert.equal(await page.getByText("Automatic Metadata", { exact: true }).count(), 0);
     await page.goto(url + "/admin/logs");
     await page.waitForURL("**/admin/logs");
     // The Logs box fits the window; the page itself does not scroll.

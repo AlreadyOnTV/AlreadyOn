@@ -47,7 +47,7 @@ var (
 	ErrInvalidAudienceTier  = errors.New("channel: audienceTier must be young_child, teen, or adult")
 	ErrInvalidGenre         = errors.New("channel: unknown genre")
 	ErrInvalidMediaType     = errors.New("channel: mediaType must be tv, movie, or both")
-	ErrInvalidEra           = errors.New("channel: era must be modern, nostalgia, or both")
+	ErrInvalidEra           = errors.New("channel: date range must be modern, nostalgia, or both")
 	ErrInvalidTitleFilter   = fmt.Errorf("channel: titleContains must be at most %d characters with no control characters", MaxTitleFilterLength)
 )
 

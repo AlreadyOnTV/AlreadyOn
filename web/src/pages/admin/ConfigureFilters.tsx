@@ -149,7 +149,7 @@ export default function ConfigureFilters({ onChanged }: { onChanged: () => void 
         <div key={kind} className="admin-card filter-definition-group">
           <div className="folder-card-header">
           <h3>
-            {kind === 'age' ? 'Age Restrictions' : 'Eras'}
+            {kind === 'age' ? 'Age Restrictions' : 'Date Range'}
             {orderChanged(kind) && (
               <button type="button" className="restore-order-link" disabled={busy} onClick={() => void restore(kind)}>
                 (Restore Default)
@@ -157,7 +157,7 @@ export default function ConfigureFilters({ onChanged }: { onChanged: () => void 
             )}
           </h3>
           <button className="admin-btn" disabled={busy} onClick={() => edit(kind)}>
-            + Add {kind === 'age' ? 'Age Restriction' : 'Era'}
+            + Add {kind === 'age' ? 'Age Restriction' : 'Date Range'}
           </button>
           </div>
           <table className="admin-table filter-definition-table">
@@ -335,7 +335,7 @@ export default function ConfigureFilters({ onChanged }: { onChanged: () => void 
         <InfoModal
           open
           className={'filter-editor filter-editor-' + editing.kind}
-          title={'Configure ' + (editing.kind === 'age' ? 'Age Restriction' : 'Era')}
+          title={'Configure ' + (editing.kind === 'age' ? 'Age Restriction' : 'Date Range')}
           onClose={() => {
             if (!busy) setEditing(null);
           }}
