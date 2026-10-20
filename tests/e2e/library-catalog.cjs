@@ -96,7 +96,22 @@ const wait = (ms) => new Promise((resolve) => setTimeout(resolve, ms));
     const showFilters = page.getByRole("complementary", {
       name: "TV Show filters",
     });
+    const movieFilterToggle = movieFilters.getByRole("button", { name: "Filter Movies", exact: true });
+    const showFilterToggle = showFilters.getByRole("button", { name: "Filter TV Shows", exact: true });
+    assert.equal(await movieFilterToggle.getAttribute("aria-expanded"), "false");
+    assert.equal(await showFilterToggle.getAttribute("aria-expanded"), "false");
+    assert.equal(await movieFilters.getByPlaceholder("Title or file path").isVisible(), false);
+    await movieFilterToggle.click();
     await movieFilters.getByPlaceholder("Title or file path").waitFor();
+    await wait(200);
+    const rightSidebar = await movieFilters.boundingBox();
+    const catalogBox = await movies.boundingBox();
+    assert.ok(rightSidebar && catalogBox && rightSidebar.x >= catalogBox.x + catalogBox.width, "Movie filters sit to the right of the catalog");
+    await showFilterToggle.click();
+    await showFilters.getByPlaceholder("Title or file path").waitFor();
+    assert.equal(await movieFilterToggle.getAttribute("aria-expanded"), "true", "Each filter menu expands independently");
+    await showFilterToggle.click();
+    await page.evaluate(() => window.scrollTo(0, 0));
     assert.equal(await page.getByRole("button", { name: /Toggle .* filters/ }).count(), 0);
     await movies.locator("thead th").first().waitFor();
     assert.deepEqual(await movies.locator("thead th").allTextContents(), ["", "Title", "Status"]);
@@ -551,7 +566,18 @@ const wait = (ms) => new Promise((resolve) => setTimeout(resolve, ms));
     assert.ok(filterBox && Math.abs(filterBox.y - 16) < 2, "Movie filters stick in the sidebar");
     await shows.getByRole("heading", { name: "Manage TV Shows" }).scrollIntoViewIfNeeded();
     await showFilters.waitFor();
-    assert.equal(await movieFilters.isVisible(), false);
+    assert.equal(await showFilterToggle.getAttribute("aria-expanded"), "false");
+    assert.equal(await movieFilters.isVisible(), true);
+    const tvSidebar = await showFilters.boundingBox();
+    const tvCatalog = await shows.boundingBox();
+    assert.ok(tvSidebar && tvCatalog && tvSidebar.x >= tvCatalog.x + tvCatalog.width, "TV filters sit beside their catalog");
+    await showFilterToggle.click();
+    await showFilters.getByPlaceholder("Title or file path").fill("Example");
+    await showFilterToggle.click();
+    await showFilterToggle.click();
+    assert.equal(await showFilters.getByPlaceholder("Title or file path").inputValue(), "Example", "Collapse preserves filter values");
+    await showFilters.getByPlaceholder("Title or file path").fill("");
+    await showFilterToggle.click();
     await page.evaluate(() => window.scrollTo(0, 0));
     await movieFilters.waitFor();
     await movies.getByRole("button", { name: "Edit Film 01", exact: true }).click();
@@ -739,7 +765,7 @@ const wait = (ms) => new Promise((resolve) => setTimeout(resolve, ms));
     );
     assert.deepEqual(errors, []);
     console.log(
-      "PASS: Library Paths order, expanded navigation, sticky section filters, modal scroll lock, three-column catalog, pagination, cross-page bulk edits, official rating preservation, show-level inheritance, mobile layout and keyboard focus.",
+      "PASS: Library Paths order, expanded navigation, independent collapsible right filters, modal scroll lock, three-column catalog, pagination, cross-page bulk edits, official rating preservation, show-level inheritance, mobile layout and keyboard focus.",
     );
   } finally {
     await browser.close();
