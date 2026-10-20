@@ -452,6 +452,13 @@ const wait = (ms) => new Promise((resolve) => setTimeout(resolve, ms));
       tmdbFieldBox && titleFieldBox && tmdbFieldBox.y < titleFieldBox.y,
       "TMDb ID should appear directly above Title",
     );
+    const originalIdentity = {
+      id: await dialog.getByLabel("TMDb ID").inputValue(),
+      title: await dialog.getByLabel("Show title").inputValue(),
+      year: await dialog.getByLabel("Show premiere year").inputValue(),
+      genres: await dialog.getByRole("button", { name: "Genres", exact: true }).innerText(),
+      rating: await dialog.getByLabel("Content Rating").locator("option").first().textContent(),
+    };
     await dialog.getByLabel("TMDb ID").fill("77");
     await dialog.getByLabel("TMDb ID").press("Enter");
     await page.waitForFunction(
@@ -471,6 +478,26 @@ const wait = (ms) => new Promise((resolve) => setTimeout(resolve, ms));
         .textContent(),
       "Current (TV-14)",
     );
+    await dialog.getByLabel("TMDb ID").fill(originalIdentity.id);
+    await dialog.getByLabel("Show title").focus();
+    assert.equal(await dialog.getByLabel("Show title").inputValue(), originalIdentity.title);
+    assert.equal(await dialog.getByLabel("Show premiere year").inputValue(), originalIdentity.year);
+    assert.equal(await dialog.getByRole("button", { name: "Genres", exact: true }).innerText(), originalIdentity.genres);
+    assert.equal(await dialog.getByLabel("Content Rating").locator("option").first().textContent(), originalIdentity.rating);
+    // Blurring an unchanged original ID must preserve edits made to that draft.
+    await dialog.getByLabel("Show title").fill("Manual original draft");
+    await dialog.getByLabel("TMDb ID").focus();
+    await dialog.getByLabel("Show title").focus();
+    assert.equal(await dialog.getByLabel("Show title").inputValue(), "Manual original draft");
+    await dialog.getByLabel("TMDb ID").fill("77");
+    await dialog.getByLabel("TMDb ID").press("Enter");
+    await page.waitForFunction(() => document.querySelector("#library-edit-title")?.value === "Preview Academy");
+    await dialog.getByLabel("TMDb ID").fill(originalIdentity.id);
+    await dialog.getByLabel("TMDb ID").press("Enter");
+    assert.equal(await dialog.getByLabel("Show title").inputValue(), "Manual original draft");
+    await dialog.getByLabel("TMDb ID").fill("77");
+    await dialog.getByLabel("TMDb ID").press("Enter");
+    await page.waitForFunction(() => document.querySelector("#library-edit-title")?.value === "Preview Academy");
     await page.setViewportSize({ width: 390, height: 600 });
     await dialog.getByRole("button", { name: "Genres" }).click();
     const genrePanel = dialog.locator(".multi-select-panel-inline");
@@ -478,6 +505,14 @@ const wait = (ms) => new Promise((resolve) => setTimeout(resolve, ms));
       .getByRole("checkbox", { name: "Drama", exact: true })
       .waitFor();
     await wait(300);
+    // Review explanations can make the mobile dialog taller than its viewport.
+    // Verify the genre panel and actions are each reachable by scrolling.
+    await genrePanel.scrollIntoViewIfNeeded();
+    const visibleGenres = await genrePanel.boundingBox();
+    const genreDialog = await dialog.boundingBox();
+    assert.ok(visibleGenres && genreDialog && visibleGenres.y >= genreDialog.y);
+    await dialog.getByRole("button", { name: "Save Changes" }).scrollIntoViewIfNeeded();
+    await dialog.evaluate(element => { element.scrollTop = element.scrollHeight; });
     const expandedDialogBox = await dialog.boundingBox();
     const modalGenrePanelBox = await genrePanel.boundingBox();
     const saveButtonBox = await dialog
@@ -498,7 +533,6 @@ const wait = (ms) => new Promise((resolve) => setTimeout(resolve, ms));
         modalGenrePanelBox &&
         saveButtonBox &&
         cancelButtonBox &&
-        modalGenrePanelBox.y >= expandedDialogBox.y &&
         modalGenrePanelBox.y + modalGenrePanelBox.height <= saveButtonBox.y &&
         saveButtonBox.y + saveButtonBox.height <=
           expandedDialogBox.y + expandedDialogBox.height &&
@@ -506,7 +540,7 @@ const wait = (ms) => new Promise((resolve) => setTimeout(resolve, ms));
           expandedDialogBox.y + expandedDialogBox.height &&
         expandedDialogBox.y + expandedDialogBox.height <=
           (await page.evaluate(() => window.innerHeight)),
-      `Expanded Genres and both actions should fit inside the modal viewport: ${JSON.stringify({ expandedDialogBox, genrePanelBox: modalGenrePanelBox, saveButtonBox, cancelButtonBox })}`,
+      `Expanded Genres remain above reachable actions inside the scrolling modal: ${JSON.stringify({ expandedDialogBox, genrePanelBox: modalGenrePanelBox, saveButtonBox, cancelButtonBox })}`,
     );
     assert.ok(
       expandedFooterGap >= 16,
@@ -514,6 +548,7 @@ const wait = (ms) => new Promise((resolve) => setTimeout(resolve, ms));
     );
     await dialog.getByRole("button", { name: "Genres" }).click();
     await wait(200);
+    await dialog.evaluate(element => { element.scrollTop = element.scrollHeight; });
     const collapsedDialogBox = await dialog.boundingBox();
     const collapsedCancelBox = await dialog
       .getByRole("button", { name: "Cancel" })

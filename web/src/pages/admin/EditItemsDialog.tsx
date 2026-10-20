@@ -68,6 +68,15 @@ export default function EditItemsDialog({
   const [genresOpen, setGenresOpen] = useState(false);
   const [tmdbPreview, setTMDbPreview] = useState<TMDbPreview | null>(null);
   const previewedTMDbId = useRef("");
+  const previewVersion = useRef(0);
+  // Keep the draft from before identity previews, including manual edits, so
+  // returning to the saved ID restores it without a provider lookup or write.
+  const originalDraft = useRef<{
+    title: string;
+    year: string;
+    genres: string[];
+    dirty: Set<string>;
+  } | null>(null);
   const pendingPreview = useRef<{
     id: string;
     promise: Promise<boolean>;
@@ -103,17 +112,39 @@ export default function EditItemsDialog({
       setError("TMDb ID must be a positive number.");
       return Promise.resolve(false);
     }
-    if (Number(value) === (first.tmdbId ?? 0)) return Promise.resolve(true);
+    if (Number(value) === (first.tmdbId ?? 0)) {
+      const original = originalDraft.current;
+      if (original) {
+        setTitle(original.title);
+        setYear(original.year);
+        setGenreIds(original.genres);
+        setDirty((current) => {
+          const next = new Set(current);
+          for (const key of ["title", "year", "genres"]) {
+            next.delete(key);
+            if (original.dirty.has(key)) next.add(key);
+          }
+          return next;
+        });
+        originalDraft.current = null;
+      }
+      setTMDbPreview(null);
+      setPreviewing(false);
+      setError(null);
+      return Promise.resolve(true);
+    }
     if (previewedTMDbId.current === value) return Promise.resolve(true);
     if (pendingPreview.current?.id === value)
       return pendingPreview.current.promise;
 
+    const version = previewVersion.current;
     const promise = (async () => {
       setPreviewing(true);
       setError(null);
       try {
         const preview = await previewTMDbItem(first.id, Number(value));
-        if (currentTMDbId.current !== value) return false;
+        if (currentTMDbId.current !== value || previewVersion.current !== version) return false;
+        originalDraft.current ??= { title, year, genres: genreIds, dirty: new Set(dirty) };
         previewedTMDbId.current = value;
         setTMDbPreview(preview);
         setTitle(preview.title);
@@ -121,12 +152,12 @@ export default function EditItemsDialog({
         setGenreIds(preview.genres);
         return true;
       } catch (err) {
-        if (currentTMDbId.current === value) {
+        if (currentTMDbId.current === value && previewVersion.current === version) {
           setError(err instanceof Error ? err.message : "TMDb preview failed.");
         }
         return false;
       } finally {
-        if (currentTMDbId.current === value) setPreviewing(false);
+        if (currentTMDbId.current === value && previewVersion.current === version) setPreviewing(false);
       }
     })();
     pendingPreview.current = { id: value, promise };
@@ -218,6 +249,9 @@ export default function EditItemsDialog({
             onChange={(event) => {
               const value = event.target.value;
               currentTMDbId.current = value;
+              previewVersion.current += 1;
+              pendingPreview.current = null;
+              setPreviewing(false);
               previewedTMDbId.current = "";
               setTMDbPreview(null);
               setTMDbId(value);
