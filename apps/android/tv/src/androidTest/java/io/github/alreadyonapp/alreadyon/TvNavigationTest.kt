@@ -49,12 +49,12 @@ class TvNavigationTest {
             compose.mainClock.advanceTimeBy(3000)
             compose.waitForIdle()
             compose.onAllNodes(hasClickAction() and (hasContentDescription("AlreadyOn") or hasAnyDescendant(hasContentDescription("AlreadyOn")))).assertCountEquals(0)
+            fun guideVisible() = compose.onAllNodesWithTag("guide-current-time").fetchSemanticsNodes().isNotEmpty()
             fun exists(text: String) = compose.onAllNodesWithText(text).fetchSemanticsNodes().isNotEmpty()
             fun click(text: String) {
                 compose.waitUntil(60000) { exists(text) }
                 val node = compose.onAllNodesWithText(text).onFirst()
-                // The centered keypad fits in its dialog and has no scroll container.
-                if (!exists("✓ Done")) node.performScrollTo()
+                node.performScrollTo()
                 node.performClick()
             }
             if (manual) {
@@ -76,6 +76,8 @@ class TvNavigationTest {
             } else {
                 compose.waitUntil(60000) { compose.onAllNodes(hasText("10.0.2.2:19900", substring = true)).fetchSemanticsNodes().isNotEmpty() }
                 val server = hasText("10.0.2.2:19900", substring = true)
+                // Leave touch mode after other UI tests before assigning remote focus.
+                device.pressDPadDown()
                 // Establish a known start below the discovered server, then navigate with the remote.
                 compose.onNodeWithText("Rescan").performSemanticsAction(SemanticsActions.RequestFocus) { it() }
                 compose.waitUntil(10000) { compose.onAllNodes(hasText("Rescan") and isFocused()).fetchSemanticsNodes().isNotEmpty() }
@@ -106,20 +108,24 @@ class TvNavigationTest {
             assertFalse("Server fingerprint confirmation is skipped", exists("Confirm Server"))
             compose.onNode(hasSetTextAction() and hasText("Username")).performTextInput("tv-fixture")
             compose.onNode(hasSetTextAction() and hasText("Username")).performImeAction()
-            compose.waitUntil(10000) { exists("✓ Done") }
-            compose.waitUntil(10000) { compose.onAllNodes(hasText("1") and isFocused()).fetchSemanticsNodes().isNotEmpty() }
+            val pinField = hasSetTextAction() and hasText("TV PIN")
+            compose.onNode(pinField).assertIsFocused()
             // Synthetic account PIN set by the isolated test fixture, never a live account.
-            "123456".forEach { click(it.toString()) }
-            click("✓ Done")
-            compose.waitUntil(10000) { !exists("✓ Done") }
+            compose.onNode(pinField).performTextInput("123456")
+            compose.onNode(pinField).performImeAction()
+            compose.onNodeWithText("Connect").assertIsFocused()
             click("Connect")
             compose.waitUntil(10000) { compose.onAllNodes(hasText("Admin") and isFocused()).fetchSemanticsNodes().isNotEmpty() }
             device.pressDPadCenter()
-            compose.waitUntil(10000) { exists("CHANNEL") }
+            compose.waitUntil(10000) { guideVisible() }
             compose.onNodeWithText("Your remote, at a glance").assertDoesNotExist()
             compose.onNodeWithText("Got it").assertDoesNotExist()
-            assertTrue("Compact guide on first entry", exists("CHANNEL"))
+            assertTrue("Compact guide on first entry", guideVisible())
             assertTrue("Guide channel 110", exists("110"))
+            if (InstrumentationRegistry.getArguments().getString("pairingOnly") == "true") {
+                device.takeScreenshot(java.io.File(instrumentation.targetContext.getExternalFilesDir(null), "tv-guide.png"))
+                return
+            }
             compose.waitUntil(10000) { compose.onAllNodes(hasContentDescription("Channel 110: TV fixture 110") and isFocused()).fetchSemanticsNodes().isNotEmpty() }
             compose.onNodeWithText("Admin").performClick()
             compose.onNodeWithText("Switch Profile").assertExists()
@@ -133,7 +139,7 @@ class TvNavigationTest {
                 (hasContentDescription(label) or hasAnyDescendant(hasContentDescription(label))) and isFocused()).fetchSemanticsNodes().isNotEmpty()
             val muted = false
             click("110")
-            assertTrue("Fullscreen hides guide", !exists("CHANNEL"))
+            assertTrue("Fullscreen hides guide", !guideVisible())
             compose.waitUntil(60000) { !exists("Preparing channel…") }
             compose.waitUntil(10000) { controlFocused("Pause") }
             device.pressDPadDown()
@@ -179,7 +185,7 @@ class TvNavigationTest {
             click("Subtitles (off)")
             compose.waitUntil(10000) { compose.onAllNodes(hasText("✓ Off") and isFocused()).fetchSemanticsNodes().isNotEmpty() }
             repeat(4) { device.pressBack(); compose.waitForIdle() }
-            compose.waitUntil(10000) { exists("CHANNEL") }
+            compose.waitUntil(10000) { guideVisible() }
             fun guideFocused(number: Int) = compose.onAllNodes(hasContentDescription("Channel $number: TV fixture $number") and isFocused()).fetchSemanticsNodes().isNotEmpty()
             device.pressBack() // A single Back still opens the profile menu.
             compose.waitUntil(10000) { compose.onAllNodes(hasText("Switch Profile") and isFocused()).fetchSemanticsNodes().isNotEmpty() }

@@ -26,12 +26,12 @@ paths:
       summary: Public metadata for the active instance TLS identity
       description: Requires management authentication. Never returns private keys. Active mode comes from the certificate manager, not legacy preferences. Includes non-secret ACME progress and configuration.
       responses:
-        '200':
+        "200":
           description: Active certificate names, trust fingerprint and expiry
           content:
             application/json:
-              schema: { $ref: '#/components/schemas/TlsStatus' }
-        '401': { description: Authentication required }
+              schema: { $ref: "#/components/schemas/TlsStatus" }
+        "401": { description: Authentication required }
     put:
       x-alreadyon-roles: [owner]
       tags: [settings]
@@ -46,16 +46,22 @@ paths:
               additionalProperties: false
               required: [names]
               properties:
-                names: { type: array, minItems: 1, maxItems: 32, items: { type: string, maxLength: 253 } }
+                names:
+                  {
+                    type: array,
+                    minItems: 1,
+                    maxItems: 32,
+                    items: { type: string, maxLength: 253 },
+                  }
       responses:
-        '200':
+        "200":
           description: Updated active certificate metadata
           content:
             application/json:
-              schema: { $ref: '#/components/schemas/TlsStatus' }
-        '400': { description: Invalid names or renewal unavailable }
-        '401': { description: Authentication required }
-        '403': { description: Cross-site request refused }
+              schema: { $ref: "#/components/schemas/TlsStatus" }
+        "400": { description: Invalid names or renewal unavailable }
+        "401": { description: Authentication required }
+        "403": { description: Cross-site request refused }
   /api/settings/tls/acme:
     put:
       x-alreadyon-roles: [owner]
@@ -70,12 +76,13 @@ paths:
               type: object
               required: [email, agree]
               properties:
-                hostname: {type: string}
-                email: {type: string, format: email}
-                agree: {type: boolean}
+                hostname: { type: string }
+                email: { type: string, format: email }
+                agree: { type: boolean }
       responses:
-        '202': {description: Configuration saved; public TLS status returned}
-        '400': {description: Invalid configuration or issuance cooldown/running}
+        "202": { description: Configuration saved; public TLS status returned }
+        "400":
+          { description: Invalid configuration or issuance cooldown/running }
     post:
       x-alreadyon-roles: [owner]
       tags: [settings]
@@ -95,14 +102,19 @@ paths:
                 agree: { type: boolean }
                 staging: { type: boolean }
       responses:
-        '202':
+        "202":
           description: Validation started; poll TLS status
           content:
             application/json:
-              schema: { $ref: '#/components/schemas/TlsStatus' }
-        '400': { description: Invalid input, staging prerequisite, concurrent request or cooldown }
-        '401': { description: Authentication required }
-        '403': { description: Cross-site request refused }
+              schema: { $ref: "#/components/schemas/TlsStatus" }
+        "400":
+          {
+            description: Invalid input,
+            staging prerequisite,
+            concurrent request or cooldown,
+          }
+        "401": { description: Authentication required }
+        "403": { description: Cross-site request refused }
   /api/settings/tls/ca.pem:
     get:
       x-alreadyon-roles: [owner]
@@ -110,12 +122,12 @@ paths:
       summary: Download the public instance trust anchor
       description: Requires management authentication. Verify SHA-256 through a trusted server terminal before importing; never includes a private key.
       responses:
-        '200':
+        "200":
           description: Public CA certificate download
           content:
             application/x-pem-file:
               schema: { type: string }
-        '401': { description: Authentication required }
+        "401": { description: Authentication required }
   /api/settings/tls/upload:
     post:
       x-alreadyon-roles: [owner]
@@ -131,18 +143,34 @@ paths:
               additionalProperties: false
               required: [certificate, privateKey, ca]
               properties:
-                certificate: { type: string, description: PEM server leaf followed by issuing intermediates }
-                privateKey: { type: string, writeOnly: true, description: Matching unencrypted PEM key; never returned }
-                ca: { type: string, description: Explicitly trusted issuing CA PEM bundle; public trust on client devices is a separate requirement }
+                certificate:
+                  {
+                    type: string,
+                    description: PEM server leaf followed by issuing intermediates,
+                  }
+                privateKey:
+                  {
+                    type: string,
+                    writeOnly: true,
+                    description: Matching unencrypted PEM key; never returned,
+                  }
+                ca:
+                  {
+                    type: string,
+                    description: Explicitly trusted issuing CA PEM bundle; public trust on client devices is a separate requirement,
+                  }
       responses:
-        '200':
+        "200":
           description: Active public certificate metadata
           content:
             application/json:
-              schema: { $ref: '#/components/schemas/TlsStatus' }
-        '400': { description: Invalid certificate or activation failed; previous identity retained }
-        '401': { description: Authentication required }
-        '403': { description: Cross-site request refused }
+              schema: { $ref: "#/components/schemas/TlsStatus" }
+        "400":
+          {
+            description: Invalid certificate or activation failed; previous identity retained,
+          }
+        "401": { description: Authentication required }
+        "403": { description: Cross-site request refused }
   /api/settings/tls/self-signed:
     post:
       x-alreadyon-roles: [owner]
@@ -150,14 +178,14 @@ paths:
       summary: Restore the original instance self-signed identity
       description: Management authentication and cookie CSRF protection required. Preserves the original generated CA and names. New connections use the restored certificate; its original trust and hostname requirements apply. Does not erase the uploaded pair.
       responses:
-        '200':
+        "200":
           description: Active public certificate metadata
           content:
             application/json:
-              schema: { $ref: '#/components/schemas/TlsStatus' }
-        '400': { description: Restore failed }
-        '401': { description: Authentication required }
-        '403': { description: Cross-site request refused }
+              schema: { $ref: "#/components/schemas/TlsStatus" }
+        "400": { description: Restore failed }
+        "401": { description: Authentication required }
+        "403": { description: Cross-site request refused }
   /api/tv/server:
     get:
       x-alreadyon-roles: [public]
@@ -167,7 +195,7 @@ paths:
       summary: Read local server name and TV pairing availability
       description: Requires HTTPS and a direct private, loopback or link-local socket peer. Never lists accounts.
       responses:
-        '200':
+        "200":
           description: Server name, pairingEnabled flag and protocol version
           content:
             application/json:
@@ -175,11 +203,11 @@ paths:
                 type: object
                 required: [name, service, pairingEnabled, protocol]
                 properties:
-                  name: {type: string, minLength: 1, maxLength: 64}
-                  service: {type: string, enum: [alreadyon]}
-                  pairingEnabled: {type: boolean}
-                  protocol: {type: integer, enum: [1]}
-        '403':
+                  name: { type: string, minLength: 1, maxLength: 64 }
+                  service: { type: string, enum: [alreadyon] }
+                  pairingEnabled: { type: boolean }
+                  protocol: { type: integer, enum: [1] }
+        "403":
           description: Not a local HTTPS request
   /api/tv/trust:
     get:
@@ -190,7 +218,7 @@ paths:
       summary: Read the public certificate trust anchor for local native sign-in
       description: Requires HTTPS and a direct LAN peer. Native apps accept the instance trust anchor automatically on first connection, then validate HTTPS against it before sending username and PIN. The fingerprint remains available for optional out-of-band verification.
       responses:
-        '200':
+        "200":
           description: Public PEM certificate and fingerprint, never private keys
           content:
             application/json:
@@ -198,9 +226,9 @@ paths:
                 type: object
                 required: [certificate, fingerprint]
                 properties:
-                  certificate: {type: string}
-                  fingerprint: {type: string}
-        '403':
+                  certificate: { type: string }
+                  fingerprint: { type: string }
+        "403":
           description: Not a local HTTPS request
   /api/auth/tv-login:
     post:
@@ -219,20 +247,20 @@ paths:
               required: [username, pin]
               additionalProperties: false
               properties:
-                username: {type: string}
-                pin: {type: string, pattern: '^[0-9]{6,12}$'}
+                username: { type: string }
+                pin: { type: string, pattern: "^[0-9]{6,12}$" }
       responses:
-        '200':
+        "200":
           description: Signed in with the existing secure account session cookie
           content:
             application/json:
               schema:
-                $ref: '#/components/schemas/AuthStatus'
-        '401':
+                $ref: "#/components/schemas/AuthStatus"
+        "401":
           description: Username or PIN not accepted
-        '403':
+        "403":
           description: Not a local HTTPS request
-        '429':
+        "429":
           description: Pairing rate or concurrency limit reached
   /api/auth/tv-pin:
     get:
@@ -241,14 +269,14 @@ paths:
       tags: [auth]
       summary: Read whether the signed-in account has a TV PIN
       responses:
-        '200':
+        "200":
           description: Enabled flag only; PIN and digest are never returned
           content:
             application/json:
               schema:
                 type: object
                 properties:
-                  enabled: {type: boolean}
+                  enabled: { type: boolean }
     put:
       x-alreadyon-roles: [owner, viewer]
       operationId: setOwnTVPIN
@@ -264,13 +292,13 @@ paths:
               required: [pin]
               additionalProperties: false
               properties:
-                pin: {type: string, pattern: '^[0-9]{6,12}$'}
+                pin: { type: string, pattern: "^[0-9]{6,12}$" }
       responses:
-        '200':
+        "200":
           description: PIN saved
-        '400':
+        "400":
           description: PIN must be 6–12 ASCII digits
-        '409':
+        "409":
           description: Another account already uses that PIN
     delete:
       x-alreadyon-roles: [owner, viewer]
@@ -278,7 +306,7 @@ paths:
       tags: [auth]
       summary: Remove the signed-in account's TV PIN without revoking existing sessions
       responses:
-        '204':
+        "204":
           description: PIN removed
   /api/auth/status:
     get:
@@ -288,12 +316,12 @@ paths:
       security: []
       summary: Whether the server has an account and this client is signed in
       responses:
-        '200':
+        "200":
           description: Current sign-in state
           content:
             application/json:
               schema:
-                $ref: '#/components/schemas/AuthStatus'
+                $ref: "#/components/schemas/AuthStatus"
   /api/auth/setup:
     post:
       x-alreadyon-roles: [public]
@@ -312,7 +340,7 @@ paths:
           application/json:
             schema:
               allOf:
-                - $ref: '#/components/schemas/Credentials'
+                - $ref: "#/components/schemas/Credentials"
                 - type: object
                   properties:
                     serverName:
@@ -321,15 +349,15 @@ paths:
                       maxLength: 64
                       description: Friendly LAN discovery name. Omitted by legacy clients defaults to AlreadyOn. Surrounding whitespace is trimmed; control characters are rejected.
       responses:
-        '201':
+        "201":
           description: Account created and signed in
           content:
             application/json:
               schema:
-                $ref: '#/components/schemas/AuthStatus'
-        '400':
+                $ref: "#/components/schemas/AuthStatus"
+        "400":
           description: Username or password not acceptable
-        '409':
+        "409":
           description: The server already has an account
   /api/auth/login:
     post:
@@ -348,19 +376,19 @@ paths:
         content:
           application/json:
             schema:
-              $ref: '#/components/schemas/Credentials'
+              $ref: "#/components/schemas/Credentials"
       responses:
-        '200':
+        "200":
           description: Signed in
           content:
             application/json:
               schema:
-                $ref: '#/components/schemas/AuthStatus'
-        '401':
+                $ref: "#/components/schemas/AuthStatus"
+        "401":
           description: Wrong username or password
-        '409':
+        "409":
           description: The server has no account yet
-        '429':
+        "429":
           description: Too many failed attempts
   /api/auth/logout:
     post:
@@ -370,7 +398,7 @@ paths:
       security: []
       summary: End this browser's session
       responses:
-        '204':
+        "204":
           description: Signed out; the cookie is cleared
   /api/auth/session-lifetime:
     get:
@@ -379,12 +407,12 @@ paths:
       tags: [auth]
       summary: How many days a signed-in browser stays signed in
       responses:
-        '200':
+        "200":
           description: Days, where 0 never expires (default 30)
           content:
             application/json:
               schema:
-                $ref: '#/components/schemas/SessionLifetime'
+                $ref: "#/components/schemas/SessionLifetime"
     put:
       x-alreadyon-roles: [owner]
       operationId: setSessionLifetime
@@ -396,15 +424,15 @@ paths:
         content:
           application/json:
             schema:
-              $ref: '#/components/schemas/SessionLifetime'
+              $ref: "#/components/schemas/SessionLifetime"
       responses:
-        '200':
+        "200":
           description: Saved
           content:
             application/json:
               schema:
-                $ref: '#/components/schemas/SessionLifetime'
-        '400':
+                $ref: "#/components/schemas/SessionLifetime"
+        "400":
           description: Days outside 0 to 3650
   /api/auth/session-inactivity:
     get:
@@ -413,12 +441,12 @@ paths:
       tags: [auth]
       summary: Read inactivity cleanup settings for all session types
       responses:
-        '200':
+        "200":
           description: Enabled by default with a 14-day threshold
           content:
             application/json:
               schema:
-                $ref: '#/components/schemas/InactiveSessionPolicy'
+                $ref: "#/components/schemas/InactiveSessionPolicy"
     put:
       x-alreadyon-roles: [owner]
       operationId: setInactiveSessionPolicy
@@ -430,15 +458,15 @@ paths:
         content:
           application/json:
             schema:
-              $ref: '#/components/schemas/InactiveSessionPolicy'
+              $ref: "#/components/schemas/InactiveSessionPolicy"
       responses:
-        '200':
+        "200":
           description: Saved policy
           content:
             application/json:
               schema:
-                $ref: '#/components/schemas/InactiveSessionPolicy'
-        '400':
+                $ref: "#/components/schemas/InactiveSessionPolicy"
+        "400":
           description: Missing enabled/days or days outside 1 to 3650
 
   /api/auth/sessions:
@@ -448,14 +476,14 @@ paths:
       tags: [auth]
       summary: Browsers currently signed in
       responses:
-        '200':
+        "200":
           description: Live sessions, newest first; `current` marks the caller's own
           content:
             application/json:
               schema:
                 type: array
                 items:
-                  $ref: '#/components/schemas/BrowserSession'
+                  $ref: "#/components/schemas/BrowserSession"
   /api/auth/sessions/{id}:
     delete:
       x-alreadyon-roles: [owner, viewer]
@@ -471,7 +499,7 @@ paths:
             type: integer
             format: int64
       responses:
-        '204':
+        "204":
           description: Signed out (also when it was already gone)
   /api/auth/sessions/revoke:
     post:
@@ -491,7 +519,7 @@ paths:
                   type: string
                   enum: [others, all]
       responses:
-        '200':
+        "200":
           description: How many sessions were ended
           content:
             application/json:
@@ -500,7 +528,7 @@ paths:
                 properties:
                   signedOut:
                     type: integer
-        '400':
+        "400":
           description: Unknown scope
   /api/auth/password:
     post:
@@ -529,19 +557,19 @@ paths:
                   minLength: 4
                   maxLength: 256
       responses:
-        '204':
+        "204":
           description: Changed
-        '400':
+        "400":
           description: New password not acceptable
-        '403':
+        "403":
           description: >
             The current password is wrong, or the account is password-locked
             (code `password_locked`)
           content:
             application/json:
               schema:
-                $ref: '#/components/schemas/Error'
-        '429':
+                $ref: "#/components/schemas/Error"
+        "429":
           description: Too many failed attempts
   /api/auth/username:
     post:
@@ -569,7 +597,7 @@ paths:
                   minLength: 1
                   maxLength: 64
       responses:
-        '200':
+        "200":
           description: Changed
           content:
             application/json:
@@ -579,23 +607,23 @@ paths:
                 properties:
                   username:
                     type: string
-        '400':
+        "400":
           description: Username not acceptable
-        '403':
+        "403":
           description: >
             The current password is wrong, or the account is password-locked
             (code `password_locked`)
           content:
             application/json:
               schema:
-                $ref: '#/components/schemas/Error'
-        '409':
+                $ref: "#/components/schemas/Error"
+        "409":
           description: Username already in use (code `username_taken`)
           content:
             application/json:
               schema:
-                $ref: '#/components/schemas/Error'
-        '429':
+                $ref: "#/components/schemas/Error"
+        "429":
           description: Too many failed attempts
   /api/users:
     get:
@@ -604,14 +632,14 @@ paths:
       tags: [users]
       summary: List accounts
       responses:
-        '200':
+        "200":
           description: Every account, oldest first
           content:
             application/json:
               schema:
                 type: array
                 items:
-                  $ref: '#/components/schemas/User'
+                  $ref: "#/components/schemas/User"
     post:
       x-alreadyon-roles: [owner]
       operationId: createUser
@@ -628,42 +656,42 @@ paths:
         content:
           application/json:
             schema:
-              $ref: '#/components/schemas/UserCreate'
+              $ref: "#/components/schemas/UserCreate"
       responses:
-        '201':
+        "201":
           description: Created
           content:
             application/json:
               schema:
-                $ref: '#/components/schemas/User'
-        '400':
+                $ref: "#/components/schemas/User"
+        "400":
           description: Invalid username, password, role or stream limit, or locked together with a required change
           content:
             application/json:
               schema:
-                $ref: '#/components/schemas/Error'
-        '409':
+                $ref: "#/components/schemas/Error"
+        "409":
           description: Username in use (`username_taken`) or too many accounts (`too_many_users`)
           content:
             application/json:
               schema:
-                $ref: '#/components/schemas/Error'
+                $ref: "#/components/schemas/Error"
   /api/users/{id}:
     parameters:
-      - $ref: '#/components/parameters/UserId'
+      - $ref: "#/components/parameters/UserId"
     get:
       x-alreadyon-roles: [owner]
       operationId: getUser
       tags: [users]
       summary: Get one account
       responses:
-        '200':
+        "200":
           description: The account
           content:
             application/json:
               schema:
-                $ref: '#/components/schemas/User'
-        '404':
+                $ref: "#/components/schemas/User"
+        "404":
           description: No such account
     patch:
       x-alreadyon-roles: [owner]
@@ -679,28 +707,28 @@ paths:
         content:
           application/json:
             schema:
-              $ref: '#/components/schemas/UserPatch'
+              $ref: "#/components/schemas/UserPatch"
       responses:
-        '200':
+        "200":
           description: Updated
           content:
             application/json:
               schema:
-                $ref: '#/components/schemas/User'
-        '400':
+                $ref: "#/components/schemas/User"
+        "400":
           description: Invalid value, or locked together with a required change
           content:
             application/json:
               schema:
-                $ref: '#/components/schemas/Error'
-        '404':
+                $ref: "#/components/schemas/Error"
+        "404":
           description: No such account
-        '409':
+        "409":
           description: Username in use (`username_taken`) or the last enabled owner (`last_owner`)
           content:
             application/json:
               schema:
-                $ref: '#/components/schemas/Error'
+                $ref: "#/components/schemas/Error"
     delete:
       x-alreadyon-roles: [owner]
       operationId: deleteUser
@@ -711,19 +739,19 @@ paths:
         An owner cannot delete the account it is signed in with, nor the last
         enabled owner.
       responses:
-        '204':
+        "204":
           description: Deleted
-        '404':
+        "404":
           description: No such account
-        '409':
+        "409":
           description: The caller's own account (`self_delete`) or the last enabled owner (`last_owner`)
           content:
             application/json:
               schema:
-                $ref: '#/components/schemas/Error'
+                $ref: "#/components/schemas/Error"
   /api/users/{id}/password:
     parameters:
-      - $ref: '#/components/parameters/UserId'
+      - $ref: "#/components/parameters/UserId"
     put:
       x-alreadyon-roles: [owner]
       operationId: setUserPassword
@@ -750,15 +778,15 @@ paths:
                   type: boolean
                   default: false
       responses:
-        '204':
+        "204":
           description: Set
-        '400':
+        "400":
           description: Password not acceptable, or a required change on a password-locked account
           content:
             application/json:
               schema:
-                $ref: '#/components/schemas/Error'
-        '404':
+                $ref: "#/components/schemas/Error"
+        "404":
           description: No such account
   /api/openapi.yaml:
     get:
@@ -767,7 +795,7 @@ paths:
       tags: [admin]
       summary: This API description
       responses:
-        '200':
+        "200":
           description: The OpenAPI document
           content:
             application/yaml: {}
@@ -779,7 +807,7 @@ paths:
       summary: Interactive API documentation (Swagger UI)
       description: Viewers can open it, but operations they may not call still answer 403.
       responses:
-        '200':
+        "200":
           description: HTML page
   /profile-icons/{file}:
     get:
@@ -794,9 +822,9 @@ paths:
           schema:
             type: string
       responses:
-        '200':
+        "200":
           description: Image file
-        '404':
+        "404":
           description: No such icon
   /healthz:
     get:
@@ -806,12 +834,12 @@ paths:
       tags: [health]
       summary: Health check
       responses:
-        '200':
+        "200":
           description: Server is healthy
           content:
             application/json:
               schema:
-                $ref: '#/components/schemas/HealthResponse'
+                $ref: "#/components/schemas/HealthResponse"
 
   /api/status/startup:
     get:
@@ -827,12 +855,12 @@ paths:
         read live, so they advance during a long scan. Counts cover media
         folders only (not commercials) and exclude missing files.
       responses:
-        '200':
+        "200":
           description: Current status
           content:
             application/json:
               schema:
-                $ref: '#/components/schemas/StartupStatus'
+                $ref: "#/components/schemas/StartupStatus"
 
   /api/logs:
     get:
@@ -856,12 +884,12 @@ paths:
             maximum: 1000
             default: 100
       responses:
-        '200':
+        "200":
           description: Matching log entries
           content:
             application/json:
               schema:
-                $ref: '#/components/schemas/LogsResponse'
+                $ref: "#/components/schemas/LogsResponse"
 
   /api/channels:
     get:
@@ -870,14 +898,14 @@ paths:
       tags: [channels]
       summary: List every channel (built-in default and custom), regardless of visibility
       responses:
-        '200':
+        "200":
           description: All channels, ordered by channel number
           content:
             application/json:
               schema:
                 type: array
                 items:
-                  $ref: '#/components/schemas/Channel'
+                  $ref: "#/components/schemas/Channel"
     post:
       x-alreadyon-roles: [owner]
       operationId: createChannel
@@ -893,42 +921,42 @@ paths:
         content:
           application/json:
             schema:
-              $ref: '#/components/schemas/ChannelDraft'
+              $ref: "#/components/schemas/ChannelDraft"
       responses:
-        '201':
+        "201":
           description: Channel created
           content:
             application/json:
               schema:
-                $ref: '#/components/schemas/Channel'
-        '400':
+                $ref: "#/components/schemas/Channel"
+        "400":
           description: Invalid name/number, reserved number range, or duplicate number
           content:
             application/json:
               schema:
-                $ref: '#/components/schemas/Error'
+                $ref: "#/components/schemas/Error"
 
   /api/channels/{id}:
     parameters:
-      - $ref: '#/components/parameters/ChannelId'
+      - $ref: "#/components/parameters/ChannelId"
     get:
       x-alreadyon-roles: [owner]
       operationId: getChannel
       tags: [channels]
       summary: Get one channel
       responses:
-        '200':
+        "200":
           description: The channel
           content:
             application/json:
               schema:
-                $ref: '#/components/schemas/Channel'
-        '404':
+                $ref: "#/components/schemas/Channel"
+        "404":
           description: No channel with this id
           content:
             application/json:
               schema:
-                $ref: '#/components/schemas/Error'
+                $ref: "#/components/schemas/Error"
     put:
       x-alreadyon-roles: [owner]
       operationId: updateChannel
@@ -946,40 +974,40 @@ paths:
         content:
           application/json:
             schema:
-              $ref: '#/components/schemas/ChannelDraft'
+              $ref: "#/components/schemas/ChannelDraft"
       responses:
-        '200':
+        "200":
           description: Updated channel
           content:
             application/json:
               schema:
-                $ref: '#/components/schemas/Channel'
-        '400':
+                $ref: "#/components/schemas/Channel"
+        "400":
           description: Invalid input, reserved number range, or duplicate number
           content:
             application/json:
               schema:
-                $ref: '#/components/schemas/Error'
-        '404':
+                $ref: "#/components/schemas/Error"
+        "404":
           description: No channel with this id
           content:
             application/json:
               schema:
-                $ref: '#/components/schemas/Error'
+                $ref: "#/components/schemas/Error"
     delete:
       x-alreadyon-roles: [owner]
       operationId: deleteChannel
       tags: [channels]
       summary: Delete a channel
       responses:
-        '204':
+        "204":
           description: Deleted
-        '404':
+        "404":
           description: No channel with this id
           content:
             application/json:
               schema:
-                $ref: '#/components/schemas/Error'
+                $ref: "#/components/schemas/Error"
 
   /api/channels/{id}/visibility:
     put:
@@ -992,7 +1020,7 @@ paths:
         every channel), `show` always shows it and `hide` never does. The
         guide follows the channel's `hidden` flag, which this keeps up to date.
       parameters:
-        - $ref: '#/components/parameters/ChannelId'
+        - $ref: "#/components/parameters/ChannelId"
       requestBody:
         required: true
         content:
@@ -1006,20 +1034,20 @@ paths:
                   type: string
                   enum: [auto, show, hide]
       responses:
-        '200':
+        "200":
           description: Updated channel
           content:
             application/json:
               schema:
-                $ref: '#/components/schemas/Channel'
-        '400':
+                $ref: "#/components/schemas/Channel"
+        "400":
           description: Not one of auto, show or hide
-        '404':
+        "404":
           description: No channel with this id
           content:
             application/json:
               schema:
-                $ref: '#/components/schemas/Error'
+                $ref: "#/components/schemas/Error"
 
   /api/channels/bulk-visibility:
     post:
@@ -1045,7 +1073,7 @@ paths:
                   type: string
                   enum: [auto, show, hide]
       responses:
-        '200':
+        "200":
           description: How many channels were requested (unknown ids are ignored, not an error)
           content:
             application/json:
@@ -1054,7 +1082,7 @@ paths:
                 properties:
                   updated:
                     type: integer
-        '400':
+        "400":
           description: Not one of auto, show or hide
 
   /api/channels/filter-preview:
@@ -1069,9 +1097,9 @@ paths:
         content:
           application/json:
             schema:
-              $ref: '#/components/schemas/ChannelFilter'
+              $ref: "#/components/schemas/ChannelFilter"
       responses:
-        '200':
+        "200":
           description: Match counts
           content:
             application/json:
@@ -1084,12 +1112,12 @@ paths:
                   items:
                     type: integer
                     description: Individual files (each episode counts).
-        '400':
+        "400":
           description: Invalid filter
           content:
             application/json:
               schema:
-                $ref: '#/components/schemas/Error'
+                $ref: "#/components/schemas/Error"
 
   /api/library/genres:
     get:
@@ -1099,7 +1127,7 @@ paths:
       summary: Genre vocabulary
       description: The genres library content is classified with, in display order.
       responses:
-        '200':
+        "200":
           description: Genres
           content:
             application/json:
@@ -1120,7 +1148,7 @@ paths:
       tags: [library]
       summary: Ratings that can be assigned by hand
       responses:
-        '200':
+        "200":
           description: Ratings per media type, most permissive audience first
           content:
             application/json:
@@ -1135,6 +1163,153 @@ paths:
                     type: array
                     items:
                       type: string
+
+  /api/library/catalog:
+    get:
+      x-alreadyon-roles: [owner]
+      operationId: listLibraryCatalog
+      tags: [library]
+      summary: Browse movies, grouped TV shows or their episodes
+      description: >
+        Includes all identified, non-missing media files, including unprobed files.
+        Unidentified files appear after identification. Show IDs are representative
+        item IDs; membership is resolved again for each request. Show audience is
+        the most restrictive episode audience, genres/ratings are unions, and
+        mixed indicates differing episode metadata. A show is matched when any
+        episode belongs to a non-legacy channel; matchedFiles gives the count.
+      parameters:
+        - {
+            name: view,
+            in: query,
+            schema:
+              {
+                type: string,
+                enum: [movies, shows, episodes],
+                default: movies,
+              },
+          }
+        - {
+            name: showId,
+            in: query,
+            description: Representative item ID required for episodes view,
+            schema: { type: integer },
+          }
+        - { name: search, in: query, schema: { type: string } }
+        - {
+            name: match,
+            in: query,
+            schema: { type: string, enum: [matched, unmatched, review] },
+          }
+        - {
+            name: audience,
+            in: query,
+            schema: { type: string, enum: [young_child, teen, adult] },
+          }
+        - {
+            name: genre,
+            in: query,
+            description: Comma-separated genre IDs; any selected genre matches,
+            schema: { type: string },
+          }
+        - {
+            name: rating,
+            in: query,
+            description: Comma-separated content ratings; any selected rating matches,
+            schema: { type: string },
+          }
+        - {
+            name: source,
+            in: query,
+            schema: { type: string, enum: [manual, automatic] },
+          }
+        - {
+            name: sort,
+            in: query,
+            schema:
+              {
+                type: string,
+                enum:
+                  [
+                    title,
+                    title-desc,
+                    year,
+                    year-asc,
+                    audience,
+                    audience-desc,
+                    rating,
+                    rating-desc,
+                    channels,
+                    channels-desc,
+                    episodes,
+                    episode,
+                  ],
+              },
+          }
+        - {
+            name: limit,
+            in: query,
+            schema: { type: integer, minimum: 1, maximum: 200, default: 50 },
+          }
+        - {
+            name: offset,
+            in: query,
+            schema: { type: integer, minimum: 0, default: 0 },
+          }
+      responses:
+        "200":
+          description: Filtered page and total before pagination
+          content:
+            application/json:
+              schema:
+                type: object
+                properties:
+                  total: { type: integer }
+                  items:
+                    type: array
+                    items: { $ref: "#/components/schemas/CatalogItem" }
+        "400": { description: Invalid query }
+        "404": { description: Show representative no longer exists }
+    patch:
+      x-alreadyon-roles: [owner]
+      operationId: updateLibraryCatalog
+      tags: [library]
+      summary: Atomically correct selected movies, shows or episodes
+      description: >
+        Omitted fields stay unchanged. Show patches update the parent and future
+        episodes inherit those values; explicit episode corrections take precedence.
+        Show title means series title, year means premiere year; mediaType,
+        seriesTitle, season and episode are rejected for show patches.
+        The response counts shows for show edits and items otherwise. No schedule
+        is rebuilt. Apply changes through POST /api/admin/refresh-schedule when ready.
+      requestBody:
+        required: true
+        content:
+          application/json:
+            schema:
+              allOf:
+                - $ref: "#/components/schemas/LibraryItemPatch"
+                - type: object
+                  required: [ids, view]
+                  properties:
+                    ids:
+                      {
+                        type: array,
+                        minItems: 1,
+                        maxItems: 1000,
+                        items: { type: integer },
+                      }
+                    view: { type: string, enum: [movies, shows, episodes] }
+      responses:
+        "200":
+          description: Saved atomically
+          content:
+            application/json:
+              schema:
+                type: object
+                properties:
+                  updated: { type: integer }
+        "400": { description: Invalid selection or patch; no changes saved }
+        "404": { description: Item no longer exists; no changes saved }
 
   /api/library/unmatched:
     get:
@@ -1164,7 +1339,7 @@ paths:
             minimum: 0
             default: 0
       responses:
-        '200':
+        "200":
           description: One page of unmatched items and the overall count
           content:
             application/json:
@@ -1176,13 +1351,13 @@ paths:
                   items:
                     type: array
                     items:
-                      $ref: '#/components/schemas/UnmatchedItem'
-        '400':
+                      $ref: "#/components/schemas/UnmatchedItem"
+        "400":
           description: Invalid limit or offset
           content:
             application/json:
               schema:
-                $ref: '#/components/schemas/Error'
+                $ref: "#/components/schemas/Error"
 
   /api/library/items/{id}:
     patch:
@@ -1208,26 +1383,26 @@ paths:
         content:
           application/json:
             schema:
-              $ref: '#/components/schemas/LibraryItemPatch'
+              $ref: "#/components/schemas/LibraryItemPatch"
       responses:
-        '200':
+        "200":
           description: Saved
           content:
             application/json:
               schema:
-                $ref: '#/components/schemas/UpdatedCount'
-        '400':
+                $ref: "#/components/schemas/UpdatedCount"
+        "400":
           description: Unknown field or an invalid value (unknown genre, wrong rating vocabulary, an episode with no series, out-of-range year)
           content:
             application/json:
               schema:
-                $ref: '#/components/schemas/Error'
-        '404':
+                $ref: "#/components/schemas/Error"
+        "404":
           description: No item with this id
           content:
             application/json:
               schema:
-                $ref: '#/components/schemas/Error'
+                $ref: "#/components/schemas/Error"
 
   /api/library/items:
     patch:
@@ -1245,7 +1420,7 @@ paths:
           application/json:
             schema:
               allOf:
-                - $ref: '#/components/schemas/LibraryItemPatch'
+                - $ref: "#/components/schemas/LibraryItemPatch"
                 - type: object
                   required: [ids]
                   properties:
@@ -1256,24 +1431,24 @@ paths:
                         format: int64
                       maxItems: 1000
       responses:
-        '200':
+        "200":
           description: Saved
           content:
             application/json:
               schema:
-                $ref: '#/components/schemas/UpdatedCount'
-        '400':
+                $ref: "#/components/schemas/UpdatedCount"
+        "400":
           description: No ids, too many ids, an unknown field, or an invalid value
           content:
             application/json:
               schema:
-                $ref: '#/components/schemas/Error'
-        '404':
+                $ref: "#/components/schemas/Error"
+        "404":
           description: An id doesn't match any item
           content:
             application/json:
               schema:
-                $ref: '#/components/schemas/Error'
+                $ref: "#/components/schemas/Error"
 
   /api/channels/{id}/preview:
     get:
@@ -1282,20 +1457,20 @@ paths:
       tags: [guide]
       summary: The single program currently airing on one channel
       parameters:
-        - $ref: '#/components/parameters/ChannelId'
+        - $ref: "#/components/parameters/ChannelId"
       responses:
-        '200':
+        "200":
           description: What's currently airing, and how far into it playback is
           content:
             application/json:
               schema:
-                $ref: '#/components/schemas/PreviewResponse'
-        '404':
+                $ref: "#/components/schemas/PreviewResponse"
+        "404":
           description: Unknown channel, or nothing scheduled (empty lineup)
           content:
             application/json:
               schema:
-                $ref: '#/components/schemas/Error'
+                $ref: "#/components/schemas/Error"
 
   /api/guide:
     get:
@@ -1323,14 +1498,14 @@ paths:
             type: string
             enum: [young_child, teen, adult]
       responses:
-        '200':
+        "200":
           description: One entry per visible channel
           content:
             application/json:
               schema:
                 type: array
                 items:
-                  $ref: '#/components/schemas/GuideChannel'
+                  $ref: "#/components/schemas/GuideChannel"
 
   /api/settings/commercials:
     get:
@@ -1339,12 +1514,12 @@ paths:
       tags: [settings]
       summary: Get commercial break settings
       responses:
-        '200':
+        "200":
           description: Current settings
           content:
             application/json:
               schema:
-                $ref: '#/components/schemas/CommercialSettings'
+                $ref: "#/components/schemas/CommercialSettings"
     put:
       x-alreadyon-roles: [owner]
       operationId: updateCommercialSettings
@@ -1355,20 +1530,20 @@ paths:
         content:
           application/json:
             schema:
-              $ref: '#/components/schemas/CommercialSettings'
+              $ref: "#/components/schemas/CommercialSettings"
       responses:
-        '200':
+        "200":
           description: Saved settings
           content:
             application/json:
               schema:
-                $ref: '#/components/schemas/CommercialSettings'
-        '400':
+                $ref: "#/components/schemas/CommercialSettings"
+        "400":
           description: Invalid frequency value
           content:
             application/json:
               schema:
-                $ref: '#/components/schemas/Error'
+                $ref: "#/components/schemas/Error"
 
   /api/settings/metadata:
     get:
@@ -1381,12 +1556,12 @@ paths:
         whether a TMDb key is set, plus the opt-in flag for the no-key
         TVmaze/Wikidata fallback.
       responses:
-        '200':
+        "200":
           description: Current status
           content:
             application/json:
               schema:
-                $ref: '#/components/schemas/MetadataSettingsStatus'
+                $ref: "#/components/schemas/MetadataSettingsStatus"
     put:
       x-alreadyon-roles: [owner]
       operationId: updateMetadataSettings
@@ -1403,20 +1578,20 @@ paths:
         content:
           application/json:
             schema:
-              $ref: '#/components/schemas/MetadataSettingsUpdate'
+              $ref: "#/components/schemas/MetadataSettingsUpdate"
       responses:
-        '200':
+        "200":
           description: Updated status
           content:
             application/json:
               schema:
-                $ref: '#/components/schemas/MetadataSettingsStatus'
-        '400':
+                $ref: "#/components/schemas/MetadataSettingsStatus"
+        "400":
           description: A non-empty key value didn't match the expected format
           content:
             application/json:
               schema:
-                $ref: '#/components/schemas/Error'
+                $ref: "#/components/schemas/Error"
 
   /api/settings/media:
     get:
@@ -1425,12 +1600,12 @@ paths:
       tags: [settings]
       summary: Get the background content-polling interval
       responses:
-        '200':
+        "200":
           description: Current setting
           content:
             application/json:
               schema:
-                $ref: '#/components/schemas/MediaSettings'
+                $ref: "#/components/schemas/MediaSettings"
     put:
       x-alreadyon-roles: [owner]
       operationId: updateMediaSettings
@@ -1446,20 +1621,20 @@ paths:
         content:
           application/json:
             schema:
-              $ref: '#/components/schemas/MediaSettings'
+              $ref: "#/components/schemas/MediaSettings"
       responses:
-        '200':
+        "200":
           description: Saved setting
           content:
             application/json:
               schema:
-                $ref: '#/components/schemas/MediaSettings'
-        '400':
+                $ref: "#/components/schemas/MediaSettings"
+        "400":
           description: Unlisted interval value
           content:
             application/json:
               schema:
-                $ref: '#/components/schemas/Error'
+                $ref: "#/components/schemas/Error"
 
   /api/settings/folders/browse:
     get:
@@ -1476,7 +1651,7 @@ paths:
             default: /data/media/
           description: Absolute directory path. Omit to start at /data/media/.
       responses:
-        '200':
+        "200":
           description: Current folder, parent (empty at root), and alphabetically sorted subfolders
           content:
             application/json:
@@ -1494,13 +1669,13 @@ paths:
                       properties:
                         name: { type: string }
                         path: { type: string }
-        '400':
+        "400":
           description: Invalid path or not a directory
-        '401':
+        "401":
           description: Sign in required
-        '403':
+        "403":
           description: Folder is not readable by the server
-        '404':
+        "404":
           description: Folder does not exist
   /api/settings/folders:
     get:
@@ -1516,12 +1691,12 @@ paths:
         which. Each path carries a live status. The scanner reads the
         union of the TV and movie folders.
       responses:
-        '200':
+        "200":
           description: Effective settings
           content:
             application/json:
               schema:
-                $ref: '#/components/schemas/FolderSettings'
+                $ref: "#/components/schemas/FolderSettings"
     put:
       x-alreadyon-roles: [owner]
       operationId: updateFolderSettings
@@ -1542,20 +1717,20 @@ paths:
         content:
           application/json:
             schema:
-              $ref: '#/components/schemas/FolderSettingsUpdate'
+              $ref: "#/components/schemas/FolderSettingsUpdate"
       responses:
-        '200':
+        "200":
           description: Saved, effective settings
           content:
             application/json:
               schema:
-                $ref: '#/components/schemas/FolderSettings'
-        '400':
+                $ref: "#/components/schemas/FolderSettings"
+        "400":
           description: Invalid path, pattern, or too many entries
           content:
             application/json:
               schema:
-                $ref: '#/components/schemas/Error'
+                $ref: "#/components/schemas/Error"
 
   /api/settings/transcoding/test:
     post:
@@ -1587,7 +1762,7 @@ paths:
                   type: boolean
                   description: Test hardware decoding instead of encoding. Default false.
       responses:
-        '200':
+        "200":
           description: The result (a failed test is still 200, with ok false)
           content:
             application/json:
@@ -1595,12 +1770,21 @@ paths:
                 type: object
                 properties:
                   encoder: { type: string }
-                  device: { type: string, description: The DRI render node used, if any. }
+                  device:
+                    {
+                      type: string,
+                      description: The DRI render node used,
+                      if any.,
+                    }
                   ok: { type: boolean }
-                  detail: { type: string, description: What happened and the likely cause. }
-        '400':
+                  detail:
+                    {
+                      type: string,
+                      description: What happened and the likely cause.,
+                    }
+        "400":
           description: Not one of the allowed choices
-        '503':
+        "503":
           description: Hardware testing is not available
 
   /api/settings/transcoding/threads:
@@ -1618,16 +1802,21 @@ paths:
         divided by the allowed simultaneous conversions. Speeds are multiples of
         real time.
       responses:
-        '200':
+        "200":
           description: Current count and the last measurement
           content:
             application/json:
               schema:
                 type: object
                 properties:
-                  threads: { type: integer, description: Used by every conversion; 2 until measured. }
+                  threads:
+                    {
+                      type: integer,
+                      description: Used by every conversion; 2 until measured.,
+                    }
                   state: { type: string, enum: [idle, running] }
-                  measuredAt: { type: string, format: date-time, nullable: true }
+                  measuredAt:
+                    { type: string, format: date-time, nullable: true }
                   cpus: { type: integer }
                   workload: { type: string }
                   samples:
@@ -1638,8 +1827,13 @@ paths:
                       properties:
                         threads: { type: integer }
                         speed: { type: number }
-                  detail: { type: string, description: Why a measurement was skipped or failed, or that the server cannot keep up in real time. }
-        '503':
+                  detail:
+                    {
+                      type: string,
+                      description: Why a measurement was skipped or failed,
+                      or that the server cannot keep up in real time.,
+                    }
+        "503":
           description: Thread tuning is not available
 
   /api/settings/transcoding/threads/tune:
@@ -1654,9 +1848,9 @@ paths:
         `GET /api/settings/transcoding/threads` for the result. Does nothing if
         one is already running.
       responses:
-        '202':
+        "202":
           description: Measuring
-        '503':
+        "503":
           description: Thread tuning is not available
 
   /api/settings/transcoding/capacity:
@@ -1684,7 +1878,7 @@ paths:
         speed, the CPU count and the free memory at startup and every hour at :15
         (unless an administrator picks a number in the playback settings).
       responses:
-        '200':
+        "200":
           description: The last measurement and the detected limits
           content:
             application/json:
@@ -1692,8 +1886,13 @@ paths:
                 type: object
                 properties:
                   state: { type: string, enum: [idle, running] }
-                  measuredAt: { type: string, format: date-time, nullable: true }
-                  encoder: { type: string, description: The encoder measured; empty is software. }
+                  measuredAt:
+                    { type: string, format: date-time, nullable: true }
+                  encoder:
+                    {
+                      type: string,
+                      description: The encoder measured; empty is software.,
+                    }
                   samples:
                     type: array
                     nullable: true
@@ -1712,7 +1911,8 @@ paths:
                         encoder: { type: string }
                         sourceFps: { type: number }
                         hardwareDecode: { type: boolean }
-                        transfer: { type: string, enum: [smpte2084, arib-std-b67] }
+                        transfer:
+                          { type: string, enum: [smpte2084, arib-std-b67] }
                         toneMapper: { type: string, enum: [gpu, cpu] }
                         threads: { type: integer }
                         measuredAt: { type: string, format: date-time }
@@ -1724,13 +1924,22 @@ paths:
                               height: { type: integer }
                               fps: { type: number }
                               speed: { type: number }
-                  maxHeight: { type: integer, description: Largest software height sustained; 0 means no limit. }
+                  maxHeight:
+                    {
+                      type: integer,
+                      description: Largest software height sustained; 0 means no limit.,
+                    }
                   maxFps: { type: number }
-                  processes: { type: integer, description: Detected parallel conversions; 0 until known. }
-                  processesAt: { type: string, format: date-time, nullable: true }
+                  processes:
+                    {
+                      type: integer,
+                      description: Detected parallel conversions; 0 until known.,
+                    }
+                  processesAt:
+                    { type: string, format: date-time, nullable: true }
                   cpus: { type: integer }
                   detail: { type: string }
-        '503':
+        "503":
           description: Capacity measurement is not available
 
   /api/settings/transcoding/capacity/measure:
@@ -1744,9 +1953,9 @@ paths:
         status; poll `GET /api/settings/transcoding/capacity` for the result.
         Does nothing if one is already running.
       responses:
-        '202':
+        "202":
           description: Measuring
-        '503':
+        "503":
           description: Capacity measurement is not available
 
   /api/server/restart:
@@ -1763,7 +1972,7 @@ paths:
         unchanged process environment, so compose file changes still need the
         container recreated. Needs the same authentication as other settings.
       responses:
-        '202':
+        "202":
           description: Restarting
           content:
             application/json:
@@ -1782,12 +1991,12 @@ paths:
         The Server tab's choices. `transcoding` is in use (see
         /api/settings/transcoding/test); TLS/ACME are activated through dedicated TLS endpoints and DDNS through its provider endpoint. Legacy preferences do not activate certificates.
       responses:
-        '200':
+        "200":
           description: Current settings
           content:
             application/json:
               schema:
-                $ref: '#/components/schemas/ServerSettings'
+                $ref: "#/components/schemas/ServerSettings"
     put:
       x-alreadyon-roles: [owner]
       operationId: updateServerSettings
@@ -1801,20 +2010,20 @@ paths:
         content:
           application/json:
             schema:
-              $ref: '#/components/schemas/ServerSettings'
+              $ref: "#/components/schemas/ServerSettings"
       responses:
-        '200':
+        "200":
           description: Saved settings
           content:
             application/json:
               schema:
-                $ref: '#/components/schemas/ServerSettings'
-        '400':
+                $ref: "#/components/schemas/ServerSettings"
+        "400":
           description: A value is not one of the allowed choices
           content:
             application/json:
               schema:
-                $ref: '#/components/schemas/Error'
+                $ref: "#/components/schemas/Error"
 
   /api/profiles:
     get:
@@ -1833,16 +2042,16 @@ paths:
         Profiles are not accounts: the account is the authorization boundary,
         and a profile's role and audience tier are content filters within it.
       parameters:
-        - $ref: '#/components/parameters/ProfileUserId'
+        - $ref: "#/components/parameters/ProfileUserId"
       responses:
-        '200':
+        "200":
           description: Profiles, oldest first
           content:
             application/json:
               schema:
                 type: array
                 items:
-                  $ref: '#/components/schemas/Profile'
+                  $ref: "#/components/schemas/Profile"
     post:
       x-alreadyon-roles: [owner, viewer]
       operationId: createProfile
@@ -1854,29 +2063,29 @@ paths:
         an owner on the account named by `userId`. An account has at most 12
         profiles.
       parameters:
-        - $ref: '#/components/parameters/ProfileUserId'
+        - $ref: "#/components/parameters/ProfileUserId"
       requestBody:
         required: true
         content:
           application/json:
             schema:
-              $ref: '#/components/schemas/ProfileDraft'
+              $ref: "#/components/schemas/ProfileDraft"
       responses:
-        '201':
+        "201":
           description: Created
           content:
             application/json:
               schema:
-                $ref: '#/components/schemas/Profile'
-        '400':
+                $ref: "#/components/schemas/Profile"
+        "400":
           description: Invalid name, role, or audience tier
           content:
             application/json:
               schema:
-                $ref: '#/components/schemas/Error'
-        '403':
+                $ref: "#/components/schemas/Error"
+        "403":
           description: A viewer named another account in `userId`
-        '409':
+        "409":
           description: >
             Another profile of the account already has that name
             (case-insensitive), or the account has the maximum number of
@@ -1884,29 +2093,29 @@ paths:
           content:
             application/json:
               schema:
-                $ref: '#/components/schemas/Error'
+                $ref: "#/components/schemas/Error"
 
   /api/profiles/{id}:
     parameters:
-      - $ref: '#/components/parameters/ProfileId'
+      - $ref: "#/components/parameters/ProfileId"
     get:
       x-alreadyon-roles: [owner, viewer]
       operationId: getProfile
       tags: [profiles]
       summary: Get one profile
       responses:
-        '200':
+        "200":
           description: The profile
           content:
             application/json:
               schema:
-                $ref: '#/components/schemas/Profile'
-        '404':
+                $ref: "#/components/schemas/Profile"
+        "404":
           description: No profile with this id
           content:
             application/json:
               schema:
-                $ref: '#/components/schemas/Error'
+                $ref: "#/components/schemas/Error"
     patch:
       x-alreadyon-roles: [owner, viewer]
       operationId: updateProfile
@@ -1925,32 +2134,32 @@ paths:
         content:
           application/json:
             schema:
-              $ref: '#/components/schemas/ProfilePatch'
+              $ref: "#/components/schemas/ProfilePatch"
       responses:
-        '200':
+        "200":
           description: The updated profile
           content:
             application/json:
               schema:
-                $ref: '#/components/schemas/Profile'
-        '400':
+                $ref: "#/components/schemas/Profile"
+        "400":
           description: Unknown field or invalid value
           content:
             application/json:
               schema:
-                $ref: '#/components/schemas/Error'
-        '404':
+                $ref: "#/components/schemas/Error"
+        "404":
           description: No profile with this id
           content:
             application/json:
               schema:
-                $ref: '#/components/schemas/Error'
-        '409':
+                $ref: "#/components/schemas/Error"
+        "409":
           description: Duplicate name, or this would leave no admin profile
           content:
             application/json:
               schema:
-                $ref: '#/components/schemas/Error'
+                $ref: "#/components/schemas/Error"
     delete:
       x-alreadyon-roles: [owner, viewer]
       operationId: deleteProfile
@@ -1958,24 +2167,24 @@ paths:
       summary: Delete a profile
       description: The last admin profile can't be deleted. An uploaded icon file is removed too.
       responses:
-        '204':
+        "204":
           description: Deleted
-        '404':
+        "404":
           description: No profile with this id
           content:
             application/json:
               schema:
-                $ref: '#/components/schemas/Error'
-        '409':
+                $ref: "#/components/schemas/Error"
+        "409":
           description: This is the last admin profile
           content:
             application/json:
               schema:
-                $ref: '#/components/schemas/Error'
+                $ref: "#/components/schemas/Error"
 
   /api/profiles/{id}/pin:
     parameters:
-      - $ref: '#/components/parameters/ProfileId'
+      - $ref: "#/components/parameters/ProfileId"
     put:
       x-alreadyon-roles: [owner, viewer]
       operationId: setProfilePin
@@ -1995,22 +2204,22 @@ paths:
               properties:
                 pin:
                   type: string
-                  pattern: '^[0-9]{4,6}$'
+                  pattern: "^[0-9]{4,6}$"
       responses:
-        '204':
+        "204":
           description: PIN stored
-        '400':
+        "400":
           description: Not 4-6 digits
           content:
             application/json:
               schema:
-                $ref: '#/components/schemas/Error'
-        '404':
+                $ref: "#/components/schemas/Error"
+        "404":
           description: No profile with this id
           content:
             application/json:
               schema:
-                $ref: '#/components/schemas/Error'
+                $ref: "#/components/schemas/Error"
     delete:
       x-alreadyon-roles: [owner, viewer]
       operationId: clearProfilePin
@@ -2020,18 +2229,18 @@ paths:
         Also serves as the admin reset for a forgotten PIN, since no
         session distinguishes an admin from the profile's own user yet.
       responses:
-        '204':
+        "204":
           description: PIN removed
-        '404':
+        "404":
           description: No profile with this id
           content:
             application/json:
               schema:
-                $ref: '#/components/schemas/Error'
+                $ref: "#/components/schemas/Error"
 
   /api/profiles/{id}/verify-pin:
     parameters:
-      - $ref: '#/components/parameters/ProfileId'
+      - $ref: "#/components/parameters/ProfileId"
     post:
       x-alreadyon-roles: [owner, viewer]
       operationId: verifyProfilePin
@@ -2055,7 +2264,7 @@ paths:
                 pin:
                   type: string
       responses:
-        '200':
+        "200":
           description: The PIN matches
           content:
             application/json:
@@ -2064,7 +2273,7 @@ paths:
                 properties:
                   valid:
                     type: boolean
-        '401':
+        "401":
           description: The PIN is wrong
           content:
             application/json:
@@ -2075,13 +2284,13 @@ paths:
                     type: boolean
                   error:
                     type: string
-        '404':
+        "404":
           description: No profile with this id
           content:
             application/json:
               schema:
-                $ref: '#/components/schemas/Error'
-        '429':
+                $ref: "#/components/schemas/Error"
+        "429":
           description: Locked after repeated wrong PINs; see the Retry-After header
           headers:
             Retry-After:
@@ -2102,7 +2311,7 @@ paths:
 
   /api/profiles/{id}/icon:
     parameters:
-      - $ref: '#/components/parameters/ProfileId'
+      - $ref: "#/components/parameters/ProfileId"
     post:
       x-alreadyon-roles: [owner, viewer]
       operationId: uploadProfileIcon
@@ -2125,24 +2334,24 @@ paths:
                   type: string
                   format: binary
       responses:
-        '200':
+        "200":
           description: The updated profile
           content:
             application/json:
               schema:
-                $ref: '#/components/schemas/Profile'
-        '400':
+                $ref: "#/components/schemas/Profile"
+        "400":
           description: Missing file, too large, or not a supported image
           content:
             application/json:
               schema:
-                $ref: '#/components/schemas/Error'
-        '404':
+                $ref: "#/components/schemas/Error"
+        "404":
           description: No profile with this id
           content:
             application/json:
               schema:
-                $ref: '#/components/schemas/Error'
+                $ref: "#/components/schemas/Error"
 
   /api/admin/refresh-schedule:
     post:
@@ -2159,20 +2368,20 @@ paths:
         startup-only population. Channels without a filter are never
         touched.
       responses:
-        '200':
+        "200":
           description: Summary of what ran
           content:
             application/json:
               schema:
-                $ref: '#/components/schemas/RefreshScheduleResult'
-        '409':
+                $ref: "#/components/schemas/RefreshScheduleResult"
+        "409":
           description: >
             A refresh (or the startup library pipeline) is already running;
             retry once it finishes.
           content:
             application/json:
               schema:
-                $ref: '#/components/schemas/Error'
+                $ref: "#/components/schemas/Error"
 
   /api/admin/refresh-times:
     get:
@@ -2182,15 +2391,17 @@ paths:
       summary: When the library was last scanned and the schedules last regenerated
       description: Counts every trigger (the manual buttons, startup, polling and the hourly schedule top-up). A time is null when it has never happened.
       responses:
-        '200':
+        "200":
           description: The two times
           content:
             application/json:
               schema:
                 type: object
                 properties:
-                  mediaRefreshedAt: { type: [string, 'null'], format: date-time }
-                  scheduleRefreshedAt: { type: [string, 'null'], format: date-time }
+                  mediaRefreshedAt:
+                    { type: [string, "null"], format: date-time }
+                  scheduleRefreshedAt:
+                    { type: [string, "null"], format: date-time }
   /api/admin/refresh-media:
     post:
       x-alreadyon-roles: [owner]
@@ -2215,7 +2426,7 @@ paths:
                   type: integer
                   format: int64
       responses:
-        '200':
+        "200":
           description: The scan finished
           content:
             application/json:
@@ -2227,18 +2438,18 @@ paths:
                     type: integer
                   filesMissing:
                     type: integer
-        '400':
+        "400":
           description: Unknown `profileId`
           content:
             application/json:
               schema:
-                $ref: '#/components/schemas/Error'
-        '409':
+                $ref: "#/components/schemas/Error"
+        "409":
           description: A refresh or scan is already running; retry once it finishes.
           content:
             application/json:
               schema:
-                $ref: '#/components/schemas/Error'
+                $ref: "#/components/schemas/Error"
 
   /api/admin/api-keys:
     get:
@@ -2251,14 +2462,14 @@ paths:
         identify and revoke one. All management API operations require
         a valid bearer key. Initial provisioning uses the local access-key CLI.
       responses:
-        '200':
+        "200":
           description: Every generated key, newest first
           content:
             application/json:
               schema:
                 type: array
                 items:
-                  $ref: '#/components/schemas/ApiKey'
+                  $ref: "#/components/schemas/ApiKey"
     post:
       x-alreadyon-roles: [owner]
       operationId: createApiKey
@@ -2278,18 +2489,18 @@ paths:
                 name:
                   type: string
       responses:
-        '201':
+        "201":
           description: The new key, including its one-time raw value
           content:
             application/json:
               schema:
-                $ref: '#/components/schemas/ApiKeyCreated'
-        '400':
+                $ref: "#/components/schemas/ApiKeyCreated"
+        "400":
           description: Missing/blank name
           content:
             application/json:
               schema:
-                $ref: '#/components/schemas/Error'
+                $ref: "#/components/schemas/Error"
 
   /api/admin/api-keys/{id}:
     delete:
@@ -2305,14 +2516,14 @@ paths:
             type: integer
             format: int64
       responses:
-        '204':
+        "204":
           description: Revoked
-        '404':
+        "404":
           description: No API key with this id
           content:
             application/json:
               schema:
-                $ref: '#/components/schemas/Error'
+                $ref: "#/components/schemas/Error"
 
   /api/settings/playback:
     get:
@@ -2321,12 +2532,12 @@ paths:
       tags: [settings]
       summary: Get playback resource limits
       responses:
-        '200':
+        "200":
           description: Limits consumed by the stream manager when it is connected to playback routes
           content:
             application/json:
               schema:
-                $ref: '#/components/schemas/PlaybackSettings'
+                $ref: "#/components/schemas/PlaybackSettings"
     put:
       x-alreadyon-roles: [owner]
       operationId: putPlaybackSettings
@@ -2337,35 +2548,35 @@ paths:
         content:
           application/json:
             schema:
-              $ref: '#/components/schemas/PlaybackSettings'
+              $ref: "#/components/schemas/PlaybackSettings"
       responses:
-        '200':
+        "200":
           description: Saved limits; lowering limits prevents new admission without interrupting existing viewers
           content:
             application/json:
               schema:
-                $ref: '#/components/schemas/PlaybackSettings'
-        '400':
+                $ref: "#/components/schemas/PlaybackSettings"
+        "400":
           description: Missing, unknown or out-of-range setting
-        '500':
+        "500":
           description: Settings could not be saved
 
   /api/channels/{id}/commercials:
     parameters:
-      - $ref: '#/components/parameters/ChannelId'
+      - $ref: "#/components/parameters/ChannelId"
     get:
       x-alreadyon-roles: [owner]
       operationId: getChannelCommercials
       tags: [channels]
       summary: Read commercial overrides and effective settings for one channel
       responses:
-        '200':
+        "200":
           description: Saved overrides plus current inheritance and removed-folder fallback
           content:
             application/json:
-              schema: { $ref: '#/components/schemas/ChannelCommercialPolicy' }
-        '401': { description: Authentication required }
-        '404': { description: Unknown channel }
+              schema: { $ref: "#/components/schemas/ChannelCommercialPolicy" }
+        "401": { description: Authentication required }
+        "404": { description: Unknown channel }
     put:
       x-alreadyon-roles: [owner]
       operationId: putChannelCommercials
@@ -2381,17 +2592,23 @@ paths:
         required: true
         content:
           application/json:
-            schema: { $ref: '#/components/schemas/ChannelCommercialSettings' }
+            schema: { $ref: "#/components/schemas/ChannelCommercialSettings" }
       responses:
-        '200':
+        "200":
           description: Saved and future schedule refreshed
           content:
             application/json:
-              schema: { $ref: '#/components/schemas/ChannelCommercialPolicy' }
-        '400': { description: Unknown field or folder outside the configured commercial folder list }
-        '401': { description: Authentication required }
-        '404': { description: Unknown channel }
-        '500': { description: Save or schedule refresh failed; a refresh failure may follow a successful settings save }
+              schema: { $ref: "#/components/schemas/ChannelCommercialPolicy" }
+        "400":
+          {
+            description: Unknown field or folder outside the configured commercial folder list,
+          }
+        "401": { description: Authentication required }
+        "404": { description: Unknown channel }
+        "500":
+          {
+            description: Save or schedule refresh failed; a refresh failure may follow a successful settings save,
+          }
 
   /api/playback/sessions:
     post:
@@ -2411,15 +2628,15 @@ paths:
                   type: integer
                   minimum: 1
       responses:
-        '201':
+        "201":
           description: Scoped authorization; the raw token is returned once
           content:
             application/json:
               schema:
-                $ref: '#/components/schemas/PlaybackSession'
-        '401':
+                $ref: "#/components/schemas/PlaybackSession"
+        "401":
           description: Invalid management credential or issuance unavailable
-        '404':
+        "404":
           description: Unknown channel
     delete:
       x-alreadyon-roles: [owner, viewer]
@@ -2439,9 +2656,9 @@ paths:
                 token:
                   type: string
       responses:
-        '204':
+        "204":
           description: Revoked
-        '401':
+        "401":
           description: Invalid or unowned session
 
   /api/playback/probe:
@@ -2451,13 +2668,13 @@ paths:
       tags: [playback]
       summary: Issue a token scoped to network probes on media channel zero
       responses:
-        '201':
+        "201":
           description: Five-minute probe token with a 32 MiB total response budget
           content:
             application/json:
               schema:
-                $ref: '#/components/schemas/PlaybackSession'
-        '401':
+                $ref: "#/components/schemas/PlaybackSession"
+        "401":
           description: Unauthorized
 
   /media/{channel}/probe:
@@ -2483,17 +2700,17 @@ paths:
             maximum: 8388608
             default: 1
       responses:
-        '200':
+        "200":
           description: Uncached random bytes; ten-second response write deadline
           content:
             application/octet-stream: {}
-        '400':
+        "400":
           description: Invalid byte count
-        '401':
+        "401":
           description: Missing, expired, revoked or wrong-channel authorization
-        '403':
+        "403":
           description: Origin not allowed
-        '429':
+        "429":
           description: Probe byte budget exhausted
 
   /api/settings/playback/delivery:
@@ -2502,12 +2719,12 @@ paths:
       operationId: getPlaybackDelivery
       tags: [settings]
       responses:
-        '200':
+        "200":
           description: Advertised media origin and allowed browser origins
           content:
             application/json:
               schema:
-                $ref: '#/components/schemas/PlaybackDelivery'
+                $ref: "#/components/schemas/PlaybackDelivery"
     put:
       x-alreadyon-roles: [owner]
       operationId: putPlaybackDelivery
@@ -2517,11 +2734,11 @@ paths:
         content:
           application/json:
             schema:
-              $ref: '#/components/schemas/PlaybackDelivery'
+              $ref: "#/components/schemas/PlaybackDelivery"
       responses:
-        '200':
+        "200":
           description: Saved settings
-        '400':
+        "400":
           description: Invalid origin or unknown field
 
   /api/channels/{id}/tune:
@@ -2531,7 +2748,7 @@ paths:
       tags: [playback]
       summary: Select direct play or a shared HLS rendition at the current schedule offset
       parameters:
-        - $ref: '#/components/parameters/ChannelId'
+        - $ref: "#/components/parameters/ChannelId"
       requestBody:
         required: true
         content:
@@ -2542,7 +2759,7 @@ paths:
               required: [capabilities]
               properties:
                 capabilities:
-                  $ref: '#/components/schemas/PlaybackCapabilities'
+                  $ref: "#/components/schemas/PlaybackCapabilities"
                 profileId:
                   type: integer
                   format: int64
@@ -2575,19 +2792,19 @@ paths:
                   default: 0
                   description: Viewer's quality ceiling in lines. 0 is automatic. A source taller than the ceiling is always converted; the plan's bitrate is capped for the chosen height. 2160 (4K) is planned only while a hardware encoder is in use and the client reports 4K H.264 decoding; otherwise the stream stays at 1080p.
       responses:
-        '201':
+        "201":
           description: Scoped media URL and authoritative timeline; poll status until ready
           content:
             application/json:
               schema:
-                $ref: '#/components/schemas/TunedPlayback'
-        '401':
+                $ref: "#/components/schemas/TunedPlayback"
+        "401":
           description: Invalid server access key
-        '404':
+        "404":
           description: Unknown profile or no scheduled content
-        '409':
+        "409":
           description: Schedule changed while preparing playback; retry
-        '429':
+        "429":
           description: >
             The account is already watching on as many other devices as its
             simultaneous-stream limit allows (code `stream_limit`). A stream
@@ -2596,10 +2813,10 @@ paths:
           content:
             application/json:
               schema:
-                $ref: '#/components/schemas/Error'
-        '422':
+                $ref: "#/components/schemas/Error"
+        "422":
           description: Missing/corrupt source or no compatible output within bandwidth. Error body also supplies retryAt (entry end) and serverTime for recovery at the next boundary. Confirmed absent files use source_missing; unreadable, corrupt or out-of-library sources use source_unavailable. Planning failures include code playback_incompatible, or client_codec_unsupported when reported baseline browser capabilities are absent. Missing FFmpeg decoders use native_server_decoder_missing outside the official image, or server_decoder_missing in the packaged runtime, with missingCodecs naming the unavailable source decoders. Only native failures offer local server package installation guidance; client codec installation cannot fix either server error. Codes are optional for other 422 failures.
-        '503':
+        "503":
           description: Capacity exhausted or playback unavailable; retry. Stream admission limits include code stream_capacity and Retry-After 1; unrelated failures omit that code.
           content:
             application/json:
@@ -2628,15 +2845,15 @@ paths:
                 token:
                   type: string
       responses:
-        '200':
+        "200":
           description: Current session state; this does not extend token expiry
           content:
             application/json:
               schema:
-                $ref: '#/components/schemas/TunedPlayback'
-        '401':
+                $ref: "#/components/schemas/TunedPlayback"
+        "401":
           description: Invalid or unowned token
-        '410':
+        "410":
           description: Worker stopped or viewer lease expired; tune again
 
   /media/{channel}/source:
@@ -2649,19 +2866,19 @@ paths:
       security:
         - PlaybackToken: []
       parameters:
-        - $ref: '#/components/parameters/MediaChannel'
+        - $ref: "#/components/parameters/MediaChannel"
       responses:
-        '200':
+        "200":
           description: Authorized source file for this session
-        '206':
+        "206":
           description: Single byte range for browser seeking
-        '401':
+        "401":
           description: Missing, expired, revoked or wrong-channel token
-        '404':
+        "404":
           description: Unavailable source, removed root or incompatible playback mode
-        '410':
+        "410":
           description: Viewer lease expired
-        '416':
+        "416":
           description: Unsatisfiable or multiple ranges
 
   /media/{channel}/index.m3u8:
@@ -2674,17 +2891,17 @@ paths:
       security:
         - PlaybackToken: []
       parameters:
-        - $ref: '#/components/parameters/MediaChannel'
+        - $ref: "#/components/parameters/MediaChannel"
       responses:
-        '200':
+        "200":
           description: HLS playlist whose segment URLs carry this short-lived token
           content:
             application/vnd.apple.mpegurl: {}
-        '401':
+        "401":
           description: Invalid authorization
-        '410':
+        "410":
           description: Stream stopped
-        '503':
+        "503":
           description: Stream starting; Retry-After is one second
 
   /media/{channel}/subtitles/{index}:
@@ -2704,13 +2921,13 @@ paths:
         a client maps them with the entry's sourceOffsetSeconds and stream
         offsets.
       parameters:
-        - $ref: '#/components/parameters/MediaChannel'
+        - $ref: "#/components/parameters/MediaChannel"
         - name: index
           in: path
           required: true
           schema: { type: integer }
       responses:
-        '200':
+        "200":
           description: Cues, sorted by start time
           content:
             application/json:
@@ -2725,13 +2942,13 @@ paths:
                         s: { type: number }
                         e: { type: number }
                         t: { type: string }
-        '202':
+        "202":
           description: Still being prepared
-        '401':
+        "401":
           description: Invalid authorization
-        '404':
+        "404":
           description: Not a text subtitle track of this stream
-        '500':
+        "500":
           description: Extraction failed; retried after a pause
 
   /media/{channel}/{segment}:
@@ -2744,7 +2961,7 @@ paths:
       security:
         - PlaybackToken: []
       parameters:
-        - $ref: '#/components/parameters/MediaChannel'
+        - $ref: "#/components/parameters/MediaChannel"
         - name: segment
           in: path
           required: true
@@ -2752,23 +2969,24 @@ paths:
             type: string
             pattern: '^segment-[0-9]{9}\.ts$'
       responses:
-        '200':
+        "200":
           description: Authorized MPEG-TS segment
           content:
             video/mp2t: {}
-        '401':
+        "401":
           description: Invalid authorization
-        '404':
+        "404":
           description: Invalid name or expired segment
-        '410':
+        "410":
           description: Stream stopped
 
   /api/channel-filter-options:
     get:
       x-alreadyon-roles: [owner]
-      summary: List shared age restrictions and eras
+      summary: List shared age restrictions and date ranges
       responses:
-        '200': { description: Catalog keyed by age, era with arrays of definitions }
+        "200":
+          { description: Catalog keyed by age and legacy era with arrays of age restrictions and date ranges }
   /api/channel-filter-options/{kind}/{id}:
     parameters:
       - in: path
@@ -2793,20 +3011,33 @@ paths:
                 id: { type: string }
                 name: { type: string, maxLength: 100 }
                 ratings: { type: array, items: { type: string } }
-                unrestricted: { type: boolean, description: Legacy bypass of all rating checks }
-                defaultPosition: { type: integer, readOnly: true, description: Stable default display order }
-                allowUnknown: { type: boolean, description: Allow missing or unrecognized ratings independently of selected known ratings }
+                unrestricted:
+                  {
+                    type: boolean,
+                    description: Legacy bypass of all rating checks,
+                  }
+                defaultPosition:
+                  {
+                    type: integer,
+                    readOnly: true,
+                    description: Stable default display order,
+                  }
+                allowUnknown:
+                  {
+                    type: boolean,
+                    description: Allow missing or unrecognized ratings independently of selected known ratings,
+                  }
                 startYear: { type: integer, minimum: 0, maximum: 9999 }
                 endYear: { type: integer, minimum: 0, maximum: 9999 }
       responses:
-        '200': { description: Saved }
-        '400': { description: Invalid definition }
+        "200": { description: Saved }
+        "400": { description: Invalid definition }
     delete:
       x-alreadyon-roles: [owner]
       summary: Delete an unused definition
       responses:
-        '200': { description: Deleted }
-        '400': { description: Referenced by a channel or missing }
+        "200": { description: Deleted }
+        "400": { description: Referenced by a channel or missing }
   /api/library/items/{id}/tmdb:
     parameters:
       - in: path
@@ -2815,7 +3046,7 @@ paths:
         schema: { type: integer }
     post:
       x-alreadyon-roles: [owner]
-      summary: Apply a direct TMDb movie or show ID and rebuild schedules
+      summary: Apply a direct TMDb movie or show ID
       requestBody:
         required: true
         content:
@@ -2826,9 +3057,41 @@ paths:
               properties:
                 tmdbId: { type: integer, minimum: 1 }
       responses:
-        '200': { description: Updated file count; TV updates all episodes in the selected show }
-        '400': { description: Invalid ID or lookup failed or missing token }
-        '404': { description: Library item not found }
+        "200":
+          {
+            description: Updated file count; TV updates all episodes in the selected show; published schedules remain unchanged,
+          }
+        "400": { description: Invalid ID or lookup failed or missing token }
+        "404": { description: Library item not found }
+  /api/library/items/{id}/tmdb-preview:
+    parameters:
+      - in: path
+        name: id
+        required: true
+        schema: { type: integer }
+      - in: query
+        name: tmdbId
+        required: true
+        schema: { type: integer, minimum: 1 }
+    get:
+      x-alreadyon-roles: [owner]
+      summary: Preview TMDb metadata without saving it
+      responses:
+        "200":
+          description: Draft metadata returned without modifying the selected item or schedule
+          content:
+            application/json:
+              schema:
+                type: object
+                required: [tmdbId, title, year, genres, certification]
+                properties:
+                  tmdbId: { type: integer }
+                  title: { type: string }
+                  year: { type: integer, nullable: true }
+                  genres: { type: array, items: { type: string } }
+                  certification: { type: string }
+        "400": { description: Invalid ID, lookup failed, or missing token }
+        "404": { description: Library item not found }
 
   /api/channel-filter-options/{kind}/restore-order:
     post:
@@ -2840,8 +3103,9 @@ paths:
           required: true
           schema: { type: string, enum: [age, era] }
       responses:
-        '204': { description: Default display order restored; definitions unchanged }
-        '400': { description: Invalid filter kind }
+        "204":
+          { description: Default display order restored; definitions unchanged }
+        "400": { description: Invalid filter kind }
   /api/channel-filter-options/{kind}/{id}/move:
     parameters:
       - in: path
@@ -2864,16 +3128,20 @@ paths:
               required: [direction]
               properties:
                 direction: { type: string, enum: [up, down, target] }
-                target: { type: string, description: Existing option ID whose display position becomes the moved row position }
+                target:
+                  {
+                    type: string,
+                    description: Existing option ID whose display position becomes the moved row position,
+                  }
       responses:
-        '204': { description: Order persisted }
-        '400': { description: Invalid ID or direction }
+        "204": { description: Order persisted }
+        "400": { description: Invalid ID or direction }
   /api/settings/loudness:
     get:
       x-alreadyon-roles: [owner]
       summary: Read loudness analysis settings and progress
       responses:
-        '200':
+        "200":
           description: >-
             Enabled/running flags, currentFile, active (files being measured now), workers (how many the load governor currently allows), cpuPercent (sampled host CPU execution, excluding disk wait), limitedBy (cpu, disk, ram, network, swap, playback, recovery, metrics or empty: pressure, foreground HDR playback, recovery or unavailable metrics holding background work), ready/pending/skipped/failed file counts and lastError. Disabled by default.
     put:
@@ -2890,30 +3158,53 @@ paths:
               properties:
                 enabled: { type: boolean, default: false }
       responses:
-        '200': { description: Updated settings and progress. Disabling cancels active analysis; new playback uses original audio. }
-        '400': { description: Missing or invalid enabled field }
+        "200":
+          {
+            description: Updated settings and progress. Disabling cancels active analysis; new playback uses original audio.,
+          }
+        "400": { description: Missing or invalid enabled field }
   /api/settings/loudness/run:
     post:
       x-alreadyon-roles: [owner]
       summary: Queue outstanding media and retry failed loudness analyses
       responses:
-        '200': { description: Run requested; completed unchanged files reuse stored measurements }
-        '409': { description: Loudness Detection is disabled }
+        "200":
+          {
+            description: Run requested; completed unchanged files reuse stored measurements,
+          }
+        "409": { description: Loudness Detection is disabled }
   /api/server/details:
     get:
       x-alreadyon-roles: [owner, viewer]
       summary: Get server process and image build details
       responses:
-        '200':
+        "200":
           description: Authenticated server identity; host IPs are empty when unavailable in a container
           content:
             application/json:
               schema:
                 type: object
-                required: [serverName, uptimeSeconds, ipAddresses, appVersion, timeZone, ffmpegVersion]
+                required:
+                  [
+                    serverName,
+                    uptimeSeconds,
+                    ipAddresses,
+                    appVersion,
+                    timeZone,
+                    ffmpegVersion,
+                  ]
                 properties:
-                  serverName: { type: string, description: Configured server display name }
-                  uptimeSeconds: { type: integer, minimum: 0, description: Seconds since app process initialization }
+                  serverName:
+                    {
+                      type: string,
+                      description: Configured server display name,
+                    }
+                  uptimeSeconds:
+                    {
+                      type: integer,
+                      minimum: 0,
+                      description: Seconds since app process initialization,
+                    }
                   ipAddresses:
                     {
                       type: array,
@@ -2923,11 +3214,15 @@ paths:
                   appVersion:
                     {
                       type: string,
-                      description: 'Build identity in America/New_York (YY.MM.DD_shortsha); Development_shortsha when native build metadata is unavailable. Release-cycle labels separately use YY.MM.DD',
+                      description: "Build identity in America/New_York (YY.MM.DD_shortsha); Development_shortsha when native build metadata is unavailable. Release-cycle labels separately use YY.MM.DD",
                     }
                   timeZone: { type: string }
-                  ffmpegVersion: { type: string, description: Installed FFmpeg version or Unavailable }
-        '401': { description: Authentication required }
+                  ffmpegVersion:
+                    {
+                      type: string,
+                      description: Installed FFmpeg version or Unavailable,
+                    }
+        "401": { description: Authentication required }
   /api/server/metrics:
     get:
       x-alreadyon-roles: [owner, viewer]
@@ -2935,9 +3230,10 @@ paths:
       parameters:
         - in: query
           name: minutes
-          schema: { type: integer, default: 15, enum: [15, 30, 60, 120, 240, 720] }
+          schema:
+            { type: integer, default: 15, enum: [15, 30, 60, 120, 240, 720] }
       responses:
-        '200':
+        "200":
           description: >
             intervalSeconds, averaged points and current sample. Unavailable readings
             are null, never zero. cpu is the mean utilization of the cgroup cpuset's
@@ -2957,7 +3253,7 @@ paths:
             CPU pressure fields are populated on current. Samples are collected every
             second; historical averages are cached for up to 15 seconds and current
             readings stay fresh.
-        '400': { description: Unsupported window }
+        "400": { description: Unsupported window }
   /api/server/activity:
     get:
       x-alreadyon-roles: [owner, viewer]
@@ -2974,7 +3270,7 @@ paths:
         are client-reported; source IP is the connected peer (forwarded headers
         are not trusted). No device hostname is inferred from browser identity.
       responses:
-        '200':
+        "200":
           description: Current activity
           content:
             application/json:
@@ -2985,12 +3281,12 @@ paths:
                   sessions:
                     type: array
                     items:
-                      $ref: '#/components/schemas/ActiveViewer'
+                      $ref: "#/components/schemas/ActiveViewer"
                   processes:
                     type: array
                     items:
-                      $ref: '#/components/schemas/ActiveProcess'
-        '401':
+                      $ref: "#/components/schemas/ActiveProcess"
+        "401":
           description: Authentication required
   /api/playback/activity:
     post:
@@ -3015,22 +3311,28 @@ paths:
                 viewerId: { type: string, minLength: 16, maxLength: 80 }
                 token: { type: string }
                 channelId: { type: integer, format: int64 }
-                profileId: { type: integer, format: int64, description: Selected profile; zero means unknown }
+                profileId:
+                  {
+                    type: integer,
+                    format: int64,
+                    description: Selected profile; zero means unknown,
+                  }
                 latencyMs:
                   {
-                    type: [number, 'null'],
+                    type: [number, "null"],
                     minimum: 0,
                     maximum: 60000,
                     description: Latest client media time to first byte in milliseconds; null when unavailable,
                   }
                 paused: { type: boolean }
       responses:
-        '204': { description: Activity accepted }
-        '400': { description: Invalid report or unknown profile }
-        '401': { description: Authentication or playback session ownership invalid }
-        '404': { description: Channel not found }
-        '410': { description: Stream stopped }
-        '503': { description: Activity capacity reached }
+        "204": { description: Activity accepted }
+        "400": { description: Invalid report or unknown profile }
+        "401":
+          { description: Authentication or playback session ownership invalid }
+        "404": { description: Channel not found }
+        "410": { description: Stream stopped }
+        "503": { description: Activity capacity reached }
     delete:
       x-alreadyon-roles: [owner, viewer]
       operationId: endPlaybackActivity
@@ -3047,8 +3349,8 @@ paths:
               properties:
                 viewerId: { type: string }
       responses:
-        '204': { description: Activity removed }
-        '401': { description: Authentication required }
+        "204": { description: Activity removed }
+        "401": { description: Authentication required }
   /api/settings/ddns:
     get:
       x-alreadyon-roles: [owner]
@@ -3056,13 +3358,13 @@ paths:
       operationId: getDdnsStatus
       tags: [Settings]
       responses:
-        '200':
+        "200":
           description: Active provider and all provider-specific public status
           content:
             application/json:
               schema:
-                $ref: '#/components/schemas/DdnsStatus'
-        '401':
+                $ref: "#/components/schemas/DdnsStatus"
+        "401":
           description: Sign-in required
     put:
       x-alreadyon-roles: [owner]
@@ -3082,19 +3384,19 @@ paths:
         content:
           application/json:
             schema:
-              $ref: '#/components/schemas/DdnsUpdate'
+              $ref: "#/components/schemas/DdnsUpdate"
       responses:
-        '200':
+        "200":
           description: Saved non-secret status
           content:
             application/json:
               schema:
-                $ref: '#/components/schemas/DdnsStatus'
-        '400':
+                $ref: "#/components/schemas/DdnsStatus"
+        "400":
           description: Invalid hostname or missing required setup
-        '401':
+        "401":
           description: Sign-in required
-        '409':
+        "409":
           description: An update is already running
   /api/settings/ddns/test:
     post:
@@ -3121,17 +3423,17 @@ paths:
                   type: string
                   enum: [cloudflare, no-ip]
       responses:
-        '200':
+        "200":
           description: Latest non-secret provider status, including failures or cooldown
           content:
             application/json:
               schema:
-                $ref: '#/components/schemas/DdnsStatus'
-        '400':
+                $ref: "#/components/schemas/DdnsStatus"
+        "400":
           description: Save a valid provider configuration before testing
-        '401':
+        "401":
           description: Sign-in required
-        '409':
+        "409":
           description: An update is already running
 
 components:
@@ -3202,7 +3504,12 @@ components:
       properties:
         mode: { type: string, enum: [self-signed, user-provided, acme] }
         names: { type: array, items: { type: string } }
-        fingerprint: { type: string, description: SHA-256 hexadecimal digest of the public instance CA DER, pattern: '^[0-9a-f]{64}$' }
+        fingerprint:
+          {
+            type: string,
+            description: SHA-256 hexadecimal digest of the public instance CA DER,
+            pattern: "^[0-9a-f]{64}$",
+          }
         issuedAt: { type: string, format: date-time }
         expiresAt: { type: string, format: date-time }
         trustExpiresAt: { type: string, format: date-time }
@@ -3224,27 +3531,84 @@ components:
 
     ActiveViewer:
       type: object
-      required: [id, channel, video, profile, sourceIp, device, mode, encoder, bandwidthMbps, latencyMs, commercial, paused, updatedAt]
+      required:
+        [
+          id,
+          channel,
+          video,
+          profile,
+          sourceIp,
+          device,
+          mode,
+          encoder,
+          bandwidthMbps,
+          latencyMs,
+          commercial,
+          paused,
+          updatedAt,
+        ]
       properties:
-        id: { type: string, description: Random player identifier; not a playback credential }
+        id:
+          {
+            type: string,
+            description: Random player identifier; not a playback credential,
+          }
         channel: { type: string }
-        video: { type: string, description: File basename; UI clips to 50 Unicode code points }
+        video:
+          {
+            type: string,
+            description: File basename; UI clips to 50 Unicode code points,
+          }
         profile: { type: string }
         sourceIp: { type: string }
-        device: { type: string, description: Device category and browser/OS inferred from User-Agent; not a hostname }
+        device:
+          {
+            type: string,
+            description: Device category and browser/OS inferred from User-Agent; not a hostname,
+          }
         mode: { type: string, enum: [direct, remux, transcode] }
-        encoder: { type: string, description: Actual encoder including runtime fallback; empty when no conversion is needed }
-        videoReason: { type: string, description: Main-program video delivery or conversion reason; retained during commercials }
-        audioReason: { type: string, description: 'Main-program audio delivery or conversion reason, or no audio track; retained during commercials' }
+        encoder:
+          {
+            type: string,
+            description: Actual encoder including runtime fallback; empty when no conversion is needed,
+          }
+        videoReason:
+          {
+            type: string,
+            description: Main-program video delivery or conversion reason; retained during commercials,
+          }
+        audioReason:
+          {
+            type: string,
+            description: "Main-program audio delivery or conversion reason, or no audio track; retained during commercials",
+          }
         bandwidthMbps:
-          { type: [number, 'null'], description: Successfully written media bytes divided by report interval, in megabits per second; null until sampled }
-        latencyMs: { type: [number, 'null'], description: Client media time to first byte; null when unavailable }
-        commercial: { type: boolean, description: Retained program readings are frozen during a commercial }
+          {
+            type: [number, "null"],
+            description: Successfully written media bytes divided by report interval,
+            in megabits per second; null until sampled,
+          }
+        latencyMs:
+          {
+            type: [number, "null"],
+            description: Client media time to first byte; null when unavailable,
+          }
+        commercial:
+          {
+            type: boolean,
+            description: Retained program readings are frozen during a commercial,
+          }
         paused: { type: boolean }
-        updatedAt: { type: string, format: date-time, description: Last program measurement time; frozen through commercials }
+        updatedAt:
+          {
+            type: string,
+            format: date-time,
+            description: Last program measurement time; frozen through commercials,
+          }
     ActiveProcess:
       type: object
-      required: [id, name, startedAt, runtimeSeconds, completed, total, percent, unit]
+      required:
+        [id, name, startedAt, runtimeSeconds, completed, total, percent, unit]
       properties:
         id: { type: string }
         name: { type: string }
@@ -3252,9 +3616,28 @@ components:
         runtimeSeconds: { type: number }
         completed: { type: integer }
         total: { type: integer }
-        percent: { type: [number, 'null'], minimum: 0, maximum: 100, description: Counted completion; null when total is not known }
-        unit: { type: string, description: Basis of completion, such as media candidates, channels, items, sample windows, or seconds of audio }
-        currentFile: { type: string, description: Optional original basename of the file being analyzed; never a filesystem path }
+        percent:
+          {
+            type: [number, "null"],
+            minimum: 0,
+            maximum: 100,
+            description: Counted completion; null when total is not known,
+          }
+        unit:
+          {
+            type: string,
+            description: Basis of completion,
+            such as media candidates,
+            channels,
+            items,
+            sample windows,
+            or seconds of audio,
+          }
+        currentFile:
+          {
+            type: string,
+            description: Optional original basename of the file being analyzed; never a filesystem path,
+          }
     PlaybackCapabilities:
       type: object
       additionalProperties: false
@@ -3285,7 +3668,11 @@ components:
               fps: { type: number }
               bitrate: { type: integer }
               pixelFormat: { type: string }
-              container: { type: string, description: Container tested for file playback. }
+              container:
+                {
+                  type: string,
+                  description: Container tested for file playback.,
+                }
               codecTag: { type: string }
               colorTransfer: { type: string }
               hdrMetadata: { type: string }
@@ -3300,27 +3687,42 @@ components:
               codec: { type: string }
               container: { type: string }
               profile: { type: string }
-              spatial: { type: boolean, description: Spatial rendering explicitly reported by the browser. }
-              hls: { type: boolean, description: Audio configuration also tested for media-source playback. }
+              spatial:
+                {
+                  type: boolean,
+                  description: Spatial rendering explicitly reported by the browser.,
+                }
+              hls:
+                {
+                  type: boolean,
+                  description: Audio configuration also tested for media-source playback.,
+                }
               channels: { type: integer }
               sampleRate: { type: integer }
               bitrate: { type: integer }
     TunedPlayback:
       allOf:
-        - $ref: '#/components/schemas/PlaybackSession'
+        - $ref: "#/components/schemas/PlaybackSession"
         - type: object
           properties:
             url: { type: string }
             ready: { type: boolean }
             serverTime: { type: string, format: date-time }
-            channelNumber: { type: integer, description: Number of the playing channel. }
-            channelName: { type: string, description: Name of the playing channel. }
+            channelNumber:
+              { type: integer, description: Number of the playing channel. }
+            channelName:
+              { type: string, description: Name of the playing channel. }
             program:
               description: Metadata for this stream's actual schedule entry, rather than the wall-clock guide. Omitted if unavailable.
-              $ref: '#/components/schemas/GuideProgram'
+              $ref: "#/components/schemas/GuideProgram"
             entryStartsAt: { type: string, format: date-time }
             entryEndsAt: { type: string, format: date-time }
-            uhd: { type: boolean, description: True while a hardware encoder is in use, so the Quality menu may offer 2160 (4K). }
+            uhd:
+              {
+                type: boolean,
+                description: True while a hardware encoder is in use,
+                so the Quality menu may offer 2160 (4K).,
+              }
             sourceOffsetSeconds: { type: number }
             streamOffsetSeconds: { type: number }
             hlsOrigin:
@@ -3370,7 +3772,11 @@ components:
                 type: object
                 required: [index, codec]
                 properties:
-                  index: { type: integer, description: Stream index in the source file }
+                  index:
+                    {
+                      type: integer,
+                      description: Stream index in the source file,
+                    }
                   language: { type: string }
                   title: { type: string }
                   codec: { type: string }
@@ -3390,13 +3796,30 @@ components:
                 fps: { type: number }
                 videoBitrate: { type: integer }
                 audioBitrate: { type: integer }
-                audioTrackIndex: { type: integer, description: Selected source audio index; -1 when absent. }
-                volumeOffsetDb: { type: number, description: Commercial-only gain applied after normalization. }
+                audioTrackIndex:
+                  {
+                    type: integer,
+                    description: Selected source audio index; -1 when absent.,
+                  }
+                volumeOffsetDb:
+                  {
+                    type: number,
+                    description: Commercial-only gain applied after normalization.,
+                  }
                 audioChannels: { type: integer, enum: [2, 6, 8] }
                 profile: { type: string }
                 reason: { type: string }
-                lowWidth: { type: integer, description: Present only on a ladder stream, with lowHeight and lowBitrate. }
-                lowHeight: { type: integer, description: Height of the small rendition; the stream's master playlist lists it beside the main one. }
+                lowWidth:
+                  {
+                    type: integer,
+                    description: Present only on a ladder stream,
+                    with lowHeight and lowBitrate.,
+                  }
+                lowHeight:
+                  {
+                    type: integer,
+                    description: Height of the small rendition; the stream's master playlist lists it beside the main one.,
+                  }
                 lowBitrate: { type: integer }
                 encoder:
                   {
@@ -3491,7 +3914,16 @@ components:
       properties:
         phase:
           type: string
-          enum: [pending, scanning, classifying, populating, scheduling, ready, failed]
+          enum:
+            [
+              pending,
+              scanning,
+              classifying,
+              populating,
+              scheduling,
+              ready,
+              failed,
+            ]
           description: >
             Current step of the active run, or the outcome of the most
             recent one (`ready`, or `failed` if it recorded an error).
@@ -3510,20 +3942,27 @@ components:
           type: integer
           description: Number of usable media folders configured. 0 means nothing will ever be scanned.
         startedAt:
-          type: [string, 'null']
+          type: [string, "null"]
           format: date-time
         finishedAt:
-          type: [string, 'null']
+          type: [string, "null"]
           format: date-time
         lastError:
           type: string
           description: Latest error recorded by the current or most recent run; omitted when none.
         library:
-          $ref: '#/components/schemas/LibraryCounts'
+          $ref: "#/components/schemas/LibraryCounts"
 
     LibraryCounts:
       type: object
-      required: [filesFound, filesProbed, itemsIdentified, itemsClassified, channelsWithContent]
+      required:
+        [
+          filesFound,
+          filesProbed,
+          itemsIdentified,
+          itemsClassified,
+          channelsWithContent,
+        ]
       properties:
         filesFound:
           type: integer
@@ -3583,7 +4022,7 @@ components:
         entries:
           type: array
           items:
-            $ref: '#/components/schemas/LogEntry'
+            $ref: "#/components/schemas/LogEntry"
 
     Channel:
       type: object
@@ -3607,8 +4046,8 @@ components:
           description: How many distinct shows/movies (not episodes) are currently in this channel's lineup.
         filter:
           oneOf:
-            - $ref: '#/components/schemas/ChannelFilter'
-            - type: 'null'
+            - $ref: "#/components/schemas/ChannelFilter"
+            - type: "null"
           description: The rule the lineup is built from, or null for a hand-managed channel. Built-in channels get one at startup.
 
     ChannelFilter:
@@ -3629,7 +4068,7 @@ components:
         eras:
           type: array
           items: { type: string }
-          description: OR across shared era IDs; empty uses legacy era.
+          description: OR across shared date range IDs; empty uses the legacy era field.
         titlePhrases:
           type: array
           maxItems: 50
@@ -3679,8 +4118,8 @@ components:
           type: string
         filter:
           oneOf:
-            - $ref: '#/components/schemas/ChannelFilter'
-            - type: 'null'
+            - $ref: "#/components/schemas/ChannelFilter"
+            - type: "null"
 
     GuideProgram:
       type: object
@@ -3785,18 +4224,29 @@ components:
           type: string
           format: date-time
         lastActiveAt:
-          type: [string, 'null']
+          type: [string, "null"]
           format: date-time
           description: Last authenticated browser or media activity, recorded at most once every 30 seconds. Null for older sessions with no activity recorded since upgrading.
         expiresAt:
-          type: [string, 'null']
+          type: [string, "null"]
           format: date-time
           description: Null when there is no absolute expiry; enabled inactivity cleanup still applies.
         current:
           type: boolean
     User:
       type: object
-      required: [id, username, role, disabled, mustChangePassword, passwordLocked, maxStreams, createdAtUnix, updatedAtUnix]
+      required:
+        [
+          id,
+          username,
+          role,
+          disabled,
+          mustChangePassword,
+          passwordLocked,
+          maxStreams,
+          createdAtUnix,
+          updatedAtUnix,
+        ]
       properties:
         id:
           type: integer
@@ -3899,12 +4349,12 @@ components:
         programs:
           type: array
           items:
-            $ref: '#/components/schemas/GuideProgram'
+            $ref: "#/components/schemas/GuideProgram"
         previousPrograms:
           type: array
           description: Real ended airings overlapping the last 30 minutes, for non-interactive clipped guide history. Original timestamps are preserved; current/upcoming programs remain in programs.
           items:
-            $ref: '#/components/schemas/GuideProgram'
+            $ref: "#/components/schemas/GuideProgram"
 
     InactiveSessionPolicy:
       type: object
@@ -3923,7 +4373,7 @@ components:
       type: object
       properties:
         program:
-          $ref: '#/components/schemas/GuideProgram'
+          $ref: "#/components/schemas/GuideProgram"
         offsetSeconds:
           type: number
           description: How far into the program playback currently is.
@@ -3933,18 +4383,27 @@ components:
       additionalProperties: false
       properties:
         enabled:
-          type: [boolean, 'null']
+          type: [boolean, "null"]
           description: Null inherits global enablement; true or false overrides it.
         folders:
-          type: [array, 'null']
+          type: [array, "null"]
           maxItems: 50
           items: { type: string }
           description: Exact configured commercial folder paths. Empty or null means all; duplicates are normalized.
     ChannelCommercialPolicy:
       type: object
-      required: [enabled, folders, globalEnabled, effectiveEnabled, availableFolders, effectiveFolders, foldersFallback]
+      required:
+        [
+          enabled,
+          folders,
+          globalEnabled,
+          effectiveEnabled,
+          availableFolders,
+          effectiveFolders,
+          foldersFallback,
+        ]
       properties:
-        enabled: { type: [boolean, 'null'] }
+        enabled: { type: [boolean, "null"] }
         folders: { type: array, items: { type: string } }
         globalEnabled: { type: boolean }
         effectiveEnabled: { type: boolean }
@@ -3993,11 +4452,11 @@ components:
       required: [tv, movies, commercials, exclusions]
       properties:
         tv:
-          $ref: '#/components/schemas/FolderList'
+          $ref: "#/components/schemas/FolderList"
         movies:
-          $ref: '#/components/schemas/FolderList'
+          $ref: "#/components/schemas/FolderList"
         commercials:
-          $ref: '#/components/schemas/FolderList'
+          $ref: "#/components/schemas/FolderList"
         exclusions:
           type: object
           required: [patterns, default, source]
@@ -4045,19 +4504,19 @@ components:
       description: Each field is optional; `null` resets that list to its default.
       properties:
         tv:
-          type: [array, 'null']
+          type: [array, "null"]
           items:
             type: string
         movies:
-          type: [array, 'null']
+          type: [array, "null"]
           items:
             type: string
         commercials:
-          type: [array, 'null']
+          type: [array, "null"]
           items:
             type: string
         exclusions:
-          type: [array, 'null']
+          type: [array, "null"]
           items:
             type: string
 
@@ -4078,9 +4537,9 @@ components:
         keylessMetadata:
           type: boolean
           description: >
-            Opt-in (default false). While no TMDb key is set, classify titles with
-            TVmaze (TV) and Wikidata (movies), which need no account. Titles are sent
-            to those services. Always false while a TMDb key is set.
+            Always true. TVmaze (TV) and Wikidata (movies) fill metadata gaps after
+            optional TMDb lookups. Titles are sent to these services. Manual
+            corrections take precedence; provider genres do not establish a rating.
 
     MetadataSettingsUpdate:
       type: object
@@ -4090,7 +4549,7 @@ components:
           description: Omit to leave untouched; "" to clear; a non-empty value to set (validated for shape).
         keylessMetadata:
           type: boolean
-          description: Omit to leave untouched. Turning it on while a TMDb key is set is rejected with 409.
+          description: Deprecated compatibility field; accepted but ignored. Free sources are always enabled.
 
     RefreshScheduleResult:
       type: object
@@ -4227,7 +4686,7 @@ components:
         configs:
           type: array
           items:
-            $ref: '#/components/schemas/DdnsConfig'
+            $ref: "#/components/schemas/DdnsConfig"
 
     Profile:
       type: object
@@ -4248,40 +4707,40 @@ components:
           type: boolean
           description: Whether a PIN is set. The PIN and its hash are never returned.
         icon:
-          type: [string, 'null']
+          type: [string, "null"]
           description: >
             A preset id (fox, cat, dog, lion, panda, koala, owl, frog,
             monkey, rabbit), or the URL of an uploaded image, or null.
         fontLevel:
           deprecated: true
-          type: [integer, 'null']
+          type: [integer, "null"]
           minimum: 0
           maximum: 3
         brightnessLevel:
           deprecated: true
-          type: [integer, 'null']
+          type: [integer, "null"]
           minimum: 0
           maximum: 3
         guideTimeFormat:
-          type: [string, 'null']
-          enum: ['12h-padded', '12h', '24h', null]
+          type: [string, "null"]
+          enum: ["12h-padded", "12h", "24h", null]
         subtitleMode:
-          type: [string, 'null']
-          enum: ['always', 'other_audio', 'off', null]
+          type: [string, "null"]
+          enum: ["always", "other_audio", "off", null]
           description: Always on, enabled when playing audio differs from audioLanguage, or off. Uses subtitleLanguage; unknown audio or missing matching subtitles does not interrupt playback. Null retains subtitlesEnabled. Setting a mode updates subtitlesEnabled for older clients; legacy subtitlesEnabled patches clear the mode.
         subtitlesEnabled:
-          type: [boolean, 'null']
+          type: [boolean, "null"]
           description: Show subtitles by default. Null means off.
         audioLanguage:
-          type: [string, 'null']
-          pattern: '^[a-z]{2}$'
+          type: [string, "null"]
+          pattern: "^[a-z]{2}$"
           description: Preferred audio language. Null uses English. Explicit player selection does not change this preference.
         subtitleLanguage:
-          type: [string, 'null']
-          pattern: '^[a-z]{2}$'
+          type: [string, "null"]
+          pattern: "^[a-z]{2}$"
           description: Default subtitle language as an ISO 639-1 code. Null means en.
         lastWatchedChannelId:
-          type: [integer, 'null']
+          type: [integer, "null"]
           format: int64
           readOnly: true
           description: Last successfully tuned channel identity, shared across devices and sessions. Null until a tune supplies profileId, or after channel deletion. Clients restore only if present with playable content in the profile's filtered guide; otherwise use their normal default selection.
@@ -4314,35 +4773,35 @@ components:
           type: string
           enum: [young_child, teen, adult]
         icon:
-          type: [string, 'null']
+          type: [string, "null"]
           description: A preset id, or null to remove the icon.
         fontLevel:
           deprecated: true
-          type: [integer, 'null']
+          type: [integer, "null"]
           minimum: 0
           maximum: 3
         brightnessLevel:
           deprecated: true
-          type: [integer, 'null']
+          type: [integer, "null"]
           minimum: 0
           maximum: 3
         guideTimeFormat:
-          type: [string, 'null']
-          enum: ['12h-padded', '12h', '24h', null]
+          type: [string, "null"]
+          enum: ["12h-padded", "12h", "24h", null]
         subtitleMode:
-          type: [string, 'null']
-          enum: ['always', 'other_audio', 'off', null]
+          type: [string, "null"]
+          enum: ["always", "other_audio", "off", null]
           description: Always on, enabled when playing audio differs from audioLanguage, or off. Uses subtitleLanguage; unknown audio or missing matching subtitles does not interrupt playback. Null retains subtitlesEnabled. Setting a mode updates subtitlesEnabled for older clients; legacy subtitlesEnabled patches clear the mode.
         subtitlesEnabled:
-          type: [boolean, 'null']
+          type: [boolean, "null"]
           description: Show subtitles by default. Null means off.
         audioLanguage:
-          type: [string, 'null']
-          pattern: '^[a-z]{2}$'
+          type: [string, "null"]
+          pattern: "^[a-z]{2}$"
           description: Preferred audio language. Null uses English. Explicit player selection does not change this preference.
         subtitleLanguage:
-          type: [string, 'null']
-          pattern: '^[a-z]{2}$'
+          type: [string, "null"]
+          pattern: "^[a-z]{2}$"
           description: Default subtitle language as an ISO 639-1 code. Null means en.
     UpdatedCount:
       type: object
@@ -4368,26 +4827,44 @@ components:
         title:
           type: string
         seriesTitle:
-          type: [string, 'null']
+          type: [string, "null"]
         season:
-          type: [integer, 'null']
+          type: [integer, "null"]
         episode:
-          type: [integer, 'null']
+          type: [integer, "null"]
         year:
-          type: [integer, 'null']
+          type: [integer, "null"]
         genres:
-          type: [array, 'null']
+          type: [array, "null"]
           items:
             type: string
           description: Null until the item has been classified; an empty list means classification found no genres.
         certification:
-          type: [string, 'null']
+          type: [string, "null"]
         isManual:
           type: boolean
           description: True once an admin has corrected the item's identification; rescans no longer overwrite it.
         reason:
           type: string
           description: Why no channel has picked it up.
+
+    CatalogItem:
+      allOf:
+        - $ref: "#/components/schemas/UnmatchedItem"
+        - type: object
+          properties:
+            audience: { type: string, enum: [young_child, teen, adult] }
+            audienceOverride:
+              { type: [string, "null"], enum: [young_child, teen, adult, null] }
+            parentAudienceOverride:
+              { type: [string, "null"], enum: [young_child, teen, adult, null] }
+            audienceSource: { type: string }
+            needsReview: { type: boolean }
+            matched: { type: boolean }
+            files: { type: integer }
+            matchedFiles: { type: integer }
+            mixed: { type: boolean }
+            certifications: { type: [array, "null"], items: { type: string } }
 
     LibraryItemPatch:
       type: object
@@ -4397,6 +4874,11 @@ components:
         automatic genre and metadata lookups again on the next refresh.
         Genres and a certification set here are kept over automatic values.
       properties:
+        audienceOverride:
+          type: [string, "null"]
+          enum: [young_child, teen, adult, null]
+          description: Positive owner validation, separate from official certification. Null restores parent inheritance or automatic classification. TV-MA, R and NC-17 remain adult.
+
         mediaType:
           type: string
           enum: [movie, episode]
@@ -4405,25 +4887,25 @@ components:
           type: string
           maxLength: 200
         seriesTitle:
-          type: [string, 'null']
+          type: [string, "null"]
           maxLength: 200
         year:
-          type: [integer, 'null']
+          type: [integer, "null"]
           minimum: 1870
           maximum: 2100
         season:
-          type: [integer, 'null']
+          type: [integer, "null"]
           minimum: 0
         episode:
-          type: [integer, 'null']
+          type: [integer, "null"]
           minimum: 0
         genres:
-          type: [array, 'null']
+          type: [array, "null"]
           items:
             type: string
           description: Ids from `GET /api/library/genres`. An empty list means deliberately no genres; null returns to automatic.
         certification:
-          type: [string, 'null']
+          type: [string, "null"]
           description: A rating from `GET /api/library/certifications` for the item's media type. For an episode it overrides its show's rating. Null or empty returns to automatic.
 
     ApiKey:
@@ -4443,7 +4925,7 @@ components:
 
     ApiKeyCreated:
       allOf:
-        - $ref: '#/components/schemas/ApiKey'
+        - $ref: "#/components/schemas/ApiKey"
         - type: object
           properties:
             key:

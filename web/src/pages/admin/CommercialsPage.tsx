@@ -151,6 +151,22 @@ export default function CommercialsPage() {
     <div className="admin-section">
       {loadError && <p className="profile-field-error">{loadError}</p>}
 
+      {savedFolders && (
+        <FolderListCard
+          title="Commercial Folders"
+          placeholder="/path/to/commercials"
+          addLabel="+ Add folder"
+          emptyText="No commercial folders configured."
+          draft={pathDraft}
+          defaults={savedFolders.commercials.default}
+          counts={Object.fromEntries(savedFolders.commercials.paths.map(p => [p.path, p.count ?? 0]))}
+          statuses={Object.fromEntries(savedFolders.commercials.paths.map((p): [string, FolderPathStatus] => [p.path, p.status]))}
+          requireAbsolute
+          disabled={folderSaving}
+          onChange={next => void saveFolders(next)}
+        />
+      )}
+
       <div className="admin-card commercial-settings">
         <h3>Commercial Breaks</h3>
         <div className="admin-field-row">
@@ -204,21 +220,6 @@ export default function CommercialsPage() {
         <SettingsActions hasChanges={hasChanges && !folderSaving} onSave={handleSave} />
       </div>
 
-      {savedFolders && (
-        <FolderListCard
-          title="Commercial Folders"
-          placeholder="/path/to/commercials"
-          addLabel="+ Add folder"
-          emptyText="No commercial folders configured."
-          draft={pathDraft}
-          defaults={savedFolders.commercials.default}
-          counts={Object.fromEntries(savedFolders.commercials.paths.map(p => [p.path, p.count ?? 0]))}
-          statuses={Object.fromEntries(savedFolders.commercials.paths.map((p): [string, FolderPathStatus] => [p.path, p.status]))}
-          requireAbsolute
-          disabled={folderSaving}
-          onChange={next => void saveFolders(next)}
-        />
-      )}
       {folderLoadError && <p className="profile-field-error">{folderLoadError}</p>}
       {pathError && <p className="profile-field-error">{pathError}</p>}
 

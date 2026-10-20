@@ -85,3 +85,30 @@
 .profile-pin-status {
   flex-wrap: wrap;
 }
+
+/* Reserve confirmation space so a save never shifts a field or its label. */
+.profile-setting-control {
+  display: flex;
+  align-items: center;
+  gap: 8px;
+  min-width: 0;
+}
+.profile-save-check {
+  display: inline-block;
+  width: 24px;
+  flex: 0 0 24px;
+  color: #36c978;
+  font-size: 20px;
+  opacity: 0;
+  vertical-align: middle;
+}
+.profile-save-check.is-saved {
+  animation: profile-setting-saved 5.3s linear forwards;
+}
+@keyframes profile-setting-saved {
+  0%, 94.34% { opacity: 1; }
+  100% { opacity: 0; }
+}
+@media (prefers-reduced-motion: reduce) {
+  .profile-save-check.is-saved { animation-timing-function: step-end; }
+}

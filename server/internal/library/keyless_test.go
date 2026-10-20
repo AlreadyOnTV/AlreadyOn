@@ -96,3 +96,34 @@ func TestClassifyGenresKeyless_PersistsPremiereSeparately(t *testing.T) {
 		t.Fatalf("free enrichment repeated completed lookup: calls=%d", calls)
 	}
 }
+
+// Free lookups fill date gaps even when TMDb genres exist; manual corrections
+// and nonempty TMDb genres remain authoritative across provider combinations.
+func TestFreeMetadataFillsGapsWithoutOverwritingProtectedFields(t *testing.T) {
+	db := openClassifyTestDB(t)
+	ctx := context.Background()
+	auto := insertUnclassified(t, db, "episode", "Pilot", "Some Show", 0)
+	manual := insertUnclassified(t, db, "episode", "Second", "Some Show", 0)
+	db.Exec(`UPDATE identified_items SET genre_tags='["drama"]',genre_source='tmdb' WHERE id=?`, auto)
+	if _, err := UpdateCatalog(ctx, db, []int64{manual}, "episodes", mustPatch(t, `{"genres":["fantasy"],"audienceOverride":"teen"}`)); err != nil {
+		t.Fatal(err)
+	}
+	var calls int32
+	client := mockKeylessClient(t, `[{"show":{"name":"Some Show","type":"Scripted","genres":["Comedy"],"premiered":"2009-12-31"}}]`, &calls)
+	if err := ClassifyGenresKeyless(ctx, db, client); err != nil {
+		t.Fatal(err)
+	}
+	for id, want := range map[int64]string{auto: `["drama"]`, manual: `["fantasy"]`} {
+		var genres, date string
+		if err := db.QueryRow(`SELECT genre_tags,keyless_release_date FROM identified_items WHERE id=?`, id).Scan(&genres, &date); err != nil {
+			t.Fatal(err)
+		}
+		if genres != want || date != "2009-12-31" {
+			t.Fatalf("id=%d genres=%s date=%s", id, genres, date)
+		}
+	}
+	page, err := Catalog(ctx, db, CatalogQuery{View: "shows", Limit: 50})
+	if err != nil || !page.Items[0].Mixed {
+		t.Fatalf("mixed summary: %+v %v", page, err)
+	}
+}

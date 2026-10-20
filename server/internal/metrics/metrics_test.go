@@ -241,7 +241,7 @@ func TestHistoryCoresCurrentAndRetention(t *testing.T) {
 		core0 *float64
 		read  float64
 	}{{50000, float(99), 9}, {20, float(20), 1}, {19, float(40), 3}, {0, nil, 5}} {
-		s := Sample{At: now.Unix() - row.ago, CPU: float(50), CPUCores: []CoreSample{{0, row.core0}, {1, float(10)}}, DiskReadMBps: float(row.read), DiskWriteMBps: float(1), IOPressure: float(2)}
+		s := Sample{At: now.Unix() - row.ago, CPU: float(50), CPUCores: []CoreSample{{0, row.core0}, {1, float(10)}}, DiskReadMBps: float(row.read), DiskWriteMBps: float(1), IOPressure: float(2), CPULoad: float(row.read), CPUPressure: float(row.read / 10), MemoryUsedBytes: bytes(int64(row.read * 1e9)), MemoryLimitBytes: bytes(2e9), DiskMounts: []DiskMountSample{{Mount: "config", ReadMBps: float(row.read), WriteMBps: float(1), ReadIOPS: float(row.read * 10), WriteIOPS: float(5), AverageLatencyMs: float(row.read / 2)}}}
 		if row.ago == 0 {
 			s.CPULoad, s.CPUPressure, s.MemoryUsedBytes, s.MemoryLimitBytes, s.MemoryLimited = float(1.5), float(0.25), bytes(1e9), bytes(2e9), true
 			s.Disk, s.DiskUsedBytes, s.DiskTotalBytes, s.DiskPath, s.DiskScope = float(75), bytes(750e9), bytes(1e12), "/config", "container"
@@ -255,11 +255,11 @@ func TestHistoryCoresCurrentAndRetention(t *testing.T) {
 	if err != nil {
 		t.Fatal(err)
 	}
-	if len(h.Points) != 2 || len(h.Points[0].CPUCores) != 2 || *h.Points[0].CPUCores[0].Utilization != 30 || *h.Points[0].DiskReadMBps != 2 || h.Points[1].CPUCores[0].Utilization != nil {
+	if len(h.Points) != 2 || len(h.Points[0].CPUCores) != 2 || *h.Points[0].CPUCores[0].Utilization != 30 || *h.Points[0].DiskReadMBps != 2 || *h.Points[0].CPULoad != 2 || *h.Points[0].DiskMounts[0].ReadMBps != 2 || *h.Points[0].DiskMounts[0].ReadIOPS != 20 || h.Points[1].CPUCores[0].Utilization != nil {
 		t.Fatalf("bucketed cores and disk throughput: %+v", h.Points)
 	}
 	c := h.Current
-	if *c.CPULoad != 1.5 || *c.CPUPressure != 0.25 || *c.MemoryLimitBytes != 2e9 || !c.MemoryLimited || *c.Disk != 75 || *c.DiskTotalBytes != 1e12 || c.DiskPath != "/config" || c.DiskScope != "container" || *c.MediaTotalBytes != 16e12 || len(c.CPUCores) != 2 {
+	if *c.CPULoad != 1.5 || *c.CPUPressure != 0.25 || *c.MemoryUsedBytes != 1e9 || *c.MemoryLimitBytes != 2e9 || !c.MemoryLimited || *c.Disk != 75 || *c.DiskTotalBytes != 1e12 || c.DiskPath != "/config" || c.DiskScope != "container" || *c.MediaTotalBytes != 16e12 || len(c.CPUCores) != 2 || len(c.DiskMounts) != 1 || *c.DiskMounts[0].AverageLatencyMs != 2.5 {
 		t.Fatalf("current reading did not round-trip: %+v", c)
 	}
 	var reader HistoryReader
@@ -280,6 +280,9 @@ func TestHistoryCoresCurrentAndRetention(t *testing.T) {
 	var count int
 	if err := db.QueryRow(`SELECT count(*) FROM server_cpu_core_metrics WHERE at_unix<?`, now.Add(-12*time.Hour).Unix()).Scan(&count); err != nil || count != 0 {
 		t.Fatal("core retention must follow parent samples", count, err)
+	}
+	if err := db.QueryRow(`SELECT count(*) FROM server_disk_mount_metrics WHERE at_unix<?`, now.Add(-12*time.Hour).Unix()).Scan(&count); err != nil || count != 0 {
+		t.Fatal("disk mount retention must follow parent samples", count, err)
 	}
 	for _, table := range []string{"server_cpu_temperatures", "server_disk_metrics"} {
 		if err := db.QueryRow(`SELECT count(*) FROM ` + table).Scan(&count); err == nil {

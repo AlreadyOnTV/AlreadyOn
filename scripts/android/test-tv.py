@@ -29,6 +29,7 @@ def main():
     parser.add_argument("--screenshots", type=Path, help="Optional local directory for emulator screenshots")
     parser.add_argument("--entry-mode", action="append", choices=("discovery", "manual"), help="Limit to selected connection flow; default runs both")
     parser.add_argument("--test-class", choices=("TvNavigationTest", "ProfileMenuTest", "SessionResumeTest"), default="TvNavigationTest", help="Select native navigation or focused profile-menu coverage")
+    parser.add_argument("--pairing-only", action="store_true", help="Stop after sign-in and profile selection, before playback checks")
     parser.add_argument("--interactive", action="store_true", help="Leave the disposable server running for manual emulator checks until Enter is pressed")
     args = parser.parse_args()
     adb = str(args.sdk / "platform-tools/adb")
@@ -118,7 +119,7 @@ def main():
                 for entry_mode in args.entry_mode or ("discovery", "manual"):
                     run(adb, "-s", args.serial, "shell", "pm", "clear", "io.github.alreadyonapp.alreadyon.tv.debug")
                     result = run(adb, "-s", args.serial, "shell", "am", "instrument", "-w", "-e", "serverPort", str(port),
-                        "-e", "entryMode", entry_mode, "-e", "class", "io.github.alreadyonapp.alreadyon." + args.test_class,
+                        "-e", "entryMode", entry_mode, "-e", "pairingOnly", str(args.pairing_only).lower(), "-e", "class", "io.github.alreadyonapp.alreadyon." + args.test_class,
                         "io.github.alreadyonapp.alreadyon.tv.debug.test/androidx.test.runner.AndroidJUnitRunner", capture=True)
                     print(result)
                     if "OK (1 test)" not in result:

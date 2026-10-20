@@ -1,6 +1,9 @@
 package io.github.alreadyonapp.alreadyon
 
 import androidx.compose.foundation.clickable
+import androidx.compose.foundation.ExperimentalFoundationApi
+import androidx.compose.foundation.gestures.BringIntoViewSpec
+import androidx.compose.foundation.gestures.LocalBringIntoViewSpec
 import androidx.compose.ui.text.rememberTextMeasurer
 import androidx.compose.ui.graphics.compositeOver
 import androidx.compose.foundation.Image
@@ -46,6 +49,9 @@ import androidx.compose.ui.graphics.vector.PathParser
 import androidx.compose.ui.graphics.SolidColor
 import androidx.compose.ui.text.input.VisualTransformation
 import androidx.compose.ui.platform.LocalView
+import androidx.compose.ui.platform.testTag
+import androidx.compose.ui.semantics.semantics
+import androidx.compose.ui.semantics.stateDescription
 import androidx.compose.ui.platform.LocalConfiguration
 import androidx.compose.ui.text.input.KeyboardType
 import androidx.compose.ui.text.input.PasswordVisualTransformation
@@ -98,8 +104,9 @@ class MainActivity : ComponentActivity() {
             }
             PhoneTheme { UpdatePrompt(visible = !pip) }
             StartupPreload {
+                val guideNow = rememberGuideTime(state.channels)
                 if (BuildConfig.IS_TV) {
-                    TvShell(state, model)
+                    TvShell(state, model, guideNow)
                     return@StartupPreload
                 }
                 val owner = LocalLifecycleOwner.current
@@ -116,7 +123,7 @@ class MainActivity : ComponentActivity() {
                     val observer = LifecycleEventObserver { _, event ->
                         when (event) {
                             Lifecycle.Event.ON_STOP -> model.suspendWatching()
-                            Lifecycle.Event.ON_START -> model.resumeWatching()
+                            Lifecycle.Event.ON_START -> { model.resumeWatching(); model.refreshGuide() }
                             else -> Unit
                         }
                     }
@@ -190,7 +197,7 @@ class MainActivity : ComponentActivity() {
                                         PhonePlayer(state, model, playerModifier, expanded, pictureInPicture = pip,
                                             onFullscreen = { fullscreen = !fullscreen })
                                     }
-                                    if (!expanded) ChannelGuide(state, model, palette, Modifier.weight(1f))
+                                    if (!expanded) ChannelGuide(state, model, palette, Modifier.weight(1f), now = guideNow)
                                 }
                             }
                         }
@@ -323,32 +330,23 @@ internal fun ProfileScreen(state: PhoneState, model: PhoneModel, modifier: Modif
 }
 
 @Composable
-internal fun ChannelGuide(state: PhoneState, model: PhoneModel, palette: PhonePalette, modifier: Modifier, onTune: (GuideChannel) -> Unit = model::watch) {
+@OptIn(ExperimentalFoundationApi::class)
+internal fun ChannelGuide(state: PhoneState, model: PhoneModel, palette: PhonePalette, modifier: Modifier, now: Long, onTune: (GuideChannel) -> Unit = model::watch) {
     val channels = state.channels
     val format = remember(state.profile?.timeFormat) { DateTimeFormatter.ofPattern(when (state.profile?.timeFormat) {
         "24h" -> "HH:mm"; "12h-padded" -> "hh:mma"; else -> "h:mma"
     }, Locale.US).withZone(ZoneId.systemDefault()) }
-    val rows = rememberLazyListState()
-    LaunchedEffect(state.channel?.id, channels) {
-        val index = channels.indexOfFirst { it.id == state.channel?.id }
-        if (index >= 0) rows.scrollToItem(index)
-    }
+    val rows = rememberLazyListState(initialFirstVisibleItemIndex = channels.indexOfFirst { it.id == state.channel?.id }.coerceAtLeast(0))
     val scroll = rememberScrollState()
     // Labels and program geometry share a local half-hour anchor, while Now uses the actual clock.
     val textMeasurer = rememberTextMeasurer()
     val density = LocalDensity.current
-    var now by remember { mutableLongStateOf(System.currentTimeMillis()) }
-    LaunchedEffect(Unit) {
-        while (true) { now = System.currentTimeMillis(); delay(30_000) }
-    }
     val currentProgramFocus = remember { FocusRequester() }
     val focusChannel = channels.firstOrNull { it.id == state.channel?.id }
         ?: channels.firstOrNull { channel -> channel.programs.any {
             Instant.parse(it.startsAt).toEpochMilli() <= now && Instant.parse(it.endsAt).toEpochMilli() > now
         } }
-    val focusProgram = focusChannel?.programs?.firstOrNull {
-        Instant.parse(it.startsAt).toEpochMilli() <= now && Instant.parse(it.endsAt).toEpochMilli() > now
-    }
+    val focusProgram = focusChannel?.liveProgram(now)
     LaunchedEffect(focusChannel?.id, focusProgram?.startsAt) {
         if (focusChannel != null && focusProgram != null) {
             rows.scrollToItem(channels.indexOf(focusChannel))
@@ -360,20 +358,26 @@ internal fun ChannelGuide(state: PhoneState, model: PhoneModel, palette: PhonePa
     val localNow = Instant.ofEpochMilli(now).atZone(ZoneId.systemDefault())
     val origin = localNow.withMinute(localNow.minute / 30 * 30).withSecond(0).withNano(0)
         .toInstant().toEpochMilli()
+    LaunchedEffect(origin) { scroll.scrollTo(0) }
     val minutesToDp = 6f
     val width = (12 * 60 * minutesToDp).dp
+    // Use nearest-edge focus scrolling, not a device's TV-style center pivot.
+    CompositionLocalProvider(LocalBringIntoViewSpec provides remember { object : BringIntoViewSpec {} }) {
     Column(modifier) {
-        Row(Modifier.fillMaxWidth().background(palette.alternate)) {
-            Text("CHANNEL", Modifier.width(100.dp).padding(4.dp), color = palette.heading)
+        Row(Modifier.fillMaxWidth().background(palette.alternate).testTag("guide-timeline").semantics { stateDescription = origin.toString() }) {
+            GuideClock(state.profile?.timeFormat, palette, Modifier.width(100.dp).padding(4.dp))
             Row(Modifier.horizontalScroll(scroll).width(width)) {
                 repeat(24) { column -> Text(format.format(Instant.ofEpochMilli(origin + column * 30 * 60_000L)),
                     Modifier.width((30 * minutesToDp).dp).padding(4.dp), color = palette.muted) }
             }
         }
-        LazyColumn(state = rows, verticalArrangement = Arrangement.spacedBy(4.dp)) {
+        BoxWithConstraints(Modifier.weight(1f)) {
+        LazyColumn(state = rows, verticalArrangement = Arrangement.spacedBy(4.dp),
+            modifier = Modifier.testTag("guide-rows"),
+            contentPadding = PaddingValues(bottom = (maxHeight - 72.dp).coerceAtLeast(0.dp))) {
             if (channels.isEmpty()) item { Text("No channels are available for this profile.") }
             items(channels, key = { it.id }) { channel ->
-                Row(Modifier.fillMaxWidth().height(72.dp)) {
+                Row(Modifier.fillMaxWidth().height(72.dp).testTag("guide-channel-${channel.id}")) {
                     Surface(onClick = { onTune(channel) }, color = palette.alternate,
                         shape = MaterialTheme.shapes.small, modifier = Modifier.width(100.dp).fillMaxHeight().tvFocusOutline()) {
                         Column(Modifier.padding(4.dp), verticalArrangement = Arrangement.Center) {
@@ -396,6 +400,7 @@ internal fun ChannelGuide(state: PhoneState, model: PhoneModel, palette: PhonePa
                                     Surface(modifier = Modifier.offset(x = left).width(block).fillMaxHeight().padding(start = 3.dp)
                                             .then(if (channel.id == focusChannel?.id && program == focusProgram) Modifier.focusRequester(currentProgramFocus) else Modifier)
                                             .tvFocusOutline()
+                                            .then(if (current && channel.id == state.channel?.id) Modifier.testTag("guide-watched-airing").semantics { stateDescription = program.startsAt } else Modifier)
                                             .then(if (current && channel.id == focusChannel?.id) Modifier.border(2.dp, Color.Red, MaterialTheme.shapes.small) else Modifier)
                                             .then(if (past) Modifier else Modifier.clickable { onTune(channel) }),
                                         color = if (past) Color.Gray.copy(alpha = 0.28f).compositeOver(palette.background) else if (current) palette.now else palette.surface, shape = MaterialTheme.shapes.small) {
@@ -414,6 +419,8 @@ internal fun ChannelGuide(state: PhoneState, model: PhoneModel, palette: PhonePa
                 }
             }
         }
+        }
+    }
     }
 }
 
