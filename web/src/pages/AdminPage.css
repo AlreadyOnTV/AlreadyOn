@@ -364,13 +364,6 @@
   font-size: var(--admin-control-size);
 }
 
-/* Self-service back navigation sits below branding, above the first settings card. */
-.settings-back-row {
-  display: flex;
-  justify-content: flex-start;
-  margin-bottom: 20px;
-}
-
 .tv-pairing-form {
   display: flex;
   align-items: center;
