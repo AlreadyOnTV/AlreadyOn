@@ -1,3 +1,4 @@
+// Validate catalog HTTP responses and reject malformed pagination or bulk edits.
 package httpapi
 
 import (

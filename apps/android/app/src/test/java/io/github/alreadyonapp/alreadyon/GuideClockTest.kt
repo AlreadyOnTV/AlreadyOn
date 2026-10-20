@@ -1,3 +1,4 @@
+// Cover profile clock formats and the device-local midnight boundary.
 package io.github.alreadyonapp.alreadyon
 
 import org.junit.Assert.assertEquals

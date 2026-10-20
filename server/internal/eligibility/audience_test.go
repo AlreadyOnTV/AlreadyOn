@@ -1,3 +1,4 @@
+// Ambiguous automatic classifications stay unrestricted until manually reviewed.
 package eligibility
 
 import "testing"

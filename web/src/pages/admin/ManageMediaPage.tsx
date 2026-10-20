@@ -1,3 +1,4 @@
+// Keep independent movie and TV catalogs with their own filter and edit state.
 import LibraryCatalog from "./LibraryCatalog";
 import "./AdminShared.css";
 
