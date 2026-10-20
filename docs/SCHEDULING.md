@@ -20,4 +20,6 @@ Preview and apply share selection semantics. Combine inclusion/exclusion rules e
 
 Date Range defaults are All, Modern (2010 onward), and Classics (through 2009). Custom ranges remain supported. The upgrade removes untouched, unused decade presets; edited or channel-referenced ranges are preserved. API keys `era` and `eras` retain their existing names for compatibility.
 
+Filename identification recognizes ordinary seasons and explicit year-based seasons from 1900–2099 (`S1940E01` and `Season 1940` folders). Episode markers take precedence over parenthesized movie years. Alternate `1x02` seasons remain limited to two digits to avoid interpreting resolutions such as `1920x800` as TV. A normal library rescan repairs prior automatic movie guesses for unchanged year-season episodes without re-probing their media. Type changes clear incompatible provider identities, dates and automatic classification so metadata can refresh as TV; manual identity corrections and independent manual genre, rating and audience overrides remain protected. Existing file/item IDs and published airings are preserved.
+
 The WebUI guide’s top-left header cell shows the current device-local time using the profile’s time format. It updates on each minute boundary and refreshes when the tab becomes visible or regains focus, independently of guide-data polling.

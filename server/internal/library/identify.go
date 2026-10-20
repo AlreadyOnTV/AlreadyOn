@@ -23,10 +23,12 @@ var (
 	// "S01E02", "s1e2", etc. Checked before any year pattern, so a show
 	// whose title happens to look like a year (e.g. "24") or a movie
 	// title containing "se" followed by a digit doesn't get misread.
-	seasonEpisodeRe = regexp.MustCompile(`(?i)s(\d{1,2})e(\d{1,3})`)
+	// Some libraries organize shorts/daily shows by year (S1940E01).
+	// Bound year seasons to 1900–2099 rather than accepting arbitrary long numbers.
+	seasonEpisodeRe = regexp.MustCompile(`(?i)s(\d{1,2}|(?:19|20)\d{2})e(\d{1,3})`)
 
-	// Alternate "1x02" style. Season is capped at 2 digits and episode
-	// at 2-3, so a resolution tag like "1920x1080" can't match this.
+	// Keep alternate "1x02" seasons short: year-like numbers here are
+	// ambiguous with resolution tags such as "1920x800".
 	altSeasonEpisodeRe = regexp.MustCompile(`(?i)\b(\d{1,2})x(\d{2,3})\b`)
 
 	// A year in parentheses is a deliberate, reliable signal (the
@@ -35,7 +37,7 @@ var (
 	parenYearRe = regexp.MustCompile(`\((\d{4})\)`)
 	bareYearRe  = regexp.MustCompile(`\b(19\d{2}|20\d{2})\b`)
 
-	seasonFolderRe = regexp.MustCompile(`(?i)^s(?:eason)?\s*\d{1,2}$`)
+	seasonFolderRe = regexp.MustCompile(`(?i)^s(?:eason)?\s*(?:\d{1,2}|(?:19|20)\d{2})$`)
 
 	// The rest of a multi-episode marker after the first episode: the "-E02"
 	// in "S01E01-E02" and the "E02" in "S01E01E02".

@@ -9,6 +9,36 @@ func TestIdentify(t *testing.T) {
 		want Identification
 	}{
 		{
+			name: "year season takes precedence over movie year",
+			path: "Tom and Jerry (1940)/Season 1940/Tom and Jerry (1940) - S1940E01 - Puss Gets The Boot [Bluray-720p].mkv",
+			want: Identification{IsEpisode: true, Show: "Tom and Jerry (1940)", Season: 1940, Episode: 1, Title: "Puss Gets The Boot"},
+		},
+		{
+			name: "year season folder supplies missing series name",
+			path: "Example Show/Season 2026/S2026E123 - News.mkv",
+			want: Identification{IsEpisode: true, Show: "Example Show", Season: 2026, Episode: 123, Title: "News"},
+		},
+		{
+			name: "abbreviated year season folder and multi episode marker",
+			path: "Example Show/S1940/S1940E01-E02 - Double.mkv",
+			want: Identification{IsEpisode: true, Show: "Example Show", Season: 1940, Episode: 1, Title: "Double"},
+		},
+		{
+			name: "cropped resolution does not become a year season",
+			path: "Movie (2020) 1920x800.mkv",
+			want: Identification{Title: "Movie", Year: 2020},
+		},
+		{
+			name: "arbitrary four digit season does not override movie year",
+			path: "Movie (2020) - S1234E01.mkv",
+			want: Identification{Title: "Movie", Year: 2020},
+		},
+		{
+			name: "five digit season does not partially match",
+			path: "Movie (2020) - S19400E01.mkv",
+			want: Identification{Title: "Movie", Year: 2020},
+		},
+		{
 			name: "standard episode with show, season folder, and title",
 			path: "Bramble & Fox/Season 02/Bramble & Fox - S02E09 - Rain Day.mkv",
 			want: Identification{IsEpisode: true, Show: "Bramble & Fox", Season: 2, Episode: 9, Title: "Rain Day"},
@@ -110,5 +140,23 @@ func TestIdentify_AmbiguousFiles_ReturnFalse(t *testing.T) {
 				t.Errorf("Identify(%q) unexpectedly succeeded, want an ambiguous (false) result", path)
 			}
 		})
+	}
+}
+
+// Explicit year-season bounds must not silently grow into arbitrary numeric IDs.
+func TestIdentifyYearSeasonBounds(t *testing.T) {
+	for _, tc := range []struct {
+		path    string
+		episode bool
+	}{
+		{"Show (1940) S1900E01.mkv", true},
+		{"Show (1940) S2099E01.mkv", true},
+		{"Movie (1940) S1899E01.mkv", false},
+		{"Movie (1940) S2100E01.mkv", false},
+	} {
+		got, ok := Identify(tc.path)
+		if !ok || got.IsEpisode != tc.episode {
+			t.Fatalf("%s: %+v, ok=%v", tc.path, got, ok)
+		}
 	}
 }
