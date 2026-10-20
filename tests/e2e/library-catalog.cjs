@@ -484,6 +484,24 @@ const wait = (ms) => new Promise((resolve) => setTimeout(resolve, ms));
     assert.equal(await dialog.getByLabel("Show premiere year").inputValue(), originalIdentity.year);
     assert.equal(await dialog.getByRole("button", { name: "Genres", exact: true }).innerText(), originalIdentity.genres);
     assert.equal(await dialog.getByLabel("Content Rating").locator("option").first().textContent(), originalIdentity.rating);
+    let finishLatePreview;
+    await page.route("**/tmdb-preview?tmdbId=78", async route => {
+      await new Promise(resolve => { finishLatePreview = resolve; });
+      await route.fulfill({ json: { tmdbId: 78, title: "Stale preview", year: 2002, genres: ["drama"], certification: "TV-14" } });
+    });
+    await dialog.getByLabel("TMDb ID").fill("78");
+    await Promise.all([
+      page.waitForRequest("**/tmdb-preview?tmdbId=78"),
+      dialog.getByLabel("TMDb ID").press("Tab"),
+    ]);
+    await dialog.getByLabel("TMDb ID").fill(originalIdentity.id);
+    await dialog.getByLabel("TMDb ID").press("Tab");
+    const lateResponse = page.waitForResponse("**/tmdb-preview?tmdbId=78");
+    finishLatePreview();
+    await lateResponse;
+    await page.evaluate(() => new Promise(resolve => requestAnimationFrame(() => requestAnimationFrame(resolve))));
+    assert.equal(await dialog.getByLabel("Show title").inputValue(), originalIdentity.title);
+    assert.equal(await dialog.getByText("Looking up…", { exact: true }).count(), 0);
     // Blurring an unchanged original ID must preserve edits made to that draft.
     await dialog.getByLabel("Show title").fill("Manual original draft");
     await dialog.getByLabel("TMDb ID").focus();
@@ -626,6 +644,11 @@ const wait = (ms) => new Promise((resolve) => setTimeout(resolve, ms));
     await page.keyboard.press("Escape");
     await page.getByRole("dialog").waitFor({ state: "hidden" });
     assert.notEqual(await page.evaluate(() => getComputedStyle(document.documentElement).overflowY), "hidden");
+    for (const width of [769, 768, 390]) {
+      await page.setViewportSize({ width, height: 844 });
+      assert.equal(await settingsNav.isVisible(), width > 768);
+      assert.equal(await page.getByRole("button", { name: "Server Settings Navigation" }).isVisible(), width <= 768);
+    }
     await page.setViewportSize({ width: 390, height: 844 });
     await page.evaluate(() => window.scrollTo(0, 0));
     await movies

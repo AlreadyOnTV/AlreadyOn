@@ -2,7 +2,7 @@
 
 [![AlreadyOn](../../web/public/branding/header-doc.svg)](../../README.md)
 
-`make test-e2e` runs the full browser suite against an isolated synthetic server. The harness prepares generated fixtures and temporary application storage; it must not target a live preview or production installation.
+`make test-e2e` runs playback, channel filters, library catalog, profile autosave and settings feedback browser suites against an isolated synthetic server. The harness prepares generated fixtures and temporary application storage; it must not target a live preview or production installation.
 
 Player menu checks require a detected audio language when known and omit the suffix for untagged audio.
 

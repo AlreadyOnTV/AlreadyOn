@@ -4505,7 +4505,7 @@ const noWorkers = async (unreleased = () => 0) => {
       "Server controls align about four characters after the longest label: " +
         JSON.stringify(serverAlignment),
     );
-    assert.equal(await page.getByText("Automatic Metadata", { exact: true }).count(), 0);
+    assert((await page.getByText("Automatic Metadata", { exact: true }).count()) === 0, "Automatic Metadata has no configurable setting");
     await page.goto(url + "/admin/logs");
     await page.waitForURL("**/admin/logs");
     // The Logs box fits the window; the page itself does not scroll.
