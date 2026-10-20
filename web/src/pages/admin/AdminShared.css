@@ -1069,6 +1069,10 @@ button.admin-badge:disabled {
 .configured-channels-table tbody td {
   font-size: var(--admin-body-size);
 }
+.account-save-feedback {
+  animation: session-saved-fade 5s forwards;
+}
+
 .channel-bulk-heading .text-action {
   font-size: 9pt;
 }
@@ -1613,7 +1617,7 @@ button.admin-badge:disabled {
   box-sizing: border-box;
 }
 
-/* Account form errors sit beside Save Changes and wrap below it on narrow screens. */
+/* Account save feedback sits beside the button and wraps on narrow screens. */
 .account-save-row {
   display: flex;
   flex-wrap: wrap;
