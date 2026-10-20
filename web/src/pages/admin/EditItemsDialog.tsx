@@ -76,6 +76,17 @@ export default function EditItemsDialog({
   const touch = (key: string) => setDirty((old) => new Set(old).add(key));
 
   useEffect(() => {
+    const previous = document.body.style.overflow;
+    const previousRoot = document.documentElement.style.overflow;
+    document.body.style.overflow = "hidden";
+    document.documentElement.style.overflow = "hidden";
+    return () => {
+      document.body.style.overflow = previous;
+      document.documentElement.style.overflow = previousRoot;
+    };
+  }, []);
+
+  useEffect(() => {
     getGenres()
       .then(setGenres)
       .catch(() => undefined);

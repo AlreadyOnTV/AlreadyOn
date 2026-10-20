@@ -1,4 +1,5 @@
 import { useEffect, useRef, useState } from "react";
+import { createPortal } from "react-dom";
 import {
   getCatalog,
   getCertifications,
@@ -11,9 +12,6 @@ import EditItemsDialog from "./EditItemsDialog";
 import MultiSelectDropdown from "./MultiSelectDropdown";
 
 const PAGE_SIZE_OPTIONS = [10, 25, 50, 100];
-const audienceLabel = (value: string) =>
-  ({ young_child: "Kids", teen: "Teen", adult: "Unrestricted" })[value] ??
-  value;
 const EMPTY_CATALOG_FILTERS = {
   search: "",
   match: "",
@@ -22,6 +20,13 @@ const EMPTY_CATALOG_FILTERS = {
   rating: "",
 };
 type CatalogFilters = typeof EMPTY_CATALOG_FILTERS;
+
+const catalogTitle = (item: CatalogItem) => {
+  const title = item.title || item.path.split("/").pop() || "Untitled";
+  // Identified shows may already carry their release year in the title.
+  const suffix = item.year ? ` (${item.year})` : "";
+  return suffix && title.endsWith(suffix) ? title.slice(0, -suffix.length) : title;
+};
 
 type LibraryView = Extract<CatalogView, "movies" | "shows">;
 
@@ -72,8 +77,8 @@ function LibraryFilters({
           onChange={(event) => changeFilter("match", event.target.value)}
         >
           <option value="">All Statuses</option>
-          <option value="matched">Channel Mapped</option>
-          <option value="unmatched">No Channels</option>
+          <option value="matched">Matched</option>
+          <option value="unmatched">No Matches</option>
           <option value="review">Needs Review</option>
         </select>
       </label>
@@ -107,6 +112,7 @@ function LibraryFilters({
         Genre
         <div className="library-genre-filter" ref={genreFilterRef}>
           <MultiSelectDropdown
+            inlinePanel
             label="Genres"
             placeholder="All genres"
             options={genres.map((genre) => ({
@@ -130,51 +136,20 @@ function LibraryFilters({
   );
 }
 
-export default function LibraryCatalog({ view }: { view: LibraryView }) {
+export default function LibraryCatalog({ view, active, filterTarget }: { view: LibraryView; active: boolean; filterTarget: HTMLElement | null }) {
   const [filters, setFilters] = useState<CatalogFilters>(EMPTY_CATALOG_FILTERS);
-  const [filtersOpen, setFiltersOpen] = useState(false);
   const [page, setPage] = useState(0);
   const [sort, setSort] = useState("title");
   const [total, setTotal] = useState(0);
   const [items, setItems] = useState<CatalogItem[]>([]);
-  const [genres, setGenres] = useState<Genre[]>([]);
   const [selected, setSelected] = useState<Map<number, CatalogItem>>(new Map());
   const [editing, setEditing] = useState<CatalogItem[] | null>(null);
   const [loading, setLoading] = useState(true);
   const [error, setError] = useState<string | null>(null);
   const [notice, setNotice] = useState<string | null>(null);
   const [revision, setRevision] = useState(0);
-  const filterControlRef = useRef<HTMLDivElement>(null);
-  const filterMenuRef = useRef<HTMLElement>(null);
   const [pageSize, setPageSize] = useState(10);
 
-  useEffect(() => {
-    if (!filtersOpen) return;
-    const closeOutside = (event: PointerEvent) => {
-      const target = event.target as Node;
-      if (
-        filterControlRef.current?.contains(target) ||
-        filterMenuRef.current?.contains(target)
-      )
-        return;
-      setFiltersOpen(false);
-    };
-    const closeOnEscape = (event: KeyboardEvent) => {
-      if (event.key === "Escape") setFiltersOpen(false);
-    };
-    document.addEventListener("pointerdown", closeOutside);
-    document.addEventListener("keydown", closeOnEscape);
-    return () => {
-      document.removeEventListener("pointerdown", closeOutside);
-      document.removeEventListener("keydown", closeOnEscape);
-    };
-  }, [filtersOpen]);
-
-  useEffect(() => {
-    getGenres()
-      .then(setGenres)
-      .catch(() => undefined);
-  }, []);
   useEffect(() => {
     const controller = new AbortController();
     const timer = setTimeout(() => {
@@ -260,33 +235,13 @@ export default function LibraryCatalog({ view }: { view: LibraryView }) {
 
   return (
     <div className="library-section-layout" data-library-section={view}>
-      <div className="library-filter-control" ref={filterControlRef}>
-        <button
-          type="button"
-          className="library-filter-toggle"
-          aria-label={`Toggle ${view === "movies" ? "Movie" : "TV Show"} filters`}
-          aria-expanded={filtersOpen}
-          onClick={() => setFiltersOpen((open) => !open)}
-        >
-          <span />
-          <span />
-          <span />
-        </button>
-        <aside
-          ref={filterMenuRef}
-          className={"library-filter-menu" + (filtersOpen ? " is-open" : "")}
-          aria-label={`${view === "movies" ? "Movie" : "TV Show"} filters`}
-          aria-hidden={!filtersOpen}
-          inert={!filtersOpen}
-        >
+      {filterTarget && createPortal(
+        <aside className="library-filter-menu" hidden={!active}
+          aria-label={`${view === "movies" ? "Movie" : "TV Show"} filters`}>
           <h3>{title} Filters</h3>
-          <LibraryFilters
-            view={view}
-            filters={filters}
-            onChange={changeFilters}
-          />
-        </aside>
-      </div>
+          <LibraryFilters view={view} filters={filters} onChange={changeFilters} />
+        </aside>, filterTarget,
+      )}
       <section
         className="library-catalog"
         aria-labelledby={`${view}-library-title`}
@@ -386,143 +341,37 @@ export default function LibraryCatalog({ view }: { view: LibraryView }) {
                   <colgroup>
                     <col className="select-column" />
                     <col className="title-column" />
-                    <col className="audience-column" />
-                    <col className="rating-column" />
                     <col className="channels-column" />
-                    <col className="actions-column" />
                   </colgroup>
                   <thead>
                     <tr>
-                      <th>
-                        <input
-                          type="checkbox"
-                          checked={all}
-                          onChange={selectPage}
-                          aria-label="Select all rows on this page"
-                        />
-                      </th>
+                      <th><input type="checkbox" checked={all} onChange={selectPage}
+                        aria-label="Select all rows on this page" /></th>
                       <th aria-sort={sortDirection("title", "title-desc")}>
-                        <button
-                          className="library-sort-button"
-                          onClick={() => toggleSort("title")}
-                        >
-                          Title
-                        </button>
+                        <button className="library-sort-button" onClick={() => toggleSort("title")}>Title</button>
                       </th>
-                      <th
-                        aria-sort={sortDirection("audience", "audience-desc")}
-                      >
-                        <button
-                          className="library-sort-button"
-                          onClick={() => toggleSort("audience")}
-                        >
-                          Audience
-                        </button>
-                      </th>
-                      <th aria-sort={sortDirection("rating", "rating-desc")}>
-                        <button
-                          className="library-sort-button"
-                          onClick={() => toggleSort("rating")}
-                        >
-                          Rating / genres
-                        </button>
-                      </th>
-                      <th
-                        aria-sort={sortDirection("channels", "channels-desc")}
-                      >
-                        <button
-                          className="library-sort-button"
-                          onClick={() => toggleSort("channels")}
-                        >
-                          Channels
-                        </button>
-                      </th>
-                      <th>
-                        <span className="library-sr-only">Actions</span>
+                      <th aria-sort={sortDirection("channels", "channels-desc")}>
+                        <button className="library-sort-button" onClick={() => toggleSort("channels")}>Status</button>
                       </th>
                     </tr>
                   </thead>
                   <tbody>
                     {items.map((item) => (
                       <tr key={item.id}>
-                        <td>
-                          <input
-                            type="checkbox"
-                            checked={selected.has(item.id)}
-                            onChange={() => toggle(item)}
-                            aria-label={`Select ${item.title}`}
-                          />
-                        </td>
-                        <td>
-                          <strong>
-                            {item.title || item.path.split("/").pop()}
-                          </strong>
-                          <div className="admin-section-hint">{`${item.year ?? "Year unknown"}${view === "shows" ? ` · ${item.files} episodes` : ""}`}</div>
-                          {view === "movies" && (
-                            <div
-                              className="admin-section-hint library-path"
-                              title={item.path}
-                            >
-                              {item.path}
-                            </div>
-                          )}
-                          {item.isManual && (
-                            <span className="admin-badge admin-badge-on">
-                              Manually edited
-                            </span>
-                          )}
-                        </td>
-                        <td>
-                          <span className="library-audience">
-                            {audienceLabel(item.audience)}
-                          </span>
-                          <div className="admin-section-hint">
-                            {item.audienceSource}
-                          </div>
-                          {item.needsReview && (
-                            <span className="library-review">Needs review</span>
-                          )}
-                          {item.mixed && (
-                            <div className="admin-section-hint">
-                              Episode values vary
-                            </div>
-                          )}
-                        </td>
-                        <td>
-                          {item.certifications?.join(" / ") ||
-                            item.certification ||
-                            "Not rated"}
-                          <div className="admin-section-hint">
-                            {item.genres
-                              ?.map(
-                                (g) =>
-                                  genres.find((known) => known.id === g)
-                                    ?.label ?? g,
-                              )
-                              .join(", ") || "Genres unknown"}
-                          </div>
-                        </td>
-                        <td>
-                          {item.matched
-                            ? view === "shows"
-                              ? `${item.matchedFiles} / ${item.files} episodes`
-                              : "On a channel"
-                            : "No channel"}
-                          {item.reason && (
-                            <div className="admin-section-hint library-reason">
-                              {item.reason}
-                            </div>
-                          )}
-                        </td>
-                        <td>
-                          <button
-                            className="admin-btn admin-btn-secondary"
-                            aria-label={`Edit ${item.title}`}
-                            onClick={() => setEditing([item])}
-                          >
-                            Edit
+                        <td><div className="library-row-actions">
+                          <input type="checkbox" checked={selected.has(item.id)}
+                            onChange={() => toggle(item)} aria-label={`Select ${item.title}`} />
+                          <button className="admin-btn admin-btn-secondary library-edit-button"
+                            aria-label={`Edit ${item.title}`} onClick={() => setEditing([item])}>
+                            <svg width="18" height="18" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2" aria-hidden="true">
+                              <path d="m16 3 5 5-12 12-6 1 1-6Z M14 5l5 5" />
+                            </svg>
                           </button>
+                        </div></td>
+                        <td className="library-title-cell" title={`${catalogTitle(item)} (${item.year ?? "Year unknown"})`}>
+                          <strong>{catalogTitle(item)}</strong> ({item.year ?? "Year unknown"})
                         </td>
+                        <td>{item.needsReview ? "Needs Review" : item.matched ? "Matched" : "No Matches"}</td>
                       </tr>
                     ))}
                   </tbody>

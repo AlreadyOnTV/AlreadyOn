@@ -62,8 +62,8 @@ const wait = (ms) => new Promise((resolve) => setTimeout(resolve, ms));
       "Polling Interval",
       "Movie Folders",
       "TV Show Folders",
-      "Commercial Breaks",
       "Commercial Folders",
+      "Commercial Breaks",
     ]);
     const settingsNav = page.getByRole("navigation", {
       name: "Server Settings",
@@ -86,37 +86,8 @@ const wait = (ms) => new Promise((resolve) => setTimeout(resolve, ms));
         .count(),
       0,
     );
-    const headerNavigation = page.getByRole("button", {
-      name: "Server Settings Navigation",
-    });
-    const brandBox = await page
-      .locator(".admin-topbar-inner .brand-link")
-      .boundingBox();
-    const headerNavigationBox = await headerNavigation.boundingBox();
-    const backBox = await page
-      .getByRole("button", { name: "Back To Guide" })
-      .boundingBox();
-    assert.ok(
-      brandBox &&
-        headerNavigationBox &&
-        backBox &&
-        brandBox.x + brandBox.width <= headerNavigationBox.x &&
-        headerNavigationBox.x + headerNavigationBox.width <= backBox.x,
-      "Navigation hamburger should sit between the brand and Back To Guide",
-    );
-    await headerNavigation.click();
-    const navigationMenu = page.getByRole("menu");
-    const headerTabLabels = await navigationMenu
-      .getByRole("menuitem")
-      .allTextContents();
-    assert.deepEqual(headerTabLabels, navLabels);
-    assert.equal(
-      await navigationMenu.getByText("Sort", { exact: true }).count(),
-      0,
-    );
-    await navigationMenu
-      .getByRole("menuitem", { name: "Manage Media" })
-      .click();
+    assert.equal(await page.getByRole("button", { name: "Server Settings Navigation" }).isVisible(), false);
+    assert.equal(await settingsNav.isVisible(), true);
     const movies = page.getByRole("region", { name: "Manage Movies" });
     const shows = page.getByRole("region", { name: "Manage TV Shows" });
     const movieFilters = page.getByRole("complementary", {
@@ -125,15 +96,10 @@ const wait = (ms) => new Promise((resolve) => setTimeout(resolve, ms));
     const showFilters = page.getByRole("complementary", {
       name: "TV Show filters",
     });
-    const movieToggle = page.getByRole("button", {
-      name: "Toggle Movie filters",
-    });
-    const showToggle = page.getByRole("button", {
-      name: "Toggle TV Show filters",
-    });
-    await movieToggle.click();
     await movieFilters.getByPlaceholder("Title or file path").waitFor();
-    assert.equal(await showToggle.getAttribute("aria-expanded"), "false");
+    assert.equal(await page.getByRole("button", { name: /Toggle .* filters/ }).count(), 0);
+    await movies.locator("thead th").first().waitFor();
+    assert.deepEqual(await movies.locator("thead th").allTextContents(), ["", "Title", "Status"]);
     assert.equal(
       (await movieFilters.locator("label").nth(0).innerText()).split("\n")[0],
       "Search",
@@ -246,7 +212,6 @@ const wait = (ms) => new Promise((resolve) => setTimeout(resolve, ms));
       )
     ).json();
     assert.equal(multiFilterResult.total, 55);
-    await movieToggle.click();
     await movies
       .getByRole("button", { name: "Reset filters", exact: true })
       .click();
@@ -259,7 +224,6 @@ const wait = (ms) => new Promise((resolve) => setTimeout(resolve, ms));
       .getByRole("button", { name: "Edit Example Academy", exact: true })
       .waitFor();
     assert.equal(await movies.locator("tbody tr").count(), 50);
-    await movieToggle.click();
     const titleSortButton = movies
       .getByRole("columnheader", { name: "Title" })
       .getByRole("button", { name: "Title" });
@@ -305,7 +269,7 @@ const wait = (ms) => new Promise((resolve) => setTimeout(resolve, ms));
           '[data-library-section="movies"] tbody tr:first-child td:nth-child(2) strong',
         )?.textContent === "Film 01",
     );
-    for (const columnName of ["Audience", "Rating / genres", "Channels"]) {
+    for (const columnName of ["Status"]) {
       const sortButton = movies
         .getByRole("columnheader", { name: columnName })
         .getByRole("button", { name: columnName });
@@ -331,21 +295,11 @@ const wait = (ms) => new Promise((resolve) => setTimeout(resolve, ms));
           '[data-library-section="movies"] tbody tr:first-child td:nth-child(2) strong',
         )?.textContent === "Film 01",
     );
-    await movieToggle.click();
     assert.equal(
       await page.getByRole("button", { name: "TV Shows", exact: true }).count(),
       0,
     );
     await page.evaluate(() => window.scrollTo(0, 0));
-    const toggleBox = await movieToggle.boundingBox();
-    const movieBox = await movies.boundingBox();
-    assert.ok(
-      toggleBox &&
-        movieBox &&
-        Math.abs(toggleBox.y - movieBox.y) < 1 &&
-        toggleBox.x + toggleBox.width < movieBox.x,
-      `Hamburger should align with and sit left of the Movies box: ${JSON.stringify({ toggleBox, movieBox, scrollY: await page.evaluate(() => window.scrollY) })}`,
-    );
     const movieHeaderLayout = await movies.evaluate((element) => {
       const box = element.getBoundingClientRect();
       const title = element
@@ -379,13 +333,6 @@ const wait = (ms) => new Promise((resolve) => setTimeout(resolve, ms));
         movieHeaderLayout.pageControls.right <=
           movieHeaderLayout.box.right - 12,
       "Desktop catalog title should center between left actions and right-side paging controls",
-    );
-    const movieMenuBox = await movieFilters.boundingBox();
-    assert.ok(
-      movieMenuBox &&
-        toggleBox &&
-        movieMenuBox.x >= toggleBox.x + toggleBox.width,
-      "Movie filters should expand to the right of their hamburger",
     );
     await wait(200);
     await page.screenshot({
@@ -582,14 +529,13 @@ const wait = (ms) => new Promise((resolve) => setTimeout(resolve, ms));
     );
     await dialog.getByRole("button", { name: "Cancel" }).click();
     await dialog.waitFor({ state: "hidden" });
-    await movieToggle.click();
+    await page.evaluate(() => window.scrollTo(0, 0));
     await movieFilters.getByPlaceholder("Title or file path").fill("Film 01");
     await movies
       .getByRole("button", { name: "Edit Film 01", exact: true })
       .waitFor();
     await wait(350);
     assert.equal(await movies.locator("tbody tr").count(), 1);
-    await movieToggle.click();
     await movies
       .getByRole("button", { name: "Reset filters", exact: true })
       .click();
@@ -598,87 +544,27 @@ const wait = (ms) => new Promise((resolve) => setTimeout(resolve, ms));
         document.querySelector('[data-library-section="movies"] tbody')?.rows
           .length === 50,
     );
-    await movieToggle.click();
-    const movieFilterPosition = await movieFilters.boundingBox();
-    const movieTogglePosition = await movieToggle.boundingBox();
-    await page.evaluate(() => window.scrollTo(0, 350));
-    await page.evaluate(
-      () =>
-        new Promise((resolve) =>
-          requestAnimationFrame(() => requestAnimationFrame(resolve)),
-        ),
-    );
-    const movieFilterAfterScroll = await movieFilters.boundingBox();
-    const movieToggleAfterScroll = await movieToggle.boundingBox();
-    assert.ok(
-      movieFilterPosition &&
-        movieFilterAfterScroll &&
-        movieTogglePosition &&
-        movieToggleAfterScroll &&
-        Math.abs(
-          movieFilterAfterScroll.y -
-            movieToggleAfterScroll.y -
-            (movieFilterPosition.y - movieTogglePosition.y),
-        ) < 1,
-      "Movie filters should stay attached to the Movies hamburger while scrolling",
-    );
-    await shows
-      .getByRole("heading", { name: "Manage TV Shows" })
-      .scrollIntoViewIfNeeded();
-    await page.evaluate(() => window.scrollTo(0, window.scrollY + 600));
-    await page.evaluate(
-      () =>
-        new Promise((resolve) =>
-          requestAnimationFrame(() => requestAnimationFrame(resolve)),
-        ),
-    );
-    const showTogglePosition = await showToggle.boundingBox();
-    const movieToggleAtShows = await movieToggle.boundingBox();
-    assert.ok(
-      showTogglePosition && Math.abs(showTogglePosition.y - 16) < 4,
-      "TV Show hamburger should stay visible with its box while scrolling",
-    );
-    assert.ok(
-      movieToggleAtShows &&
-        movieToggleAtShows.y + movieToggleAtShows.height <= 0,
-      "Movie hamburger should leave with its section before the TV Show section",
-    );
-    await showToggle.click();
-    await showFilters.getByPlaceholder("Title or file path").waitFor();
-    await page.waitForFunction(() => {
-      const menu = document.querySelector('[aria-label="TV Show filters"]');
-      return (
-        menu &&
-        Math.abs(new DOMMatrixReadOnly(getComputedStyle(menu).transform).m41) <
-          0.1
-      );
-    });
-    assert.equal(await movieToggle.getAttribute("aria-expanded"), "false");
-    const showMenuBox = await showFilters.boundingBox();
-    assert.ok(
-      showMenuBox &&
-        showTogglePosition &&
-        showMenuBox.x >= showTogglePosition.x + showTogglePosition.width,
-      "TV Show filters should expand to the right of their hamburger",
-    );
-    await showToggle.click();
-    assert.equal(await showToggle.getAttribute("aria-expanded"), "false");
+    await page.setViewportSize({ width: 1440, height: 1100 });
+    await page.evaluate(() => window.scrollTo(0, 700));
+    await wait(200);
+    const filterBox = await movieFilters.boundingBox();
+    assert.ok(filterBox && Math.abs(filterBox.y - 16) < 2, "Movie filters stick in the sidebar");
+    await shows.getByRole("heading", { name: "Manage TV Shows" }).scrollIntoViewIfNeeded();
+    await showFilters.waitFor();
+    assert.equal(await movieFilters.isVisible(), false);
     await page.evaluate(() => window.scrollTo(0, 0));
-    await movieToggle.click();
-    assert.ok(
-      (await movieToggle.getAttribute("aria-expanded")) === "true",
-      "Movie filter menu should reopen independently",
-    );
-    await page.mouse.click(5, 500);
-    assert.equal(await movieToggle.getAttribute("aria-expanded"), "false");
-    await movies
-      .getByRole("button", { name: "Edit Film 01", exact: true })
-      .click();
-    assert.equal(await movieToggle.getAttribute("aria-expanded"), "false");
+    await movieFilters.waitFor();
+    await movies.getByRole("button", { name: "Edit Film 01", exact: true }).click();
     await page.getByRole("dialog").waitFor();
+    assert.equal(await page.evaluate(() => getComputedStyle(document.documentElement).overflowY), "hidden");
+    const lockedY = await page.evaluate(() => window.scrollY);
+    await page.mouse.move(10, 500);
+    await page.mouse.wheel(0, 600);
+    await wait(100);
+    assert.equal(await page.evaluate(() => window.scrollY), lockedY, "Modal blocks background scrolling");
     await page.keyboard.press("Escape");
     await page.getByRole("dialog").waitFor({ state: "hidden" });
-    await movieToggle.click();
+    assert.notEqual(await page.evaluate(() => getComputedStyle(document.documentElement).overflowY), "hidden");
     await page.setViewportSize({ width: 390, height: 844 });
     await page.evaluate(() => window.scrollTo(0, 0));
     await movies
@@ -853,7 +739,7 @@ const wait = (ms) => new Promise((resolve) => setTimeout(resolve, ms));
     );
     assert.deepEqual(errors, []);
     console.log(
-      "PASS: Library Paths order, expanded navigation, overlay sidebar filters, fixed filter groups, pagination, cross-page bulk edits, official rating preservation, show-level inheritance, mobile layout and keyboard focus.",
+      "PASS: Library Paths order, expanded navigation, sticky section filters, modal scroll lock, three-column catalog, pagination, cross-page bulk edits, official rating preservation, show-level inheritance, mobile layout and keyboard focus.",
     );
   } finally {
     await browser.close();
