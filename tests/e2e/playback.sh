@@ -45,3 +45,11 @@ ALREADYON_WEB_PORT="$management_port" "$playback_tmp/server" > "$playback_tmp/se
 server_pid=$!
 export PLAYBACK_TEST_ROOT="$playback_tmp" PLAYBACK_TEST_URL="http://localhost:$management_port" PLAYBACK_TEST_SERVER_PID="$server_pid"
 node tests/e2e/playback.cjs
+
+# Full delivery runs also cover the focused UI suites with isolated fixtures.
+if [[ -z ${PLAYBACK_TEST_ONLY:-} ]]; then
+  node tests/e2e/channel-filters.cjs
+  tests/e2e/library-catalog.sh
+  node tests/e2e/profile-autosave.cjs "$PLAYBACK_TEST_URL"
+  node tests/e2e/settings-feedback.cjs "$PLAYBACK_TEST_URL"
+fi
