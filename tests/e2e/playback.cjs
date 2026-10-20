@@ -3993,7 +3993,7 @@ const noWorkers = async (unreleased = () => 0) => {
             .getBoundingClientRect();
           return {
             menuRight: menuBox.right,
-            headerRight: headerBox.right,
+            headerRight: headerBox.right - parseFloat(getComputedStyle(header).paddingRight),
             panelLeft: panelBox.left,
             panelRight: panelBox.right,
             contentTop: contentBox.top,

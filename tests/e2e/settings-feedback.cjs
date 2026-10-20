@@ -43,6 +43,9 @@ if (!url) throw Error('Usage: node settings-feedback.cjs <synthetic-server-url>'
       }
     }
     await page.setViewportSize({ width: 1440, height: 1000 });
+    for (const icon of await page.locator('.profiles-table .admin-icon-btn').all()) {
+      assert.equal((await icon.boundingBox()).width, 40, 'Profile action icons must not shrink');
+    }
     const helpLabel = page.locator('label[for="tv-pairing-pin"]');
     await helpLabel.hover();
     const help = await helpLabel.getAttribute('title');
@@ -57,6 +60,8 @@ if (!url) throw Error('Usage: node settings-feedback.cjs <synthetic-server-url>'
     const feedback = page.locator('.account-save-feedback');
     await save.click();
     assert.equal(await feedback.innerText(), 'There are no changes to save.');
+    assert.equal(await feedback.evaluate(el => getComputedStyle(el).animationName), 'session-saved-fade');
+    assert.equal(await feedback.evaluate(el => getComputedStyle(el).animationDuration), '5s');
     const saveBox = await save.boundingBox(), feedbackBox = await feedback.boundingBox();
     assert.ok(feedbackBox.x >= saveBox.x + saveBox.width);
     await page.clock.fastForward(3000);
