@@ -14,10 +14,24 @@ import (
 func SaveIdentification(ctx context.Context, db *sql.DB, mediaFileID int64, id Identification) error {
 	mediaType, title, seriesTitle, season, episode, year := identificationSQLArgs(id)
 
-	_, err := db.ExecContext(ctx, `
+	// Provider IDs/dates belong to the old media type. Invalidate them on a
+	// type correction, retaining independently protected genres/rating/audience.
+	result, err := db.ExecContext(ctx, `
 		INSERT INTO identified_items (media_file_id, media_type, title, series_title, season_number, episode_number, release_year)
 		VALUES (?, ?, ?, ?, ?, ?, ?)
 		ON CONFLICT(media_file_id) DO UPDATE SET
+			tmdb_id = CASE WHEN identified_items.media_type != excluded.media_type THEN NULL ELSE identified_items.tmdb_id END,
+			show_id = CASE WHEN identified_items.media_type != excluded.media_type THEN NULL ELSE identified_items.show_id END,
+			overview = CASE WHEN identified_items.media_type != excluded.media_type THEN NULL ELSE identified_items.overview END,
+			release_date = CASE WHEN identified_items.media_type != excluded.media_type THEN NULL ELSE identified_items.release_date END,
+			episode_air_date = CASE WHEN identified_items.media_type != excluded.media_type THEN NULL ELSE identified_items.episode_air_date END,
+			metadata_fetched_at_unix = CASE WHEN identified_items.media_type != excluded.media_type THEN NULL ELSE identified_items.metadata_fetched_at_unix END,
+			keyless_release_date = CASE WHEN identified_items.media_type != excluded.media_type THEN NULL ELSE identified_items.keyless_release_date END,
+			keyless_provider = CASE WHEN identified_items.media_type != excluded.media_type THEN NULL ELSE identified_items.keyless_provider END,
+			keyless_fetched_at_unix = CASE WHEN identified_items.media_type != excluded.media_type THEN NULL ELSE identified_items.keyless_fetched_at_unix END,
+			genre_tags = CASE WHEN identified_items.media_type != excluded.media_type AND coalesce(identified_items.genre_source,'') != 'manual' THEN NULL ELSE identified_items.genre_tags END,
+			genre_source = CASE WHEN identified_items.media_type != excluded.media_type AND coalesce(identified_items.genre_source,'') != 'manual' THEN NULL ELSE identified_items.genre_source END,
+			content_rating = CASE WHEN identified_items.media_type != excluded.media_type AND identified_items.content_rating_manual = 0 THEN NULL ELSE identified_items.content_rating END,
 			media_type = excluded.media_type,
 			title = excluded.title,
 			series_title = excluded.series_title,
@@ -29,6 +43,11 @@ func SaveIdentification(ctx context.Context, db *sql.DB, mediaFileID int64, id I
 		mediaFileID, mediaType, title, seriesTitle, season, episode, year)
 	if err != nil {
 		return fmt.Errorf("library: save identification for media file %d: %w", mediaFileID, err)
+	}
+	if n, err := result.RowsAffected(); err != nil {
+		return err
+	} else if n == 0 {
+		return nil // A protected identity must not acquire an automatic parent either.
 	}
 	if id.IsEpisode {
 		// Reattach new episodes to a manually managed series even without TMDb.
