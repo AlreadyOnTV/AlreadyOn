@@ -39,6 +39,7 @@ export default function EditItemsDialog({
   onClose: () => void;
   onSaved: (updated: number) => void;
 }) {
+  const reviewItems = items.filter((item) => item.needsReview);
   const single = items.length === 1;
   const first = items[0];
   const view =
@@ -342,6 +343,20 @@ export default function EditItemsDialog({
       {error && (
         <p className="profile-field-error" role="alert">
           {error}
+        </p>
+      )}
+      {reviewItems.length > 0 && (
+        <p className="library-review-notice" role="note">
+          <strong>Why this needs review: </strong>
+          {single
+            ? view === "shows"
+              ? "Automatic metadata has not confirmed an intended audience for one or more episodes of this show. "
+              : "Automatic metadata has not confirmed an intended audience for this movie. "
+            : `${reviewItems.length} selected ${view === "shows" ? "shows contain episodes without" : "movies lack"} a confirmed intended audience. `}
+          Content ratings and genres alone may not establish suitability for kids
+          or teens. Affected content stays outside restricted default channels
+          until reviewed. Check the content and metadata, then choose an explicit
+          Intended audience to record your decision.
         </p>
       )}
       <div
