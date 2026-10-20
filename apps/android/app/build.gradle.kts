@@ -46,9 +46,9 @@ dependencies {
     // Compose's transitive Espresso 3.5.0 uses input-manager APIs removed on API 37.
     androidTestImplementation("androidx.test.espresso:espresso-core:3.7.0")
     androidTestImplementation("androidx.test.uiautomator:uiautomator:2.3.0")
-    androidTestImplementation(platform("androidx.compose:compose-bom:2025.12.00"))
+    androidTestImplementation(platform("androidx.compose:compose-bom:2026.09.00"))
     androidTestImplementation("androidx.compose.ui:ui-test-junit4")
-    implementation(platform("androidx.compose:compose-bom:2025.12.00"))
+    implementation(platform("androidx.compose:compose-bom:2026.09.00"))
     implementation("androidx.activity:activity-compose:1.12.4")
     implementation("androidx.compose.material3:material3")
     implementation("androidx.compose.foundation:foundation")
