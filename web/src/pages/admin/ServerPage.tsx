@@ -1,6 +1,5 @@
 import ServerDetails from './ServerDetails';
 import LoudnessRow from './LoudnessRow';
-import SettingToggle from './SettingToggle';
 import TlsControls, { type TlsControlsHandle } from './TlsControls';
 import DdnsControls, { type DdnsControlsHandle } from './DdnsControls';
 // One box of server settings in three columns: the setting's name, its control,
@@ -235,15 +234,12 @@ export default function ServerPage() {
   const [metadataLoading, setMetadataLoading] = useState(true);
   const [metadataLoadError, setMetadataLoadError] = useState<string | null>(null);
   const [tmdbKeySet, setTmdbKeySet] = useState(false);
-  const [keyless, setKeyless] = useState(false);
-  const [keylessError, setKeylessError] = useState<string | null>(null);
   const [showTlsCA, setShowTlsCA] = useState(false);
 
   useEffect(() => {
     getMetadataSettings()
       .then((s) => {
         setTmdbKeySet(s.tmdbApiKeySet);
-        setKeyless(s.keylessMetadata);
         setMetadataLoadError(null);
       })
       .catch((err: Error) => setMetadataLoadError(err.message))
@@ -270,15 +266,6 @@ export default function ServerPage() {
     }
   };
 
-  const handleToggleKeyless = async () => {
-    setKeylessError(null);
-    try {
-      const s = await updateMetadataSettings({ keylessMetadata: !keyless });
-      setKeyless(s.keylessMetadata);
-    } catch (err) {
-      setKeylessError(err instanceof Error ? err.message : 'Failed to save setting');
-    }
-  };
 
   if (draft === null) {
     return (
@@ -399,39 +386,15 @@ export default function ServerPage() {
                 onSet={async (value) => {
                   const s = await updateMetadataSettings({ tmdbApiKey: value });
                   setTmdbKeySet(s.tmdbApiKeySet);
-                  setKeyless(s.keylessMetadata);
-                }}
+                          }}
                 onClear={async () => setTmdbKeySet((await updateMetadataSettings({ tmdbApiKey: '' })).tmdbApiKeySet)}
               />
               {metadataLoadError && <p className="profile-field-error setting-note">{metadataLoadError}</p>}
 
               <hr className="settings-divider" />
 
-              <Row
-                name="Free Metadata Sources"
-                className="metadata-setting-row"
-                control={
-                  <div className="setting-control-with-note">
-                    <fieldset disabled={tmdbKeySet} className="setting-toggle-fieldset">
-                      <SettingToggle
-                        checked={keyless && !tmdbKeySet}
-                        onChange={() => void handleToggleKeyless()}
-                        label="Free Metadata Sources"
-                        text
-                      />
-                    </fieldset>
-                    {tmdbKeySet && !keylessError && (
-                      <span className="setting-control-note">Off while a TMDb API key is set.</span>
-                    )}
-                  </div>
-                }
-                actions={<Button onClick={() => setInfo('free')}>More Info</Button>}
-                note={
-                  keylessError ? (
-                    <p className="profile-field-error setting-note">{keylessError}</p>
-                  ) : undefined
-                }
-              />
+              <Row name="Automatic Metadata" control={<span className="setting-control-note">Free sources always enabled</span>}
+                actions={<Button onClick={() => setInfo('free')}>More Info</Button>} />
             </>
           )}
 
@@ -562,7 +525,7 @@ export default function ServerPage() {
 
       <InfoModal open={info === 'free'} title="Free Metadata Sources" onClose={() => setInfo(null)}>
         <p>
-          Without a TMDb key you can opt in to free, account-less sources: TV shows are classified with{' '}
+          Free, account-less sources are enabled automatically: TV shows are classified with{' '}
           <a href="https://www.tvmaze.com" target="_blank" rel="noreferrer">
             TVmaze
           </a>{' '}
@@ -573,10 +536,10 @@ export default function ServerPage() {
           (CC0).
         </p>
         <p>
-          <strong>Titles from your library are sent to those services.</strong> Free sources build up to 12 best-effort channels, including broad mixes for poorly named files. Unknown ratings remain adult-only. A TMDb key enables the full, more accurately classified channel library and switches this Off, and
-          it stays Off (and locked) while a key is set.
+          <strong>Titles from your library are sent to those services.</strong> A configured TMDb token adds richer metadata;
+          free sources fill classification gaps. Manual corrections take precedence. Missing age information never makes a title safe for kids or teens.
         </p>
-        <p>The setting is saved immediately. Channels rebuild automatically, and genres and premiere dates improve as background lookups finish. Unreadable, missing, zero-duration and excluded files cannot be scheduled.</p>
+        <p>Channels use the same audience rules with or without a TMDb token. You can review and correct metadata in the Media library.</p>
       </InfoModal>
 
       <InfoModal open={info === 'tls'} title="TLS Certificates" onClose={() => setInfo(null)}>

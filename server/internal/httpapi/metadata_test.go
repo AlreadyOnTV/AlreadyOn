@@ -104,10 +104,10 @@ func TestMetadataSettingsAPI_MalformedTMDbKey_Returns400(t *testing.T) {
 	}
 }
 
-func TestMetadataSettingsAPI_Keyless_DefaultsOffAndRoundTrips(t *testing.T) {
+func TestMetadataSettingsAPI_KeylessAlwaysEnabled(t *testing.T) {
 	router := NewRouter(t.TempDir(), t.TempDir(), openTestDB(t))
-	if got := getMetadataSettings(t, router); got.KeylessMetadata {
-		t.Fatalf("got %+v, want keyless off by default", got)
+	if got := getMetadataSettings(t, router); !got.KeylessMetadata {
+		t.Fatalf("got %+v, want free providers enabled by default", got)
 	}
 
 	if got := putMetadataSettings(t, router, `{"keylessMetadata":true}`); !got.KeylessMetadata {
@@ -116,30 +116,30 @@ func TestMetadataSettingsAPI_Keyless_DefaultsOffAndRoundTrips(t *testing.T) {
 	if got := getMetadataSettings(t, router); !got.KeylessMetadata {
 		t.Errorf("got %+v, want keyless still on when read back", got)
 	}
-	if got := putMetadataSettings(t, router, `{"keylessMetadata":false}`); got.KeylessMetadata {
-		t.Errorf("got %+v, want keyless off after disabling", got)
+	if got := putMetadataSettings(t, router, `{"keylessMetadata":false}`); !got.KeylessMetadata {
+		t.Errorf("got %+v, want free providers enabled after disabling", got)
 	}
 }
 
-func TestMetadataSettingsAPI_TMDbKeyTurnsFreeSourcesOffAndLocksThem(t *testing.T) {
+func TestMetadataSettingsAPI_TMDbKeyCombinesWithFreeSources(t *testing.T) {
 	router := NewRouter(t.TempDir(), t.TempDir(), openTestDB(t))
 	putMetadataSettings(t, router, `{"keylessMetadata":true}`)
 
 	got := putMetadataSettings(t, router, `{"tmdbApiKey":"`+fakeTMDbKey+`"}`)
-	if !got.TMDbAPIKeySet || got.KeylessMetadata {
+	if !got.TMDbAPIKeySet || !got.KeylessMetadata {
 		t.Errorf("got %+v, want key set and free sources switched off", got)
 	}
 
 	req := httptest.NewRequest(http.MethodPut, "/api/settings/metadata", strings.NewReader(`{"keylessMetadata":true}`))
 	rec := httptest.NewRecorder()
 	router.ServeHTTP(rec, req)
-	if rec.Code != http.StatusConflict {
-		t.Fatalf("status = %d, want 409 while a key is set, body=%s", rec.Code, rec.Body.String())
+	if rec.Code != http.StatusOK {
+		t.Fatalf("status = %d, want 200 while a key is set, body=%s", rec.Code, rec.Body.String())
 	}
 
 	// Clearing the key leaves them off until the admin turns them on again.
 	got = putMetadataSettings(t, router, `{"tmdbApiKey":""}`)
-	if got.TMDbAPIKeySet || got.KeylessMetadata {
+	if got.TMDbAPIKeySet || !got.KeylessMetadata {
 		t.Errorf("got %+v, want no key and free sources still off", got)
 	}
 	if got = putMetadataSettings(t, router, `{"keylessMetadata":true}`); !got.KeylessMetadata {

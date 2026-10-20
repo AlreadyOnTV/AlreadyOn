@@ -20,14 +20,15 @@ import (
 // so: for Genres and Certification that hands the item back to automatic
 // classification and metadata.
 type ItemPatch struct {
-	MediaType     *string                    `json:"mediaType"`
-	Title         *string                    `json:"title"`
-	SeriesTitle   jsonopt.Optional[string]   `json:"seriesTitle"`
-	Year          jsonopt.Optional[int]      `json:"year"`
-	Season        jsonopt.Optional[int]      `json:"season"`
-	Episode       jsonopt.Optional[int]      `json:"episode"`
-	Genres        jsonopt.Optional[[]string] `json:"genres"`
-	Certification jsonopt.Optional[string]   `json:"certification"`
+	AudienceOverride jsonopt.Optional[string]   `json:"audienceOverride"`
+	MediaType        *string                    `json:"mediaType"`
+	Title            *string                    `json:"title"`
+	SeriesTitle      jsonopt.Optional[string]   `json:"seriesTitle"`
+	Year             jsonopt.Optional[int]      `json:"year"`
+	Season           jsonopt.Optional[int]      `json:"season"`
+	Episode          jsonopt.Optional[int]      `json:"episode"`
+	Genres           jsonopt.Optional[[]string] `json:"genres"`
+	Certification    jsonopt.Optional[string]   `json:"certification"`
 }
 
 var (
@@ -97,10 +98,17 @@ func UpdateItems(ctx context.Context, db *sql.DB, ids []int64, patch ItemPatch) 
 
 func patchIsEmpty(p ItemPatch) bool {
 	return p.MediaType == nil && p.Title == nil && !p.SeriesTitle.Set && !p.Year.Set && !p.Season.Set &&
-		!p.Episode.Set && !p.Genres.Set && !p.Certification.Set
+		!p.Episode.Set && !p.Genres.Set && !p.Certification.Set && !p.AudienceOverride.Set
 }
 
 func updateOne(ctx context.Context, tx *sql.Tx, id int64, p ItemPatch) error {
+	if p.AudienceOverride.Set && p.AudienceOverride.Value != nil {
+		switch *p.AudienceOverride.Value {
+		case "young_child", "teen", "adult":
+		default:
+			return invalid("audienceOverride must be young_child, teen, adult or null")
+		}
+	}
 	var r itemRow
 	var manual int
 	err := tx.QueryRowContext(ctx, `
@@ -220,9 +228,14 @@ func updateOne(ctx context.Context, tx *sql.Tx, id int64, p ItemPatch) error {
 		WHERE id = ?`,
 		r.mediaType, r.title, r.seriesTitle, r.season, r.episode, r.year,
 		r.genreTags, r.genreSource, r.contentRating, ratingManual,
-		manualFlag, refetch, identityChanged, identityChanged, identityChanged, identityChanged, id)
+		manualFlag, refetch, identityChanged, identityChanged, identityChanged, p.MediaType != nil || p.SeriesTitle.Set, id)
 	if err != nil {
 		return fmt.Errorf("library: update item %d: %w", id, err)
+	}
+	if p.AudienceOverride.Set {
+		if _, err := tx.ExecContext(ctx, `UPDATE identified_items SET audience_override=? WHERE id=?`, p.AudienceOverride.Value, id); err != nil {
+			return err
+		}
 	}
 	return nil
 }

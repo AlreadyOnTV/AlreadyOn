@@ -231,7 +231,8 @@ func runLocked(ctx context.Context, db *sql.DB, trigger status.Trigger, mode sca
 			return res, fmt.Errorf("refresh: enrich metadata: %w", err)
 		}
 		res.Enriched = true
-	} else if settings.KeylessEnabled {
+	}
+	{ // Free sources fill gaps after TMDb and also work without credentials.
 		if err := library.ClassifyGenresKeyless(ctx, db, keylessClient); err != nil {
 			return res, fmt.Errorf("refresh: keyless classify: %w", err)
 		}

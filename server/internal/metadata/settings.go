@@ -11,9 +11,7 @@ import (
 type Settings struct {
 	// TMDbAPIKey is the TMDb v4 read access token; empty means not set.
 	TMDbAPIKey string
-	// KeylessEnabled opts in to classifying via TVmaze and Wikidata (see
-	// KeylessClient) while no TMDb key is set. Off by default: titles are
-	// only sent to those services once an admin turns this on.
+	// KeylessEnabled is retained for compatibility; free providers are always enabled.
 	KeylessEnabled bool
 }
 
@@ -30,6 +28,7 @@ func GetSettings(ctx context.Context, db *sql.DB) (Settings, error) {
 		return Settings{}, fmt.Errorf("metadata: get settings: %w", err)
 	}
 	s.TMDbAPIKey = tmdbKey.String
+	s.KeylessEnabled = true
 	return s, nil
 }
 
@@ -39,7 +38,7 @@ func SaveSettings(ctx context.Context, db *sql.DB, s Settings) error {
 	_, err := db.ExecContext(ctx, `
 		UPDATE metadata_settings SET tmdb_api_key = NULLIF(?, ''), keyless_enabled = ?,
 			updated_at_unix = unixepoch() WHERE id = 1`,
-		s.TMDbAPIKey, s.KeylessEnabled)
+		s.TMDbAPIKey, true)
 	if err != nil {
 		return fmt.Errorf("metadata: save settings: %w", err)
 	}

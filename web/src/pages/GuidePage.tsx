@@ -1,5 +1,5 @@
-import Brand from '../components/Brand';
-import { circularChannelIndex } from '../playback/channelNavigation';
+import Brand from "../components/Brand";
+import { circularChannelIndex } from "../playback/channelNavigation";
 // Full-screen home page: a 1990s/2000s US cable TV guide, backed by the
 // real /api/guide endpoint (see server/internal/guide, #25) — channels
 // with no configured/classified content yet just render with an empty
@@ -10,18 +10,26 @@ import { circularChannelIndex } from '../playback/channelNavigation';
 //   - preview section: the bar containing the now-playing detail + video
 //   - guide section:   the scrollable channel/time grid ("the guide")
 
-import { useEffect, useLayoutEffect, useMemo, useRef, useState } from 'react';
-import { useSearchParams } from 'react-router-dom';
-import { mediaTitle } from './mediaTitle';
-import { getGuide, getProfile, type GuideChannel, type GuideProgram } from '../api/client';
-import { useGuideSettings, type TimeFormat } from '../settings/GuideSettingsContext';
-import { formatClock, formatRange } from '../settings/formatTime';
-import { useUsers } from '../users/UsersContext';
-import { isBusy, useStartupStatus } from '../status/useStartupStatus';
-import StartupNotice from '../status/StartupNotice';
-import ProfileMenu from './ProfileMenu';
-import { Player } from '../playback/Player';
-import './GuidePage.css';
+import { useEffect, useLayoutEffect, useMemo, useRef, useState } from "react";
+import { useSearchParams } from "react-router-dom";
+import { mediaTitle } from "./mediaTitle";
+import {
+  getGuide,
+  getProfile,
+  type GuideChannel,
+  type GuideProgram,
+} from "../api/client";
+import {
+  useGuideSettings,
+  type TimeFormat,
+} from "../settings/GuideSettingsContext";
+import { formatClock, formatRange } from "../settings/formatTime";
+import { useUsers } from "../users/UsersContext";
+import { isBusy, useStartupStatus } from "../status/useStartupStatus";
+import StartupNotice from "../status/StartupNotice";
+import ProfileMenu from "./ProfileMenu";
+import { Player } from "../playback/Player";
+import "./GuidePage.css";
 
 // Keep the A1 clock independent of guide fetching and aligned to minute boundaries.
 function GuideClock({ format }: { format: TimeFormat }) {
@@ -35,16 +43,24 @@ function GuideClock({ format }: { format: TimeFormat }) {
       timer = window.setTimeout(refresh, 60_000 - (current.getTime() % 60_000));
     };
     refresh();
-    window.addEventListener('focus', refresh);
-    document.addEventListener('visibilitychange', refresh);
+    window.addEventListener("focus", refresh);
+    document.addEventListener("visibilitychange", refresh);
     return () => {
       window.clearTimeout(timer);
-      window.removeEventListener('focus', refresh);
-      document.removeEventListener('visibilitychange', refresh);
+      window.removeEventListener("focus", refresh);
+      document.removeEventListener("visibilitychange", refresh);
     };
   }, []);
   const label = formatClock(now.getHours() * 60 + now.getMinutes(), format);
-  return <time dateTime={now.toISOString()} aria-label={`Current time: ${label}`} title="Current time">{label}</time>;
+  return (
+    <time
+      dateTime={now.toISOString()}
+      aria-label={`Current time: ${label}`}
+      title="Current time"
+    >
+      {label}
+    </time>
+  );
 }
 
 // The guide always shows this many hours ahead.
@@ -55,7 +71,8 @@ const GUIDE_POLL_INTERVAL_MS = 30_000;
 // Phones and tablets keep the simplified large-player experience in either
 // orientation. The width fallback also covers narrow desktop windows where the
 // compact preview cannot lay out cleanly.
-const MOBILE_PLAYER_QUERY = '(hover: none) and (pointer: coarse), (max-width: 700px)';
+const MOBILE_PLAYER_QUERY =
+  "(hover: none) and (pointer: coarse), (max-width: 700px)";
 // One "chunk" is twice the width of a box's start - stop time line and stands for
 // this many minutes of runtime; a 30-minute column is scaled from it, so every box
 // is as wide as its runtime and a shorter show is narrower (its text is cut off).
@@ -78,7 +95,11 @@ const GUIDE_BOX_VERTICAL_INSET = 3; // top/bottom: 3px (each side, within the ro
 // *series*, without the "(2023)" the library adds to tell shows apart, and
 // the episode's own title goes in the S01E02 line below (see episodeLabel).
 function displayTitle(program: GuideProgram): string {
-  return mediaTitle(program.mediaType === 'movie' ? program.title : program.seriesTitle || program.title);
+  return mediaTitle(
+    program.mediaType === "movie"
+      ? program.title
+      : program.seriesTitle || program.title,
+  );
 }
 
 // mergeIntervalSegments collapses consecutive schedule entries for the
@@ -102,7 +123,11 @@ function mergeIntervalSegments(programs: GuideProgram[]): GuideProgram[] {
   const merged: GuideProgram[] = [];
   for (const program of programs) {
     const prev = merged[merged.length - 1];
-    if (prev && prev.mediaFileId === program.mediaFileId && (program.sourceOffsetSeconds ?? 0) > (prev.sourceOffsetSeconds ?? 0)) {
+    if (
+      prev &&
+      prev.mediaFileId === program.mediaFileId &&
+      (program.sourceOffsetSeconds ?? 0) > (prev.sourceOffsetSeconds ?? 0)
+    ) {
       merged[merged.length - 1] = { ...prev, endsAt: program.endsAt };
     } else {
       merged.push(program);
@@ -113,25 +138,25 @@ function mergeIntervalSegments(programs: GuideProgram[]): GuideProgram[] {
 
 // "Rating: PG-13"; empty when the rating is unknown.
 function ratingLabel(program: GuideProgram): string {
-  return program.contentRating ? `Rating: ${program.contentRating}` : '';
+  return program.contentRating ? `Rating: ${program.contentRating}` : "";
 }
 
 // The second line: an episode's "S01E02 — Its Title", or a movie's content rating.
 function episodeLabel(program: GuideProgram): string {
-  if (program.mediaType === 'episode' && program.seasonNumber) {
-    const s = String(program.seasonNumber).padStart(2, '0');
-    const e = String(program.episodeNumber ?? 0).padStart(2, '0');
+  if (program.mediaType === "episode" && program.seasonNumber) {
+    const s = String(program.seasonNumber).padStart(2, "0");
+    const e = String(program.episodeNumber ?? 0).padStart(2, "0");
     const title = mediaTitle(program.title);
-    return `S${s}E${e}` + (title ? ` — ${title}` : '');
+    return `S${s}E${e}` + (title ? ` — ${title}` : "");
   }
-  if (program.mediaType === 'movie') return ratingLabel(program);
-  return '';
+  if (program.mediaType === "movie") return ratingLabel(program);
+  return "";
 }
 
 // ISO date components avoid browser locale and timezone shifts.
 function formatAirDate(date: string | undefined): string {
-  const m = /^(\d{4})-(\d{2})-(\d{2})/.exec(date ?? '');
-  if (!m) return '';
+  const m = /^(\d{4})-(\d{2})-(\d{2})/.exec(date ?? "");
+  if (!m) return "";
   return `Air Date: ${m[2]}/${m[3]}/${m[1]}`;
 }
 
@@ -163,7 +188,10 @@ function currentProgramIndex(programs: GuideProgram[], nowMs: number): number {
 // stable identity Selected actually stores (see its own comment) —
 // every call site wants "which program is live," never the index
 // itself, so this is what they all actually call.
-function currentProgramStartsAt(programs: GuideProgram[], nowMs: number): string {
+function currentProgramStartsAt(
+  programs: GuideProgram[],
+  nowMs: number,
+): string {
   return programs[currentProgramIndex(programs, nowMs)].startsAt;
 }
 
@@ -188,7 +216,8 @@ interface RowMetrics {
 // Canvas text measurement: no layout reflow, so cheap enough to call every render.
 let measureCtx: CanvasRenderingContext2D | null | undefined;
 function measureTextWidth(font: string, text: string): number {
-  if (measureCtx === undefined) measureCtx = document.createElement('canvas').getContext('2d');
+  if (measureCtx === undefined)
+    measureCtx = document.createElement("canvas").getContext("2d");
   if (!measureCtx) return text.length * 7;
   measureCtx.font = font;
   return measureCtx.measureText(text).width;
@@ -196,7 +225,7 @@ function measureTextWidth(font: string, text: string): number {
 
 // The widest realistic start - stop label, so one scale fits every box.
 function chunkReferenceText(timeFormat: TimeFormat): string {
-  return timeFormat === '24h' ? '00:00 - 00:00' : '00:00am - 00:00am';
+  return timeFormat === "24h" ? "00:00 - 00:00" : "00:00am - 00:00am";
 }
 
 // Canvas and DOM text layout can differ by a hair; keep that from clipping the label.
@@ -204,8 +233,13 @@ const TEXT_MEASURE_BUFFER = 2;
 
 function requiredRowMinHeight(metrics: RowMetrics | null): number {
   if (!metrics) return 68; // pre-metrics fallback, matches the old static floor
-  const contentHeight = metrics.titleHeight + metrics.episodeHeight + metrics.timeHeight + 2 * GUIDE_BOX_ROW_GAP;
-  const boxHeight = contentHeight + 2 * GUIDE_BOX_PADDING_V + 2 * GUIDE_BOX_BORDER;
+  const contentHeight =
+    metrics.titleHeight +
+    metrics.episodeHeight +
+    metrics.timeHeight +
+    2 * GUIDE_BOX_ROW_GAP;
+  const boxHeight =
+    contentHeight + 2 * GUIDE_BOX_PADDING_V + 2 * GUIDE_BOX_BORDER;
   return Math.ceil(boxHeight + 2 * GUIDE_BOX_VERTICAL_INSET);
 }
 
@@ -226,17 +260,35 @@ interface Selected {
 // merged differently). Keep the viewer on the same channel, on the program that
 // now covers the same moment (else the one airing now), so the preview never
 // empties; a channel that has disappeared falls back to the first with content.
-function reconcileSelection(sel: Selected | null, channels: GuideChannel[], nowMs: number): Selected | null {
+function reconcileSelection(
+  sel: Selected | null,
+  channels: GuideChannel[],
+  nowMs: number,
+): Selected | null {
   if (!sel) return sel;
-  const channel = channels.find((c) => c.number === sel.channelNumber && c.programs.length > 0);
+  const channel = channels.find(
+    (c) => c.number === sel.channelNumber && c.programs.length > 0,
+  );
   if (!channel) {
     const first = channels.find((c) => c.programs.length > 0);
-    return first ? { channelNumber: first.number, programStartsAt: currentProgramStartsAt(first.programs, nowMs) } : sel;
+    return first
+      ? {
+          channelNumber: first.number,
+          programStartsAt: currentProgramStartsAt(first.programs, nowMs),
+        }
+      : sel;
   }
-  if (channel.programs.some((p) => p.startsAt === sel.programStartsAt)) return sel;
+  if (channel.programs.some((p) => p.startsAt === sel.programStartsAt))
+    return sel;
   const at = Date.parse(sel.programStartsAt);
-  const covering = channel.programs.find((p) => Date.parse(p.startsAt) <= at && at < Date.parse(p.endsAt));
-  return { channelNumber: channel.number, programStartsAt: covering?.startsAt ?? currentProgramStartsAt(channel.programs, nowMs) };
+  const covering = channel.programs.find(
+    (p) => Date.parse(p.startsAt) <= at && at < Date.parse(p.endsAt),
+  );
+  return {
+    channelNumber: channel.number,
+    programStartsAt:
+      covering?.startsAt ?? currentProgramStartsAt(channel.programs, nowMs),
+  };
 }
 
 export default function GuidePage() {
@@ -244,63 +296,94 @@ export default function GuidePage() {
   const { currentUser } = useUsers();
   const audienceTier = currentUser.audienceTier;
   // The channel picture in the first column is the profile's choice (shown unless turned off).
-  const { status: startupStatus, completions: startupCompletions } = useStartupStatus();
+  const { status: startupStatus, completions: startupCompletions } =
+    useStartupStatus();
   const [channels, setChannels] = useState<GuideChannel[] | null>(null);
   const [loadError, setLoadError] = useState<string | null>(null);
   const [nowMs, setNowMs] = useState(Date.now);
   const gridOrigin = new Date(nowMs);
-  gridOrigin.setMinutes(gridOrigin.getMinutes() - (gridOrigin.getMinutes() % SLOT_MINUTES), 0, 0);
+  gridOrigin.setMinutes(
+    gridOrigin.getMinutes() - (gridOrigin.getMinutes() % SLOT_MINUTES),
+    0,
+    0,
+  );
   const gridStartMs = gridOrigin.getTime();
 
   const [focused, setFocused] = useState<Selected | null>(null);
   const [tunedSelection, setTuned] = useState<Selected | null>(null);
   const tuned = useMemo(() => {
-    const watchedChannel = channels?.find((c) => c.number === tunedSelection?.channelNumber);
+    const watchedChannel = channels?.find(
+      (c) => c.number === tunedSelection?.channelNumber,
+    );
     return watchedChannel?.programs.length
-      ? { channelNumber: watchedChannel.number, programStartsAt: currentProgramStartsAt(watchedChannel.programs, nowMs) }
+      ? {
+          channelNumber: watchedChannel.number,
+          programStartsAt: currentProgramStartsAt(
+            watchedChannel.programs,
+            nowMs,
+          ),
+        }
       : tunedSelection;
   }, [channels, tunedSelection, nowMs]);
   const restoreGuideRef = useRef(true);
+  const restoreAfterPlayerTransitionRef = useRef(false);
   const [guideEntry, setGuideEntry] = useState(0);
   useEffect(() => {
     let timer: number;
     const refresh = () => {
       const stamp = Date.now();
       setNowMs(stamp);
-      const nextEnd = channels?.flatMap(c => c.programs)
-        .map(p => Date.parse(p.endsAt)).filter(end => end > stamp)
-        .reduce((next, end) => Math.min(next, end), Infinity) ?? Infinity;
+      const nextEnd =
+        channels
+          ?.flatMap((c) => c.programs)
+          .map((p) => Date.parse(p.endsAt))
+          .filter((end) => end > stamp)
+          .reduce((next, end) => Math.min(next, end), Infinity) ?? Infinity;
       window.clearTimeout(timer);
-      timer = window.setTimeout(refresh, Math.max(1, Math.min(
-        30_000, SLOT_MINUTES * 60_000 - stamp % (SLOT_MINUTES * 60_000), nextEnd - stamp,
-      )));
+      timer = window.setTimeout(
+        refresh,
+        Math.max(
+          1,
+          Math.min(
+            30_000,
+            SLOT_MINUTES * 60_000 - (stamp % (SLOT_MINUTES * 60_000)),
+            nextEnd - stamp,
+          ),
+        ),
+      );
     };
     refresh();
-    window.addEventListener('focus', refresh);
-    document.addEventListener('visibilitychange', refresh);
+    window.addEventListener("focus", refresh);
+    document.addEventListener("visibilitychange", refresh);
     return () => {
       window.clearTimeout(timer);
-      window.removeEventListener('focus', refresh);
-      document.removeEventListener('visibilitychange', refresh);
+      window.removeEventListener("focus", refresh);
+      document.removeEventListener("visibilitychange", refresh);
     };
   }, [channels]);
   // The address carries the tuned channel (?channel=124) so a refresh or bookmark returns to it.
   const [searchParams, setSearchParams] = useSearchParams();
   // Capture an explicit link once; discard it after selection or fallback.
-  const urlWantedRef = useRef<number | null>(Number(searchParams.get('channel')) || null);
+  const urlWantedRef = useRef<number | null>(
+    Number(searchParams.get("channel")) || null,
+  );
   const tunedChannelNumber = tuned?.channelNumber;
   useEffect(() => {
-    document.title = tunedChannelNumber === undefined ? 'AlreadyOn' : `AlreadyOn - CH ${tunedChannelNumber}`;
+    document.title =
+      tunedChannelNumber === undefined
+        ? "AlreadyOn"
+        : `AlreadyOn - CH ${tunedChannelNumber}`;
   }, [tunedChannelNumber]);
   useEffect(() => {
     if (tunedChannelNumber === undefined) return;
-    if (urlWantedRef.current === tunedChannelNumber) urlWantedRef.current = null;
+    if (urlWantedRef.current === tunedChannelNumber)
+      urlWantedRef.current = null;
     if (urlWantedRef.current !== null) return;
-    if (searchParams.get('channel') === String(tunedChannelNumber)) return;
+    if (searchParams.get("channel") === String(tunedChannelNumber)) return;
     setSearchParams(
       (prev) => {
         const next = new URLSearchParams(prev);
-        next.set('channel', String(tunedChannelNumber));
+        next.set("channel", String(tunedChannelNumber));
         return next;
       },
       { replace: true },
@@ -314,14 +397,16 @@ export default function GuidePage() {
   const initialFocusTierRef = useRef<string | null>(null);
   // The large player fills the window's width and hides the show details.
   const [largePlayer, setLargePlayer] = useState(false);
-  const [mobilePlayer, setMobilePlayer] = useState(() => window.matchMedia(MOBILE_PLAYER_QUERY).matches);
+  const [mobilePlayer, setMobilePlayer] = useState(
+    () => window.matchMedia(MOBILE_PLAYER_QUERY).matches,
+  );
   const playerLarge = largePlayer || mobilePlayer;
   useEffect(() => {
     const query = window.matchMedia(MOBILE_PLAYER_QUERY);
     const sync = () => setMobilePlayer(query.matches);
-    query.addEventListener('change', sync);
+    query.addEventListener("change", sync);
     sync();
-    return () => query.removeEventListener('change', sync);
+    return () => query.removeEventListener("change", sync);
   }, []);
   const [fullscreen, setFullscreen] = useState(false);
   useEffect(() => {
@@ -331,11 +416,11 @@ export default function GuidePage() {
       if (!active) {
         restoreGuideRef.current = true;
         setNowMs(Date.now());
-        setGuideEntry(value => value + 1);
+        setGuideEntry((value) => value + 1);
       }
     };
-    document.addEventListener('fullscreenchange', sync);
-    return () => document.removeEventListener('fullscreenchange', sync);
+    document.addEventListener("fullscreenchange", sync);
+    return () => document.removeEventListener("fullscreenchange", sync);
   }, []);
 
   // The large player is sized to the space below the header, so publish its height.
@@ -344,7 +429,11 @@ export default function GuidePage() {
   useEffect(() => {
     const header = pageHeaderRef.current;
     if (!header) return;
-    const publish = () => pageRef.current?.style.setProperty('--page-header-h', `${header.getBoundingClientRect().height}px`);
+    const publish = () =>
+      pageRef.current?.style.setProperty(
+        "--page-header-h",
+        `${header.getBoundingClientRect().height}px`,
+      );
     publish();
     const observer = new ResizeObserver(publish);
     observer.observe(header);
@@ -373,7 +462,10 @@ export default function GuidePage() {
     const loadGuide = () => {
       const nowMs = Date.now();
 
-      Promise.all([getGuide(GUIDE_HOURS, audienceTier), getProfile(currentUser.id)])
+      Promise.all([
+        getGuide(GUIDE_HOURS, audienceTier),
+        getProfile(currentUser.id),
+      ])
         .then(([data, viewer]) => {
           if (cancelled) return;
           // Commercial breaks are real, timed entries the schedule engine
@@ -386,7 +478,17 @@ export default function GuidePage() {
           // here, so nothing downstream ever needs to know segments
           // existed at all.
           const sortedData = data
-            .map((c) => ({ ...c, programs: mergeIntervalSegments(c.programs.filter((p) => p.kind !== 'commercial')), previousPrograms: mergeIntervalSegments((c.previousPrograms ?? []).filter(p => p.kind !== 'commercial')) }))
+            .map((c) => ({
+              ...c,
+              programs: mergeIntervalSegments(
+                c.programs.filter((p) => p.kind !== "commercial"),
+              ),
+              previousPrograms: mergeIntervalSegments(
+                (c.previousPrograms ?? []).filter(
+                  (p) => p.kind !== "commercial",
+                ),
+              ),
+            }))
             .sort((a, b) => a.number - b.number);
           setChannels(sortedData);
           setNowMs(Date.now());
@@ -405,13 +507,26 @@ export default function GuidePage() {
             // Explicit links win; otherwise restore the server's channel identity.
             // The filtered guide excludes hidden/ineligible channels and empty rows.
             const firstWithContent =
-              sortedData.find((c) => c.number === urlWantedRef.current && c.programs.length > 0) ??
-              sortedData.find((c) => c.channelId === viewer.lastWatchedChannelId && c.programs.length > 0) ??
+              sortedData.find(
+                (c) =>
+                  c.number === urlWantedRef.current && c.programs.length > 0,
+              ) ??
+              sortedData.find(
+                (c) =>
+                  c.channelId === viewer.lastWatchedChannelId &&
+                  c.programs.length > 0,
+              ) ??
               sortedData.find((c) => c.programs.length > 0);
             if (firstWithContent) {
               urlWantedRef.current = null;
               initialFocusTierRef.current = audienceTier;
-              const cell = { channelNumber: firstWithContent.number, programStartsAt: currentProgramStartsAt(firstWithContent.programs, nowMs) };
+              const cell = {
+                channelNumber: firstWithContent.number,
+                programStartsAt: currentProgramStartsAt(
+                  firstWithContent.programs,
+                  nowMs,
+                ),
+              };
               setFocused(cell);
               setTuned(cell);
             }
@@ -429,13 +544,13 @@ export default function GuidePage() {
     // only ever fetching once on mount, so a guide left open stays live
     // instead of looking frozen/stale.
     const intervalId = window.setInterval(loadGuide, GUIDE_POLL_INTERVAL_MS);
-    window.addEventListener('focus', loadGuide);
-    document.addEventListener('visibilitychange', loadGuide);
+    window.addEventListener("focus", loadGuide);
+    document.addEventListener("visibilitychange", loadGuide);
     return () => {
       cancelled = true;
       window.clearInterval(intervalId);
-      window.removeEventListener('focus', loadGuide);
-      document.removeEventListener('visibilitychange', loadGuide);
+      window.removeEventListener("focus", loadGuide);
+      document.removeEventListener("visibilitychange", loadGuide);
     };
   }, [currentUser.id, audienceTier, startupCompletions]);
 
@@ -444,10 +559,11 @@ export default function GuidePage() {
   // `channels` only actually changes on a real data fetch.
   const sorted = useMemo(() => channels ?? [], [channels]);
   const guideHasContent = sorted.some((c) => c.programs.length > 0);
-  const startupRunning = !guideHasContent && startupStatus !== null && isBusy(startupStatus);
+  const startupRunning =
+    !guideHasContent && startupStatus !== null && isBusy(startupStatus);
 
   const slotLabels = Array.from({ length: slotCount }, (_, i) => {
-    if (gridStartMs === null) return '';
+    if (gridStartMs === null) return "";
     const d = new Date(gridStartMs + i * SLOT_MINUTES * 60_000);
     return formatClock(d.getHours() * 60 + d.getMinutes(), timeFormat);
   });
@@ -489,7 +605,13 @@ export default function GuidePage() {
   // width, so 1 minute = chunk / 20 px. Whole pixels: fractional box positions have
   // made Chromium on Linux garble the text inside.
   const slotPixelWidth = metrics
-    ? Math.round((2 * (measureTextWidth(metrics.timeFont, chunkReferenceText(timeFormat)) + TEXT_MEASURE_BUFFER) * SLOT_MINUTES) / CHUNK_MINUTES)
+    ? Math.round(
+        (2 *
+          (measureTextWidth(metrics.timeFont, chunkReferenceText(timeFormat)) +
+            TEXT_MEASURE_BUFFER) *
+          SLOT_MINUTES) /
+          CHUNK_MINUTES,
+      )
     : FALLBACK_SLOT_WIDTH;
 
   // Every box sits at its true time inside a strip exactly as wide as the
@@ -549,13 +671,17 @@ export default function GuidePage() {
     let deltaX = 0;
     if (elRect.left < visibleLeft || elRect.left > visibleRight) {
       deltaX = elRect.left - visibleLeft;
-    } else if (elRect.right > visibleRight && elRect.right - elRect.left <= visibleRight - visibleLeft) {
+    } else if (
+      elRect.right > visibleRight &&
+      elRect.right - elRect.left <= visibleRight - visibleLeft
+    ) {
       deltaX = elRect.right - visibleRight;
     }
 
     let deltaY = 0;
     if (elRect.top < visibleTop) deltaY = elRect.top - visibleTop;
-    else if (elRect.bottom > visibleBottom) deltaY = elRect.bottom - visibleBottom;
+    else if (elRect.bottom > visibleBottom)
+      deltaY = elRect.bottom - visibleBottom;
 
     // Hard stop at the true edges, instead of trusting the geometry-based
     // delta above to land exactly on 0: that delta is only ever "the
@@ -567,15 +693,27 @@ export default function GuidePage() {
     // its starting position. Snapping to exactly 0 whenever focus is
     // genuinely at the first program/first focusable channel row makes
     // "hold left" and "hold up" always bottom out at the real edge.
-    const focusedChannelForEdge = sorted.find((c) => c.number === focused.channelNumber);
-    const atLeftEdge = focusedChannelForEdge?.programs[0]?.startsAt === focused.programStartsAt;
-    const firstFocusableChannelNumber = sorted.find((c) => c.programs.length > 0)?.number;
+    const focusedChannelForEdge = sorted.find(
+      (c) => c.number === focused.channelNumber,
+    );
+    const atLeftEdge =
+      focusedChannelForEdge?.programs[0]?.startsAt === focused.programStartsAt;
+    const firstFocusableChannelNumber = sorted.find(
+      (c) => c.programs.length > 0,
+    )?.number;
     const atTopEdge = focused.channelNumber === firstFocusableChannelNumber;
 
     const targetScrollLeft = atLeftEdge ? 0 : container.scrollLeft + deltaX;
     const targetScrollTop = atTopEdge ? 0 : container.scrollTop + deltaY;
-    if (targetScrollLeft !== container.scrollLeft || targetScrollTop !== container.scrollTop) {
-      container.scrollTo({ left: targetScrollLeft, top: targetScrollTop, behavior: 'auto' });
+    if (
+      targetScrollLeft !== container.scrollLeft ||
+      targetScrollTop !== container.scrollTop
+    ) {
+      container.scrollTo({
+        left: targetScrollLeft,
+        top: targetScrollTop,
+        behavior: "auto",
+      });
     }
     // Also re-run whenever column geometry changes (window resize, or a
     // "time span shown" setting change): the previously-focused cell's
@@ -593,14 +731,18 @@ export default function GuidePage() {
     if (previousGridStartMs.current !== gridStartMs) container.scrollLeft = 0;
     previousGridStartMs.current = gridStartMs;
     if (fullscreen || !restoreGuideRef.current || !tuned) return;
-    const cell = slotRefs.current.get(`${tuned.channelNumber}-${tuned.programStartsAt}`);
-    const row = cell?.closest('.guide-row');
+    const cell = slotRefs.current.get(
+      `${tuned.channelNumber}-${tuned.programStartsAt}`,
+    );
+    const row = cell?.closest(".guide-row");
     if (!row) return;
     restoreGuideRef.current = false;
     setFocused(tuned);
     container.scrollLeft = 0;
-    container.scrollTop += row.getBoundingClientRect().top - container.getBoundingClientRect().top
-      - (headRef.current?.getBoundingClientRect().height ?? 0);
+    container.scrollTop +=
+      row.getBoundingClientRect().top -
+      container.getBoundingClientRect().top -
+      (headRef.current?.getBoundingClientRect().height ?? 0);
     container.focus({ preventScroll: true });
   }, [fullscreen, guideEntry, tuned, gridStartMs, metrics]);
 
@@ -610,8 +752,15 @@ export default function GuidePage() {
   // tuned there; see the Enter/click handlers below, which always
   // resolve `tuned` to whatever's actually live on the target channel
   // via currentProgramIndex, never to the clicked/focused slot itself.
-  const focusedChannel = focused ? (sorted.find((c) => c.number === focused.channelNumber) ?? null) : null;
-  const focusedProgram = focused && focusedChannel ? (focusedChannel.programs.find((p) => p.startsAt === focused.programStartsAt) ?? null) : null;
+  const focusedChannel = focused
+    ? (sorted.find((c) => c.number === focused.channelNumber) ?? null)
+    : null;
+  const focusedProgram =
+    focused && focusedChannel
+      ? (focusedChannel.programs.find(
+          (p) => p.startsAt === focused.programStartsAt,
+        ) ?? null)
+      : null;
 
   // IMPORTANT: every branch derives its result from the *previous* state
   // passed into the updater (never from the `focused` in this render's
@@ -623,35 +772,49 @@ export default function GuidePage() {
   // the next keypress and crashing the render (this was reproducible:
   // it showed up as a blank page in a screen recording).
   const handleKeyDown = (e: KeyboardEvent) => {
-    if (!focused || e.defaultPrevented || e.ctrlKey || e.metaKey || e.altKey) return;
+    if (!focused || e.defaultPrevented || e.ctrlKey || e.metaKey || e.altKey)
+      return;
     const target = e.target instanceof Element ? e.target : null;
     // The profile menu own the keyboard while they are in use.
-    if (target?.closest('select, input:not([type="range"]), textarea, dialog, .profile-menu')) return;
+    if (
+      target?.closest(
+        'select, input:not([type="range"]), textarea, dialog, .profile-menu',
+      )
+    )
+      return;
     // Enter and Space still press a focused button rather than tuning.
-    if (e.key === 'Enter' && target?.closest('button, a, summary')) return;
+    if (e.key === "Enter" && target?.closest("button, a, summary")) return;
     // Expanded playback reserves horizontal arrows for its control cursor.
     if (playerLarge || fullscreen) {
-      if (document.querySelector('.playback-menu')) return;
-      const step = e.key === 'ArrowDown' ? 1 : e.key === 'ArrowUp' ? -1 : 0;
+      if (document.querySelector(".playback-menu")) return;
+      const step = e.key === "ArrowDown" ? 1 : e.key === "ArrowUp" ? -1 : 0;
       if (step !== 0) {
         e.preventDefault();
         // The ref, not state, so a burst of key presses keeps stepping.
-        const from = sorted.findIndex((c) => c.number === (tunedNow.current ?? focused).channelNumber);
+        const from = sorted.findIndex(
+          (c) => c.number === (tunedNow.current ?? focused).channelNumber,
+        );
         const i = circularChannelIndex(sorted, from, step);
         if (i !== null) {
-          const startsAt = currentProgramStartsAt(sorted[i].programs, Date.now());
-          tunedNow.current = { channelNumber: sorted[i].number, programStartsAt: startsAt };
+          const startsAt = currentProgramStartsAt(
+            sorted[i].programs,
+            Date.now(),
+          );
+          tunedNow.current = {
+            channelNumber: sorted[i].number,
+            programStartsAt: startsAt,
+          };
           urlWantedRef.current = null;
           setTuned(tunedNow.current);
           setFocused(tunedNow.current);
         }
         return;
       }
-      if (e.key === 'ArrowLeft' || e.key === 'ArrowRight') return;
+      if (e.key === "ArrowLeft" || e.key === "ArrowRight") return;
     }
-    if (e.key === 'ArrowRight' || e.key === 'ArrowLeft') {
+    if (e.key === "ArrowRight" || e.key === "ArrowLeft") {
       e.preventDefault();
-      const delta = e.key === 'ArrowRight' ? 1 : -1;
+      const delta = e.key === "ArrowRight" ? 1 : -1;
       setFocused((prev) => {
         if (!prev) return prev;
         const channel = sorted.find((c) => c.number === prev.channelNumber);
@@ -662,7 +825,9 @@ export default function GuidePage() {
         // now sits at (or age it out of the array entirely; findIndex
         // then returns -1, which the Math.max below just treats as "walk
         // from the start," a reasonable recovery rather than a crash).
-        const currentIndex = channel.programs.findIndex((p) => p.startsAt === prev.programStartsAt);
+        const currentIndex = channel.programs.findIndex(
+          (p) => p.startsAt === prev.programStartsAt,
+        );
         const maxIndex = channel.programs.length - 1;
         const nextIndex = Math.max(0, Math.min(maxIndex, currentIndex + delta));
         const nextStartsAt = channel.programs[nextIndex].startsAt;
@@ -674,30 +839,44 @@ export default function GuidePage() {
         if (nextStartsAt === prev.programStartsAt) return prev;
         return { ...prev, programStartsAt: nextStartsAt };
       });
-    } else if (e.key === 'ArrowDown' || e.key === 'ArrowUp') {
+    } else if (e.key === "ArrowDown" || e.key === "ArrowUp") {
       e.preventDefault();
       setFocused((prev) => {
         if (!prev) return prev;
-        const channelIdx = sorted.findIndex((c) => c.number === prev.channelNumber);
+        const channelIdx = sorted.findIndex(
+          (c) => c.number === prev.channelNumber,
+        );
         const channel = sorted[channelIdx];
         if (!channel) return prev;
-        const currentProgram = channel.programs.find((p) => p.startsAt === prev.programStartsAt);
+        const currentProgram = channel.programs.find(
+          (p) => p.startsAt === prev.programStartsAt,
+        );
 
         // Skip channels with nothing scheduled — there's no program to
         // land the cursor on there.
-        const nextIdx = circularChannelIndex(sorted, channelIdx, e.key === 'ArrowDown' ? 1 : -1);
+        const nextIdx = circularChannelIndex(
+          sorted,
+          channelIdx,
+          e.key === "ArrowDown" ? 1 : -1,
+        );
         if (nextIdx === null) return prev;
 
         const nextChannel = sorted[nextIdx];
-        const currentStart = currentProgram ? new Date(currentProgram.startsAt).getTime() : 0;
+        const currentStart = currentProgram
+          ? new Date(currentProgram.startsAt).getTime()
+          : 0;
         const found = nextChannel.programs.findIndex((p) => {
           const start = new Date(p.startsAt).getTime();
           const end = new Date(p.endsAt).getTime();
           return start <= currentStart && currentStart < end;
         });
-        return { channelNumber: nextChannel.number, programStartsAt: nextChannel.programs[found >= 0 ? found : 0].startsAt };
+        return {
+          channelNumber: nextChannel.number,
+          programStartsAt:
+            nextChannel.programs[found >= 0 ? found : 0].startsAt,
+        };
       });
-    } else if (e.key === 'Enter') {
+    } else if (e.key === "Enter") {
       e.preventDefault();
       // Route through setFocused's updater (not the outer `focused`) so
       // this always tunes to whatever the *actual* latest focus is, even
@@ -712,7 +891,13 @@ export default function GuidePage() {
           const channel = sorted.find((c) => c.number === prev.channelNumber);
           if (channel && channel.programs.length > 0) {
             urlWantedRef.current = null;
-            setTuned({ channelNumber: prev.channelNumber, programStartsAt: currentProgramStartsAt(channel.programs, Date.now()) });
+            setTuned({
+              channelNumber: prev.channelNumber,
+              programStartsAt: currentProgramStartsAt(
+                channel.programs,
+                Date.now(),
+              ),
+            });
           }
         }
         return prev;
@@ -727,30 +912,46 @@ export default function GuidePage() {
   });
   useEffect(() => {
     const onKey = (e: KeyboardEvent) => keyHandler.current(e);
-    window.addEventListener('keydown', onKey);
-    return () => window.removeEventListener('keydown', onKey);
+    window.addEventListener("keydown", onKey);
+    return () => window.removeEventListener("keydown", onKey);
   }, []);
 
   return (
-    <div className={'guide-page' + (playerLarge ? ' is-large-player' : '')} ref={pageRef}>
+    <div
+      className={"guide-page" + (playerLarge ? " is-large-player" : "")}
+      ref={pageRef}
+    >
       <div className="page-header" ref={pageHeaderRef}>
-        <div className="page-header-brand"><Brand /></div>
+        <div className="page-header-brand">
+          <Brand />
+        </div>
         <div className="page-header-actions">
           <ProfileMenu />
         </div>
       </div>
 
-      <div className={'preview-section' + (playerLarge ? ' is-large' : '')}>
+      <div className={"preview-section" + (playerLarge ? " is-large" : "")}>
         <div className="preview-detail">
           {focusedChannel && focusedProgram ? (
             <>
               <div className="preview-detail-main">
                 <div className="preview-channel">
-                  <span className="preview-channel-badge">{focusedChannel.number}</span>
-                  <span className="preview-channel-name">{focusedChannel.name}</span>
+                  <span className="preview-channel-badge">
+                    {focusedChannel.number}
+                  </span>
+                  <span className="preview-channel-name">
+                    {focusedChannel.name}
+                  </span>
                 </div>
-                <div className="preview-title">{displayTitle(focusedProgram)}</div>
-                {focusedProgram.mediaType !== 'movie' && episodeLabel(focusedProgram) && <div className="preview-episode">{episodeLabel(focusedProgram)}</div>}
+                <div className="preview-title">
+                  {displayTitle(focusedProgram)}
+                </div>
+                {focusedProgram.mediaType !== "movie" &&
+                  episodeLabel(focusedProgram) && (
+                    <div className="preview-episode">
+                      {episodeLabel(focusedProgram)}
+                    </div>
+                  )}
                 {ratingLabel(focusedProgram) && (
                   <div className="preview-meta" title="Age Restrictions">
                     {ratingLabel(focusedProgram)}
@@ -764,7 +965,13 @@ export default function GuidePage() {
               </div>
               <div className="preview-description">
                 <div>{focusedProgram.overview}</div>
-                <div className="preview-time">{formatRange(clockMinutesOf(focusedProgram.startsAt), clockMinutesOf(focusedProgram.endsAt), timeFormat)}</div>
+                <div className="preview-time">
+                  {formatRange(
+                    clockMinutesOf(focusedProgram.startsAt),
+                    clockMinutesOf(focusedProgram.endsAt),
+                    timeFormat,
+                  )}
+                </div>
               </div>
             </>
           ) : (
@@ -773,27 +980,55 @@ export default function GuidePage() {
                 {loadError
                   ? `Couldn't load the guide: ${loadError}`
                   : startupRunning
-                    ? 'Tuning…'
+                    ? "Tuning…"
                     : channels === null
-                      ? 'Loading guide…'
-                      : 'Nothing scheduled yet'}
+                      ? "Loading guide…"
+                      : "Nothing scheduled yet"}
               </div>
             </div>
           )}
         </div>
-        <div className="preview-video-wrap" style={{ width: playerLarge ? undefined : DEFAULT_PREVIEW_WIDTH }}>
+        <div
+          className="preview-video-wrap"
+          style={{ width: playerLarge ? undefined : DEFAULT_PREVIEW_WIDTH }}
+          onTransitionEnd={(event) => {
+            if (
+              event.target !== event.currentTarget ||
+              event.propertyName !== "width" ||
+              !restoreAfterPlayerTransitionRef.current
+            )
+              return;
+            restoreAfterPlayerTransitionRef.current = false;
+            restoreGuideRef.current = true;
+            setNowMs(Date.now());
+            setGuideEntry((value) => value + 1);
+          }}
+        >
           <div className="preview-video">
             <Player
-              channelId={sorted.find((c) => c.number === tuned?.channelNumber)?.channelId ?? null}
+              channelId={
+                sorted.find((c) => c.number === tuned?.channelNumber)
+                  ?.channelId ?? null
+              }
               large={playerLarge}
-              onToggleLarge={mobilePlayer ? undefined : () => {
-                if (largePlayer) {
-                  restoreGuideRef.current = true;
-                  setNowMs(Date.now());
-                  setGuideEntry(value => value + 1);
-                }
-                setLargePlayer(value => !value);
-              }}
+              onToggleLarge={
+                mobilePlayer
+                  ? undefined
+                  : () => {
+                      if (largePlayer) {
+                        // The expanded player makes this outer page scrollable;
+                        // reset that offset before restoring the inner guide row.
+                        if (pageRef.current) pageRef.current.scrollTop = 0;
+                        restoreAfterPlayerTransitionRef.current = true;
+                        restoreGuideRef.current = true;
+                        setNowMs(Date.now());
+                        setGuideEntry((value) => value + 1);
+                      } else {
+                        restoreAfterPlayerTransitionRef.current = false;
+                      }
+                      setLargePlayer((value) => !value);
+                    }
+              }
             />
           </div>
         </div>
@@ -803,7 +1038,17 @@ export default function GuidePage() {
           can read real computed font/height for these exact classes
           (see the useLayoutEffect above). Kept outside guide-section so
           its own layout can't affect the real grid. */}
-      <div aria-hidden="true" style={{ position: 'absolute', visibility: 'hidden', pointerEvents: 'none', whiteSpace: 'nowrap', left: -99999, top: -99999 }}>
+      <div
+        aria-hidden="true"
+        style={{
+          position: "absolute",
+          visibility: "hidden",
+          pointerEvents: "none",
+          whiteSpace: "nowrap",
+          left: -99999,
+          top: -99999,
+        }}
+      >
         <span ref={titleMeasureRef} className="guide-slot-title">
           Sample
         </span>
@@ -816,12 +1061,24 @@ export default function GuidePage() {
       </div>
 
       <div className="guide-section">
-        {!guideHasContent && <StartupNotice status={startupStatus} variant="panel" />}
+        {!guideHasContent && (
+          <StartupNotice status={startupStatus} variant="panel" />
+        )}
         <div className="guide-scroll no-scrollbar" ref={scrollRef} tabIndex={0}>
-          <div className="guide-head-row" ref={headRef} style={{ gridTemplateColumns }}>
-            <div className="guide-col-channel guide-head-channel"><GuideClock format={timeFormat} /></div>
+          <div
+            className="guide-head-row"
+            ref={headRef}
+            style={{ gridTemplateColumns }}
+          >
+            <div className="guide-col-channel guide-head-channel">
+              <GuideClock format={timeFormat} />
+            </div>
             {slotLabels.map((label, i) => (
-              <div key={i} className="guide-head-slot" data-start-ms={(gridStartMs ?? 0) + i * SLOT_MINUTES * 60_000}>
+              <div
+                key={i}
+                className="guide-head-slot"
+                data-start-ms={(gridStartMs ?? 0) + i * SLOT_MINUTES * 60_000}
+              >
                 {label}
               </div>
             ))}
@@ -846,15 +1103,29 @@ export default function GuidePage() {
                   // Same rule as Enter (see handleKeyDown): clicking any
                   // slot moves the focus cursor there, but only ever
                   // tunes to whatever's actually live on that channel.
-                  setFocused({ channelNumber: channel.number, programStartsAt });
+                  setFocused({
+                    channelNumber: channel.number,
+                    programStartsAt,
+                  });
                   if (channel.programs.length > 0) {
                     urlWantedRef.current = null;
-                    setTuned({ channelNumber: channel.number, programStartsAt: currentProgramStartsAt(channel.programs, Date.now()) });
+                    setTuned({
+                      channelNumber: channel.number,
+                      programStartsAt: currentProgramStartsAt(
+                        channel.programs,
+                        Date.now(),
+                      ),
+                    });
                   }
                 }}
               />
             ))}
-          <div aria-hidden="true" style={{ height: `max(0px, calc(100% - ${rowMinHeight}px - 40px))` }} />
+          <div
+            aria-hidden="true"
+            style={{
+              height: `max(0px, calc(100% - ${rowMinHeight}px - 40px))`,
+            }}
+          />
         </div>
       </div>
     </div>
@@ -871,11 +1142,22 @@ interface SlotLayout {
 // airing at the grid's left edge is clipped to it, and one running past the
 // last column is clipped to the strip. Short programs are narrow slivers (their
 // text is cut off; the tooltip has it all) rather than pushing later ones aside.
-function layoutPrograms(programs: GuideProgram[], gridStartMs: number, slotPixelWidth: number, timelineWidthPx: number): SlotLayout[] {
+function layoutPrograms(
+  programs: GuideProgram[],
+  gridStartMs: number,
+  slotPixelWidth: number,
+  timelineWidthPx: number,
+): SlotLayout[] {
   const pxPerMs = slotPixelWidth / (SLOT_MINUTES * 60_000);
   return programs.map((program) => {
-    const startPx = Math.max(0, (new Date(program.startsAt).getTime() - gridStartMs) * pxPerMs);
-    const endPx = Math.min(timelineWidthPx, (new Date(program.endsAt).getTime() - gridStartMs) * pxPerMs);
+    const startPx = Math.max(
+      0,
+      (new Date(program.startsAt).getTime() - gridStartMs) * pxPerMs,
+    );
+    const endPx = Math.min(
+      timelineWidthPx,
+      (new Date(program.endsAt).getTime() - gridStartMs) * pxPerMs,
+    );
     // Whole pixels: fractional left/width has made Chromium on Linux garble the text inside.
     const leftPx = Math.round(startPx) + 3;
     return { leftPx, widthPx: Math.max(Math.round(endPx) - 3 - leftPx, 4) };
@@ -912,32 +1194,87 @@ function GuideChannelRow({
   onSelectProgram: (programStartsAt: string) => void;
 }) {
   return (
-    <div className="guide-row" style={{ gridTemplateColumns, minHeight: rowMinHeight }}>
+    <div
+      className="guide-row"
+      style={{ gridTemplateColumns, minHeight: rowMinHeight }}
+    >
       <div className="guide-col-channel">
-        <div className="guide-channel-info" style={{ flex: `0 0 ${infoWidth}px` }}>
+        <div
+          className="guide-channel-info"
+          style={{ flex: `0 0 ${infoWidth}px` }}
+        >
           <span className="guide-channel-num">{channel.number}</span>
           <span className="guide-channel-row-name">{channel.name}</span>
-          {channel.audienceTier === 'young_child' && <span className="guide-channel-rating">(kids)</span>}
-          {channel.audienceTier === 'teen' && <span className="guide-channel-rating">(teens)</span>}
+          {channel.audienceTier === "young_child" && (
+            <span className="guide-channel-rating">(kids)</span>
+          )}
+          {channel.audienceTier === "teen" && (
+            <span className="guide-channel-rating">(teens)</span>
+          )}
         </div>
       </div>
       <div className="guide-row-timeline">
         {(() => {
-          const history = (channel.previousPrograms ?? []).filter(program => new Date(program.endsAt).getTime() > gridStartMs);
-          const displayed = [...history, ...channel.programs.filter(program => Date.parse(program.endsAt) > gridStartMs)];
-          const layout = layoutPrograms(displayed, gridStartMs, slotPixelWidth, timelineWidthPx);
+          const history = (channel.previousPrograms ?? []).filter(
+            (program) => new Date(program.endsAt).getTime() > gridStartMs,
+          );
+          const displayed = [
+            ...history,
+            ...channel.programs.filter(
+              (program) => Date.parse(program.endsAt) > gridStartMs,
+            ),
+          ];
+          const layout = layoutPrograms(
+            displayed,
+            gridStartMs,
+            slotPixelWidth,
+            timelineWidthPx,
+          );
           return displayed.map((program, index) => {
             const { leftPx, widthPx } = layout[index];
             if (index < history.length) {
-              const range = formatRange(clockMinutesOf(program.startsAt), clockMinutesOf(program.endsAt), timeFormat);
-              const showText = !!timeFont && measureTextWidth(timeFont, range) <= widthPx - 22;
-              return <div key={`past-${program.startsAt}`} className="guide-slot-history" style={{left: leftPx, width: widthPx, padding: showText ? undefined : 0}}
-                data-starts-at={program.startsAt} data-ends-at={program.endsAt} title={[displayTitle(program), episodeLabel(program), range].filter(Boolean).join(' · ')}>
-                {showText && <><span className="guide-slot-title">{displayTitle(program)}</span><span className="guide-slot-episode">{episodeLabel(program)}</span><span className="guide-slot-time">{range}</span></>}
-              </div>;
+              const range = formatRange(
+                clockMinutesOf(program.startsAt),
+                clockMinutesOf(program.endsAt),
+                timeFormat,
+              );
+              const showText =
+                !!timeFont && measureTextWidth(timeFont, range) <= widthPx - 22;
+              return (
+                <div
+                  key={`past-${program.startsAt}`}
+                  className="guide-slot-history"
+                  style={{
+                    left: leftPx,
+                    width: widthPx,
+                    padding: showText ? undefined : 0,
+                  }}
+                  data-starts-at={program.startsAt}
+                  data-ends-at={program.endsAt}
+                  title={[displayTitle(program), episodeLabel(program), range]
+                    .filter(Boolean)
+                    .join(" · ")}
+                >
+                  {showText && (
+                    <>
+                      <span className="guide-slot-title">
+                        {displayTitle(program)}
+                      </span>
+                      <span className="guide-slot-episode">
+                        {episodeLabel(program)}
+                      </span>
+                      <span className="guide-slot-time">{range}</span>
+                    </>
+                  )}
+                </div>
+              );
             }
-            const isFocused = channel.number === focused?.channelNumber && program.startsAt === focused.programStartsAt;
-            const isTuned = channel.number === tuned?.channelNumber && program.startsAt === tuned.programStartsAt;
+            const isFocused =
+              channel.number === focused?.channelNumber &&
+              program.startsAt === focused.programStartsAt;
+            const isTuned =
+              channel.number === tuned?.channelNumber &&
+              program.startsAt === tuned.programStartsAt;
             // Keyed by the program's own identity, not its index: an
             // index-based key would let React reuse the same DOM node
             // (and this same ref) across a re-fetch that shifts what's
@@ -951,18 +1288,40 @@ function GuideChannelRow({
                   if (el) slotRefs.current.set(key, el);
                   else slotRefs.current.delete(key);
                 }}
-                className={'guide-slot-box' + (isTuned ? ' guide-slot-box-tuned' : '') + (isFocused ? ' guide-slot-box-focused' : '')}
+                className={
+                  "guide-slot-box" +
+                  (isTuned ? " guide-slot-box-tuned" : "") +
+                  (isFocused ? " guide-slot-box-focused" : "")
+                }
                 style={{ left: leftPx, width: widthPx }}
-                title={[displayTitle(program), episodeLabel(program), formatRange(clockMinutesOf(program.startsAt), clockMinutesOf(program.endsAt), timeFormat)]
+                title={[
+                  displayTitle(program),
+                  episodeLabel(program),
+                  formatRange(
+                    clockMinutesOf(program.startsAt),
+                    clockMinutesOf(program.endsAt),
+                    timeFormat,
+                  ),
+                ]
                   .filter(Boolean)
-                  .join(' · ')}
+                  .join(" · ")}
                 data-starts-at={program.startsAt}
                 data-ends-at={program.endsAt}
                 onClick={() => onSelectProgram(program.startsAt)}
               >
-                <span className="guide-slot-title">{displayTitle(program)}</span>
-                <span className="guide-slot-episode">{episodeLabel(program)}</span>
-                <span className="guide-slot-time">{formatRange(clockMinutesOf(program.startsAt), clockMinutesOf(program.endsAt), timeFormat)}</span>
+                <span className="guide-slot-title">
+                  {displayTitle(program)}
+                </span>
+                <span className="guide-slot-episode">
+                  {episodeLabel(program)}
+                </span>
+                <span className="guide-slot-time">
+                  {formatRange(
+                    clockMinutesOf(program.startsAt),
+                    clockMinutesOf(program.endsAt),
+                    timeFormat,
+                  )}
+                </span>
               </button>
             );
           });

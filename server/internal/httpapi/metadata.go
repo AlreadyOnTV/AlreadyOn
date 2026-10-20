@@ -76,17 +76,7 @@ func handlePutMetadataSettings(db *sql.DB) http.HandlerFunc {
 		if body.TMDbAPIKey != nil {
 			next.TMDbAPIKey = *body.TMDbAPIKey
 		}
-		if body.KeylessMetadata != nil {
-			next.KeylessEnabled = *body.KeylessMetadata
-		}
-		// The free sources only stand in for a missing key, so a key turns them off.
-		if next.TMDbAPIKey != "" {
-			if body.KeylessMetadata != nil && *body.KeylessMetadata {
-				writeJSONError(w, http.StatusConflict, "free metadata sources can't be turned on while a TMDb API key is set")
-				return
-			}
-			next.KeylessEnabled = false
-		}
+		next.KeylessEnabled = true // Legacy toggle values are accepted but cannot disable automatic enrichment.
 
 		if err := metadata.SaveSettings(r.Context(), db, next); err != nil {
 			writeJSONError(w, http.StatusInternalServerError, err.Error())

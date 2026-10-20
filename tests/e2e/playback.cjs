@@ -242,7 +242,9 @@ const noWorkers = async (unreleased = () => 0) => {
     const player = page.locator(".playback-player");
     await player.hover();
     await player.getByRole("button", { name: "Settings", exact: true }).click();
-    await page.getByRole("menuitem", { name: "Audio Tracks (eng)", exact: true }).waitFor();
+    await page
+      .getByRole("menuitem", { name: "Audio Tracks (eng)", exact: true })
+      .waitFor();
     await page.getByRole("menuitem", { name: /^Audio Tracks/ }).click();
     await page.getByRole("menuitemradio", { name: /Japanese/ }).click();
     for (let i = 0; i < 100 && sessions.at(-1)?.plan.audioTrackIndex !== 1; i++)
@@ -268,7 +270,9 @@ const noWorkers = async (unreleased = () => 0) => {
       "Profile default must be English",
     );
     await page.getByLabel("Preferred Audio Language").selectOption("ja");
-    await page.getByRole("status", { name: "audioLanguage saved", exact: true }).waitFor();
+    await page
+      .getByRole("status", { name: "audioLanguage saved", exact: true })
+      .waitFor();
     await page.getByRole("button", { name: /Back To Guide/ }).click();
     await playing(page);
     assert(
@@ -327,7 +331,9 @@ const noWorkers = async (unreleased = () => 0) => {
     // Missing language falls back to the default audio, never silence or a subtitle index.
     await page.goto(url + "/profile");
     await page.getByLabel("Preferred Audio Language").selectOption("fr");
-    await page.getByRole("status", { name: "audioLanguage saved", exact: true }).waitFor();
+    await page
+      .getByRole("status", { name: "audioLanguage saved", exact: true })
+      .waitFor();
     await page.getByRole("button", { name: /Back To Guide/ }).click();
     await playing(page);
     assert(
@@ -336,7 +342,9 @@ const noWorkers = async (unreleased = () => 0) => {
     );
     await page.goto(url + "/profile");
     await page.getByLabel("Preferred Audio Language").selectOption("en");
-    await page.getByRole("status", { name: "audioLanguage saved", exact: true }).waitFor();
+    await page
+      .getByRole("status", { name: "audioLanguage saved", exact: true })
+      .waitFor();
     await page.getByRole("button", { name: /Back To Guide/ }).click();
     await playing(page);
     await leave(page);
@@ -2561,8 +2569,12 @@ const noWorkers = async (unreleased = () => 0) => {
       .getByLabel("Subtitle language", { exact: true })
       .selectOption("de");
     await card.getByLabel("Subtitles", { exact: true }).selectOption("always");
-    await page.getByRole("status", { name: "subtitleLanguage saved", exact: true }).waitFor();
-    await page.getByRole("status", { name: "subtitleMode saved", exact: true }).waitFor();
+    await page
+      .getByRole("status", { name: "subtitleLanguage saved", exact: true })
+      .waitFor();
+    await page
+      .getByRole("status", { name: "subtitleMode saved", exact: true })
+      .waitFor();
     await page.getByRole("button", { name: /Back To Guide/ }).click();
     await page.locator(".guide-slot-box").first().waitFor();
     await playing(page);
@@ -2952,8 +2964,47 @@ const noWorkers = async (unreleased = () => 0) => {
         headers.map((header) => getComputedStyle(header).textAlign),
       );
     assert(
-      sessionHeaderAlignment.every((alignment) => alignment === "center"),
-      "Signed-in session column headers are centered",
+      JSON.stringify(sessionHeaderAlignment) ===
+        JSON.stringify(["left", "left", "left", "left", "center"]),
+      "Session headings align with their content, except centered sign-out actions",
+    );
+    const sessionTextAlignment = await page
+      .locator(".sessions-table")
+      .evaluate((table) =>
+        [...table.tHead.rows[0].cells].slice(0, 4).map((header, index) => {
+          const textStart = (cell) => {
+            const range = document.createRange();
+            range.selectNodeContents(cell);
+            return range.getBoundingClientRect().left;
+          };
+          return Math.abs(
+            textStart(header) -
+              textStart(table.tBodies[0].rows[0].cells[index]),
+          );
+        }),
+      );
+    assert(
+      sessionTextAlignment.every((offset) => offset <= 1),
+      "Session header text starts above its column content: " +
+        JSON.stringify(sessionTextAlignment),
+    );
+    const sessionActionAlignment = await page
+      .locator(".sessions-table")
+      .evaluate((table) => {
+        const header = table.tHead.rows[0].cells[4];
+        const pill = table.querySelector(".session-current-pill");
+        const range = document.createRange();
+        range.selectNodeContents(header);
+        const heading = range.getBoundingClientRect();
+        const action = pill.getBoundingClientRect();
+        return Math.abs(
+          (heading.left + heading.right) / 2 - (action.left + action.right) / 2,
+        );
+      });
+    assert(
+      sessionActionAlignment <= 1,
+      "This Session pill centers under the Sign Out heading: " +
+        sessionActionAlignment,
     );
     const rowsText = await page
       .locator(".sessions-table tbody tr td:first-child")
@@ -3339,7 +3390,7 @@ const noWorkers = async (unreleased = () => 0) => {
     const tabs = await page.locator(".admin-tab").allTextContents();
     assert(
       tabs.join(",") ===
-        "Dashboard,Home Users,Media,Commercials,Channels,Server,Logs,API",
+        "Dashboard,Home Users,Library Paths,Manage Media,Channels,Server,Logs,API",
       "Settings tab order: " + tabs,
     );
     await page.goto(url + "/dashboard");
@@ -3681,7 +3732,7 @@ const noWorkers = async (unreleased = () => 0) => {
           "Hardware Decoding",
           "Loudness Detection",
           "TMDb API Key",
-          "Free Metadata Sources",
+          "Automatic Metadata",
           "Dynamic DNS",
           "TLS Certificates",
         ]),
@@ -3992,11 +4043,18 @@ const noWorkers = async (unreleased = () => 0) => {
     const timeSelect = field("Time Format");
     const currentTime = await timeSelect.inputValue();
     await timeSelect.selectOption(currentTime === "24h" ? "12h" : "24h");
-    await page.getByRole("status", { name: "guideTimeFormat saved", exact: true }).waitFor();
+    await page
+      .getByRole("status", { name: "guideTimeFormat saved", exact: true })
+      .waitFor();
     await page.reload();
-    assert((await field("Time Format").inputValue()) !== currentTime, "Time format autosave survives reload");
+    assert(
+      (await field("Time Format").inputValue()) !== currentTime,
+      "Time format autosave survives reload",
+    );
     await field("Time Format").selectOption(currentTime);
-    await page.getByRole("status", { name: "guideTimeFormat saved", exact: true }).waitFor();
+    await page
+      .getByRole("status", { name: "guideTimeFormat saved", exact: true })
+      .waitFor();
 
     await page.goto(url + "/admin/channels");
     await page.locator("table.admin-table").last().waitFor();
@@ -4124,6 +4182,23 @@ const noWorkers = async (unreleased = () => 0) => {
         .getAttribute("title")) === "Delete channel",
       "Channel trash can has a delete tooltip",
     );
+    const channelIconStyle = await row
+      .getByRole("button", { name: "Edit Synthetic channel 998" })
+      .evaluate((button) => {
+        const style = getComputedStyle(button);
+        return {
+          background: style.backgroundColor,
+          borderRadius: style.borderRadius,
+          width: button.getBoundingClientRect().width,
+        };
+      });
+    assert(
+      channelIconStyle.background !== "rgb(239, 239, 239)" &&
+        channelIconStyle.borderRadius !== "0px" &&
+        channelIconStyle.width === 40,
+      "Channel edit/delete actions use the shared styled icon buttons: " +
+        JSON.stringify(channelIconStyle),
+    );
     await page.setViewportSize({ width: 390, height: 844 });
     const channelActionRows = await row.evaluate((tr) => ({
       primary: tr
@@ -4140,6 +4215,13 @@ const noWorkers = async (unreleased = () => 0) => {
 
     await page.goto(url + "/account");
     await page.locator("#account-days").waitFor();
+    const accountFieldOrder = await page
+      .locator(".account-card form .admin-field-row label")
+      .allTextContents();
+    assert(
+      accountFieldOrder.slice(0, 2).join(",") === "Username,Current Password",
+      "Username appears before Current Password",
+    );
     const profileHeads = (
       await page.locator(".profiles-table thead th").allTextContents()
     ).map((text) => text.replace(/\s*[▲▼]$/, ""));
@@ -4171,6 +4253,24 @@ const noWorkers = async (unreleased = () => 0) => {
     assert(
       new Set(profileActionTops).size === 1,
       "Profile pencil and trash can stay side by side",
+    );
+    const profileIconStyle = await firstProfile
+      .locator(".admin-icon-btn")
+      .first()
+      .evaluate((button) => {
+        const style = getComputedStyle(button);
+        return {
+          background: style.backgroundColor,
+          borderRadius: style.borderRadius,
+          width: button.getBoundingClientRect().width,
+        };
+      });
+    assert(
+      profileIconStyle.background !== "rgb(239, 239, 239)" &&
+        profileIconStyle.borderRadius !== "0px" &&
+        profileIconStyle.width === 40,
+      "Profile actions use the shared styled icon buttons: " +
+        JSON.stringify(profileIconStyle),
     );
     await firstProfile.getByTitle("Edit profile").click();
     assert(
@@ -4659,7 +4759,11 @@ const noWorkers = async (unreleased = () => 0) => {
     if (!only || only.includes("pause")) await pausedBoundary();
     if (!only || only.includes("alignment")) await guideAlignment();
     if (!only || only.includes("guide-live"))
-      cp.execFileSync(process.execPath, [path.join(__dirname, "guide-live.cjs"), url], { stdio: "inherit" });
+      cp.execFileSync(
+        process.execPath,
+        [path.join(__dirname, "guide-live.cjs"), url],
+        { stdio: "inherit" },
+      );
     if (!only || only.includes("autofill-policy"))
       await require("./autofill-policy.cjs")({ browser, login, url, assert });
     if (!only || only.includes("credential-drafts"))
