@@ -1,3 +1,4 @@
+// Format device-local guide time independently of schedule refreshes.
 package io.github.alreadyonapp.alreadyon
 
 import androidx.compose.material3.Text

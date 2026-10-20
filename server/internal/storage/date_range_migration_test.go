@@ -1,3 +1,4 @@
+// Default cleanup must preserve custom definitions and referenced channel rules.
 package storage
 
 import (

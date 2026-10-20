@@ -1,3 +1,4 @@
+// Catalog queries validate pagination and show identity before reading library metadata.
 package httpapi
 
 import (
