@@ -184,12 +184,7 @@
 .admin-media-sidebar .admin-tabs {
   position: static;
 }
-#library-sidebar-filters {
-  position: sticky;
-  top: 16px;
-  margin-top: 20px;
-  padding-bottom: 24px;
-}
+
 
 .admin-layout-manage-media > .admin-content {
   padding-top: 48px;
@@ -396,5 +391,4 @@
   .admin-page-manage-media .admin-mobile-nav { display: none; }
   .admin-media-sidebar { padding: 0 12px; }
   .admin-media-sidebar .admin-tabs { display: flex; padding-top: 24px; }
-  #library-sidebar-filters { position: static; padding-bottom: 0; }
 }

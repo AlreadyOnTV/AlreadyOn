@@ -1,5 +1,4 @@
 import { useEffect, useRef, useState } from "react";
-import { createPortal } from "react-dom";
 import {
   getCatalog,
   getCertifications,
@@ -136,7 +135,8 @@ function LibraryFilters({
   );
 }
 
-export default function LibraryCatalog({ view, active, filterTarget }: { view: LibraryView; active: boolean; filterTarget: HTMLElement | null }) {
+export default function LibraryCatalog({ view }: { view: LibraryView }) {
+  const [filtersOpen, setFiltersOpen] = useState(false);
   const [filters, setFilters] = useState<CatalogFilters>(EMPTY_CATALOG_FILTERS);
   const [page, setPage] = useState(0);
   const [sort, setSort] = useState("title");
@@ -235,13 +235,6 @@ export default function LibraryCatalog({ view, active, filterTarget }: { view: L
 
   return (
     <div className="library-section-layout" data-library-section={view}>
-      {filterTarget && createPortal(
-        <aside className="library-filter-menu" hidden={!active}
-          aria-label={`${view === "movies" ? "Movie" : "TV Show"} filters`}>
-          <h3>{title} Filters</h3>
-          <LibraryFilters view={view} filters={filters} onChange={changeFilters} />
-        </aside>, filterTarget,
-      )}
       <section
         className="library-catalog"
         aria-labelledby={`${view}-library-title`}
@@ -416,6 +409,25 @@ export default function LibraryCatalog({ view, active, filterTarget }: { view: L
           />
         )}
       </section>
+      <aside className="library-filter-menu"
+        aria-label={`${view === "movies" ? "Movie" : "TV Show"} filters`}>
+        <h3 className="library-filter-heading">
+          <button type="button" className="library-filter-toggle"
+            aria-expanded={filtersOpen} aria-controls={`${view}-filter-options`}
+            onClick={() => setFiltersOpen((open) => !open)}>
+            <svg className="library-filter-triangle" width="14" height="14" viewBox="0 0 16 16" aria-hidden="true">
+              <path d="M5 2 13 8 5 14Z" fill="currentColor" />
+            </svg>
+            <span>Filter {view === "movies" ? "Movies" : "TV Shows"}</span>
+          </button>
+        </h3>
+        <div className={"library-filter-expansion" + (filtersOpen ? " is-open" : "")}
+          id={`${view}-filter-options`} inert={!filtersOpen} aria-hidden={!filtersOpen}>
+          <div className="library-filter-options">
+            <LibraryFilters view={view} filters={filters} onChange={changeFilters} />
+          </div>
+        </div>
+      </aside>
     </div>
   );
 }

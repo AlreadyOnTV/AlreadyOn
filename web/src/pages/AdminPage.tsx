@@ -116,8 +116,6 @@ export default function AdminPage() {
     };
   }, [navigationOpen]);
 
-  const [librarySidebar, setLibrarySidebar] = useState<HTMLDivElement | null>(null);
-
   const openTab = (next: AdminTab) => {
     setNavigationOpen(false);
     navigate(`/admin/${next}`);
@@ -195,12 +193,11 @@ export default function AdminPage() {
               </button>
             ))}
           </nav>
-          {activeTab === "manage-media" && <div id="library-sidebar-filters" ref={setLibrarySidebar} />}
         </aside>
         <div className="admin-content">
           <StartupNotice status={startupStatus} variant="banner" />
           {activeTab === "manage-media" ? (
-            <ManageMediaPage filterTarget={librarySidebar} />
+            <ManageMediaPage />
           ) : ActiveTab ? (
             <ActiveTab />
           ) : null}
