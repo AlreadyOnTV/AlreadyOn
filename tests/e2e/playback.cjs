@@ -242,7 +242,9 @@ const noWorkers = async (unreleased = () => 0) => {
     const player = page.locator(".playback-player");
     await player.hover();
     await player.getByRole("button", { name: "Settings", exact: true }).click();
-    await page.getByRole("menuitem", { name: "Audio Tracks (eng)", exact: true }).waitFor();
+    await page
+      .getByRole("menuitem", { name: "Audio Tracks (eng)", exact: true })
+      .waitFor();
     await page.getByRole("menuitem", { name: /^Audio Tracks/ }).click();
     await page.getByRole("menuitemradio", { name: /Japanese/ }).click();
     for (let i = 0; i < 100 && sessions.at(-1)?.plan.audioTrackIndex !== 1; i++)
@@ -268,7 +270,10 @@ const noWorkers = async (unreleased = () => 0) => {
       "Profile default must be English",
     );
     await page.getByLabel("Preferred Audio Language").selectOption("ja");
-    await page.getByRole("button", { name: "Save Changes" }).click();
+    await page
+      .getByRole("status", { name: "audioLanguage saved", exact: true })
+      .waitFor();
+    await page.getByRole("button", { name: /Back To Guide/ }).click();
     await playing(page);
     assert(
       sessions.at(-1).plan.audioTrackIndex === 1,
@@ -288,8 +293,7 @@ const noWorkers = async (unreleased = () => 0) => {
     );
     assert(
       (await page
-        .locator(".admin-card")
-        .first()
+        .locator(".commercial-settings")
         .locator(".admin-field-row label")
         .last()
         .textContent()) === "Commercial Volume Offset (dB)",
@@ -326,7 +330,10 @@ const noWorkers = async (unreleased = () => 0) => {
     // Missing language falls back to the default audio, never silence or a subtitle index.
     await page.goto(url + "/profile");
     await page.getByLabel("Preferred Audio Language").selectOption("fr");
-    await page.getByRole("button", { name: "Save Changes" }).click();
+    await page
+      .getByRole("status", { name: "audioLanguage saved", exact: true })
+      .waitFor();
+    await page.getByRole("button", { name: /Back To Guide/ }).click();
     await playing(page);
     assert(
       sessions.at(-1).plan.audioTrackIndex === 1,
@@ -334,7 +341,10 @@ const noWorkers = async (unreleased = () => 0) => {
     );
     await page.goto(url + "/profile");
     await page.getByLabel("Preferred Audio Language").selectOption("en");
-    await page.getByRole("button", { name: "Save Changes" }).click();
+    await page
+      .getByRole("status", { name: "audioLanguage saved", exact: true })
+      .waitFor();
+    await page.getByRole("button", { name: /Back To Guide/ }).click();
     await playing(page);
     await leave(page);
     await noWorkers();
@@ -2558,7 +2568,13 @@ const noWorkers = async (unreleased = () => 0) => {
       .getByLabel("Subtitle language", { exact: true })
       .selectOption("de");
     await card.getByLabel("Subtitles", { exact: true }).selectOption("always");
-    await page.getByRole("button", { name: "Save Changes" }).click();
+    await page
+      .getByRole("status", { name: "subtitleLanguage saved", exact: true })
+      .waitFor();
+    await page
+      .getByRole("status", { name: "subtitleMode saved", exact: true })
+      .waitFor();
+    await page.getByRole("button", { name: /Back To Guide/ }).click();
     await page.locator(".guide-slot-box").first().waitFor();
     await playing(page);
     await caption("E2E UNTERTITEL");
@@ -2947,8 +2963,47 @@ const noWorkers = async (unreleased = () => 0) => {
         headers.map((header) => getComputedStyle(header).textAlign),
       );
     assert(
-      sessionHeaderAlignment.every((alignment) => alignment === "center"),
-      "Signed-in session column headers are centered",
+      JSON.stringify(sessionHeaderAlignment) ===
+        JSON.stringify(["left", "left", "left", "left", "center"]),
+      "Session headings align with their content, except centered sign-out actions",
+    );
+    const sessionTextAlignment = await page
+      .locator(".sessions-table")
+      .evaluate((table) =>
+        [...table.tHead.rows[0].cells].slice(0, 4).map((header, index) => {
+          const textStart = (cell) => {
+            const range = document.createRange();
+            range.selectNodeContents(cell);
+            return range.getBoundingClientRect().left;
+          };
+          return Math.abs(
+            textStart(header) -
+              textStart(table.tBodies[0].rows[0].cells[index]),
+          );
+        }),
+      );
+    assert(
+      sessionTextAlignment.every((offset) => offset <= 1),
+      "Session header text starts above its column content: " +
+        JSON.stringify(sessionTextAlignment),
+    );
+    const sessionActionAlignment = await page
+      .locator(".sessions-table")
+      .evaluate((table) => {
+        const header = table.tHead.rows[0].cells[4];
+        const pill = table.querySelector(".session-current-pill");
+        const range = document.createRange();
+        range.selectNodeContents(header);
+        const heading = range.getBoundingClientRect();
+        const action = pill.getBoundingClientRect();
+        return Math.abs(
+          (heading.left + heading.right) / 2 - (action.left + action.right) / 2,
+        );
+      });
+    assert(
+      sessionActionAlignment <= 1,
+      "This Session pill centers under the Sign Out heading: " +
+        sessionActionAlignment,
     );
     const rowsText = await page
       .locator(".sessions-table tbody tr td:first-child")
@@ -3148,7 +3203,7 @@ const noWorkers = async (unreleased = () => 0) => {
         has: page.getByRole("heading", { name: "Display Name", exact: true }),
       })
       .locator("input");
-    await nameInput.fill("Local unsaved name");
+    await nameInput.fill(""); // Incomplete input is not autosaved.
     refreshed.name = "Second remote update";
     refreshed.icon = "/profile-icons/synthetic-refresh.png";
     await page.route("**/profile-icons/synthetic-refresh.png", (route) =>
@@ -3169,8 +3224,8 @@ const noWorkers = async (unreleased = () => 0) => {
       "Uploaded avatar changes reach the active profile",
     );
     assert(
-      (await nameInput.inputValue()) === "Local unsaved name",
-      "Polling preserves unsaved local profile edits",
+      (await nameInput.inputValue()) === "",
+      "Polling preserves incomplete local profile edits",
     );
     await context.close();
     console.log(
@@ -3334,7 +3389,7 @@ const noWorkers = async (unreleased = () => 0) => {
     const tabs = await page.locator(".admin-tab").allTextContents();
     assert(
       tabs.join(",") ===
-        "Dashboard,Home Users,Media,Commercials,Channels,Server,Logs,API",
+        "Dashboard,Home Users,Library Paths,Manage Media,Channels,Server,Logs,API",
       "Settings tab order: " + tabs,
     );
     await page.goto(url + "/dashboard");
@@ -3389,7 +3444,7 @@ const noWorkers = async (unreleased = () => 0) => {
       .waitFor();
     for (const [title, action] of [
       ["Age Restrictions", "+ Add Age Restriction"],
-      ["Eras", "+ Add Era"],
+      ["Date Range", "+ Add Date Range"],
     ]) {
       const card = page.locator(".admin-card").filter({
         has: page.getByRole("heading", { name: title, exact: true }),
@@ -3603,7 +3658,15 @@ const noWorkers = async (unreleased = () => 0) => {
         "-3",
       "Cancel discards break draft while keeping saved folders",
     );
-    await page.request.put(url + "/api/settings/folders", {
+    const folderRuns = () => {
+      const log = fs.readFileSync(path.join(root, "server.log"), "utf8");
+      return {
+        started: (log.match(/content folders changed: rescanning/g) ?? []).length,
+        finished: (log.match(/content folders changed: rescan complete/g) ?? []).length,
+      };
+    };
+    const beforeRestore = folderRuns();
+    const restoredFolders = await page.request.put(url + "/api/settings/folders", {
       data: {
         commercials:
           originalFolders.commercials.source === "default"
@@ -3611,6 +3674,17 @@ const noWorkers = async (unreleased = () => 0) => {
             : originalFolders.commercials.paths.map((p) => p.path),
       },
     });
+    assert(restoredFolders.ok(), "Restore the original synthetic folder settings");
+    // A successful folder save queues a debounced rescan. Drain that exact
+    // restore before later scenarios reseed schedules; otherwise it can erase
+    // their guide after login has already started on a slower CI runner.
+    const rescanDeadline = Date.now() + 120000;
+    for (;;) {
+      const runs = folderRuns();
+      if (runs.started > beforeRestore.started && runs.finished >= runs.started) break;
+      assert(Date.now() < rescanDeadline, "Restored folder rescan did not finish");
+      await delay(100);
+    }
     await page.goto(url + "/admin/server");
     await page.locator(".settings-grid").waitFor();
     assert(
@@ -3676,7 +3750,6 @@ const noWorkers = async (unreleased = () => 0) => {
           "Hardware Decoding",
           "Loudness Detection",
           "TMDb API Key",
-          "Free Metadata Sources",
           "Dynamic DNS",
           "TLS Certificates",
         ]),
@@ -3939,7 +4012,7 @@ const noWorkers = async (unreleased = () => 0) => {
             .getBoundingClientRect();
           return {
             menuRight: menuBox.right,
-            headerRight: headerBox.right,
+            headerRight: headerBox.right - parseFloat(getComputedStyle(header).paddingRight),
             panelLeft: panelBox.left,
             panelRight: panelBox.right,
             contentTop: contentBox.top,
@@ -3987,12 +4060,18 @@ const noWorkers = async (unreleased = () => 0) => {
     const timeSelect = field("Time Format");
     const currentTime = await timeSelect.inputValue();
     await timeSelect.selectOption(currentTime === "24h" ? "12h" : "24h");
-    await page.getByRole("button", { name: "Save Changes" }).click();
-    await page.locator(".guide-slot-box").first().waitFor();
-    await page.goto(url + "/profile");
+    await page
+      .getByRole("status", { name: "guideTimeFormat saved", exact: true })
+      .waitFor();
+    await page.reload();
+    assert(
+      (await field("Time Format").inputValue()) !== currentTime,
+      "Time format autosave survives reload",
+    );
     await field("Time Format").selectOption(currentTime);
-    await page.getByRole("button", { name: "Save Changes" }).click();
-    await page.locator(".guide-slot-box").first().waitFor();
+    await page
+      .getByRole("status", { name: "guideTimeFormat saved", exact: true })
+      .waitFor();
 
     await page.goto(url + "/admin/channels");
     await page.locator("table.admin-table").last().waitFor();
@@ -4120,6 +4199,23 @@ const noWorkers = async (unreleased = () => 0) => {
         .getAttribute("title")) === "Delete channel",
       "Channel trash can has a delete tooltip",
     );
+    const channelIconStyle = await row
+      .getByRole("button", { name: "Edit Synthetic channel 998" })
+      .evaluate((button) => {
+        const style = getComputedStyle(button);
+        return {
+          background: style.backgroundColor,
+          borderRadius: style.borderRadius,
+          width: button.getBoundingClientRect().width,
+        };
+      });
+    assert(
+      channelIconStyle.background !== "rgb(239, 239, 239)" &&
+        channelIconStyle.borderRadius !== "0px" &&
+        channelIconStyle.width === 40,
+      "Channel edit/delete actions use the shared styled icon buttons: " +
+        JSON.stringify(channelIconStyle),
+    );
     await page.setViewportSize({ width: 390, height: 844 });
     const channelActionRows = await row.evaluate((tr) => ({
       primary: tr
@@ -4136,6 +4232,13 @@ const noWorkers = async (unreleased = () => 0) => {
 
     await page.goto(url + "/account");
     await page.locator("#account-days").waitFor();
+    const accountFieldOrder = await page
+      .locator(".account-card form .admin-field-row label")
+      .allTextContents();
+    assert(
+      accountFieldOrder.slice(0, 2).join(",") === "Username,Current Password",
+      "Username appears before Current Password",
+    );
     const profileHeads = (
       await page.locator(".profiles-table thead th").allTextContents()
     ).map((text) => text.replace(/\s*[▲▼]$/, ""));
@@ -4167,6 +4270,24 @@ const noWorkers = async (unreleased = () => 0) => {
     assert(
       new Set(profileActionTops).size === 1,
       "Profile pencil and trash can stay side by side",
+    );
+    const profileIconStyle = await firstProfile
+      .locator(".admin-icon-btn")
+      .first()
+      .evaluate((button) => {
+        const style = getComputedStyle(button);
+        return {
+          background: style.backgroundColor,
+          borderRadius: style.borderRadius,
+          width: button.getBoundingClientRect().width,
+        };
+      });
+    assert(
+      profileIconStyle.background !== "rgb(239, 239, 239)" &&
+        profileIconStyle.borderRadius !== "0px" &&
+        profileIconStyle.width === 40,
+      "Profile actions use the shared styled icon buttons: " +
+        JSON.stringify(profileIconStyle),
     );
     await firstProfile.getByTitle("Edit profile").click();
     assert(
@@ -4402,27 +4523,7 @@ const noWorkers = async (unreleased = () => 0) => {
       "Server controls align about four characters after the longest label: " +
         JSON.stringify(serverAlignment),
     );
-    const metadataInline = await page
-      .locator(".setting-control-with-note")
-      .evaluate((element) => {
-        const note = element.querySelector(".setting-control-note");
-        const buttonBox = element
-          .querySelector("button")
-          .getBoundingClientRect();
-        const noteBox = note?.getBoundingClientRect();
-        return {
-          wrap: getComputedStyle(element).flexWrap,
-          button: Math.round(buttonBox.top + buttonBox.height / 2),
-          note: noteBox ? Math.round(noteBox.top + noteBox.height / 2) : null,
-        };
-      });
-    assert(
-      metadataInline.wrap === "nowrap" &&
-        (metadataInline.note === null ||
-          Math.abs(metadataInline.button - metadataInline.note) < 3),
-      "Free Metadata status stays inline with its toggle: " +
-        JSON.stringify(metadataInline),
-    );
+    assert((await page.getByText("Automatic Metadata", { exact: true }).count()) === 0, "Automatic Metadata has no configurable setting");
     await page.goto(url + "/admin/logs");
     await page.waitForURL("**/admin/logs");
     // The Logs box fits the window; the page itself does not scroll.
@@ -4654,6 +4755,12 @@ const noWorkers = async (unreleased = () => 0) => {
     if (!only || only.includes("subtitles")) await subtitleDefaults();
     if (!only || only.includes("pause")) await pausedBoundary();
     if (!only || only.includes("alignment")) await guideAlignment();
+    if (!only || only.includes("guide-live"))
+      cp.execFileSync(
+        process.execPath,
+        [path.join(__dirname, "guide-live.cjs"), url],
+        { stdio: "inherit" },
+      );
     if (!only || only.includes("autofill-policy"))
       await require("./autofill-policy.cjs")({ browser, login, url, assert });
     if (!only || only.includes("credential-drafts"))

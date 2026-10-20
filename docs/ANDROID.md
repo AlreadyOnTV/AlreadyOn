@@ -10,7 +10,7 @@ Use [the app guide](../apps/android/README.md) to build. Keep `io.github.already
 
 Management calls use authenticated sessions; media delivery uses scoped credentials. Profile and account permissions remain server-enforced. Persist only necessary session state and review storage, backup and logout behavior before release.
 
-Native onboarding accepts the instance certificate on first connection without a fingerprint confirmation screen and validates subsequent HTTPS requests against that instance certificate. PIN sign-in requires a direct LAN connection.
+Native onboarding accepts the instance certificate on first connection without a fingerprint confirmation screen and validates subsequent HTTPS requests against that instance certificate. PIN sign-in requires a direct LAN connection. Phone/tablet and TV request the device’s numeric password keyboard for the account PIN. The installed keyboard controls its layout; entry remains limited to 12 ASCII digits. Username Next moves to the PIN; PIN Done dismisses the keyboard and focuses Connect when the form is valid.
 
 ## Validation
 
@@ -29,3 +29,7 @@ See [subtitle modes](SUBTITLES.md).
 Phone/TV Sign Out retains the encrypted session. Selecting the recent server revalidates it before skipping credentials; profile PINs still apply. WebUI revocation, expiry and account restrictions require fresh authentication. Network/TLS failures retain the cookie.
 
 Active clients refresh shared profile settings and avatars every five minutes and on app resume, preserving local settings drafts and playback choices.
+
+Phone and TV guide headers show the current device-local time in the profile’s time format. The clock updates on minute boundaries and immediately on resume. Its left inset matches the channel numbers below.
+
+Fullscreen guides stay current. Returning restores the watched row at top, current slot leftmost and live airing in red.

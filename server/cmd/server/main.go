@@ -381,7 +381,7 @@ func run() (restart bool) {
 func runBootstrap(ctx context.Context, db *sql.DB) {
 	start := time.Now()
 	logging.Info("startup: library pipeline starting (the web UI is already available)")
-	runKeyless := false
+	runKeyless := true
 
 	refresh.Exclusive(func() {
 		defer status.Default.End()
@@ -401,16 +401,13 @@ func runBootstrap(ctx context.Context, db *sql.DB) {
 		tmdbKey := metaSettings.TMDbAPIKey
 
 		if tmdbKey == "" {
-			runKeyless = metaSettings.KeylessEnabled
+			runKeyless = true
 			// WARN, not INFO: if this key was configured before, a still-empty
 			// Server Settings row after a restart is worth an admin's
 			// attention (see #93) — this line, visible on the Logs page,
 			// is the signal, whether the cause is a botched migration/restore
 			// or the admin genuinely never set one up.
 			logging.Warn("TMDb classification skipped: no API key configured (set one on the Server tab)")
-			if !metaSettings.KeylessEnabled {
-				logging.Info("the Server tab can enable classification via TVmaze/Wikidata without a key")
-			}
 		} else {
 			logging.Info("TMDb API key configured (Server Settings)")
 			phaseStart := time.Now()

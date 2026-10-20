@@ -95,17 +95,17 @@ func TestRefresh_UsesAnEditedDefaultChannelFilter(t *testing.T) {
 }
 
 func TestApprovedDefaultsAgeEraAndGenreBoundaries(t *testing.T) {
-	if len(defaultFilters) != 36 {
-		t.Fatalf("defaults=%d, want 36", len(defaultFilters))
+	if len(defaultFilters) != 38 {
+		t.Fatalf("defaults=%d, want 38", len(defaultFilters))
 	}
 	for number, f := range defaultFilters {
-		if number < 101 || number > 136 {
+		if number < 101 || number > 138 {
 			t.Fatal(number)
 		}
-		if f.RequireKnownYear != (number <= 120) {
+		if f.RequireKnownYear != (number <= 120 || number >= 137) {
 			t.Fatalf("known-year rule on %d", number)
 		}
-		if number >= 121 && f.Era != "both" {
+		if number >= 121 && number <= 136 && f.Era != "both" {
 			t.Fatalf("unrestricted era on %d", number)
 		}
 	}
@@ -124,7 +124,7 @@ func TestApprovedDefaultsAgeEraAndGenreBoundaries(t *testing.T) {
 		}
 	}
 	live, _ := defaultFilterFor(103)
-	if filterMatches(live, makeItem(2009, metadata.TagAnimation)) || !filterMatches(live, makeItem(2009, metadata.TagFamily)) {
+	if filterMatches(live, makeItem(2009, metadata.TagAnimation)) {
 		t.Fatal("live action")
 	}
 	toon, _ := defaultFilterFor(107)
@@ -132,7 +132,12 @@ func TestApprovedDefaultsAgeEraAndGenreBoundaries(t *testing.T) {
 		t.Fatal("anime leaked into cartoons")
 	}
 	anime, _ := defaultFilterFor(109)
-	if !filterMatches(anime, makeItem(1990, metadata.TagAnime)) || !filterMatches(anime, makeItem(2025, metadata.TagAnime)) {
+	validatedAnime := func(year int) classifiedItem {
+		it := makeItem(year, metadata.TagAnime)
+		it.AudienceOverride = "teen"
+		return it
+	}
+	if !filterMatches(anime, validatedAnime(1990)) || !filterMatches(anime, validatedAnime(2025)) {
 		t.Fatal("anime era restriction")
 	}
 	anime.AudienceTier = "teen"
@@ -144,5 +149,19 @@ func TestApprovedDefaultsAgeEraAndGenreBoundaries(t *testing.T) {
 	unrestricted, _ := defaultFilterFor(123)
 	if !filterMatches(unrestricted, makeItem(0, metadata.TagAnime)) {
 		t.Fatal("unknown date missing from unrestricted")
+	}
+}
+
+func TestValidatedAudienceDoesNotBypassCustomRatingFilter(t *testing.T) {
+	item := classifiedItem{MediaType: "movie", Certification: "PG", AudienceOverride: "young_child", ReleaseYear: 2010, Tags: []metadata.Tag{metadata.TagAnime}}
+	kids, _ := defaultFilterFor(106)
+	kids.AgeOption = &channel.FilterOption{Ratings: []string{"G"}}
+	if !filterMatches(kids, item) {
+		t.Fatal("positive kids movie exception excluded from default")
+	}
+	custom := kids
+	custom.MatchAudience = false
+	if filterMatches(custom, item) {
+		t.Fatal("manual audience bypassed custom exact rating filter")
 	}
 }

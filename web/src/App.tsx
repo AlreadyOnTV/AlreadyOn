@@ -11,7 +11,7 @@ function App() {
   return (
     <Routes>
       <Route path="/" element={<GuidePage key={currentUserId} />} />
-      <Route path="/profile" element={<ProfileSettingsPage />} />
+      <Route path="/profile" element={<ProfileSettingsPage key={currentUserId} />} />
       <Route path="/account" element={<AdminSettingsPage />} />
       <Route path="/dashboard" element={<Navigate to="/admin/dashboard" replace />} />
       <Route path="/admin" element={<Navigate to="/admin/dashboard" replace />} />

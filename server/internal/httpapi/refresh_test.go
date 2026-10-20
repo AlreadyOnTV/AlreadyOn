@@ -15,11 +15,9 @@ import (
 	"github.com/alreadyonapp/alreadyon/server/internal/refresh"
 )
 
-// TestRefreshScheduleAPI_NoProviderKeysConfigured_StillRefreshesChannels
-// covers the common CI/test-DB case: no TMDb key saved, so the
-// handler must skip straight to lineup.Refresh instead of erroring out
-// (and definitely without making any real network calls).
-func TestRefreshScheduleAPI_NoProviderKeysConfigured_StillRefreshesChannels(t *testing.T) {
+// Automatic free sources run even without a TMDb key. This empty synthetic
+// library verifies the refresh contract without making provider network calls.
+func TestRefreshScheduleAPI_AutomaticSourcesWithoutTMDb_StillRefreshesChannels(t *testing.T) {
 	db := openTestDB(t)
 	router := NewRouter(t.TempDir(), t.TempDir(), db)
 
@@ -34,8 +32,8 @@ func TestRefreshScheduleAPI_NoProviderKeysConfigured_StillRefreshesChannels(t *t
 	if err := json.Unmarshal(rec.Body.Bytes(), &got); err != nil {
 		t.Fatalf("decode: %v", err)
 	}
-	if got.Classified {
-		t.Errorf("Classified = true, want false (no TMDb key configured)")
+	if !got.Classified {
+		t.Errorf("Classified = false, want automatic free metadata classification")
 	}
 }
 

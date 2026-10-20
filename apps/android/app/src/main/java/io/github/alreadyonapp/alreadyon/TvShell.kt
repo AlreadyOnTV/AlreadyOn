@@ -28,7 +28,7 @@ import androidx.compose.ui.semantics.contentDescription
 
 /** TV navigation is fixed-position presentation; tuning never rotates or remounts the shell. */
 @Composable
-internal fun TvShell(state: PhoneState, model: PhoneModel) {
+internal fun TvShell(state: PhoneState, model: PhoneModel, guideNow: Long) {
     val activity = LocalActivity.current
     var exitBackAt by remember { mutableStateOf<Long?>(null) }
     fun exitApp() { model.suspendWatching(); activity?.finishAndRemoveTask() }
@@ -62,7 +62,7 @@ internal fun TvShell(state: PhoneState, model: PhoneModel) {
     DisposableEffect(owner, model) {
         val observer = LifecycleEventObserver { _, event ->
             if (event == Lifecycle.Event.ON_STOP) model.suspendWatching()
-            if (event == Lifecycle.Event.ON_START) model.resumeWatching()
+            if (event == Lifecycle.Event.ON_START) { model.resumeWatching(); model.refreshGuide() }
         }
         owner.lifecycle.addObserver(observer)
         onDispose { owner.lifecycle.removeObserver(observer) }
@@ -171,7 +171,7 @@ internal fun TvShell(state: PhoneState, model: PhoneModel) {
                             }
                         }
                     }
-                    if (!fullscreen) TvGuide(state, palette, Modifier.weight(1f), resetSignal = guideReset,
+                    if (!fullscreen) TvGuide(state, palette, Modifier.weight(1f), now = guideNow, resetSignal = guideReset,
                         onSelection = { channel, program -> selection.value = channel to program },
                         onNavigation = { guideAtCurrent = false },
                         onChannelFocus = { channelId, current -> region = "guide"; guideAtCurrent = channelId == state.channel?.id && current }) { channel ->

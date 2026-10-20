@@ -7,17 +7,23 @@
 }
 
 .admin-topbar {
-  padding: 12px 20px;
+  width: 100%;
+  max-width: 1280px;
+  box-sizing: border-box;
+  padding: 12px 0;
+  margin: 0 auto;
   border-bottom: 1px solid var(--border);
 }
 
-/* Matches .admin-content's max-width so the tabs sit above the centered
-   content column, instead of hugging the left edge of a full-width bar. */
+/* Header and content share a centered 1280px shell. */
 .admin-topbar-inner {
   display: flex;
   align-items: center;
   gap: 24px;
-  max-width: 900px;
+  width: 100%;
+  max-width: 1280px;
+  box-sizing: border-box;
+  padding: 0 20px;
   margin: 0 auto;
 }
 
@@ -35,38 +41,13 @@
   flex-shrink: 0;
 }
 
-/* Server Settings: a vertical sidebar on the left of the content column on
-   laptops and desktops; compact windows use the hamburger menu instead. The
-   topbar widens to the same column so Back To Guide sits above the sidebar. */
-.admin-page-sidebar .admin-topbar-inner {
-  max-width: calc(var(--admin-sidebar-width) + 24px + 900px);
-}
-
-.admin-page-sidebar {
-  --admin-sidebar-width: 200px;
-}
-
-.admin-layout {
-  display: flex;
-  align-items: flex-start;
-  gap: 24px;
-  max-width: calc(var(--admin-sidebar-width) + 24px + 900px);
-  margin: 0 auto;
-}
-
-.admin-tabs {
-  position: sticky;
-  top: 0;
-  flex: 0 0 var(--admin-sidebar-width);
-  display: flex;
-  flex-direction: column;
-  gap: 6px;
-  padding-top: 48px;
-}
-
 .admin-mobile-nav {
   display: none;
   position: relative;
+  flex: 0 0 auto;
+}
+.admin-nav-back-row {
+  display: contents;
 }
 
 .admin-nav-toggle {
@@ -95,7 +76,7 @@
   position: absolute;
   top: calc(100% + 6px);
   left: 0;
-  z-index: 30;
+  z-index: 50;
   min-width: 180px;
   padding: 6px;
   display: flex;
@@ -118,9 +99,33 @@
 }
 
 .admin-mobile-menu button:hover,
-.admin-mobile-menu button[aria-current='page'] {
+.admin-mobile-menu button[aria-current="page"] {
   background: var(--surface-alt);
   color: var(--accent);
+}
+
+.admin-page-sidebar {
+  --admin-sidebar-width: 200px;
+}
+
+.admin-layout {
+  display: flex;
+  align-items: flex-start;
+  gap: 12px;
+  width: 100%;
+  max-width: 1280px;
+  box-sizing: border-box;
+  margin: 0 auto;
+}
+
+.admin-tabs {
+  position: sticky;
+  top: 16px;
+  flex: 0 0 var(--admin-sidebar-width);
+  display: flex;
+  flex-direction: column;
+  gap: 6px;
+  padding-top: 48px;
 }
 
 .admin-tab {
@@ -148,6 +153,7 @@
 .admin-layout > .admin-content {
   flex: 1 1 auto;
   min-width: 0;
+  max-width: none;
   margin: 0;
 }
 
@@ -157,20 +163,72 @@
      section you're in), and this preserves the same overall gap under
      the topbar that title used to take up. */
   padding: 48px 24px 48px;
-  max-width: 900px;
-  /* Center the content column itself; text/cards within it stay
-     left-aligned as before. Shared by every Admin tab. */
+  width: 100%;
+  max-width: 1280px;
+  box-sizing: border-box;
   margin: 0 auto;
 }
 
-/* Split-screen laptop windows use compact navigation instead of the sidebar. */
-@media (max-width: 1200px) {
+.admin-navigation-sidebar,
+.admin-media-sidebar {
+  flex: 0 0 var(--admin-sidebar-width);
+  min-width: 0;
+}
+.admin-navigation-sidebar {
+  position: sticky;
+  top: 16px;
+}
+.admin-layout-manage-media {
+  align-items: stretch;
+}
+.admin-media-sidebar .admin-tabs {
+  position: static;
+}
+
+
+.admin-layout-manage-media > .admin-content {
+  padding-top: 48px;
+}
+
+@media (max-width: 768px) {
   .admin-topbar-inner {
+    display: grid;
+    grid-template-columns: minmax(0, 1fr) auto;
+    grid-template-rows: auto auto;
+    align-items: start;
+    gap: 12px;
+    padding: 0 12px;
+  }
+
+  .admin-topbar-inner > .brand-link {
+    grid-column: 1;
+    grid-row: 1;
+    min-width: 0;
+  }
+
+  .admin-topbar-inner > .profile-menu {
+    grid-column: 2;
+    grid-row: 1;
+    justify-self: end;
+    max-width: min(180px, 45vw);
+    margin-left: 0;
+  }
+
+  .admin-topbar-inner > .admin-nav-back-row {
+    display: block;
+    grid-column: 1 / -1;
+    grid-row: 2;
+    justify-self: start;
+    display: flex;
     align-items: center;
     gap: 12px;
   }
 
-  .admin-back {
+  .admin-topbar-inner .admin-mobile-nav {
+    display: block;
+  }
+
+  .admin-nav-back-row .admin-back {
     min-height: 44px;
   }
 
@@ -179,39 +237,14 @@
   }
 
   .admin-layout > .admin-content {
-    margin: 0 auto;
-  }
-
-  .admin-mobile-nav {
-    display: block;
+    width: 100%;
+    margin: 0;
   }
 }
 
-@media (max-width: 700px) {
+@media (max-width: 600px) {
   .admin-topbar {
-    padding: 10px 12px;
-  }
-
-  .admin-topbar-inner {
-    /* Keep the named profile control on the brand row; navigation occupies
-       the following row rather than overlapping either header element. */
-    display: grid;
-    grid-template-columns: minmax(0, 1fr) auto;
-    gap: 12px;
-  }
-
-  .admin-topbar-inner > .profile-menu {
-    grid-column: 2;
-    grid-row: 1;
-    /* A capped item must anchor to the track's end even when wider fonts
-       make the intrinsic auto column larger than the item itself. */
-    justify-self: end;
-    max-width: min(180px, 45vw);
-    margin-left: 0;
-  }
-
-  .admin-topbar-inner > .brand-link {
-    min-width: 0;
+    padding: 10px 0;
   }
 
   .admin-topbar-inner .profile-menu-trigger {
@@ -226,6 +259,10 @@
 
   .admin-content {
     padding: 24px 12px 32px;
+  }
+
+  .admin-layout-manage-media > .admin-content {
+    padding-top: 24px;
   }
 }
 
@@ -302,19 +339,47 @@
 .admin-page .admin-table thead :is(input, select, button) {
   font-size: var(--admin-control-size);
 }
-.admin-page .restore-order-link { font-size: var(--admin-body-size); }
+.admin-page .restore-order-link {
+  font-size: var(--admin-body-size);
+}
 /* Icon controls retain their glyph size instead of becoming text buttons. */
-.admin-page .admin-modal-close { font-size:22px; }
+.admin-page .admin-modal-close {
+  font-size: 22px;
+}
 /* Create/edit form copy and fields match the table-header size. */
 .admin-page .admin-modal,
-.admin-page .admin-modal :is(label, input, select, textarea, p, .multi-select-option, .included-paths label),
+.admin-page
+  .admin-modal
+  :is(
+    label,
+    input,
+    select,
+    textarea,
+    p,
+    .multi-select-option,
+    .included-paths label
+  ),
 .admin-page .admin-modal .admin-field-row > label,
 .admin-page .folder-browser {
   font-size: var(--admin-control-size);
 }
 
-/* Self-service back navigation sits below branding, above the first settings card. */
-.settings-back-row { display: flex; justify-content: flex-start; margin-bottom: 20px; }
+.tv-pairing-form {
+  display: flex;
+  align-items: center;
+  flex-wrap: wrap;
+  gap: 10px;
+}
+.tv-pairing-form input {
+  background: var(--bg, #101318);
+  color: inherit;
+  border: 1px solid #303743;
+  border-radius: 8px;
+  padding: 8px 12px;
+}
 
-.tv-pairing-form { display: flex; align-items: center; flex-wrap: wrap; gap: 10px; }
-.tv-pairing-form input { background: var(--bg, #101318); color: inherit; border: 1px solid #303743; border-radius: 8px; padding: 8px 12px; }
+@media (max-width: 768px) {
+  .admin-navigation-sidebar,
+  .admin-media-sidebar { display: none; }
+  .admin-layout-manage-media { display: block; }
+}

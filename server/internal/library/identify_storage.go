@@ -30,6 +30,14 @@ func SaveIdentification(ctx context.Context, db *sql.DB, mediaFileID int64, id I
 	if err != nil {
 		return fmt.Errorf("library: save identification for media file %d: %w", mediaFileID, err)
 	}
+	if id.IsEpisode {
+		// Reattach new episodes to a manually managed series even without TMDb.
+		_, err = db.ExecContext(ctx, `UPDATE identified_items SET show_id=(SELECT id FROM tv_shows WHERE local_series_title=? AND local_series_year IS ? ORDER BY id LIMIT 1) WHERE media_file_id=? AND show_id IS NULL`, seriesTitle, year, mediaFileID)
+		if err != nil {
+			return err
+		}
+	}
+
 	return nil
 }
 

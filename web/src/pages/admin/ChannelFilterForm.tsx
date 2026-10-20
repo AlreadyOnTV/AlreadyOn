@@ -71,10 +71,10 @@ export default function ChannelFilterForm({ filter, onChange }: { filter: Channe
         </select>
       </div>
       <div className="admin-field-row">
-        <label>Era</label>
+        <label>Date Range</label>
         <MultiSelectDropdown
-          label="Era"
-          placeholder="All eras"
+          label="Date Range"
+          placeholder="All"
           options={catalog.era.map((o) => ({ value: o.id, label: o.name }))}
           selected={filter.eras ?? [filter.era]}
           onChange={(eras) => set({ eras, era: 'both' })}

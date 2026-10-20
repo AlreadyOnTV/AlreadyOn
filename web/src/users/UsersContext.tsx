@@ -57,7 +57,7 @@ interface UsersContextValue {
   setPin: (id: number, pin: string) => Promise<void>;
   clearPin: (id: number) => Promise<void>;
   verifyPin: (id: number, pin: string) => Promise<PinCheck>;
-  uploadIcon: (id: number, image: Blob) => Promise<void>;
+  uploadIcon: (id: number, image: Blob) => Promise<Profile>;
 }
 
 const UsersContext = createContext<UsersContextValue | null>(null);
@@ -179,7 +179,9 @@ export function UsersProvider({ children }: { children: ReactNode }) {
   };
 
   const uploadIcon = async (id: number, image: Blob) => {
-    replace(await uploadProfileIcon(id, image));
+    const saved = await uploadProfileIcon(id, image);
+    replace(saved);
+    return saved;
   };
 
   const setCurrentUserId = (id: number) => {

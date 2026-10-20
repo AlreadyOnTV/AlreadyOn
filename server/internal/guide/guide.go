@@ -180,7 +180,7 @@ func loadMetadata(ctx context.Context, db *sql.DB, entries []schedule.Entry) (ma
 		       COALESCE(ii.season_number, 0), COALESCE(ii.episode_number, 0),
 		       COALESCE(ii.overview, ''),
 		       COALESCE(ii.release_year, CAST(substr(ii.release_date, 1, 4) AS INTEGER), 0),
-		       COALESCE(ii.content_rating, ts.content_rating, ''),
+		       COALESCE(CASE WHEN ii.content_rating_manual=1 THEN ii.content_rating END,ts.content_rating,ii.content_rating,''),
 		       COALESCE(ii.episode_air_date, ii.release_date, '')
 		FROM media_files mf
 		LEFT JOIN identified_items ii ON ii.media_file_id = mf.id

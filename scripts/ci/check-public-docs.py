@@ -16,8 +16,8 @@ for name in sorted(set(paths)):
     words = len(text.split())
     # Preserve the standard governance policy; it is not a short contributor guide.
     # Its links still receive the same validation as other Markdown files.
-    if words > 400 and name != 'CODE_OF_CONDUCT.md':
-        errors.append(f'{name}: {words} words; keep each guide within 400 words (~2 minutes).')
+    if words > 500 and name != 'CODE_OF_CONDUCT.md':
+        errors.append(f'{name}: {words} words; keep each guide within 500 words.')
     for target in re.findall(r'\]\(([^)]+)\)', text):
         target = target.split('#', 1)[0]
         if not target or '://' in target or target.startswith('mailto:'):

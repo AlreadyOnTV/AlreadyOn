@@ -39,7 +39,7 @@ func insertRatedMediaFile(t *testing.T, db *sql.DB, path string, durationSeconds
 	if certification != "" {
 		cert = sql.NullString{String: certification, Valid: true}
 	}
-	if _, err := db.ExecContext(ctx, `INSERT INTO identified_items (media_file_id, media_type, title, content_rating) VALUES (?, 'movie', ?, ?)`, id, path, cert); err != nil {
+	if _, err := db.ExecContext(ctx, `INSERT INTO identified_items (media_file_id, media_type, title, content_rating,genre_tags) VALUES (?, 'movie', ?, ?, '["family"]')`, id, path, cert); err != nil {
 		t.Fatalf("insert identified_items: %v", err)
 	}
 	return id

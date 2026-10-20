@@ -5,7 +5,6 @@ set -euo pipefail
 
 host=${1:?Usage: deploy-production.sh <ssh-host> [compose-directory]}
 app_dir=${2:-/opt/apps/alreadyon}
-target=ghcr.io/alreadyontv/alreadyon:nightly
 local_image=alreadyon:local
 engine=$(command -v podman || command -v docker)
 
@@ -19,6 +18,16 @@ label=$("$engine" image inspect "$local_image" --format '{{index .Config.Labels 
 if [[ $(ssh "$host" 'systemctl is-enabled alreadyon-nightly-sync.timer 2>/dev/null || true') == enabled ]]; then
   die 'the deployment host nightly sync is enabled and would replace this image; pause the automatic updater before manual deployment'
 fi
+
+# Honor pinned local tags as well as nightly; do not change the host's Compose configuration.
+target=$(ssh "$host" bash -s -- "$app_dir" <<'REMOTE'
+set -euo pipefail
+cd "$1"
+docker compose config --images alreadyon
+REMOTE
+)
+[[ -n $target && $target != *$'\n'* && $target != *@* ]] ||
+  die 'Expected one mutable Compose image reference for alreadyon'
 
 echo "Copying $local_image ($revision) to $host"
 "$engine" save --format docker-archive "$local_image" | gzip -1 | ssh "$host" 'gunzip | docker load --quiet'

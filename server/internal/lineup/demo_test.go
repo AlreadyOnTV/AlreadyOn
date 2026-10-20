@@ -53,129 +53,29 @@ func demoChannelIDs(t *testing.T, db *sql.DB) map[int]int64 {
 	return out
 }
 
-func TestSyncDemoChannels_CreatesFourWhenNothingClassified(t *testing.T) {
+// Retiring fallback channels must not discard an already-published airing.
+func TestSyncDemoChannelsHidesFallbacksWithoutDeletingSchedules(t *testing.T) {
 	db := openTestDB(t)
 	ctx := context.Background()
-	insertChannel(t, db, 120, "Sci-Fi Network")
-	a1 := insertUnclassified(t, db, "episode", "Alpha Show", 1, 1)
-	a2 := insertUnclassified(t, db, "episode", "Alpha Show", 1, 2)
-	b1 := insertUnclassified(t, db, "episode", "Bravo Show", 1, 1)
-	m1 := insertUnclassified(t, db, "movie", "Apple Movie", 0, 0)
-	m2 := insertUnclassified(t, db, "movie", "Banana Movie", 0, 0)
-
-	n, err := SyncDemoChannels(ctx, db)
-	if err != nil {
-		t.Fatalf("SyncDemoChannels: %v", err)
+	id := insertChannel(t, db, 196, "Demo: TV Mix 1")
+	media := insertUnclassified(t, db, "episode", "Example", 1, 1)
+	if _, err := db.Exec(`INSERT INTO channel_items(channel_id,media_file_id,position) VALUES(?,?,0)`, id, media); err != nil {
+		t.Fatal(err)
 	}
-	if n != 4 {
-		t.Fatalf("active demo channels = %d, want 4", n)
+	if _, err := db.Exec(`INSERT INTO schedule_entries(channel_id,media_file_id,kind,source_offset_seconds,duration_seconds,starts_at_unix,ends_at_unix) VALUES(?,?,'program',0,600,100,700)`, id, media); err != nil {
+		t.Fatal(err)
 	}
-	ids := demoChannelIDs(t, db)
-	checks := map[int][]int64{196: {a1, a2}, 197: {b1}, 198: {m1}, 199: {m2}}
-	for number, want := range checks {
-		got := channelItemMediaFileIDs(t, db, ids[number])
-		if fmt.Sprint(got) != fmt.Sprint(want) {
-			t.Errorf("channel %d items = %v, want %v", number, got, want)
-		}
+	if n, err := SyncDemoChannels(ctx, db); err != nil || n != 0 {
+		t.Fatal(n, err)
 	}
-
-	// Idempotent: a second run keeps the same channels and lineups.
-	if _, err := SyncDemoChannels(ctx, db); err != nil {
-		t.Fatalf("second SyncDemoChannels: %v", err)
+	var hidden, count int
+	if err := db.QueryRow(`SELECT hidden FROM channels WHERE id=?`, id).Scan(&hidden); err != nil || hidden != 1 {
+		t.Fatal(hidden, err)
 	}
-	if again := demoChannelIDs(t, db); fmt.Sprint(again) != fmt.Sprint(ids) {
-		t.Errorf("demo channel ids changed: %v -> %v", ids, again)
+	if err := db.QueryRow(`SELECT count(*) FROM schedule_entries WHERE channel_id=?`, id).Scan(&count); err != nil || count != 1 {
+		t.Fatal("published airing deleted", count, err)
 	}
-	if got := channelItemMediaFileIDs(t, db, ids[196]); len(got) != 2 {
-		t.Errorf("channel 196 items after rerun = %v, want 2 items", got)
-	}
-}
-
-func TestSyncDemoChannels_OnlyCreatesChannelsWithContent(t *testing.T) {
-	db := openTestDB(t)
-	insertUnclassified(t, db, "movie", "Only Movie", 0, 0)
-
-	n, err := SyncDemoChannels(context.Background(), db)
-	if err != nil {
-		t.Fatalf("SyncDemoChannels: %v", err)
-	}
-	if n != 1 {
-		t.Errorf("active demo channels = %d, want 1", n)
-	}
-	if ids := demoChannelIDs(t, db); len(ids) != 1 || ids[198] == 0 {
-		t.Errorf("demo channels = %v, want only 198", ids)
-	}
-}
-
-func TestSyncDemoChannels_RemovedOnceRealChannelHasContent(t *testing.T) {
-	db := openTestDB(t)
-	ctx := context.Background()
-	insertChannel(t, db, 120, "Sci-Fi Network")
-	insertUnclassified(t, db, "episode", "Plain Show", 1, 1)
-	if n, err := SyncDemoChannels(ctx, db); err != nil || n == 0 {
-		t.Fatalf("SyncDemoChannels = %d, %v; want demo channels", n, err)
-	}
-
-	insertClassified(t, db, "episode", "Space Show", 1, 1, 0, 600, `["scifi"]`)
-	insertClassified(t, db, "episode", "Other Space Show", 1, 1, 0, 600, `["scifi"]`) // 2 distinct shows: channel stays visible
-	if _, err := Populate(ctx, db); err != nil {
-		t.Fatalf("Populate: %v", err)
-	}
-	n, err := SyncDemoChannels(ctx, db)
-	if err != nil {
-		t.Fatalf("SyncDemoChannels: %v", err)
-	}
-	if n != 0 {
-		t.Errorf("active demo channels = %d, want 0", n)
-	}
-	if ids := demoChannelIDs(t, db); len(ids) != 0 {
-		t.Errorf("demo channels still present: %v", ids)
-	}
-}
-
-func TestSyncDemoChannels_HiddenRealChannelDoesNotRetireDemos(t *testing.T) {
-	db := openTestDB(t)
-	ctx := context.Background()
-	insertChannel(t, db, 120, "Sci-Fi Network")
-	insertClassified(t, db, "episode", "Space Show", 1, 1, 0, 600, `["scifi"]`)
-	if _, err := Populate(ctx, db); err != nil {
-		t.Fatalf("Populate: %v", err)
-	}
-	if _, err := db.Exec(`UPDATE channels SET hidden = 1 WHERE number = 120`); err != nil {
-		t.Fatalf("hide channel: %v", err)
-	}
-	var hidden bool
-	if err := db.QueryRow(`SELECT hidden FROM channels WHERE number = 120`).Scan(&hidden); err != nil || !hidden {
-		t.Fatalf("channel 120 hidden = %v (err %v), want true", hidden, err)
-	}
-
-	n, err := SyncDemoChannels(ctx, db)
-	if err != nil {
-		t.Fatalf("SyncDemoChannels: %v", err)
-	}
-	if n == 0 {
-		t.Error("demo channels were retired by a channel the guide doesn't show")
-	}
-}
-
-func TestSyncDemoChannels_PreservesAdminHiddenFlag(t *testing.T) {
-	db := openTestDB(t)
-	ctx := context.Background()
-	insertUnclassified(t, db, "movie", "Some Movie", 0, 0)
-	if _, err := SyncDemoChannels(ctx, db); err != nil {
-		t.Fatalf("SyncDemoChannels: %v", err)
-	}
-	if _, err := db.Exec(`UPDATE channels SET hidden = 1 WHERE number = 198`); err != nil {
-		t.Fatalf("hide: %v", err)
-	}
-	if _, err := SyncDemoChannels(ctx, db); err != nil {
-		t.Fatalf("SyncDemoChannels: %v", err)
-	}
-	var hidden bool
-	if err := db.QueryRow(`SELECT hidden FROM channels WHERE number = 198`).Scan(&hidden); err != nil {
-		t.Fatalf("read hidden: %v", err)
-	}
-	if !hidden {
-		t.Error("admin-set hidden flag was reset")
+	if n, err := SyncDemoChannels(ctx, db); err != nil || n != 0 {
+		t.Fatal(n, err)
 	}
 }
