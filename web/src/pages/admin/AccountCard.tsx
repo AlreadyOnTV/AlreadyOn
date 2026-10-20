@@ -65,6 +65,12 @@ export default function AccountCard({ children }: { children: ReactNode }) {
   const [next, setNext] = useState("");
   const [confirm, setConfirm] = useState("");
   const [passwordMessage, setPasswordMessage] = useState<string | null>(null);
+  const [saveAttempt, setSaveAttempt] = useState(0);
+  useEffect(() => {
+    if (!passwordMessage) return;
+    const timer = window.setTimeout(() => setPasswordMessage(null), SAVE_CONFIRMATION_MS);
+    return () => window.clearTimeout(timer);
+  }, [passwordMessage, saveAttempt]);
   const [passwordError, setPasswordError] = useState<string | null>(null);
   const [saving, setSaving] = useState(false);
 
@@ -227,10 +233,11 @@ export default function AccountCard({ children }: { children: ReactNode }) {
     event.preventDefault();
     setPasswordError(null);
     setPasswordMessage(null);
+    setSaveAttempt((attempt) => attempt + 1);
     const changingPassword = next !== "" || confirm !== "";
     if (!newName.trim()) return setPasswordError("Enter a username.");
     if (!renaming && !changingPassword && !pairing.pin)
-      return setPasswordError("There are no changes to save.");
+      return setPasswordMessage("There are no changes to save.");
     if ((renaming || changingPassword) && !current)
       return setPasswordError("Enter your current password to save changes.");
     if (changingPassword) {
@@ -416,6 +423,11 @@ export default function AccountCard({ children }: { children: ReactNode }) {
             >
               {saving ? "Saving…" : "Save Changes"}
             </button>
+            {passwordMessage && (
+              <p key={saveAttempt} className="profile-field-error account-save-feedback" role="status">
+                {passwordMessage}
+              </p>
+            )}
             {passwordError && (
               <p className="profile-field-error" role="alert">
                 {passwordError}
@@ -423,11 +435,6 @@ export default function AccountCard({ children }: { children: ReactNode }) {
             )}
           </div>
         </form>
-        {passwordMessage && (
-          <p className="admin-section-hint" role="status">
-            {passwordMessage}
-          </p>
-        )}
       </div>
       {children}
       <div className="admin-card account-card">
