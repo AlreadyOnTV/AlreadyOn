@@ -156,6 +156,7 @@ export interface UnmatchedItem {
 // Only the fields present change; null clears (or, for genres and
 // certification, returns the item to automatic values).
 export interface LibraryItemPatch {
+  audienceOverride?: 'young_child' | 'teen' | 'adult' | null;
   mediaType?: 'movie' | 'episode';
   title?: string;
   seriesTitle?: string | null;
@@ -164,6 +165,26 @@ export interface LibraryItemPatch {
   episode?: number | null;
   genres?: string[] | null;
   certification?: string | null;
+}
+
+export type CatalogView = 'movies' | 'shows' | 'episodes';
+export interface CatalogItem extends UnmatchedItem {
+  audience: 'young_child' | 'teen' | 'adult';
+  audienceOverride: 'young_child' | 'teen' | 'adult' | null;
+  parentAudienceOverride: 'young_child' | 'teen' | 'adult' | null;
+  audienceSource: string;
+  needsReview: boolean;
+  matched: boolean;
+  matchedFiles: number;
+  files: number;
+  mixed: boolean;
+  certifications: string[] | null;
+}
+export function getCatalog(query: Record<string, string>, signal?: AbortSignal): Promise<{ total: number; items: CatalogItem[] }> {
+  return apiRequest(`/api/library/catalog?${new URLSearchParams(query)}`, { signal }, 'failed to load library');
+}
+export function updateCatalog(ids: number[], view: CatalogView, patch: LibraryItemPatch): Promise<{ updated: number }> {
+  return apiRequest('/api/library/catalog', jsonInit('PATCH', { ids, view, ...patch }), 'failed to save library changes');
 }
 
 export function getUnmatched(limit: number, offset: number, signal?: AbortSignal): Promise<{ total: number; items: UnmatchedItem[] }> {
@@ -816,6 +837,21 @@ export const saveFilterOption = (kind: string, option: FilterOption): Promise<Fi
   );
 export const deleteFilterOption = (kind: string, id: string): Promise<FilterOption> =>
   apiRequest('/api/channel-filter-options/' + kind + '/' + encodeURIComponent(id), { method: 'DELETE' }, 'Could not delete filter');
+export interface TMDbPreview {
+  tmdbId: number;
+  title: string;
+  year: number;
+  genres: string[];
+  certification: string;
+}
+
+export const previewTMDbItem = (id: number, tmdbId: number): Promise<TMDbPreview> =>
+  apiRequest(
+    `/api/library/items/${id}/tmdb-preview?tmdbId=${encodeURIComponent(tmdbId)}`,
+    undefined,
+    'Could not preview TMDb ID',
+  );
+
 export const lookupTMDbItem = (id: number, tmdbId: number): Promise<{ updated: number }> =>
   apiRequest('/api/library/items/' + id + '/tmdb', { method: 'POST', body: JSON.stringify({ tmdbId }) }, 'Could not look up TMDb ID');
 

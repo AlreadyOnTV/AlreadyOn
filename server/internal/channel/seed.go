@@ -6,7 +6,7 @@ import (
 	"fmt"
 )
 
-// The approved 36-channel cable-style lineup runs from kids to unrestricted.
+// The approved 38-channel cable-style lineup runs from kids to unrestricted.
 var defaultChannels = []Draft{
 	{Number: 101, Name: "Kids Toon Classic"},
 	{Number: 102, Name: "Kids Toon Modern"},
@@ -44,6 +44,8 @@ var defaultChannels = []Draft{
 	{Number: 134, Name: "Cinema Two"},
 	{Number: 135, Name: "Action Cinema"},
 	{Number: 136, Name: "Beyond Cinema"},
+	{Number: 137, Name: "Teen Comedy Classic"},
+	{Number: 138, Name: "Teen Comedy Modern"},
 }
 
 // SeedDefaults inserts AlreadyOn's built-in default channels

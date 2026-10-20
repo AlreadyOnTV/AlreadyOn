@@ -91,7 +91,13 @@ function initial(key: string, fallback: number, choices: number[]) {
     return fallback;
   }
 }
-export default function ServerMetrics({ actions }: { actions?: ReactNode }) {
+export default function ServerMetrics({
+  actions,
+  title,
+}: {
+  actions?: ReactNode;
+  title?: string;
+}) {
   const grid = useRef<HTMLDivElement>(null);
   const dialog = useRef<HTMLDialogElement>(null);
   const [expanded, setExpanded] = useState<MetricKey | null>(null);
@@ -396,7 +402,7 @@ export default function ServerMetrics({ actions }: { actions?: ReactNode }) {
     const right = width - 30;
     const bottom = height - 45;
     const plotTop = disk
-      ? Math.max(panelSize.width < 380 ? 190 : 185, height * 0.62)
+      ? Math.max(155, height * 0.36)
       : Math.max(90, height * 0.25);
     const x = (at: number) =>
       plotLeft + ((at - start) / (end - start)) * (right - plotLeft);
@@ -897,6 +903,7 @@ export default function ServerMetrics({ actions }: { actions?: ReactNode }) {
   return (
     <section className="server-metrics" aria-label="Server resource metrics">
       <div className="metrics-toolbar">
+        {title && <h3 className="metrics-heading">{title}</h3>}
         {actions && <div className="metrics-actions">{actions}</div>}
         <div className="metrics-controls">
           <label>

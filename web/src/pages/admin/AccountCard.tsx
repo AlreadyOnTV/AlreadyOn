@@ -350,18 +350,6 @@ export default function AccountCard({ children }: { children: ReactNode }) {
           ) : (
             <>
               <div className="admin-field-row">
-                <label htmlFor="account-current">Current Password</label>
-                <PasswordInput
-                  concealFromManagers
-                  id="account-current"
-                  name="account-current"
-                  value={current}
-                  readOnly={!unlocked}
-                  onFocus={() => setUnlocked(true)}
-                  onChange={typed(setCurrent)}
-                />
-              </div>
-              <div className="admin-field-row">
                 <label htmlFor="account-username">Username</label>
                 <input
                   id="account-username"
@@ -377,6 +365,18 @@ export default function AccountCard({ children }: { children: ReactNode }) {
                   readOnly={!unlocked}
                   onFocus={() => setUnlocked(true)}
                   onChange={typed(setNewName)}
+                />
+              </div>
+              <div className="admin-field-row">
+                <label htmlFor="account-current">Current Password</label>
+                <PasswordInput
+                  concealFromManagers
+                  id="account-current"
+                  name="account-current"
+                  value={current}
+                  readOnly={!unlocked}
+                  onFocus={() => setUnlocked(true)}
+                  onChange={typed(setCurrent)}
                 />
               </div>
               <div className="admin-field-row">

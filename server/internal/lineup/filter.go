@@ -53,6 +53,28 @@ func filterMatches(f channel.Filter, it classifiedItem) bool {
 // Shared by scheduling and unmatched diagnostics so explanations cannot drift.
 func filterMismatches(f channel.Filter, it classifiedItem) []string {
 	var reasons []string
+	tags := make([]string, 0, len(it.Tags))
+	for _, tag := range it.Tags {
+		tags = append(tags, string(tag))
+	}
+	override := it.AudienceOverride
+	if override == "" {
+		override = it.ShowAudienceOverride
+	}
+	audience, review := eligibility.Audience(it.MediaType, it.Certification, tags, override)
+
+	if f.MatchAudience && audience != eligibility.Tier(f.AudienceTier) {
+		reason := "intended audience is " + string(audience)
+		if review {
+			reason += " (needs review)"
+		}
+		reasons = append(reasons, reason)
+	}
+	// Manual restrictions also apply to custom channels.
+	if override != "" && !eligibility.Eligible(eligibility.Tier(f.AudienceTier), audience) {
+		reasons = append(reasons, "manual audience restriction")
+	}
+
 	if f.RequireKnownYear && it.ReleaseYear == 0 {
 		reasons = append(reasons, "premiere/release year is unknown")
 	}
@@ -64,7 +86,12 @@ func filterMismatches(f channel.Filter, it classifiedItem) []string {
 			}
 		}
 	}
-	if (f.AgeOption != nil && !f.AgeOption.Unrestricted && !slices.Contains(f.AgeOption.Ratings, it.Certification) && !(f.AgeOption.AllowUnknown && !eligibility.ValidCertification(it.MediaType, it.Certification))) || (f.AgeOption == nil && !eligibility.Eligible(eligibility.Tier(f.AudienceTier), eligibility.RequiredTier(it.MediaType, it.Certification))) {
+	if ((override == "" || !f.MatchAudience) && f.AgeOption != nil && !f.AgeOption.Unrestricted && !slices.Contains(f.AgeOption.Ratings, it.Certification) && !(f.AgeOption.AllowUnknown && !eligibility.ValidCertification(it.MediaType, it.Certification))) || (f.AgeOption == nil && !eligibility.Eligible(eligibility.Tier(f.AudienceTier), func() eligibility.Tier {
+		if override != "" {
+			return audience
+		}
+		return eligibility.RequiredTier(it.MediaType, it.Certification)
+	}())) {
 		reasons = append(reasons, fmt.Sprintf("rating %q is outside %s", it.Certification, f.AudienceTier))
 	}
 	if (f.MediaType == "tv" && it.MediaType != "episode") || (f.MediaType == "movie" && it.MediaType != "movie") {

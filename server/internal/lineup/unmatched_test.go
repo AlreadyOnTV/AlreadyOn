@@ -145,7 +145,7 @@ func TestUnmatched_Paging(t *testing.T) {
 func TestPool_ManualEpisodeCertificationOverridesTheShows(t *testing.T) {
 	db := openTestDB(t)
 	id := insertItem(t, db, item{mediaType: "episode", title: "Strict Show", year: 2005, rating: "TV-MA", tags: `["drama"]`, episode: 1})
-	if _, err := db.Exec(`UPDATE identified_items SET content_rating = 'TV-G' WHERE media_file_id = ?`, id); err != nil {
+	if _, err := db.Exec(`UPDATE identified_items SET content_rating = 'TV-G', content_rating_manual=1, audience_override='young_child' WHERE media_file_id = ?`, id); err != nil {
 		t.Fatal(err)
 	}
 	pool, err := loadPool(context.Background(), db, false)

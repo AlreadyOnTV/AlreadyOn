@@ -1,3 +1,4 @@
+// Compatibility settings cannot disable the automatic free provider pipeline.
 package metadata
 
 import (
@@ -25,7 +26,7 @@ func TestGetSettings_DefaultsToEmpty(t *testing.T) {
 	if err != nil {
 		t.Fatalf("GetSettings: %v", err)
 	}
-	if s != (Settings{}) {
+	if s != (Settings{KeylessEnabled: true}) {
 		t.Errorf("s = %+v, want zero value", s)
 	}
 }
@@ -33,7 +34,7 @@ func TestGetSettings_DefaultsToEmpty(t *testing.T) {
 func TestSaveSettings_RoundTrips(t *testing.T) {
 	db := openSettingsTestDB(t)
 
-	want := Settings{TMDbAPIKey: "tmdb-key"}
+	want := Settings{TMDbAPIKey: "tmdb-key", KeylessEnabled: true}
 	if err := SaveSettings(context.Background(), db, want); err != nil {
 		t.Fatalf("SaveSettings: %v", err)
 	}
@@ -87,7 +88,7 @@ func TestSaveSettings_KeylessFlagRoundTripsAndIsIndependentOfTheKey(t *testing.T
 		t.Fatalf("SaveSettings: %v", err)
 	}
 	got, _ = GetSettings(ctx, db)
-	if got.KeylessEnabled {
-		t.Errorf("got %+v, want keyless turned off", got)
+	if !got.KeylessEnabled {
+		t.Errorf("got %+v, free providers must stay enabled", got)
 	}
 }

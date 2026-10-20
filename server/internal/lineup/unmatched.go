@@ -15,20 +15,22 @@ import (
 // UnmatchedItem is a library file that isn't on any channel, with a
 // short reason (#102).
 type UnmatchedItem struct {
-	ID            int64 // identified_items.id, what corrections are addressed by
-	TMDbID        int
-	MediaFileID   int64
-	Path          string
-	MediaType     string // "movie" or "episode"
-	Title         string
-	SeriesTitle   string
-	Season        int
-	Episode       int
-	Year          int
-	Genres        []string // nil when genres haven't been classified yet
-	Certification string
-	IsManual      bool
-	Reason        string
+	AudienceOverride     string
+	ShowAudienceOverride string
+	ID                   int64 // identified_items.id, what corrections are addressed by
+	TMDbID               int
+	MediaFileID          int64
+	Path                 string
+	MediaType            string // "movie" or "episode"
+	Title                string
+	SeriesTitle          string
+	Season               int
+	Episode              int
+	Year                 int
+	Genres               []string // nil when genres haven't been classified yet
+	Certification        string
+	IsManual             bool
+	Reason               string
 }
 
 // UnmatchedPage is one page of unmatched items and the overall count.
@@ -79,10 +81,10 @@ func Unmatched(ctx context.Context, db *sql.DB, limit, offset int) (UnmatchedPag
 	}
 	rows, err := db.QueryContext(ctx, `
 		SELECT ii.id, mf.id, mf.path, ii.media_type, ii.title, COALESCE(ii.series_title, ''),
-		       COALESCE(ii.season_number, 0), COALESCE(ii.episode_number, 0), COALESCE(CASE WHEN ii.media_type = 'episode' THEN CAST(substr(ts.first_air_date, 1, 4) AS INTEGER) ELSE ii.release_year END, 0),
-		       ii.genre_tags,
-		       COALESCE(CASE WHEN ii.media_type = 'movie' THEN ii.content_rating ELSE COALESCE(ii.content_rating, ts.content_rating) END, ''),
-		       ii.is_manual_correction,
+		       COALESCE(ii.season_number, 0), COALESCE(ii.episode_number, 0), COALESCE(CASE WHEN ii.media_type = 'episode' THEN COALESCE(ts.premiere_year_override,CAST(substr(COALESCE(ts.first_air_date,ii.keyless_release_date), 1, 4) AS INTEGER),ii.release_year) ELSE ii.release_year END, 0),
+		       COALESCE(CASE WHEN ii.genre_source='manual' THEN ii.genre_tags END,ts.genre_tags,ii.genre_tags),
+		       COALESCE(CASE WHEN ii.media_type = 'movie' THEN ii.content_rating ELSE COALESCE(CASE WHEN ii.content_rating_manual=1 THEN ii.content_rating END,ts.content_rating,ii.content_rating) END, ''),
+		       ii.is_manual_correction,COALESCE(ii.audience_override,''),COALESCE(ts.audience_override,''),
 
  COALESCE(CASE WHEN ii.media_type='episode' THEN ts.tmdb_id ELSE ii.tmdb_id END,0) `+unmatchedWhere+`
 		ORDER BY mf.path LIMIT ? OFFSET ?`, limit, offset)
@@ -95,7 +97,7 @@ func Unmatched(ctx context.Context, db *sql.DB, limit, offset int) (UnmatchedPag
 		var tags sql.NullString
 		var manual int
 		if err := rows.Scan(&it.ID, &it.MediaFileID, &it.Path, &it.MediaType, &it.Title, &it.SeriesTitle,
-			&it.Season, &it.Episode, &it.Year, &tags, &it.Certification, &manual, &it.TMDbID); err != nil {
+			&it.Season, &it.Episode, &it.Year, &tags, &it.Certification, &manual, &it.AudienceOverride, &it.ShowAudienceOverride, &it.TMDbID); err != nil {
 			return UnmatchedPage{}, fmt.Errorf("lineup: list unmatched: %w", err)
 		}
 		it.IsManual = manual == 1
@@ -117,7 +119,7 @@ func explainUnmatched(it UnmatchedItem, channels []channel.Channel, filters map[
 	if it.MediaType == "episode" && it.SeriesTitle != "" {
 		title = it.SeriesTitle
 	}
-	candidate := classifiedItem{Path: it.Path, MediaType: it.MediaType, Title: title, ReleaseYear: it.Year, Certification: it.Certification}
+	candidate := classifiedItem{AudienceOverride: it.AudienceOverride, ShowAudienceOverride: it.ShowAudienceOverride, Path: it.Path, MediaType: it.MediaType, Title: title, ReleaseYear: it.Year, Certification: it.Certification}
 	for _, g := range it.Genres {
 		candidate.Tags = append(candidate.Tags, metadata.Tag(g))
 	}

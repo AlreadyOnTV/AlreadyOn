@@ -14,6 +14,8 @@ import (
 )
 
 type FilterExtra struct {
+	// MatchAudience gives built-in channels a distinct audience pool rather than cumulative permission.
+	MatchAudience bool `json:"matchAudience,omitempty"`
 	// ExcludedGenres takes precedence over OR-matched included genres.
 	ExcludedGenres []string `json:"excludedGenres,omitempty"`
 	// RequireKnownYear keeps undated titles out of restricted default channels.

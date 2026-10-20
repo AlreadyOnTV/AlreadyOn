@@ -51,7 +51,7 @@ func ClassifyGenresKeyless(ctx context.Context, db *sql.DB, client *metadata.Key
 		return nil
 	}
 	defer keylessRunning.Unlock()
-	return classifyPending(ctx, db, client, genreSourceKeyless, `genre_tags IS NULL OR (genre_source = 'keyless' AND keyless_fetched_at_unix IS NULL)`)
+	return classifyPending(ctx, db, client, genreSourceKeyless, `keyless_fetched_at_unix IS NULL`)
 }
 
 type genreClassifier interface {
@@ -149,7 +149,10 @@ func classifyPending(ctx context.Context, db *sql.DB, client genreClassifier, so
 		if err != nil {
 			continue
 		}
-		if _, err := db.ExecContext(ctx, `UPDATE identified_items SET genre_tags = ?, genre_source = ? WHERE id = ?`, string(encoded), source, p.id); err != nil {
+		if _, err := db.ExecContext(ctx, `UPDATE identified_items SET genre_tags = ?, genre_source = ?
+ WHERE id = ? AND coalesce(genre_source,'')!='manual'
+ AND (? != 'keyless' OR genre_tags IS NULL OR genre_tags='[]' OR genre_source='keyless')
+ AND (? != 'tmdb' OR ? != '[]' OR genre_tags IS NULL OR genre_tags='[]')`, string(encoded), source, p.id, source, source, string(encoded)); err != nil {
 			return fmt.Errorf("library: classify genres: save row %d: %w", p.id, err)
 		}
 		if result, ok := details[key]; ok {
@@ -242,7 +245,15 @@ func EnrichMetadata(ctx context.Context, db *sql.DB, client *metadata.Client) er
 		if seriesTitle == "" {
 			seriesTitle = p.title
 		}
-		show, err := resolveShow(ctx, db, client, showCache, seriesTitle, lookupName(seriesTitle, p.path))
+		var existingID int64
+		var existingTitle string
+		_ = db.QueryRowContext(ctx, `SELECT s.id,s.title FROM identified_items i JOIN tv_shows s ON s.id=i.show_id WHERE i.id=? AND s.local_series_title IS NOT NULL`, p.id).Scan(&existingID, &existingTitle)
+		lookup := lookupName(seriesTitle, p.path)
+		if existingID > 0 {
+			seriesTitle = existingTitle
+			lookup = existingTitle
+		}
+		show, err := resolveShow(ctx, db, client, showCache, seriesTitle, lookup)
 		if err != nil {
 			return err
 		}
@@ -318,25 +329,49 @@ func resolveShow(ctx context.Context, db *sql.DB, client *metadata.Client, cache
 
 	var localID int64
 	var tmdbID int
+	var fetched sql.NullInt64
 	if lookup == seriesTitle {
-		err := db.QueryRowContext(ctx, `SELECT id, tmdb_id FROM tv_shows WHERE title = ?`, seriesTitle).Scan(&localID, &tmdbID)
-		if err == nil {
+		err := db.QueryRowContext(ctx, `SELECT id, tmdb_id, metadata_fetched_at_unix FROM tv_shows WHERE title = ?`, seriesTitle).Scan(&localID, &tmdbID, &fetched)
+		if err == nil && tmdbID > 0 {
+			if !fetched.Valid {
+				details, err := client.TVDetails(ctx, tmdbID)
+				if err != nil {
+					return showRef{}, nil
+				}
+				_, err = db.ExecContext(ctx, `UPDATE tv_shows SET content_rating=CASE WHEN content_rating_manual=1 THEN content_rating ELSE NULLIF(?,'') END,metadata_fetched_at_unix=unixepoch() WHERE id=?`, details.Certification, localID)
+				if err != nil {
+					return showRef{}, err
+				}
+			}
 			ref := showRef{localID: sql.NullInt64{Int64: localID, Valid: true}, tmdbID: tmdbID}
 			cache[lookup] = ref
 			return ref, nil
 		}
-		if err != sql.ErrNoRows {
+		if err != nil && err != sql.ErrNoRows {
 			return showRef{}, fmt.Errorf("library: enrich metadata: look up show %q: %w", seriesTitle, err)
 		}
 	}
 
 	foundID, err := client.FindTVID(ctx, lookup, 0)
 	if err != nil || foundID == 0 {
-		ref := showRef{}
+		ref := showRef{localID: sql.NullInt64{Int64: localID, Valid: localID > 0}}
 		cache[lookup] = ref
 		return ref, nil
 	}
 
+	if localID > 0 && tmdbID < 0 {
+		details, err := client.TVDetails(ctx, foundID)
+		if err != nil {
+			return showRef{}, nil
+		}
+		_, err = db.ExecContext(ctx, `UPDATE tv_shows SET first_air_date=?,last_air_date=?,overview=?,content_rating=CASE WHEN content_rating_manual=1 THEN content_rating ELSE NULLIF(?,'') END,metadata_fetched_at_unix=unixepoch() WHERE id=?`, details.FirstAirDate, details.LastAirDate, details.Overview, details.Certification, localID)
+		if err != nil {
+			return showRef{}, err
+		}
+		ref := showRef{localID: sql.NullInt64{Int64: localID, Valid: true}, tmdbID: foundID}
+		cache[lookup] = ref
+		return ref, nil
+	}
 	err = db.QueryRowContext(ctx, `SELECT id FROM tv_shows WHERE tmdb_id = ?`, foundID).Scan(&localID)
 	if err == nil {
 		ref := showRef{localID: sql.NullInt64{Int64: localID, Valid: true}, tmdbID: foundID}
@@ -383,6 +418,10 @@ func enrichEpisode(ctx context.Context, db *sql.DB, client *metadata.Client, id 
 		return nil
 	}
 
+	if show.tmdbID <= 0 {
+		_, err := db.ExecContext(ctx, `UPDATE identified_items SET show_id=?,metadata_fetched_at_unix=unixepoch() WHERE id=?`, show.localID, id)
+		return err
+	}
 	details, err := client.EpisodeDetails(ctx, show.tmdbID, season, episode)
 	if err != nil {
 		return nil

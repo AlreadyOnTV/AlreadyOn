@@ -98,6 +98,7 @@ func TestMinimumAudienceTier_AllYoungChildContent(t *testing.T) {
 	c, _ := Create(context.Background(), db, Draft{Number: 2001, Name: "Kids"})
 	insertRatedMovie(t, db, c.ID, "/media/kids1.mkv", "G", 1)
 	insertRatedEpisode(t, db, c.ID, "/media/kids2.mkv", "Kids Show", "TV-Y7", 2)
+	db.Exec(`UPDATE identified_items SET genre_tags='["family","animation"]'`)
 
 	tier, err := MinimumAudienceTier(context.Background(), db, c.ID)
 	if err != nil {
@@ -140,8 +141,8 @@ func TestMinimumAudienceTier_MissingCertification_RequiresAdult(t *testing.T) {
 func TestMinimumAudienceTier_EpisodeUsesParentShowCertification(t *testing.T) {
 	db := openTestDB(t)
 	c, _ := Create(context.Background(), db, Draft{Number: 2004, Name: "Teen Show"})
-	insertRatedEpisode(t, db, c.ID, "/media/ep1.mkv", "Some Show", "TV-14", 1)
-	insertRatedEpisode(t, db, c.ID, "/media/ep2.mkv", "Some Show", "TV-14", 2)
+	insertRatedEpisode(t, db, c.ID, "/media/ep1.mkv", "Some Show", "TV-PG", 1)
+	insertRatedEpisode(t, db, c.ID, "/media/ep2.mkv", "Some Show", "TV-PG", 2)
 
 	tier, err := MinimumAudienceTier(context.Background(), db, c.ID)
 	if err != nil {

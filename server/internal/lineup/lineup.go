@@ -80,10 +80,12 @@ func build(ctx context.Context, db *sql.DB, emptyOnly bool) (int, error) {
 }
 
 type classifiedItem struct {
-	Path            string
-	MediaFileID     int64
-	DurationSeconds float64
-	MediaType       string
+	AudienceOverride     string
+	ShowAudienceOverride string
+	Path                 string
+	MediaFileID          int64
+	DurationSeconds      float64
+	MediaType            string
 	// Title is the movie's title, or the show's name for an episode.
 	Title         string
 	SeriesTitle   string // "" for movies
@@ -117,8 +119,8 @@ func loadPool(ctx context.Context, db *sql.DB, classifiedOnly bool) ([]classifie
 		SELECT mf.id, mf.duration_seconds, ii.media_type, mf.path,
 		       CASE WHEN ii.media_type = 'movie' THEN ii.title ELSE COALESCE(ii.series_title, ii.title) END,
 		       COALESCE(ii.series_title, ''), COALESCE(ii.season_number, 0), COALESCE(ii.episode_number, 0),
-		       COALESCE(CASE WHEN ii.media_type = 'episode' THEN CAST(substr(ts.first_air_date, 1, 4) AS INTEGER) ELSE ii.release_year END, 0), ii.genre_tags,
-		       COALESCE(CASE WHEN ii.media_type = 'movie' THEN ii.content_rating ELSE COALESCE(ii.content_rating, ts.content_rating) END, '')
+		       COALESCE(CASE WHEN ii.media_type = 'episode' THEN COALESCE(ts.premiere_year_override, CAST(substr(COALESCE(ts.first_air_date,ii.keyless_release_date), 1, 4) AS INTEGER), ii.release_year) ELSE ii.release_year END, 0), COALESCE(CASE WHEN ii.genre_source='manual' THEN ii.genre_tags END, ts.genre_tags, ii.genre_tags),
+		       COALESCE(CASE WHEN ii.media_type = 'movie' THEN ii.content_rating ELSE COALESCE(CASE WHEN ii.content_rating_manual=1 THEN ii.content_rating END,ts.content_rating,ii.content_rating) END, ''), COALESCE(ii.audience_override,''), COALESCE(ts.audience_override,'')
 		FROM media_files mf
 		JOIN identified_items ii ON ii.media_file_id = mf.id
 		LEFT JOIN tv_shows ts ON ts.id = ii.show_id
@@ -137,7 +139,7 @@ func loadPool(ctx context.Context, db *sql.DB, classifiedOnly bool) ([]classifie
 		var it classifiedItem
 		var tagsJSON sql.NullString
 		if err := rows.Scan(&it.MediaFileID, &it.DurationSeconds, &it.MediaType, &it.Path, &it.Title,
-			&it.SeriesTitle, &it.SeasonNumber, &it.EpisodeNumber, &it.ReleaseYear, &tagsJSON, &it.Certification); err != nil {
+			&it.SeriesTitle, &it.SeasonNumber, &it.EpisodeNumber, &it.ReleaseYear, &tagsJSON, &it.Certification, &it.AudienceOverride, &it.ShowAudienceOverride); err != nil {
 			return nil, fmt.Errorf("lineup: load classified pool: %w", err)
 		}
 		if tagsJSON.Valid {
