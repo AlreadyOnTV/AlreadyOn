@@ -386,9 +386,7 @@
 }
 
 @media (max-width: 768px) {
-  .admin-navigation-sidebar { display: none; }
+  .admin-navigation-sidebar,
+  .admin-media-sidebar { display: none; }
   .admin-layout-manage-media { display: block; }
-  .admin-page-manage-media .admin-mobile-nav { display: none; }
-  .admin-media-sidebar { padding: 0 12px; }
-  .admin-media-sidebar .admin-tabs { display: flex; padding-top: 24px; }
 }
