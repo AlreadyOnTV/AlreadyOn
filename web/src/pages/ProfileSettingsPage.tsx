@@ -199,15 +199,15 @@ export default function ProfileSettingsPage() {
       <div className="admin-topbar">
         <div className="admin-topbar-inner">
           <Brand />
+          <div className="admin-nav-back-row">
+            <button className="admin-back" onClick={() => navigate('/')}>
+              ← Back To Guide
+            </button>
+          </div>
           <ProfileMenu />
         </div>
       </div>
       <div className="admin-content">
-        <div className="settings-back-row">
-          <button className="admin-back" onClick={() => navigate('/')}>
-            ← Back To Guide
-          </button>
-        </div>
         <div className="admin-section">
           <div className="admin-card">
             <h3>Display Name</h3>
