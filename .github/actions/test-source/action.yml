@@ -21,10 +21,15 @@ runs:
         TEST_TMPFS: 2g
       shell: bash
       run: |
+        # Source tests run without Git installed; pass the checkout identity as
+        # the same read-only build input used by the production WebUI build.
+        revision_file=$(mktemp "$RUNNER_TEMP/alreadyon-web-revision.XXXXXX")
+        trap 'rm -f "$revision_file"' EXIT
+        git rev-parse HEAD > "$revision_file"
         docker run --rm --name "alreadyon-ci-tests-$GITHUB_RUN_ID-$GITHUB_RUN_ATTEMPT" \
           --memory="$TEST_MEMORY" --tmpfs "/tmp:rw,exec,size=$TEST_TMPFS,mode=1777" --user "$(id -u):$(id -g)" \
           -e GOFLAGS=-p=1 -e HOME=/tmp -e TZ \
-          -v "$GITHUB_WORKSPACE:/workspaces/alreadyon" \
+          -v "$GITHUB_WORKSPACE:/workspaces/alreadyon"           -v "$revision_file:/workspaces/web-build-revision:ro" \
           '${{ inputs.ci-base }}' bash -euc \
           'npm ci --prefix web; go clean -testcache; make test; make test-e2e'
     - name: Clean up the test container after cancellation

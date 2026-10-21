@@ -16,7 +16,7 @@ function clientVersion() {
     const cycle = readFileSync(new URL('../release-date.txt', import.meta.url), 'utf8').trim();
     let revision: string;
     try {
-      revision = readFileSync(new URL('../web-build-revision', import.meta.url), 'utf8').trim();
+      revision = readFileSync(new URL('../../web-build-revision', import.meta.url), 'utf8').trim();
     } catch {
       revision = execFileSync('git', ['rev-parse', 'HEAD'], { encoding: 'utf8' }).trim();
     }
