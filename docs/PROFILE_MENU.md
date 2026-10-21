@@ -30,4 +30,4 @@ WebUI stays on-page: dropdowns/icons save immediately; names save after typing p
 
 Server success shows per-setting green checks for five seconds, then fades; failures show field errors. Unchanged values never write. Serialized writes coalesce queued same-setting edits, preserving newest choices/unrelated settings. Remote refreshes update untouched fields, preserving incomplete edits.
 
-Active Streaming Sessions shows client-reported App Version, never the server version; older clients display Unknown. Web players report their bundled source version; Android reports the installed APK version. Packaged-runtime checks verify that the served WebUI assets contain their source revision.
+Active Streaming Sessions shows client-reported App Version, never the server version; older clients display Unknown. Web players report their bundled source version; Android reports the installed APK version. Source-test containers receive a read-only revision file when Git is unavailable. Packaged-runtime checks verify that served WebUI assets contain their source revision.
