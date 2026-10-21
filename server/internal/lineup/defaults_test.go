@@ -169,6 +169,15 @@ func TestValidatedAudienceDoesNotBypassCustomRatingFilter(t *testing.T) {
 // Every identified title has a default destination even without genres or dates.
 // This also guards the second eligibility gate (PG must be allowed on Kids).
 func TestDefaultsCoverAutomaticRatingsWithoutManualMatching(t *testing.T) {
+	db := openTestDB(t)
+	resolved := make(map[int]channel.Filter)
+	for n, f := range defaultFilters {
+		f, err := channel.Resolve(context.Background(), db, f)
+		if err != nil {
+			t.Fatal(err)
+		}
+		resolved[n] = f
+	}
 	for _, kind := range []string{"movie", "episode"} {
 		certs := append([]string{"", "NR", "invalid"}, eligibility.TVCertifications...)
 		if kind == "movie" {
@@ -179,7 +188,7 @@ func TestDefaultsCoverAutomaticRatingsWithoutManualMatching(t *testing.T) {
 				for _, tags := range [][]metadata.Tag{nil, {metadata.TagAnime}, {metadata.TagHorror, metadata.TagWar}, {metadata.TagAnimation}} {
 					it := classifiedItem{MediaType: kind, Certification: cert, ReleaseYear: year, Tags: tags}
 					count := 0
-					for _, f := range defaultFilters {
+					for _, f := range resolved {
 						if filterMatches(f, it) {
 							count++
 							if f.AudienceTier != string(eligibility.RequiredTier(kind, cert)) {
