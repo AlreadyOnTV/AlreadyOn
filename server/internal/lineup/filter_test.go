@@ -91,7 +91,7 @@ func TestFilterMatches(t *testing.T) {
 	}{
 		// Audience tier is a hard boundary.
 		{"kids sees G movie", channel.Filter{AudienceTier: "young_child"}, classified("movie", "A", 2000, "G"), true},
-		{"kids blocked from PG movie", channel.Filter{AudienceTier: "young_child"}, classified("movie", "A", 2000, "PG"), false},
+		{"kids sees PG movie", channel.Filter{AudienceTier: "young_child"}, classified("movie", "A", 2000, "PG"), true},
 		{"teen sees PG-13", channel.Filter{AudienceTier: "teen"}, classified("movie", "A", 2000, "PG-13"), true},
 		{"teen blocked from R", channel.Filter{AudienceTier: "teen"}, classified("movie", "A", 2000, "R"), false},
 		{"teen sees TV-14 episode", channel.Filter{AudienceTier: "teen"}, classified("episode", "A", 2000, "TV-14"), true},

@@ -294,6 +294,11 @@ func (s *Scanner) visitFile(ctx context.Context, root config.ValidatedRoot, path
 		needsProbe = previousStatus == "unreadable" || previousStatus == "corrupt"
 	}
 	if !needsProbe {
+		// Parser upgrades must also repair already-probed year-season files.
+		// This does not re-probe media or reset correctly classified TV metadata.
+		if err := s.identifyFile(ctx, root, path, id, true); err != nil {
+			result.Errors = append(result.Errors, fmt.Errorf("repair identification: %w", err))
+		}
 		return nil
 	}
 
@@ -348,6 +353,15 @@ func (s *Scanner) visitFile(ctx context.Context, root config.ValidatedRoot, path
 		result.Errors = append(result.Errors, fmt.Errorf("mark ok %s: %w", path, statusErr))
 	}
 
+	if err := s.identifyFile(ctx, root, path, id, false); err != nil {
+		result.Errors = append(result.Errors, fmt.Errorf("save identification for %s: %w", path, err))
+	}
+	return nil
+}
+
+// identifyFile shares filename parsing between new probes and narrowly scoped
+// recovery of old year-season movie guesses during an otherwise unchanged scan.
+func (s *Scanner) identifyFile(ctx context.Context, root config.ValidatedRoot, path string, id int64, repairOnly bool) error {
 	// Commercials aren't movies/episodes to identify — running them
 	// through Identify() just produced junk identified_items rows (a
 	// bare release year from a "2000/2001/2002" library folder, mostly
@@ -365,9 +379,20 @@ func (s *Scanner) visitFile(ctx context.Context, root config.ValidatedRoot, path
 		relPath = filepath.Base(path)
 	}
 	if identification, ok := Identify(relPath); ok {
-		if err := SaveIdentification(ctx, s.DB, id, identification); err != nil {
-			result.Errors = append(result.Errors, fmt.Errorf("save identification for %s: %w", path, err))
+		if repairOnly {
+			if !identification.IsEpisode || identification.Season < 1900 {
+				return nil
+			}
+			var kind string
+			err := s.DB.QueryRowContext(ctx, `SELECT media_type FROM identified_items WHERE media_file_id=?`, id).Scan(&kind)
+			if err != nil && err != sql.ErrNoRows {
+				return err
+			}
+			if err == nil && kind != "movie" {
+				return nil
+			}
 		}
+		return SaveIdentification(ctx, s.DB, id, identification)
 	}
 	return nil
 }

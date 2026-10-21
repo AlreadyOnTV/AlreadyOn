@@ -18,7 +18,7 @@ type FilterExtra struct {
 	MatchAudience bool `json:"matchAudience,omitempty"`
 	// ExcludedGenres takes precedence over OR-matched included genres.
 	ExcludedGenres []string `json:"excludedGenres,omitempty"`
-	// RequireKnownYear keeps undated titles out of restricted default channels.
+	// RequireKnownYear keeps undated titles out of filters such as Classics.
 	RequireKnownYear bool      `json:"requireKnownYear,omitempty"`
 	AgeRestrictionID string    `json:"ageRestrictionId,omitempty"`
 	Eras             []string  `json:"eras,omitempty"`

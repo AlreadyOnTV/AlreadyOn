@@ -146,3 +146,38 @@ func TestClearCorrection_NoExistingRow_ReturnsError(t *testing.T) {
 		t.Fatal("expected an error clearing a correction with no identified_items row, got nil")
 	}
 }
+
+// Same-title provider records must not make automatic parent attachment arbitrary.
+func TestSaveIdentification_ReattachesOnlyUniqueManagedSeries(t *testing.T) {
+	db := openTestDB(t)
+	var firstShowID int64
+	if err := db.QueryRow(`INSERT INTO tv_shows (tmdb_id,title,local_series_title) VALUES (900,'Example Show','Example Show') RETURNING id`).Scan(&firstShowID); err != nil {
+		t.Fatalf("insert first managed show: %v", err)
+	}
+	firstFile := insertTestMediaFile(t, db, "/media/tv/Example Show/S01E01.mkv")
+	if err := SaveIdentification(context.Background(), db, firstFile, Identification{IsEpisode: true, Show: "Example Show", Season: 1, Episode: 1, Title: "Pilot"}); err != nil {
+		t.Fatalf("SaveIdentification for unique parent: %v", err)
+	}
+	var firstParent sql.NullInt64
+	if err := db.QueryRow(`SELECT show_id FROM identified_items WHERE media_file_id=?`, firstFile).Scan(&firstParent); err != nil {
+		t.Fatalf("query unique parent: %v", err)
+	}
+	if !firstParent.Valid || firstParent.Int64 != firstShowID {
+		t.Fatalf("unique parent=%v, want %d", firstParent, firstShowID)
+	}
+
+	if _, err := db.Exec(`INSERT INTO tv_shows (tmdb_id,title,local_series_title) VALUES (901,'Example Show','Example Show')`); err != nil {
+		t.Fatalf("insert second same-title show: %v", err)
+	}
+	secondFile := insertTestMediaFile(t, db, "/media/tv/Example Show/S01E02.mkv")
+	if err := SaveIdentification(context.Background(), db, secondFile, Identification{IsEpisode: true, Show: "Example Show", Season: 1, Episode: 2, Title: "Episode Two"}); err != nil {
+		t.Fatalf("SaveIdentification for ambiguous parent: %v", err)
+	}
+	var secondParent sql.NullInt64
+	if err := db.QueryRow(`SELECT show_id FROM identified_items WHERE media_file_id=?`, secondFile).Scan(&secondParent); err != nil {
+		t.Fatalf("query ambiguous parent: %v", err)
+	}
+	if secondParent.Valid {
+		t.Errorf("ambiguous episode attached to show %d, want it left unlinked", secondParent.Int64)
+	}
+}

@@ -2752,21 +2752,28 @@ const noWorkers = async (unreleased = () => 0) => {
     });
     const page = await context.newPage();
     await login(page);
+    // The heading renders before session rows arrive. Hold the response until
+    // the heading is visible so this regression also covers a slow sessions API.
+    let releaseSessions;
+    const sessionsReady = new Promise((resolve) => { releaseSessions = resolve; });
+    const pendingSessions = async (route) => {
+      await sessionsReady;
+      await route.continue();
+    };
+    await page.route("**/api/auth/sessions", pendingSessions);
     await page.goto(url + "/account");
     await page
       .getByRole("heading", { name: "Sessions", exact: true })
       .waitFor();
+    releaseSessions();
     assert(
       (await page
         .getByRole("columnheader", { name: "Type", exact: true })
         .count()) === 0,
       "Session Type column is removed",
     );
-    assert(
-      (await page.getByRole("cell", { name: "Linux", exact: true }).count()) >
-        0,
-      "Web sessions use operating system labels",
-    );
+    await page.getByRole("cell", { name: "Linux", exact: true }).first().waitFor();
+    await page.unroute("**/api/auth/sessions", pendingSessions);
     const toggle = page.getByRole("switch", {
       name: "Remove Inactive Sessions",
       exact: true,
@@ -4593,6 +4600,7 @@ const noWorkers = async (unreleased = () => 0) => {
         a.sessions[0].device,
       "Activity identifies the active viewer",
     );
+    assert(/^\d{2}\.\d{2}\.\d{2}_[a-f0-9]{7}$/.test(a.sessions[0].appVersion), 'Player must report its bundled app version');
     assert(
       !JSON.stringify(a).includes("token"),
       "Activity never exposes playback tokens",

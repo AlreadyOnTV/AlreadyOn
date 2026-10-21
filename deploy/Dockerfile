@@ -28,6 +28,9 @@ WORKDIR /src/web
 COPY web/package.json web/package-lock.json ./
 RUN --mount=type=cache,target=/root/.npm npm ci
 COPY web/ .
+COPY release-date.txt /src/release-date.txt
+ARG VCS_REF
+RUN echo "$VCS_REF" | grep -Eq '^[0-9a-f]{40}$' && printf '%s' "$VCS_REF" > /web-build-revision
 RUN npm run build
 
 FROM ${RUNTIME_BASE} AS runtime

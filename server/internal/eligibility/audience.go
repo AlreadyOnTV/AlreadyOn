@@ -1,53 +1,16 @@
 package eligibility
 
-import "slices"
-
-// Audience separates channel identity from cumulative viewing permission. A
-// manual decision is positive owner validation; a known certification remains
-// a safety floor. Ambiguous TV-14/PG-13 content needs review because these
-// certifications do not establish the absence of nudity or graphic violence.
+// Audience separates channel identity from cumulative viewing permission.
+// Ratings supply the household's default audience; genres alone do not describe
+// violence or nudity severity. Missing/invalid ratings have a complete automatic
+// classification too: unrestricted, rather than requiring manual approval to air.
+// Owner overrides remain supported, with R/NC-17/TV-MA as an unrestricted floor.
 func Audience(mediaType, certification string, tags []string, override string) (Tier, bool) {
-	if override != "" {
-		tier := ParseTier(override)
-		if certification == "TV-MA" || certification == "R" || certification == "NC-17" {
-			tier = TierAdult
-		}
-		return tier, false
-	}
 	if certification == "TV-MA" || certification == "R" || certification == "NC-17" {
 		return TierAdult, false
 	}
-	if !ValidCertification(mediaType, certification) || certification == "NR" {
-		return TierAdult, true
+	if override != "" {
+		return ParseTier(override), false
 	}
-	if slices.Contains(tags, "horror") || slices.Contains(tags, "war") {
-		return TierAdult, true
-	}
-	if slices.Contains(tags, "anime") {
-		return TierAdult, true
-	}
-	if mediaType == "movie" {
-		if certification == "G" && (slices.Contains(tags, "family") || slices.Contains(tags, "kids")) {
-			return TierYoungChild, false
-		}
-		return TierAdult, true
-	}
-	switch certification {
-	case "TV-Y":
-		return TierYoungChild, false
-	case "TV-Y7", "TV-Y7-FV":
-		if slices.Contains(tags, "animation") {
-			return TierYoungChild, false
-		}
-		return TierTeen, false
-	case "TV-G":
-		if slices.Contains(tags, "animation") {
-			return TierYoungChild, false
-		}
-		return TierTeen, false
-	case "TV-PG":
-		return TierTeen, false
-	default:
-		return TierAdult, true
-	}
+	return RequiredTier(mediaType, certification), false
 }

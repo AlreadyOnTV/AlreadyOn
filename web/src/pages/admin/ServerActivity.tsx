@@ -15,7 +15,7 @@ type Session = {
   videoReason?: string;
   audioReason?: string;
   bandwidthMbps: number | null;
-  latencyMs: number | null;
+  appVersion?: string;
   commercial: boolean;
   paused: boolean;
 };
@@ -107,8 +107,8 @@ export default function ServerActivity() {
                       <dd>{s.bandwidthMbps == null ? 'Unavailable' : `${s.bandwidthMbps.toFixed(2)} Mbps`}</dd>
                     </div>
                     <div>
-                      <dt>Latency</dt>
-                      <dd>{s.latencyMs == null ? 'Unavailable' : `${s.latencyMs.toFixed(0)} ms`}</dd>
+                      <dt>App Version</dt>
+                      <dd>{s.appVersion?.trim() || 'Unknown'}</dd>
                     </div>
                     <div>
                       <dt>Playback</dt>

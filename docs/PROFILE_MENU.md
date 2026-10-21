@@ -29,3 +29,5 @@ Clients refresh shared profiles/avatars every five minutes and on visibility/res
 WebUI stays on-page: dropdowns/icons save immediately; names save after typing pauses/blur, never blank. PINs require Save PIN with matching 4–6 digits; Cancel restores pre-edit view. Removal requires confirmation. No page-level Save Changes/Cancel; native save flows are unchanged.
 
 Server success shows per-setting green checks for five seconds, then fades; failures show field errors. Unchanged values never write. Serialized writes coalesce queued same-setting edits, preserving newest choices/unrelated settings. Remote refreshes update untouched fields, preserving incomplete edits.
+
+Active Streaming Sessions shows client-reported App Version, never the server version; older clients display Unknown. Web players report their bundled source version; Android reports the installed APK version. Source-test containers receive a read-only revision file when Git is unavailable. Packaged-runtime checks verify that served WebUI assets contain their source revision.

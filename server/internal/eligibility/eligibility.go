@@ -46,8 +46,8 @@ func ParseTier(raw string) Tier {
 // allow-lists from docs/PROJECT_BRIEF.md's example audience_tiers
 // mapping. adult has no list: it's unconditionally unrestricted.
 var (
-	youngChildTV    = map[string]bool{"TV-Y": true, "TV-Y7": true, "TV-G": true}
-	youngChildMovie = map[string]bool{"G": true}
+	youngChildTV    = map[string]bool{"TV-Y": true, "TV-Y7": true, "TV-Y7-FV": true, "TV-G": true}
+	youngChildMovie = map[string]bool{"G": true, "PG": true}
 	teenTV          = map[string]bool{"TV-Y": true, "TV-Y7": true, "TV-Y7-FV": true, "TV-G": true, "TV-PG": true, "TV-14": true}
 	teenMovie       = map[string]bool{"G": true, "PG": true, "PG-13": true}
 )

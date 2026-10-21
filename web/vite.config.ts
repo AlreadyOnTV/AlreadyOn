@@ -1,4 +1,5 @@
 import react from '@vitejs/plugin-react';
+import { execFileSync } from 'node:child_process';
 import { defineConfig, type ProxyOptions } from 'vite';
 import { readFileSync, watchFile, unwatchFile } from 'node:fs';
 import { Agent, Server } from 'node:https';
@@ -7,6 +8,23 @@ import { X509Certificate } from 'node:crypto';
 // Keep preview port overrides aligned with the managed backend.
 const apiOrigin = `https://127.0.0.1:${process.env.PREVIEW_API_PORT || 19900}`;
 // Media URLs are derived from Host, which must match the browser for scoped CORS.
+
+// Container builds supply the source revision as a file; local builds read Git.
+// Embed it in the assets so an older open tab keeps reporting its own version.
+function clientVersion() {
+  try {
+    const cycle = readFileSync(new URL('../release-date.txt', import.meta.url), 'utf8').trim();
+    let revision: string;
+    try {
+      revision = readFileSync(new URL('../../web-build-revision', import.meta.url), 'utf8').trim();
+    } catch {
+      revision = execFileSync('git', ['rev-parse', 'HEAD'], { encoding: 'utf8' }).trim();
+    }
+    return /^[0-9a-f]{40}$/.test(revision) ? `${cycle}_${revision.slice(0, 7)}` : 'Unknown';
+  } catch {
+    return 'Unknown';
+  }
+}
 
 // https://vite.dev/config/
 export default defineConfig(({ command }) => {
@@ -38,6 +56,7 @@ export default defineConfig(({ command }) => {
     },
   };
   return {
+    define: { __APP_VERSION__: JSON.stringify(clientVersion()) },
     plugins: [
       react(),
       {

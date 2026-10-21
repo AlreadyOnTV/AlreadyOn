@@ -118,6 +118,18 @@ def main():
     assert re.fullmatch(r'\d{2}\.\d{2}\.\d{2}_[0-9a-f]{7}', details['appVersion']), details['appVersion']
     revision = engine('image', 'inspect', '--format', '{{index .Config.Labels "org.opencontainers.image.revision"}}', IMAGE).stdout.decode().strip()
     assert details['appVersion'].endswith('_' + revision[:7]), 'Build stamp must identify the image revision'
+    # Client identity must survive the real container build context, not merely
+    # a local Vite build. Inspect the served assets rather than the server stamp.
+    code, index = request('GET', '/', authenticated=False)
+    scripts = re.findall(r'<script[^>]*src="([^"]+)"', index.decode())
+    assert code == 200 and scripts, 'WebUI scripts missing'
+    bundles = []
+    for path in scripts:
+        code, bundle = request('GET', path, authenticated=False)
+        assert code == 200, 'WebUI bundle unavailable'
+        bundles.append(bundle.decode())
+    assert any(re.search(r'\d{2}\.\d{2}\.\d{2}_' + revision[:7], bundle) for bundle in bundles), 'WebUI client version must identify its bundled image revision'
+
     assert details['uptimeSeconds'] >= 0 and details['timeZone'] == 'America/New_York'
     assert details['ffmpegVersion'] != 'Unavailable'
     assert all(ipaddress.ip_address(address).version == 4 for address in details['ipAddresses'])

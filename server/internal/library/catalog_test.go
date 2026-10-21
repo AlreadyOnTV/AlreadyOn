@@ -112,3 +112,25 @@ func TestCatalogAllContentFiltersPaginationAndMixedShows(t *testing.T) {
 		t.Fatal(err)
 	}
 }
+
+func TestCatalogResetAudienceUsesRatingsAndUnrestrictedFallback(t *testing.T) {
+	db := openClassifyTestDB(t)
+	ctx := context.Background()
+	for _, tt := range []struct{ rating, want string }{{"PG", "young_child"}, {"PG-13", "teen"}, {"", "adult"}} {
+		id := insertUnclassified(t, db, "movie", "Automatic "+tt.want, "", 2010)
+		if _, err := UpdateCatalog(ctx, db, []int64{id}, "movies", mustPatch(t, `{"audienceOverride":"adult","genres":["horror"],"certification":"`+tt.rating+`"}`)); err != nil {
+			t.Fatal(err)
+		}
+		if _, err := UpdateCatalog(ctx, db, []int64{id}, "movies", mustPatch(t, `{"audienceOverride":null}`)); err != nil {
+			t.Fatal(err)
+		}
+		page, err := Catalog(ctx, db, CatalogQuery{View: "movies", Search: "Automatic " + tt.want, Limit: 50})
+		if err != nil || len(page.Items) != 1 {
+			t.Fatalf("catalog: %+v, %v", page, err)
+		}
+		e := page.Items[0]
+		if e.Audience != tt.want || e.AudienceOverride != nil || e.NeedsReview || len(e.Genres) != 1 || e.Genres[0] != "horror" || e.Year == nil || *e.Year != 2010 {
+			t.Fatalf("reset changed metadata or failed automatic classification: %+v", e)
+		}
+	}
+}

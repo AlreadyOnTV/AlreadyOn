@@ -8,6 +8,7 @@ import (
 	"sort"
 	"strings"
 	"time"
+	"unicode"
 
 	"github.com/alreadyonapp/alreadyon/server/internal/activity"
 	"github.com/alreadyonapp/alreadyon/server/internal/auth"
@@ -27,6 +28,7 @@ type viewerActivity struct {
 	Profile              string    `json:"profile"`
 	SourceIP             string    `json:"sourceIp"`
 	Device               string    `json:"device"`
+	AppVersion           string    `json:"appVersion"`
 	Mode                 string    `json:"mode"`
 	Encoder              string    `json:"encoder"`
 	BandwidthMbps        *float64  `json:"bandwidthMbps"`
@@ -45,17 +47,18 @@ type viewerActivity struct {
 // Activity is tied to a player instance, not an FFmpeg rendition or a prefetch.
 func (p *PlaybackHTTP) reportActivity(w http.ResponseWriter, r *http.Request) {
 	var b struct {
-		ViewerID  string   `json:"viewerId"`
-		Token     string   `json:"token"`
-		ChannelID int64    `json:"channelId"`
-		ProfileID int64    `json:"profileId"`
-		LatencyMS *float64 `json:"latencyMs"`
-		Paused    bool     `json:"paused"`
+		ViewerID   string   `json:"viewerId"`
+		Token      string   `json:"token"`
+		ChannelID  int64    `json:"channelId"`
+		ProfileID  int64    `json:"profileId"`
+		LatencyMS  *float64 `json:"latencyMs"`
+		Paused     bool     `json:"paused"`
+		AppVersion string   `json:"appVersion"`
 	}
 	if !decodeStrict(w, r, &b) {
 		return
 	}
-	if len(b.ViewerID) < 16 || len(b.ViewerID) > 80 || (b.LatencyMS != nil && (math.IsNaN(*b.LatencyMS) || math.IsInf(*b.LatencyMS, 0) || *b.LatencyMS < 0 || *b.LatencyMS > 60000)) {
+	if len(b.AppVersion) > 100 || strings.ContainsFunc(b.AppVersion, unicode.IsControl) || len(b.ViewerID) < 16 || len(b.ViewerID) > 80 || (b.LatencyMS != nil && (math.IsNaN(*b.LatencyMS) || math.IsInf(*b.LatencyMS, 0) || *b.LatencyMS < 0 || *b.LatencyMS > 60000)) {
 		writeJSONError(w, 400, "invalid activity report")
 		return
 	}
@@ -138,6 +141,8 @@ func (p *PlaybackHTTP) reportActivity(w http.ResponseWriter, r *http.Request) {
 		}
 		v.UpdatedAt = now
 	}
+	// Reported by this player, never substituted with the server build.
+	v.AppVersion = strings.TrimSpace(b.AppVersion)
 	v.Profile = profileName
 	v.SourceIP = ip
 	v.Paused = b.Paused
