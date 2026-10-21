@@ -522,7 +522,8 @@ internal class PhoneModel(application: Application) : AndroidViewModel(applicati
             try {
                 api.request("/api/playback/activity", "POST", JSONObject()
                     .put("viewerId", viewerId).put("channelId", channel).put("token", token)
-                    .put("profileId", profileId).put("paused", paused))
+                    .put("profileId", profileId).put("paused", paused)
+                    .put("appVersion", BuildConfig.VERSION_NAME))
             } catch (e: CancellationException) {
                 throw e
             } catch (_: Exception) {

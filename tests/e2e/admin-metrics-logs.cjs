@@ -86,13 +86,24 @@ module.exports = async function adminMetricsAndLogs({
     });
   });
   await page.route("**/api/server/activity", (route) =>
-    route.fulfill({ json: { sessions: [], processes: [] } }),
+    route.fulfill({ json: { sessions: [
+      { id: 'web-client', channel: '101 · Kids', video: 'movie.mp4', profile: 'Viewer', sourceIp: '192.0.2.1', device: 'Desktop · Browser', mode: 'direct', encoder: '', bandwidthMbps: 2, latencyMs: 12, commercial: false, paused: false, appVersion: 'web-fixture_1234567' },
+      { id: 'tv-client', channel: '102 · TV', video: 'show.mp4', profile: 'Viewer', sourceIp: '192.0.2.2', device: 'TV · Android', mode: 'direct', encoder: '', bandwidthMbps: 3, latencyMs: 20, commercial: false, paused: false, appVersion: '26.10.25-alpha1' },
+      { id: 'old-client', channel: '103 · Older', video: 'legacy.mp4', profile: 'Viewer', sourceIp: '192.0.2.3', device: 'Mobile', mode: 'direct', encoder: '', bandwidthMbps: null, latencyMs: null, commercial: false, paused: false },
+    ], processes: [] } }),
   );
   await page.goto(url + "/admin/dashboard");
   await page
     .getByRole("table", { name: "Disk performance by mount" })
     .getByRole("cell", { name: "32GB / 128GB", exact: true })
     .waitFor();
+  const sessions = page.locator('.activity-session');
+  await sessions.first().getByText('web-fixture_1234567', { exact: true }).waitFor();
+  assert(await sessions.count() === 3, 'Concurrent sessions missing');
+  assert(await sessions.locator('dt').filter({ hasText: /^App Version$/ }).count() === 3, 'App Version label missing');
+  assert(await sessions.locator('dt').filter({ hasText: /^Latency$/ }).count() === 0, 'Latency still displayed in sessions');
+  assert(await sessions.nth(1).getByText('26.10.25-alpha1', { exact: true }).count() === 1, 'Native client version missing');
+  assert(await sessions.nth(2).getByText('Unknown', { exact: true }).count() === 1, 'Missing version needs placeholder');
   const metricsHeader = await page
     .locator(".metrics-toolbar")
     .evaluate((toolbar) => {

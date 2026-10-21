@@ -3329,6 +3329,10 @@ paths:
                     maximum: 60000,
                     description: Latest client media time to first byte in milliseconds; null when unavailable,
                   }
+                appVersion:
+                  type: string
+                  maxLength: 100
+                  description: Client application build version, not the server version. Optional for older clients; omit when unknown. Control characters are rejected.
                 paused: { type: boolean }
       responses:
         "204": { description: Activity accepted }
@@ -3548,6 +3552,7 @@ components:
           encoder,
           bandwidthMbps,
           latencyMs,
+          appVersion,
           commercial,
           paused,
           updatedAt,
@@ -3593,6 +3598,9 @@ components:
             description: Successfully written media bytes divided by report interval,
             in megabits per second; null until sampled,
           }
+        appVersion:
+          type: string
+          description: Client-reported application version; empty when unknown. Dashboards display Unknown for absent or empty values. Never inferred from the server version.
         latencyMs:
           {
             type: [number, "null"],

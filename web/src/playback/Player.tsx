@@ -1,5 +1,6 @@
 import { useEffect, useMemo, useRef, useState } from "react";
 import Hls from "hls.js";
+import { APP_VERSION } from "../version";
 import { apiFetch } from "../api/access";
 import { clientCapabilities } from "./capabilities";
 import { BROWSER_CODEC_MESSAGE, CodecHelp } from "./CodecHelp";
@@ -525,6 +526,7 @@ export function Player({
               token: s.token,
               profileId: currentUserId,
               latencyMs,
+              appVersion: APP_VERSION,
               paused: userPaused,
             }),
           });

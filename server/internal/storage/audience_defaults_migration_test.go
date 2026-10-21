@@ -1,3 +1,4 @@
+// Untouched audience presets advance without overwriting owner-edited definitions.
 package storage
 
 import (
