@@ -1,6 +1,6 @@
 package eligibility
 
-// Certification defaults keep fantasy violence in Teen rather than young child.
+// Certification defaults reflect the household audience policy.
 
 import "testing"
 
@@ -28,7 +28,7 @@ func TestRequiredTier_Movie(t *testing.T) {
 		want          Tier
 	}{
 		{"G", TierYoungChild},
-		{"PG", TierTeen},
+		{"PG", TierYoungChild},
 		{"PG-13", TierTeen},
 		{"R", TierAdult},
 		{"NC-17", TierAdult},
@@ -49,7 +49,7 @@ func TestRequiredTier_Episode(t *testing.T) {
 	}{
 		{"TV-Y", TierYoungChild},
 		{"TV-Y7", TierYoungChild},
-		{"TV-Y7-FV", TierTeen},
+		{"TV-Y7-FV", TierYoungChild},
 		{"TV-G", TierYoungChild},
 		{"TV-PG", TierTeen},
 		{"TV-14", TierTeen},

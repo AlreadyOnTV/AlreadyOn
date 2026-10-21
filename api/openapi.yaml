@@ -1172,6 +1172,11 @@ paths:
       summary: Browse movies, grouped TV shows or their episodes
       description: >
         Includes all identified, non-missing media files, including unprobed files.
+        Automatic audiences use certification: G/PG and TV-Y/TV-Y7/TV-Y7-FV/TV-G
+        are Kids, PG-13/TV-PG/TV-14 are Teens, and R/NC-17/TV-MA or missing/invalid
+        ratings are Unrestricted. Missing ratings do not require manual audience
+        review or prevent unrestricted channel matching. Manual overrides remain
+        supported; known R/NC-17/TV-MA ratings always require Unrestricted.
         Unidentified files appear after identification. Show IDs are representative
         item IDs; membership is resolved again for each request. Show audience is
         the most restrictive episode audience, genres/ratings are unions, and

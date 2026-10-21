@@ -9,7 +9,7 @@ import (
 )
 
 // defaultFilterFor supplies the approved age, genre and era rules.
-// Unknown premiere years remain exclusive to unrestricted channels.
+// Unknown years can use Modern/All defaults; Classics requires a known year.
 func defaultFilterFor(number int) (channel.Filter, bool) {
 	f, ok := defaultFilters[number]
 	return f, ok
@@ -17,33 +17,33 @@ func defaultFilterFor(number int) (channel.Filter, bool) {
 
 var defaultFilters = map[int]channel.Filter{
 	101: {AudienceTier: "young_child", MediaType: "tv", Era: "nostalgia", Genres: []string{"animation", "anime"}, FilterExtra: channel.FilterExtra{RequireKnownYear: true, MatchAudience: true}},
-	102: {AudienceTier: "young_child", MediaType: "tv", Era: "modern", Genres: []string{"animation", "anime"}, FilterExtra: channel.FilterExtra{RequireKnownYear: true, MatchAudience: true}},
-	103: {AudienceTier: "young_child", MediaType: "tv", Era: "nostalgia", Genres: []string{}, FilterExtra: channel.FilterExtra{RequireKnownYear: true, MatchAudience: true, ExcludedGenres: []string{"animation"}}},
-	104: {AudienceTier: "young_child", MediaType: "tv", Era: "modern", Genres: []string{}, FilterExtra: channel.FilterExtra{RequireKnownYear: true, MatchAudience: true, ExcludedGenres: []string{"animation"}}},
+	102: {AudienceTier: "young_child", MediaType: "tv", Era: "modern", Genres: []string{"animation", "anime"}, FilterExtra: channel.FilterExtra{RequireKnownYear: false, MatchAudience: true}},
+	103: {AudienceTier: "young_child", MediaType: "tv", Era: "nostalgia", Genres: []string{}, FilterExtra: channel.FilterExtra{RequireKnownYear: true, MatchAudience: true, ExcludedGenres: []string{"animation", "anime"}}},
+	104: {AudienceTier: "young_child", MediaType: "tv", Era: "modern", Genres: []string{}, FilterExtra: channel.FilterExtra{RequireKnownYear: false, MatchAudience: true, ExcludedGenres: []string{"animation", "anime"}}},
 	105: {AudienceTier: "young_child", MediaType: "movie", Era: "nostalgia", Genres: []string{}, FilterExtra: channel.FilterExtra{RequireKnownYear: true, MatchAudience: true}},
-	106: {AudienceTier: "young_child", MediaType: "movie", Era: "modern", Genres: []string{}, FilterExtra: channel.FilterExtra{RequireKnownYear: true, MatchAudience: true}},
+	106: {AudienceTier: "young_child", MediaType: "movie", Era: "modern", Genres: []string{}, FilterExtra: channel.FilterExtra{RequireKnownYear: false, MatchAudience: true}},
 	107: {AudienceTier: "teen", MediaType: "tv", Era: "nostalgia", Genres: []string{"animation"}, FilterExtra: channel.FilterExtra{RequireKnownYear: true, MatchAudience: true, ExcludedGenres: []string{"anime"}}},
-	108: {AudienceTier: "teen", MediaType: "tv", Era: "modern", Genres: []string{"animation"}, FilterExtra: channel.FilterExtra{RequireKnownYear: true, MatchAudience: true, ExcludedGenres: []string{"anime"}}},
-	109: {AudienceTier: "teen", MediaType: "tv", Era: "both", Genres: []string{"anime"}, FilterExtra: channel.FilterExtra{RequireKnownYear: true, MatchAudience: true}},
-	110: {AudienceTier: "teen", MediaType: "tv", Era: "both", Genres: []string{"anime"}, FilterExtra: channel.FilterExtra{RequireKnownYear: true, MatchAudience: true}},
+	108: {AudienceTier: "teen", MediaType: "tv", Era: "modern", Genres: []string{"animation"}, FilterExtra: channel.FilterExtra{RequireKnownYear: false, MatchAudience: true, ExcludedGenres: []string{"anime"}}},
+	109: {AudienceTier: "teen", MediaType: "tv", Era: "both", Genres: []string{"anime"}, FilterExtra: channel.FilterExtra{RequireKnownYear: false, MatchAudience: true}},
+	110: {AudienceTier: "teen", MediaType: "tv", Era: "both", Genres: []string{"anime"}, FilterExtra: channel.FilterExtra{RequireKnownYear: false, MatchAudience: true}},
 	111: {AudienceTier: "teen", MediaType: "tv", Era: "nostalgia", Genres: []string{"reality"}, FilterExtra: channel.FilterExtra{RequireKnownYear: true, MatchAudience: true, ExcludedGenres: []string{"animation", "anime"}}},
-	112: {AudienceTier: "teen", MediaType: "tv", Era: "modern", Genres: []string{"reality"}, FilterExtra: channel.FilterExtra{RequireKnownYear: true, MatchAudience: true, ExcludedGenres: []string{"animation", "anime"}}},
-	113: {AudienceTier: "teen", MediaType: "tv", Era: "nostalgia", Genres: []string{"drama"}, FilterExtra: channel.FilterExtra{RequireKnownYear: true, MatchAudience: true, ExcludedGenres: []string{"animation", "anime"}}},
-	114: {AudienceTier: "teen", MediaType: "tv", Era: "modern", Genres: []string{"drama"}, FilterExtra: channel.FilterExtra{RequireKnownYear: true, MatchAudience: true, ExcludedGenres: []string{"animation", "anime"}}},
+	112: {AudienceTier: "teen", MediaType: "tv", Era: "modern", Genres: []string{"reality"}, FilterExtra: channel.FilterExtra{RequireKnownYear: false, MatchAudience: true, ExcludedGenres: []string{"animation", "anime"}}},
+	113: {AudienceTier: "teen", MediaType: "tv", Era: "nostalgia", Genres: []string{}, FilterExtra: channel.FilterExtra{RequireKnownYear: true, MatchAudience: true}},
+	114: {AudienceTier: "teen", MediaType: "tv", Era: "modern", Genres: []string{}, FilterExtra: channel.FilterExtra{RequireKnownYear: false, MatchAudience: true}},
 	115: {AudienceTier: "teen", MediaType: "tv", Era: "nostalgia", Genres: []string{"fantasy", "scifi"}, FilterExtra: channel.FilterExtra{RequireKnownYear: true, MatchAudience: true, ExcludedGenres: []string{"animation", "anime"}}},
-	116: {AudienceTier: "teen", MediaType: "tv", Era: "modern", Genres: []string{"fantasy", "scifi"}, FilterExtra: channel.FilterExtra{RequireKnownYear: true, MatchAudience: true, ExcludedGenres: []string{"animation", "anime"}}},
+	116: {AudienceTier: "teen", MediaType: "tv", Era: "modern", Genres: []string{"fantasy", "scifi"}, FilterExtra: channel.FilterExtra{RequireKnownYear: false, MatchAudience: true, ExcludedGenres: []string{"animation", "anime"}}},
 	117: {AudienceTier: "teen", MediaType: "tv", Era: "nostalgia", Genres: []string{"action", "adventure"}, FilterExtra: channel.FilterExtra{RequireKnownYear: true, MatchAudience: true, ExcludedGenres: []string{"animation", "anime"}}},
-	118: {AudienceTier: "teen", MediaType: "tv", Era: "modern", Genres: []string{"action", "adventure"}, FilterExtra: channel.FilterExtra{RequireKnownYear: true, MatchAudience: true, ExcludedGenres: []string{"animation", "anime"}}},
+	118: {AudienceTier: "teen", MediaType: "tv", Era: "modern", Genres: []string{"action", "adventure"}, FilterExtra: channel.FilterExtra{RequireKnownYear: false, MatchAudience: true, ExcludedGenres: []string{"animation", "anime"}}},
 	119: {AudienceTier: "teen", MediaType: "movie", Era: "nostalgia", Genres: []string{}, FilterExtra: channel.FilterExtra{RequireKnownYear: true, MatchAudience: true}},
-	120: {AudienceTier: "teen", MediaType: "movie", Era: "modern", Genres: []string{}, FilterExtra: channel.FilterExtra{RequireKnownYear: true, MatchAudience: true}},
+	120: {AudienceTier: "teen", MediaType: "movie", Era: "modern", Genres: []string{}, FilterExtra: channel.FilterExtra{RequireKnownYear: false, MatchAudience: true}},
 	121: {AudienceTier: "adult", MediaType: "tv", Era: "both", Genres: []string{"animation"}, FilterExtra: channel.FilterExtra{RequireKnownYear: false, MatchAudience: true, ExcludedGenres: []string{"anime"}}},
 	122: {AudienceTier: "adult", MediaType: "tv", Era: "both", Genres: []string{"animation"}, FilterExtra: channel.FilterExtra{RequireKnownYear: false, MatchAudience: true, ExcludedGenres: []string{"anime"}}},
 	123: {AudienceTier: "adult", MediaType: "tv", Era: "both", Genres: []string{"anime"}, FilterExtra: channel.FilterExtra{RequireKnownYear: false, MatchAudience: true}},
 	124: {AudienceTier: "adult", MediaType: "tv", Era: "both", Genres: []string{"anime"}, FilterExtra: channel.FilterExtra{RequireKnownYear: false, MatchAudience: true}},
 	125: {AudienceTier: "adult", MediaType: "tv", Era: "both", Genres: []string{"reality"}, FilterExtra: channel.FilterExtra{RequireKnownYear: false, MatchAudience: true, ExcludedGenres: []string{"animation", "anime"}}},
 	126: {AudienceTier: "adult", MediaType: "tv", Era: "both", Genres: []string{"reality"}, FilterExtra: channel.FilterExtra{RequireKnownYear: false, MatchAudience: true, ExcludedGenres: []string{"animation", "anime"}}},
-	127: {AudienceTier: "adult", MediaType: "tv", Era: "both", Genres: []string{"drama"}, FilterExtra: channel.FilterExtra{RequireKnownYear: false, MatchAudience: true, ExcludedGenres: []string{"animation", "anime"}}},
-	128: {AudienceTier: "adult", MediaType: "tv", Era: "both", Genres: []string{"drama"}, FilterExtra: channel.FilterExtra{RequireKnownYear: false, MatchAudience: true, ExcludedGenres: []string{"animation", "anime"}}},
+	127: {AudienceTier: "adult", MediaType: "tv", Era: "both", Genres: []string{}, FilterExtra: channel.FilterExtra{RequireKnownYear: false, MatchAudience: true}},
+	128: {AudienceTier: "adult", MediaType: "tv", Era: "both", Genres: []string{}, FilterExtra: channel.FilterExtra{RequireKnownYear: false, MatchAudience: true}},
 	129: {AudienceTier: "adult", MediaType: "tv", Era: "both", Genres: []string{"fantasy", "scifi"}, FilterExtra: channel.FilterExtra{RequireKnownYear: false, MatchAudience: true, ExcludedGenres: []string{"animation", "anime"}}},
 	130: {AudienceTier: "adult", MediaType: "tv", Era: "both", Genres: []string{"fantasy", "scifi"}, FilterExtra: channel.FilterExtra{RequireKnownYear: false, MatchAudience: true, ExcludedGenres: []string{"animation", "anime"}}},
 	131: {AudienceTier: "adult", MediaType: "tv", Era: "both", Genres: []string{"action", "adventure"}, FilterExtra: channel.FilterExtra{RequireKnownYear: false, MatchAudience: true, ExcludedGenres: []string{"animation", "anime"}}},
@@ -53,7 +53,7 @@ var defaultFilters = map[int]channel.Filter{
 	135: {AudienceTier: "adult", MediaType: "movie", Era: "both", Genres: []string{"action", "adventure", "crime", "thriller"}, FilterExtra: channel.FilterExtra{RequireKnownYear: false, MatchAudience: true}},
 	136: {AudienceTier: "adult", MediaType: "movie", Era: "both", Genres: []string{"fantasy", "scifi", "horror"}, FilterExtra: channel.FilterExtra{RequireKnownYear: false, MatchAudience: true}},
 	137: {AudienceTier: "teen", MediaType: "tv", Era: "nostalgia", Genres: []string{"comedy"}, FilterExtra: channel.FilterExtra{RequireKnownYear: true, MatchAudience: true, ExcludedGenres: []string{"animation", "anime"}}},
-	138: {AudienceTier: "teen", MediaType: "tv", Era: "modern", Genres: []string{"comedy"}, FilterExtra: channel.FilterExtra{RequireKnownYear: true, MatchAudience: true, ExcludedGenres: []string{"animation", "anime"}}},
+	138: {AudienceTier: "teen", MediaType: "tv", Era: "modern", Genres: []string{"comedy"}, FilterExtra: channel.FilterExtra{RequireKnownYear: false, MatchAudience: true, ExcludedGenres: []string{"animation", "anime"}}},
 }
 
 // SeedDefaultFilters gives every built-in default channel that has no filter
