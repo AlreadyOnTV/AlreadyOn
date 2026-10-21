@@ -10,6 +10,7 @@ import (
 	"sync"
 
 	"github.com/alreadyonapp/alreadyon/server/internal/activity"
+	"github.com/alreadyonapp/alreadyon/server/internal/eligibility"
 	"github.com/alreadyonapp/alreadyon/server/internal/governor"
 	"github.com/alreadyonapp/alreadyon/server/internal/metadata"
 )
@@ -205,7 +206,8 @@ func EnrichMetadata(ctx context.Context, db *sql.DB, client *metadata.Client) er
 		SELECT ii.id, ii.media_type, ii.title, ii.series_title, ii.release_year, ii.season_number, ii.episode_number, mf.path
 		FROM identified_items ii
 		JOIN media_files mf ON mf.id = ii.media_file_id
-		WHERE ii.metadata_fetched_at_unix IS NULL`)
+		WHERE ii.metadata_fetched_at_unix IS NULL
+		   OR EXISTS (SELECT 1 FROM tv_shows s WHERE s.id=ii.show_id AND s.tmdb_id<0)`)
 	if err != nil {
 		return fmt.Errorf("library: enrich metadata: %w", err)
 	}
@@ -245,15 +247,20 @@ func EnrichMetadata(ctx context.Context, db *sql.DB, client *metadata.Client) er
 		if seriesTitle == "" {
 			seriesTitle = p.title
 		}
+		lookup := lookupName(seriesTitle, p.path)
 		var existingID int64
 		var existingTitle string
-		_ = db.QueryRowContext(ctx, `SELECT s.id,s.title FROM identified_items i JOIN tv_shows s ON s.id=i.show_id WHERE i.id=? AND s.local_series_title IS NOT NULL`, p.id).Scan(&existingID, &existingTitle)
-		lookup := lookupName(seriesTitle, p.path)
+		var existingTMDbID int
+		if err := db.QueryRowContext(ctx, `SELECT s.id,s.title,s.tmdb_id FROM identified_items i JOIN tv_shows s ON s.id=i.show_id WHERE i.id=? AND s.local_series_title IS NOT NULL`, p.id).Scan(&existingID, &existingTitle, &existingTMDbID); err != nil && err != sql.ErrNoRows {
+			return fmt.Errorf("library: enrich metadata: look up episode show: %w", err)
+		}
 		if existingID > 0 {
 			seriesTitle = existingTitle
-			lookup = existingTitle
+			parsed := metadata.ParseName(lookup)
+			parsed.Title = existingTitle
+			lookup = parsed.String()
 		}
-		show, err := resolveShow(ctx, db, client, showCache, seriesTitle, lookup)
+		show, err := resolveShow(ctx, db, client, showCache, seriesTitle, lookup, existingID, existingTMDbID)
 		if err != nil {
 			return err
 		}
@@ -308,21 +315,10 @@ func enrichMovie(ctx context.Context, db *sql.DB, client *metadata.Client, id in
 	return nil
 }
 
-// resolveShow returns seriesTitle's tv_shows row, resolving (and
-// caching, for the rest of this EnrichMetadata call) it in this order:
-// an already-cached result, an existing tv_shows row by title, a TMDb
-// search + an existing tv_shows row by the found tmdb_id (a previous
-// run may have already created it under a different title string), or
-// finally a fresh TVDetails fetch + insert. A show with no TMDb match
-// caches (and returns) a not-valid localID, so every episode of the
-// same still-unresolved series in this same call shares one search
-// instead of each retrying it.
-//
-// lookup is what the provider is searched with (see lookupName). It is
-// also the cache key, and when it carries a year, region or ID that
-// seriesTitle doesn't, the by-title shortcut is skipped: two shows can
-// share a title.
-func resolveShow(ctx context.Context, db *sql.DB, client *metadata.Client, cache map[string]showRef, seriesTitle, lookup string) (showRef, error) {
+// resolveShow retains an episode's existing parent. Negative-ID parents
+// are reconciled only when the provider ID or a unique year-qualified
+// identity confirms the match.
+func resolveShow(ctx context.Context, db *sql.DB, client *metadata.Client, cache map[string]showRef, seriesTitle, lookup string, existingID int64, existingTMDbID int) (showRef, error) {
 	if ref, ok := cache[lookup]; ok {
 		return ref, nil
 	}
@@ -330,8 +326,35 @@ func resolveShow(ctx context.Context, db *sql.DB, client *metadata.Client, cache
 	var localID int64
 	var tmdbID int
 	var fetched sql.NullInt64
-	if lookup == seriesTitle {
-		err := db.QueryRowContext(ctx, `SELECT id, tmdb_id, metadata_fetched_at_unix FROM tv_shows WHERE title = ?`, seriesTitle).Scan(&localID, &tmdbID, &fetched)
+	if existingID > 0 {
+		localID, tmdbID = existingID, existingTMDbID
+		if tmdbID > 0 {
+			err := db.QueryRowContext(ctx, `SELECT metadata_fetched_at_unix FROM tv_shows WHERE id=?`, localID).Scan(&fetched)
+			if err != nil {
+				return showRef{}, fmt.Errorf("library: enrich metadata: look up show %d: %w", localID, err)
+			}
+			parsed := metadata.ParseName(lookup)
+			if parsed.TMDbID != 0 && parsed.TMDbID != tmdbID {
+				ref := showRef{localID: sql.NullInt64{Int64: localID, Valid: true}, tmdbID: tmdbID}
+				cache[lookup] = ref
+				return ref, nil
+			}
+			if !fetched.Valid {
+				details, err := client.TVDetails(ctx, tmdbID)
+				if err != nil {
+					return showRef{}, nil
+				}
+				_, err = db.ExecContext(ctx, `UPDATE tv_shows SET content_rating=CASE WHEN content_rating_manual=1 THEN content_rating ELSE NULLIF(?,'') END,metadata_fetched_at_unix=unixepoch() WHERE id=?`, details.Certification, localID)
+				if err != nil {
+					return showRef{}, err
+				}
+			}
+			ref := showRef{localID: sql.NullInt64{Int64: localID, Valid: true}, tmdbID: tmdbID}
+			cache[lookup] = ref
+			return ref, nil
+		}
+	} else if lookup == seriesTitle {
+		err := db.QueryRowContext(ctx, `SELECT id, tmdb_id, metadata_fetched_at_unix FROM tv_shows WHERE title = ? AND tmdb_id > 0 AND (SELECT count(*) FROM tv_shows WHERE title = ? AND tmdb_id > 0)=1`, seriesTitle, seriesTitle).Scan(&localID, &tmdbID, &fetched)
 		if err == nil && tmdbID > 0 {
 			if !fetched.Valid {
 				details, err := client.TVDetails(ctx, tmdbID)
@@ -359,27 +382,57 @@ func resolveShow(ctx context.Context, db *sql.DB, client *metadata.Client, cache
 		return ref, nil
 	}
 
-	if localID > 0 && tmdbID < 0 {
-		details, err := client.TVDetails(ctx, foundID)
-		if err != nil {
-			return showRef{}, nil
-		}
-		_, err = db.ExecContext(ctx, `UPDATE tv_shows SET first_air_date=?,last_air_date=?,overview=?,content_rating=CASE WHEN content_rating_manual=1 THEN content_rating ELSE NULLIF(?,'') END,metadata_fetched_at_unix=unixepoch() WHERE id=?`, details.FirstAirDate, details.LastAirDate, details.Overview, details.Certification, localID)
-		if err != nil {
-			return showRef{}, err
-		}
-		ref := showRef{localID: sql.NullInt64{Int64: localID, Valid: true}, tmdbID: foundID}
-		cache[lookup] = ref
-		return ref, nil
-	}
 	err = db.QueryRowContext(ctx, `SELECT id FROM tv_shows WHERE tmdb_id = ?`, foundID).Scan(&localID)
 	if err == nil {
+		if existingID > 0 && existingTMDbID < 0 {
+			merged, mergeErr := mergeDuplicateShow(ctx, db, existingID, localID, lookup, foundID)
+			if mergeErr != nil {
+				return showRef{}, mergeErr
+			}
+			if !merged {
+				ref := showRef{localID: sql.NullInt64{Int64: existingID, Valid: true}}
+				cache[lookup] = ref
+				return ref, nil
+			}
+		}
 		ref := showRef{localID: sql.NullInt64{Int64: localID, Valid: true}, tmdbID: foundID}
 		cache[lookup] = ref
 		return ref, nil
 	}
 	if err != sql.ErrNoRows {
 		return showRef{}, fmt.Errorf("library: enrich metadata: look up show by tmdb id %d: %w", foundID, err)
+	}
+	if existingID > 0 && existingTMDbID < 0 {
+		details, err := client.TVDetails(ctx, foundID)
+		if err != nil {
+			return showRef{}, nil
+		}
+		matches, err := placeholderMatchesDetails(ctx, db, existingID, lookup, foundID, details)
+		if err != nil {
+			return showRef{}, err
+		}
+		if !matches {
+			ref := showRef{localID: sql.NullInt64{Int64: existingID, Valid: true}}
+			cache[lookup] = ref
+			return ref, nil
+		}
+		var currentRating sql.NullString
+		var currentRatingManual bool
+		if err := db.QueryRowContext(ctx, `SELECT content_rating,content_rating_manual FROM tv_shows WHERE id=?`, existingID).Scan(&currentRating, &currentRatingManual); err != nil {
+			return showRef{}, fmt.Errorf("library: enrich metadata: look up local show rating %d: %w", existingID, err)
+		}
+		providerRating := sql.NullString{String: details.Certification, Valid: details.Certification != ""}
+		rating := preferredCertification(currentRating, providerRating)
+		if currentRatingManual {
+			rating = currentRating
+		}
+		_, err = db.ExecContext(ctx, `UPDATE tv_shows SET tmdb_id=?,overview=coalesce(NULLIF(?,''),overview),first_air_date=coalesce(NULLIF(?,''),first_air_date),last_air_date=coalesce(NULLIF(?,''),last_air_date),content_rating=?,metadata_fetched_at_unix=unixepoch() WHERE id=?`, foundID, details.Overview, details.FirstAirDate, details.LastAirDate, rating, existingID)
+		if err != nil {
+			return showRef{}, fmt.Errorf("library: enrich metadata: update local show %d: %w", existingID, err)
+		}
+		ref := showRef{localID: sql.NullInt64{Int64: existingID, Valid: true}, tmdbID: foundID}
+		cache[lookup] = ref
+		return ref, nil
 	}
 
 	details, err := client.TVDetails(ctx, foundID)
@@ -403,6 +456,225 @@ func resolveShow(ctx context.Context, db *sql.DB, client *metadata.Client, cache
 	ref := showRef{localID: sql.NullInt64{Int64: newID, Valid: true}, tmdbID: foundID}
 	cache[lookup] = ref
 	return ref, nil
+}
+
+func placeholderMatchesDetails(ctx context.Context, db *sql.DB, showID int64, lookup string, tmdbID int, details metadata.TVDetails) (bool, error) {
+	var localTitle string
+	var localYear sql.NullInt64
+	if err := db.QueryRowContext(ctx, `SELECT local_series_title,local_series_year FROM tv_shows WHERE id=?`, showID).Scan(&localTitle, &localYear); err != nil {
+		return false, err
+	}
+	parsed := metadata.ParseName(lookup)
+	if parsed.TMDbID > 0 && parsed.TMDbID != tmdbID {
+		return false, nil
+	}
+	expectedYear := parsed.Year
+	if localYear.Valid {
+		if expectedYear > 0 && expectedYear != int(localYear.Int64) {
+			return false, nil
+		}
+		expectedYear = int(localYear.Int64)
+	}
+	providerYear := 0
+	if len(details.FirstAirDate) >= 4 {
+		providerYear, _ = strconv.Atoi(details.FirstAirDate[:4])
+	}
+	if expectedYear > 0 && providerYear > 0 {
+		difference := expectedYear - providerYear
+		if difference < 0 {
+			difference = -difference
+		}
+		if difference > 1 {
+			return false, nil
+		}
+	}
+	localRegion := metadata.ParseName(localTitle).Region
+	if parsed.Region != "" {
+		localRegion = parsed.Region
+	}
+	providerRegion := metadata.ParseName(details.Name).Region
+	if (localRegion != "" || providerRegion != "") && localRegion != providerRegion {
+		return false, nil
+	}
+	hasProviderID := parsed.TMDbID > 0 || parsed.IMDbID != "" || parsed.TVDBID > 0
+	if !hasProviderID && (!metadata.SameTitle(localTitle, details.Name) || expectedYear == 0 || providerYear != expectedYear) {
+		return false, nil
+	}
+	return true, nil
+}
+
+func mergeDuplicateShow(ctx context.Context, db *sql.DB, sourceID, targetID int64, lookup string, tmdbID int) (bool, error) {
+	type parent struct {
+		tmdbID              int
+		title               string
+		localTitle          sql.NullString
+		localYear           sql.NullInt64
+		firstAirDate        sql.NullString
+		contentRating       sql.NullString
+		contentRatingManual bool
+		genreTags           sql.NullString
+		genreSource         sql.NullString
+		audienceOverride    sql.NullString
+		premiereYear        sql.NullInt64
+	}
+	load := func(id int64) (parent, error) {
+		var p parent
+		err := db.QueryRowContext(ctx, `SELECT tmdb_id,title,local_series_title,local_series_year,first_air_date,content_rating,content_rating_manual,genre_tags,genre_source,audience_override,premiere_year_override FROM tv_shows WHERE id=?`, id).
+			Scan(&p.tmdbID, &p.title, &p.localTitle, &p.localYear, &p.firstAirDate, &p.contentRating, &p.contentRatingManual, &p.genreTags, &p.genreSource, &p.audienceOverride, &p.premiereYear)
+		return p, err
+	}
+	source, err := load(sourceID)
+	if err != nil {
+		return false, err
+	}
+	target, err := load(targetID)
+	if err != nil {
+		return false, err
+	}
+	if source.tmdbID >= 0 || target.tmdbID != tmdbID {
+		return false, nil
+	}
+	parsed := metadata.ParseName(lookup)
+	confirmed := parsed.TMDbID == tmdbID
+	sourceRegion := metadata.ParseName(source.localTitle.String).Region
+	targetRegion := metadata.ParseName(target.title).Region
+	if parsed.Region != "" {
+		sourceRegion = parsed.Region
+	}
+	if (sourceRegion != "" || targetRegion != "") && sourceRegion != targetRegion {
+		return false, nil
+	}
+	if source.localYear.Valid && target.localYear.Valid && source.localYear.Int64 != target.localYear.Int64 {
+		return false, nil
+	}
+	if source.localYear.Valid && target.firstAirDate.Valid && len(target.firstAirDate.String) >= 4 {
+		targetYear, err := strconv.Atoi(target.firstAirDate.String[:4])
+		if err == nil {
+			yearDifference := int(source.localYear.Int64) - targetYear
+			if yearDifference < 0 {
+				yearDifference = -yearDifference
+			}
+			if yearDifference > 1 {
+				return false, nil
+			}
+		}
+	}
+	if !confirmed {
+		year := parsed.Year
+		if source.localYear.Valid {
+			if year > 0 && year != int(source.localYear.Int64) {
+				return false, nil
+			}
+			year = int(source.localYear.Int64)
+		}
+		if year == 0 || !metadata.SameTitle(source.localTitle.String, target.title) || !strings.HasPrefix(target.firstAirDate.String, strconv.Itoa(year)) {
+			return false, nil
+		}
+		rows, err := db.QueryContext(ctx, `SELECT id,title,first_air_date FROM tv_shows WHERE tmdb_id>0`)
+		if err != nil {
+			return false, err
+		}
+		matches := 0
+		for rows.Next() {
+			var candidateID int64
+			var title, airDate string
+			if err := rows.Scan(&candidateID, &title, &airDate); err != nil {
+				rows.Close()
+				return false, err
+			}
+			if metadata.SameTitle(source.localTitle.String, title) && strings.HasPrefix(airDate, strconv.Itoa(year)) {
+				matches++
+			}
+		}
+		if err := rows.Err(); err != nil {
+			rows.Close()
+			return false, err
+		}
+		if err := rows.Close(); err != nil {
+			return false, err
+		}
+		confirmed = matches == 1
+	}
+	if !confirmed || conflictingParentCorrections(source, target) {
+		return false, nil
+	}
+	contentRating := preferredCertification(target.contentRating, source.contentRating)
+	contentRatingManual := target.contentRatingManual || source.contentRatingManual
+	tx, err := db.BeginTx(ctx, nil)
+	if err != nil {
+		return false, err
+	}
+	defer tx.Rollback()
+	if _, err = tx.ExecContext(ctx, `UPDATE tv_shows SET
+		content_rating=?,content_rating_manual=?,
+		overview=coalesce(overview,(SELECT overview FROM tv_shows WHERE id=?)),
+		first_air_date=coalesce(first_air_date,(SELECT first_air_date FROM tv_shows WHERE id=?)),
+		last_air_date=coalesce(last_air_date,(SELECT last_air_date FROM tv_shows WHERE id=?)),
+		genre_tags=CASE WHEN (SELECT genre_source FROM tv_shows WHERE id=?)='manual' AND coalesce(genre_source,'')!='manual' THEN (SELECT genre_tags FROM tv_shows WHERE id=?) ELSE coalesce(genre_tags,(SELECT genre_tags FROM tv_shows WHERE id=?)) END,
+		genre_source=CASE WHEN coalesce(genre_source,'')!='manual' THEN coalesce((SELECT genre_source FROM tv_shows WHERE id=?),genre_source) ELSE genre_source END,
+		audience_override=coalesce(audience_override,(SELECT audience_override FROM tv_shows WHERE id=?)),
+		premiere_year_override=coalesce(premiere_year_override,(SELECT premiere_year_override FROM tv_shows WHERE id=?)),
+		title=CASE WHEN (SELECT local_series_title FROM tv_shows WHERE id=?) IS NOT NULL AND (SELECT title FROM tv_shows WHERE id=?)!=(SELECT local_series_title FROM tv_shows WHERE id=?) AND (local_series_title IS NULL OR title=local_series_title) THEN (SELECT title FROM tv_shows WHERE id=?) ELSE title END,
+		local_series_title=coalesce(local_series_title,(SELECT local_series_title FROM tv_shows WHERE id=?)),
+		local_series_year=coalesce(local_series_year,(SELECT local_series_year FROM tv_shows WHERE id=?))
+		WHERE id=?`, contentRating, contentRatingManual, sourceID, sourceID, sourceID, sourceID, sourceID, sourceID, sourceID, sourceID, sourceID, sourceID, sourceID, sourceID, sourceID, sourceID, sourceID, targetID); err != nil {
+		return false, err
+	}
+	if _, err = tx.ExecContext(ctx, `UPDATE identified_items SET show_id=? WHERE show_id=?`, targetID, sourceID); err != nil {
+		return false, err
+	}
+	if _, err = tx.ExecContext(ctx, `DELETE FROM tv_shows WHERE id=?`, sourceID); err != nil {
+		return false, err
+	}
+	if err = tx.Commit(); err != nil {
+		return false, err
+	}
+	return true, nil
+}
+
+func preferredCertification(primary, fallback sql.NullString) sql.NullString {
+	if !fallback.Valid || fallback.String == "" {
+		return primary
+	}
+	if !primary.Valid || primary.String == "" {
+		return fallback
+	}
+	primaryTier := eligibility.RequiredTier("episode", primary.String)
+	fallbackTier := eligibility.RequiredTier("episode", fallback.String)
+	if eligibility.Max(primaryTier, fallbackTier) == fallbackTier && primaryTier != fallbackTier {
+		return fallback
+	}
+	return primary
+}
+
+func conflictingParentCorrections(source, target struct {
+	tmdbID              int
+	title               string
+	localTitle          sql.NullString
+	localYear           sql.NullInt64
+	firstAirDate        sql.NullString
+	contentRating       sql.NullString
+	contentRatingManual bool
+	genreTags           sql.NullString
+	genreSource         sql.NullString
+	audienceOverride    sql.NullString
+	premiereYear        sql.NullInt64
+}) bool {
+	if source.audienceOverride.Valid && target.audienceOverride.Valid && source.audienceOverride.String != target.audienceOverride.String {
+		return true
+	}
+	if source.contentRating.Valid && target.contentRating.Valid && source.contentRating.String != target.contentRating.String && (source.contentRatingManual || target.contentRatingManual) {
+		return true
+	}
+	if source.genreSource.String == "manual" && target.genreSource.String == "manual" && source.genreTags.String != target.genreTags.String {
+		return true
+	}
+	if source.premiereYear.Valid && target.premiereYear.Valid && source.premiereYear.Int64 != target.premiereYear.Int64 {
+		return true
+	}
+	sourceTitleManual := source.localTitle.Valid && source.title != source.localTitle.String
+	targetTitleManual := target.localTitle.Valid && target.title != target.localTitle.String
+	return sourceTitleManual && targetTitleManual && !metadata.SameTitle(source.title, target.title)
 }
 
 // enrichEpisode fetches and persists one episode's own overview/air

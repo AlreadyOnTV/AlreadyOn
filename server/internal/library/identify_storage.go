@@ -50,8 +50,8 @@ func SaveIdentification(ctx context.Context, db *sql.DB, mediaFileID int64, id I
 		return nil // A protected identity must not acquire an automatic parent either.
 	}
 	if id.IsEpisode {
-		// Reattach new episodes to a manually managed series even without TMDb.
-		_, err = db.ExecContext(ctx, `UPDATE identified_items SET show_id=(SELECT id FROM tv_shows WHERE local_series_title=? AND local_series_year IS ? ORDER BY id LIMIT 1) WHERE media_file_id=? AND show_id IS NULL`, seriesTitle, year, mediaFileID)
+		// Attach only when the local identity names exactly one managed series.
+		_, err = db.ExecContext(ctx, `UPDATE identified_items SET show_id=(SELECT CASE WHEN count(*)=1 THEN min(id) END FROM tv_shows WHERE local_series_title=? AND local_series_year IS ?) WHERE media_file_id=? AND show_id IS NULL`, seriesTitle, year, mediaFileID)
 		if err != nil {
 			return err
 		}
