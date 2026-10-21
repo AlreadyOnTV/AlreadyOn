@@ -4,6 +4,8 @@
 
 Tuning selects the channel's current persisted airing. Delivery chooses direct playback when the browser supports the source, remuxing when the container alone needs changing, or a bounded transcoding path. GPU availability does not imply codec, HDR or browser support.
 
+WebUI capability checks use the media-source constructor selected by hls.js, including Apple's `ManagedMediaSource` when the standard `MediaSource` API is absent. Browsers without MSE can use native HLS when supported; unavailable APIs must not interrupt capability detection.
+
 ## Session contract
 
 The server authorizes each tune and scopes media credentials to playback. Management keys must not be exposed in manifests, browser logs or external receiver requests. Session status and leases drive activity tracking and cleanup. API fields and errors are defined in [OpenAPI](../api/openapi.yaml).

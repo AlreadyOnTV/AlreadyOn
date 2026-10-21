@@ -13,6 +13,9 @@ let originChecked = false;
 async function detect(): Promise<Capabilities> {
   const element = document.createElement('video');
   const nativeHLS = !!element.canPlayType('application/vnd.apple.mpegurl');
+  // hls.js can use ManagedMediaSource on iPhone even when MediaSource is
+  // absent. Probe the same constructor that the player will actually use.
+  const mediaSource = Hls.getMediaSource();
   const mseHLS = Hls.isSupported();
   const hls = nativeHLS || mseHLS;
   const video: VideoCapability[] = [];
@@ -21,7 +24,7 @@ async function detect(): Promise<Capabilities> {
       const codec = `avc1.${prefix}${level.toString(16).padStart(2, '0')}`;
       const contentType = `video/mp4; codecs="${codec}"`;
       if (!element.canPlayType(contentType)) continue;
-      if (mseHLS && !MediaSource.isTypeSupported(contentType)) continue;
+      if (mseHLS && !mediaSource?.isTypeSupported(contentType)) continue;
       let supported = true;
       if (navigator.mediaCapabilities) {
         try {
@@ -88,7 +91,7 @@ async function detect(): Promise<Capabilities> {
       const contentType = `audio/${container}; codecs="${code}"`;
       if (!await probe({type: 'file', audio: {contentType, channels: String(channels), bitrate, samplerate: sampleRate}})) continue;
       const spatial = codec === 'eac3' || codec === 'truehd' ? await probe({type: 'file', audio: {contentType, channels: String(channels), bitrate, samplerate: sampleRate, spatialRendering: true}}) : false;
-      const hlsAudio = codec === 'aac' && mseHLS && MediaSource.isTypeSupported(contentType) && await probe({type: 'media-source', audio: {contentType, channels: String(channels), bitrate, samplerate: sampleRate}});
+      const hlsAudio = codec === 'aac' && mseHLS && mediaSource?.isTypeSupported(contentType) && await probe({type: 'media-source', audio: {contentType, channels: String(channels), bitrate, samplerate: sampleRate}});
       audio.push({codec, channels, bitrate, sampleRate, container, profile, spatial, hls: hlsAudio});
       break;
     }
@@ -96,7 +99,7 @@ async function detect(): Promise<Capabilities> {
   if (mseHLS) for (const channels of [8, 6]) {
     const contentType = 'audio/mp4; codecs="mp4a.40.2"';
     const bitrate = channels === 8 ? 768000 : 512000;
-    if (MediaSource.isTypeSupported(contentType) && await probe({type: 'media-source', audio: {contentType, channels: String(channels), bitrate, samplerate: 48000}})) {
+    if (mediaSource?.isTypeSupported(contentType) && await probe({type: 'media-source', audio: {contentType, channels: String(channels), bitrate, samplerate: 48000}})) {
       audio.push({codec: 'aac', channels, sampleRate: 48000, bitrate, container: 'mp4', profile: 'LC', hls: true});
       break;
     }
