@@ -269,6 +269,7 @@ func (c *Client) MovieDetails(ctx context.Context, tmdbID int) (MovieDetails, er
 // TVDetails is the subset of a show's TMDb details AlreadyOn keeps —
 // see MovieDetails.
 type TVDetails struct {
+	Name          string
 	Overview      string
 	FirstAirDate  string // ISO "YYYY-MM-DD"
 	LastAirDate   string // ISO "YYYY-MM-DD"; "" for a still-airing/unknown-ended show
@@ -276,6 +277,7 @@ type TVDetails struct {
 }
 
 type tvDetailsResponse struct {
+	Name         string `json:"name"`
 	Overview     string `json:"overview"`
 	FirstAirDate string `json:"first_air_date"`
 	LastAirDate  string `json:"last_air_date"`
@@ -309,7 +311,7 @@ func (c *Client) TVDetails(ctx context.Context, tmdbID int) (TVDetails, error) {
 			}
 		}
 	}
-	return TVDetails{Overview: details.Overview, FirstAirDate: details.FirstAirDate, LastAirDate: details.LastAirDate, Certification: cert}, nil
+	return TVDetails{Name: details.Name, Overview: details.Overview, FirstAirDate: details.FirstAirDate, LastAirDate: details.LastAirDate, Certification: cert}, nil
 }
 
 // EpisodeDetails is the subset of one episode's TMDb details AlreadyOn

@@ -344,6 +344,318 @@ func TestEnrichMetadata_Episode_SharesOneShowSearchAcrossEpisodes(t *testing.T) 
 	}
 }
 
+func TestEnrichMetadata_RepairsExistingDuplicateShowParent(t *testing.T) {
+	db := openClassifyTestDB(t)
+	ctx := context.Background()
+	if _, err := db.Exec(`INSERT INTO tv_shows (tmdb_id,title,first_air_date,content_rating,metadata_fetched_at_unix) VALUES (500,'Example Show','2020-01-01','TV-MA',1)`); err != nil {
+		t.Fatalf("insert canonical show: %v", err)
+	}
+	var placeholderID int64
+	if err := db.QueryRow(`INSERT INTO tv_shows (tmdb_id,title,local_series_title,local_series_year,content_rating) VALUES (-1,'Example Show','Example Show',2020,'TV-MA') RETURNING id`).Scan(&placeholderID); err != nil {
+		t.Fatalf("insert placeholder show: %v", err)
+	}
+
+	first := insertUnclassified(t, db, "episode", "Pilot", "Example Show", 0)
+	second := insertUnclassified(t, db, "episode", "The Return", "Example Show", 0)
+	for _, id := range []int64{first, second} {
+		if _, err := db.Exec(`UPDATE identified_items SET show_id=?,season_number=1,episode_number=?,metadata_fetched_at_unix=1,audience_override='adult' WHERE id=?`, placeholderID, id-first+1, id); err != nil {
+			t.Fatalf("seed placeholder episode %d: %v", id, err)
+		}
+	}
+	if _, err := db.Exec(`UPDATE media_files SET path='/media/tv/Example Show {tmdb-500}/Example Show - S01E01.mkv' WHERE id=(SELECT media_file_id FROM identified_items WHERE id=?)`, first); err != nil {
+		t.Fatalf("set provider-qualified path: %v", err)
+	}
+
+	client, requests := mockTMDbPathRoutedClient(t, map[string]string{
+		"/tv/500":                    `{"id":500,"name":"Example Show","first_air_date":"2020-01-01"}`,
+		"/tv/500/content_ratings":    `{"results":[{"iso_3166_1":"US","rating":"TV-MA"}]}`,
+		"/tv/500/season/1/episode/1": `{"overview":"Pilot overview","air_date":"2020-01-02"}`,
+		"/tv/500/season/1/episode/2": `{"overview":"Return overview","air_date":"2020-01-09"}`,
+	})
+	if err := EnrichMetadata(ctx, db, client); err != nil {
+		t.Fatalf("EnrichMetadata: %v", err)
+	}
+	firstRequestCount := *requests
+	if err := EnrichMetadata(ctx, db, client); err != nil {
+		t.Fatalf("EnrichMetadata (repeat): %v", err)
+	}
+	if *requests != firstRequestCount {
+		t.Errorf("repeat enrichment made %d extra requests, want idempotent no-op", *requests-firstRequestCount)
+	}
+
+	var remaining int
+	if err := db.QueryRow(`SELECT count(*) FROM tv_shows WHERE tmdb_id<0`).Scan(&remaining); err != nil {
+		t.Fatalf("count placeholders: %v", err)
+	}
+	if remaining != 0 {
+		t.Fatalf("negative-ID placeholders = %d, want duplicate parent repaired", remaining)
+	}
+	var linked, overridden int
+	if err := db.QueryRow(`SELECT count(*),count(*) FILTER (WHERE audience_override='adult') FROM identified_items WHERE id IN (?,?) AND show_id=(SELECT id FROM tv_shows WHERE tmdb_id=500)`, first, second).Scan(&linked, &overridden); err != nil {
+		t.Fatalf("query repaired episodes: %v", err)
+	}
+	if linked != 2 || overridden != 2 {
+		t.Fatalf("canonical links=%d preserved episode overrides=%d, want 2 and 2", linked, overridden)
+	}
+	var rating string
+	if err := db.QueryRow(`SELECT content_rating FROM tv_shows WHERE tmdb_id=500`).Scan(&rating); err != nil {
+		t.Fatalf("query canonical rating: %v", err)
+	}
+	if rating != "TV-MA" {
+		t.Errorf("canonical rating=%q, want mature TV-MA preserved", rating)
+	}
+}
+
+func insertDuplicateShowFixture(t *testing.T, db *sql.DB, firstAirDate, rating, sourceAudience, targetAudience string, sourceYear int, path string) (int64, int64) {
+	t.Helper()
+	if _, err := db.Exec(`INSERT INTO tv_shows (tmdb_id,title,first_air_date,content_rating,metadata_fetched_at_unix,audience_override) VALUES (500,'Example Show',?,NULLIF(?,''),1,NULLIF(?,''))`, firstAirDate, rating, targetAudience); err != nil {
+		t.Fatalf("insert canonical show: %v", err)
+	}
+	var year sql.NullInt64
+	if sourceYear > 0 {
+		year = sql.NullInt64{Int64: int64(sourceYear), Valid: true}
+	}
+	var placeholderID int64
+	if err := db.QueryRow(`INSERT INTO tv_shows (tmdb_id,title,local_series_title,local_series_year,audience_override) VALUES (-1,'Example Show','Example Show',?,NULLIF(?,'')) RETURNING id`, year, sourceAudience).Scan(&placeholderID); err != nil {
+		t.Fatalf("insert placeholder show: %v", err)
+	}
+	episodeID := insertUnclassified(t, db, "episode", "Pilot", "Example Show", 0)
+	if _, err := db.Exec(`UPDATE identified_items SET show_id=?,season_number=1,episode_number=1,metadata_fetched_at_unix=1 WHERE id=?`, placeholderID, episodeID); err != nil {
+		t.Fatalf("link placeholder episode: %v", err)
+	}
+	if _, err := db.Exec(`UPDATE media_files SET path=? WHERE id=(SELECT media_file_id FROM identified_items WHERE id=?)`, path, episodeID); err != nil {
+		t.Fatalf("set episode path: %v", err)
+	}
+	return placeholderID, episodeID
+}
+
+func TestEnrichMetadata_DoesNotMergeWrongYearRemake(t *testing.T) {
+	db := openClassifyTestDB(t)
+	placeholderID, episodeID := insertDuplicateShowFixture(t, db, "2020-01-01", "TV-MA", "", "", 2021, "/media/tv/Example Show (2021)/S01E01.mkv")
+	client, _ := mockTMDbPathRoutedClient(t, map[string]string{
+		"/search/tv": `{"results":[{"id":500,"name":"Example Show","first_air_date":"2020-01-01"}]}`,
+	})
+	if err := EnrichMetadata(context.Background(), db, client); err != nil {
+		t.Fatalf("EnrichMetadata: %v", err)
+	}
+	var showID, placeholderTMDbID int64
+	if err := db.QueryRow(`SELECT i.show_id,s.tmdb_id FROM identified_items i JOIN tv_shows s ON s.id=i.show_id WHERE i.id=?`, episodeID).Scan(&showID, &placeholderTMDbID); err != nil {
+		t.Fatalf("query episode parent: %v", err)
+	}
+	if showID != placeholderID || placeholderTMDbID != -1 {
+		t.Fatalf("episode parent=(%d, tmdb %d), want the distinct 2021 placeholder", showID, placeholderTMDbID)
+	}
+}
+
+func TestEnrichMetadata_DoesNotMergeAmbiguousSameYearIdentity(t *testing.T) {
+	db := openClassifyTestDB(t)
+	if _, err := db.Exec(`INSERT INTO tv_shows (tmdb_id,title,first_air_date,metadata_fetched_at_unix) VALUES (500,'Example Show','2020-01-01',1),(501,'Example Show','2020-09-01',1)`); err != nil {
+		t.Fatalf("insert same-title canonical shows: %v", err)
+	}
+	var placeholderID int64
+	if err := db.QueryRow(`INSERT INTO tv_shows (tmdb_id,title,local_series_title,local_series_year) VALUES (-1,'Example Show','Example Show',2020) RETURNING id`).Scan(&placeholderID); err != nil {
+		t.Fatalf("insert placeholder show: %v", err)
+	}
+	episodeID := insertUnclassified(t, db, "episode", "Pilot", "Example Show", 0)
+	if _, err := db.Exec(`UPDATE identified_items SET show_id=?,season_number=1,episode_number=1,metadata_fetched_at_unix=1 WHERE id=?`, placeholderID, episodeID); err != nil {
+		t.Fatalf("link episode: %v", err)
+	}
+	if _, err := db.Exec(`UPDATE media_files SET path='/media/tv/Example Show (2020)/S01E01.mkv' WHERE id=(SELECT media_file_id FROM identified_items WHERE id=?)`, episodeID); err != nil {
+		t.Fatalf("set year-qualified path: %v", err)
+	}
+	client, _ := mockTMDbPathRoutedClient(t, map[string]string{
+		"/search/tv": `{"results":[{"id":500,"name":"Example Show","first_air_date":"2020-01-01"}]}`,
+	})
+	if err := EnrichMetadata(context.Background(), db, client); err != nil {
+		t.Fatalf("EnrichMetadata: %v", err)
+	}
+	var showID int64
+	if err := db.QueryRow(`SELECT show_id FROM identified_items WHERE id=?`, episodeID).Scan(&showID); err != nil {
+		t.Fatalf("query episode parent: %v", err)
+	}
+	if showID != placeholderID {
+		t.Errorf("episode parent=%d, want unresolved placeholder %d because title/year match is ambiguous", showID, placeholderID)
+	}
+}
+
+func TestEnrichMetadata_DoesNotUseAmbiguousTitleShortcut(t *testing.T) {
+	db := openClassifyTestDB(t)
+	if _, err := db.Exec(`INSERT INTO tv_shows (tmdb_id,title,first_air_date,metadata_fetched_at_unix) VALUES (500,'Example Show','2020-01-01',1),(501,'Example Show','2020-01-01',1)`); err != nil {
+		t.Fatalf("insert same-title provider shows: %v", err)
+	}
+	episodeID := insertUnclassified(t, db, "episode", "Pilot", "Example Show", 0)
+	if _, err := db.Exec(`UPDATE identified_items SET season_number=1,episode_number=1 WHERE id=?`, episodeID); err != nil {
+		t.Fatalf("set episode number: %v", err)
+	}
+	client, requests := mockTMDbPathRoutedClient(t, map[string]string{
+		"/search/tv":                 `{"results":[{"id":500,"name":"Example Show","first_air_date":"2020-01-01"}]}`,
+		"/tv/500/season/1/episode/1": `{"overview":"Pilot overview","air_date":"2020-01-02"}`,
+	})
+	if err := EnrichMetadata(context.Background(), db, client); err != nil {
+		t.Fatalf("EnrichMetadata: %v", err)
+	}
+	if *requests != 2 {
+		t.Errorf("requests=%d, want provider search and episode detail requests", *requests)
+	}
+	var tmdbID int
+	if err := db.QueryRow(`SELECT s.tmdb_id FROM identified_items i JOIN tv_shows s ON s.id=i.show_id WHERE i.id=?`, episodeID).Scan(&tmdbID); err != nil {
+		t.Fatalf("query selected provider parent: %v", err)
+	}
+	if tmdbID != 500 {
+		t.Errorf("selected TMDb ID=%d, want the provider search result rather than an arbitrary title row", tmdbID)
+	}
+}
+
+func TestEnrichMetadata_ManualAudienceConflictPreventsMerge(t *testing.T) {
+	db := openClassifyTestDB(t)
+	placeholderID, episodeID := insertDuplicateShowFixture(t, db, "2020-01-01", "TV-MA", "young_child", "adult", 2020, "/media/tv/Example Show {tmdb-500}/S01E01.mkv")
+	client, _ := mockTMDbPathRoutedClient(t, map[string]string{
+		"/tv/500": `{"id":500,"name":"Example Show","first_air_date":"2020-01-01"}`,
+	})
+	if err := EnrichMetadata(context.Background(), db, client); err != nil {
+		t.Fatalf("EnrichMetadata: %v", err)
+	}
+	var showID int64
+	var sourceAudience, targetAudience string
+	if err := db.QueryRow(`SELECT show_id FROM identified_items WHERE id=?`, episodeID).Scan(&showID); err != nil {
+		t.Fatalf("query episode parent: %v", err)
+	}
+	if err := db.QueryRow(`SELECT audience_override FROM tv_shows WHERE id=?`, placeholderID).Scan(&sourceAudience); err != nil {
+		t.Fatalf("query placeholder override: %v", err)
+	}
+	if err := db.QueryRow(`SELECT audience_override FROM tv_shows WHERE tmdb_id=500`).Scan(&targetAudience); err != nil {
+		t.Fatalf("query canonical override: %v", err)
+	}
+	if showID != placeholderID || sourceAudience != "young_child" || targetAudience != "adult" {
+		t.Fatalf("parent=%d source override=%q target override=%q; conflicting manual values must remain separate", showID, sourceAudience, targetAudience)
+	}
+}
+
+func TestEnrichMetadata_MissingRatingRemainsUnrestrictedAfterRepair(t *testing.T) {
+	db := openClassifyTestDB(t)
+	insertDuplicateShowFixture(t, db, "2020-01-01", "", "", "", 2020, "/media/tv/Example Show {tmdb-500}/S01E01.mkv")
+	client, _ := mockTMDbPathRoutedClient(t, map[string]string{
+		"/tv/500":                    `{"id":500,"name":"Example Show","first_air_date":"2020-01-01"}`,
+		"/tv/500/content_ratings":    `{"results":[{"iso_3166_1":"US","rating":"TV-G"}]}`,
+		"/tv/500/season/1/episode/1": `{"overview":"Pilot overview","air_date":"2020-01-02"}`,
+	})
+	if err := EnrichMetadata(context.Background(), db, client); err != nil {
+		t.Fatalf("EnrichMetadata: %v", err)
+	}
+	page, err := Catalog(context.Background(), db, CatalogQuery{View: "shows", Limit: 200, Search: "Example Show"})
+	if err != nil {
+		t.Fatalf("Catalog: %v", err)
+	}
+	if page.Total != 1 || page.Items[0].Audience != "adult" || page.Items[0].Certification != nil {
+		t.Fatalf("catalog after repair = %+v, want one unrestricted show with no claimed rating", page.Items)
+	}
+}
+
+func TestEnrichMetadata_PreservesMatureRatingAcrossDuplicateRepair(t *testing.T) {
+	db := openClassifyTestDB(t)
+	placeholderID, _ := insertDuplicateShowFixture(t, db, "2020-01-01", "TV-G", "", "", 2020, "/media/tv/Example Show {tmdb-500}/S01E01.mkv")
+	if _, err := db.Exec(`UPDATE tv_shows SET content_rating='TV-MA' WHERE id=?`, placeholderID); err != nil {
+		t.Fatalf("set known mature placeholder rating: %v", err)
+	}
+	client, _ := mockTMDbPathRoutedClient(t, map[string]string{
+		"/tv/500":                    `{"id":500,"name":"Example Show","first_air_date":"2020-01-01"}`,
+		"/tv/500/season/1/episode/1": `{"overview":"Pilot overview","air_date":"2020-01-02"}`,
+	})
+	if err := EnrichMetadata(context.Background(), db, client); err != nil {
+		t.Fatalf("EnrichMetadata: %v", err)
+	}
+	var rating string
+	if err := db.QueryRow(`SELECT content_rating FROM tv_shows WHERE tmdb_id=500`).Scan(&rating); err != nil {
+		t.Fatalf("query reconciled certification: %v", err)
+	}
+	if rating != "TV-MA" {
+		t.Errorf("reconciled certification=%q, want stricter known TV-MA", rating)
+	}
+	page, err := Catalog(context.Background(), db, CatalogQuery{View: "shows", Limit: 200, Search: "Example Show"})
+	if err != nil {
+		t.Fatalf("Catalog: %v", err)
+	}
+	if page.Total != 1 || page.Items[0].Audience != "adult" {
+		t.Errorf("catalog after repair = %+v, want one unrestricted show", page.Items)
+	}
+}
+
+func TestEnrichMetadata_DoesNotMergeConflictingRegions(t *testing.T) {
+	db := openClassifyTestDB(t)
+	if _, err := db.Exec(`INSERT INTO tv_shows (tmdb_id,title,first_air_date,metadata_fetched_at_unix) VALUES (500,'Example Show (US)','2020-01-01',1)`); err != nil {
+		t.Fatalf("insert US show: %v", err)
+	}
+	var placeholderID int64
+	if err := db.QueryRow(`INSERT INTO tv_shows (tmdb_id,title,local_series_title,local_series_year) VALUES (-1,'Example Show (UK)','Example Show (UK)',2020) RETURNING id`).Scan(&placeholderID); err != nil {
+		t.Fatalf("insert UK placeholder: %v", err)
+	}
+	episodeID := insertUnclassified(t, db, "episode", "Pilot", "Example Show", 0)
+	if _, err := db.Exec(`UPDATE identified_items SET show_id=?,season_number=1,episode_number=1,metadata_fetched_at_unix=1 WHERE id=?`, placeholderID, episodeID); err != nil {
+		t.Fatalf("link episode: %v", err)
+	}
+	if _, err := db.Exec(`UPDATE media_files SET path='/media/tv/Example Show (UK) (2020) {tmdb-500}/S01E01.mkv' WHERE id=(SELECT media_file_id FROM identified_items WHERE id=?)`, episodeID); err != nil {
+		t.Fatalf("set UK-qualified path: %v", err)
+	}
+	client, _ := mockTMDbPathRoutedClient(t, map[string]string{
+		"/tv/500": `{"id":500,"name":"Example Show (US)","first_air_date":"2020-01-01"}`,
+	})
+	if err := EnrichMetadata(context.Background(), db, client); err != nil {
+		t.Fatalf("EnrichMetadata: %v", err)
+	}
+	var showID int64
+	if err := db.QueryRow(`SELECT show_id FROM identified_items WHERE id=?`, episodeID).Scan(&showID); err != nil {
+		t.Fatalf("query episode parent: %v", err)
+	}
+	if showID != placeholderID {
+		t.Errorf("episode parent=%d, want separate UK placeholder %d", showID, placeholderID)
+	}
+}
+
+func TestEnrichMetadata_EnrichesPlaceholderWithoutCanonicalParent(t *testing.T) {
+	db := openClassifyTestDB(t)
+	var placeholderID int64
+	if err := db.QueryRow(`INSERT INTO tv_shows (tmdb_id,title,local_series_title,local_series_year,content_rating) VALUES (-1,'Example Show','Example Show',2020,'TV-MA') RETURNING id`).Scan(&placeholderID); err != nil {
+		t.Fatalf("insert placeholder show: %v", err)
+	}
+	episodeID := insertUnclassified(t, db, "episode", "Pilot", "Example Show", 0)
+	if _, err := db.Exec(`UPDATE identified_items SET show_id=?,season_number=1,episode_number=1 WHERE id=?`, placeholderID, episodeID); err != nil {
+		t.Fatalf("link episode: %v", err)
+	}
+	if _, err := db.Exec(`UPDATE media_files SET path='/media/tv/Example Show {tmdb-500}/S01E01.mkv' WHERE id=(SELECT media_file_id FROM identified_items WHERE id=?)`, episodeID); err != nil {
+		t.Fatalf("set provider-qualified path: %v", err)
+	}
+	client, _ := mockTMDbPathRoutedClient(t, map[string]string{
+		"/tv/500":                    `{"id":500,"name":"Example Show","first_air_date":"2020-01-01"}`,
+		"/tv/500/content_ratings":    `{"results":[{"iso_3166_1":"US","rating":"TV-G"}]}`,
+		"/tv/500/season/1/episode/1": `{"overview":"Pilot overview","air_date":"2020-01-02"}`,
+	})
+	if err := EnrichMetadata(context.Background(), db, client); err != nil {
+		t.Fatalf("EnrichMetadata: %v", err)
+	}
+	var showID int64
+	var tmdbID int
+	if err := db.QueryRow(`SELECT i.show_id,s.tmdb_id FROM identified_items i JOIN tv_shows s ON s.id=i.show_id WHERE i.id=?`, episodeID).Scan(&showID, &tmdbID); err != nil {
+		t.Fatalf("query enriched episode: %v", err)
+	}
+	if showID != placeholderID || tmdbID != 500 {
+		t.Errorf("episode parent=(%d, TMDb %d), want retained parent %d enriched to TMDb 500", showID, tmdbID, placeholderID)
+	}
+	var rating string
+	if err := db.QueryRow(`SELECT content_rating FROM tv_shows WHERE id=?`, placeholderID).Scan(&rating); err != nil {
+		t.Fatalf("query retained rating: %v", err)
+	}
+	if rating != "TV-MA" {
+		t.Errorf("retained rating=%q, want known mature TV-MA", rating)
+	}
+	page, err := Catalog(context.Background(), db, CatalogQuery{View: "shows", Limit: 200, Search: "Example Show"})
+	if err != nil {
+		t.Fatalf("Catalog: %v", err)
+	}
+	if page.Total != 1 || page.Items[0].Audience != "adult" {
+		t.Errorf("catalog after enrichment = %+v, want one unrestricted show", page.Items)
+	}
+}
+
 func TestEnrichMetadata_DisabledClient_LeavesRowsUntouched(t *testing.T) {
 	db := openClassifyTestDB(t)
 	id := insertUnclassified(t, db, "movie", "Some Movie", "", 2020)
