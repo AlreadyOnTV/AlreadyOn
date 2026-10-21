@@ -6,7 +6,7 @@ Channels contain persisted UTC airings generated from the normalized library and
 
 Rotation is deterministic for a channel's existing state. Repeat limits, duration accounting and commercial placement must produce valid, non-overlapping entries. Changes to generation should be tested with a fixed clock and small synthetic catalogs.
 
-All metadata configurations use the same audience-focused defaults. TVmaze/Wikidata fill gaps after optional TMDb; manual corrections win. Free sources supply genres/dates, not age certification. Unknown or ambiguous audiences stay unrestricted until manually validated. Legacy broad free mixes are hidden without deleting their published schedules.
+All metadata configurations use the same audience-focused defaults. TVmaze/Wikidata fill gaps after optional TMDb; manual corrections win. Free sources supply genres/dates, not age certification. Ratings determine the automatic audience: G/PG and TV-Y/TV-Y7/TV-Y7-FV/TV-G are Kids; PG-13/TV-PG/TV-14 are Teens; R/NC-17/TV-MA and missing/invalid/unrated certifications are Unrestricted. Missing ratings do not require manual review or prevent unrestricted scheduling. Genres alone do not raise the audience. Teen and unrestricted TV Mix channels accept all genres, including absent genre metadata. Classics requires a known year; Modern also accepts unknown dates. Existing saved filters and audience overrides remain unchanged unless the owner explicitly resets them. Legacy broad free mixes are hidden without deleting their published schedules.
 
 Channel filter previews and applied schedules must use the same selection semantics. Document deliberate contract changes in [OpenAPI](../api/openapi.yaml) and add focused regression cases.
 

@@ -6,6 +6,7 @@ import (
 	"testing"
 
 	"github.com/alreadyonapp/alreadyon/server/internal/channel"
+	"github.com/alreadyonapp/alreadyon/server/internal/eligibility"
 	"github.com/alreadyonapp/alreadyon/server/internal/metadata"
 )
 
@@ -102,7 +103,7 @@ func TestApprovedDefaultsAgeEraAndGenreBoundaries(t *testing.T) {
 		if number < 101 || number > 138 {
 			t.Fatal(number)
 		}
-		if f.RequireKnownYear != (number <= 120 || number >= 137) {
+		if f.RequireKnownYear != (f.Era == "nostalgia") {
 			t.Fatalf("known-year rule on %d", number)
 		}
 		if number >= 121 && number <= 136 && f.Era != "both" {
@@ -117,11 +118,8 @@ func TestApprovedDefaultsAgeEraAndGenreBoundaries(t *testing.T) {
 	if !filterMatches(classic, makeItem(2009, metadata.TagAnimation)) || filterMatches(classic, makeItem(2010, metadata.TagAnimation)) || !filterMatches(modern, makeItem(2010, metadata.TagAnimation)) {
 		t.Fatal("2010 boundary")
 	}
-	for _, n := range []int{101, 102, 109, 110} {
-		f, _ := defaultFilterFor(n)
-		if filterMatches(f, makeItem(0, metadata.TagAnimation, metadata.TagAnime)) {
-			t.Fatalf("unknown year on %d", n)
-		}
+	if filterMatches(classic, makeItem(0, metadata.TagAnimation)) || !filterMatches(modern, makeItem(0, metadata.TagAnimation)) {
+		t.Fatal("unknown year should use Modern, never Classics")
 	}
 	live, _ := defaultFilterFor(103)
 	if filterMatches(live, makeItem(2009, metadata.TagAnimation)) {
@@ -147,7 +145,9 @@ func TestApprovedDefaultsAgeEraAndGenreBoundaries(t *testing.T) {
 		t.Fatal("mature anime on teen channel")
 	}
 	unrestricted, _ := defaultFilterFor(123)
-	if !filterMatches(unrestricted, makeItem(0, metadata.TagAnime)) {
+	unknown := makeItem(0, metadata.TagAnime)
+	unknown.Certification = ""
+	if !filterMatches(unrestricted, unknown) {
 		t.Fatal("unknown date missing from unrestricted")
 	}
 }
@@ -163,5 +163,35 @@ func TestValidatedAudienceDoesNotBypassCustomRatingFilter(t *testing.T) {
 	custom.MatchAudience = false
 	if filterMatches(custom, item) {
 		t.Fatal("manual audience bypassed custom exact rating filter")
+	}
+}
+
+// Every identified title has a default destination even without genres or dates.
+// This also guards the second eligibility gate (PG must be allowed on Kids).
+func TestDefaultsCoverAutomaticRatingsWithoutManualMatching(t *testing.T) {
+	for _, kind := range []string{"movie", "episode"} {
+		certs := append([]string{"", "NR", "invalid"}, eligibility.TVCertifications...)
+		if kind == "movie" {
+			certs = append([]string{"", "invalid"}, eligibility.MovieCertifications...)
+		}
+		for _, cert := range certs {
+			for _, year := range []int{0, 2009, 2010} {
+				for _, tags := range [][]metadata.Tag{nil, {metadata.TagAnime}, {metadata.TagHorror, metadata.TagWar}, {metadata.TagAnimation}} {
+					it := classifiedItem{MediaType: kind, Certification: cert, ReleaseYear: year, Tags: tags}
+					count := 0
+					for _, f := range defaultFilters {
+						if filterMatches(f, it) {
+							count++
+							if f.AudienceTier != string(eligibility.RequiredTier(kind, cert)) {
+								t.Fatalf("%+v crossed audience: %+v", it, f)
+							}
+						}
+					}
+					if count == 0 {
+						t.Errorf("no default destination for %+v", it)
+					}
+				}
+			}
+		}
 	}
 }
