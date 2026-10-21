@@ -4600,6 +4600,7 @@ const noWorkers = async (unreleased = () => 0) => {
         a.sessions[0].device,
       "Activity identifies the active viewer",
     );
+    assert(/^\d{2}\.\d{2}\.\d{2}_[a-f0-9]{7}$/.test(a.sessions[0].appVersion), 'Player must report its bundled app version');
     assert(
       !JSON.stringify(a).includes("token"),
       "Activity never exposes playback tokens",

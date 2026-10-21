@@ -89,9 +89,14 @@ func TestServerActivityLifecycleCommercialsAndAuthorization(t *testing.T) {
 		}
 		return token
 	}
+	clientVersion := ""
 	report := func(token, viewer, credential string, intend int) {
 		t.Helper()
-		w := call("POST", "/api/playback/activity", fmt.Sprintf(`{"viewerId":%q,"channelId":999,"token":%q,"profileId":1,"latencyMs":12}`, viewer, token), credential)
+		versionField := ""
+		if clientVersion != "" {
+			versionField = fmt.Sprintf(`,"appVersion":%q`, clientVersion)
+		}
+		w := call("POST", "/api/playback/activity", fmt.Sprintf(`{"viewerId":%q,"channelId":999,"token":%q,"profileId":1,"latencyMs":12%s}`, viewer, token, versionField), credential)
 		if w.Code != intend {
 			t.Fatalf("report %d: %s", w.Code, w.Body.String())
 		}
@@ -107,9 +112,14 @@ func TestServerActivityLifecycleCommercialsAndAuthorization(t *testing.T) {
 	report(token, viewer, other, 401)
 	report(token, viewer, raw, 204)
 	first := snapshot()
-	if len(first) != 1 || first[0].Profile != "Admin" || first[0].SourceIP != "192.0.2.10" || first[0].BandwidthMbps != nil {
+	if len(first) != 1 || first[0].Profile != "Admin" || first[0].SourceIP != "192.0.2.10" || first[0].BandwidthMbps != nil || first[0].AppVersion != "" {
 		t.Fatalf("first=%+v", first)
 	}
+	for _, version := range []string{strings.Repeat("v", 101), "bad\nversion", "bad\u0085version"} {
+		clientVersion = version
+		report(token, "viewer-invalid-123", raw, 400)
+	}
+	clientVersion = "web-fixture_1234567"
 	counter := &mediaCounter{ResponseWriter: httptest.NewRecorder(), sessions: p.Sessions, token: token}
 	if _, err := counter.Write(make([]byte, 625000)); err != nil {
 		t.Fatal(err)
@@ -117,7 +127,7 @@ func TestServerActivityLifecycleCommercialsAndAuthorization(t *testing.T) {
 	clock.now = clock.now.Add(5 * time.Second)
 	report(token, viewer, raw, 204)
 	program := snapshot()[0]
-	if program.VideoReason == "" || program.AudioReason == "" {
+	if program.AppVersion != clientVersion || program.VideoReason == "" || program.AudioReason == "" {
 		t.Fatal("missing per-track playback reasons")
 	}
 	if program.BandwidthMbps == nil || *program.BandwidthMbps != 1 {
@@ -138,6 +148,27 @@ func TestServerActivityLifecycleCommercialsAndAuthorization(t *testing.T) {
 	resumed := snapshot()[0]
 	if resumed.Commercial || resumed.Video != program.Video || resumed.BandwidthMbps != nil {
 		t.Fatalf("resumed=%+v", resumed)
+	}
+	// Distinct clients retain their own versions, without a server-version fallback.
+	clientVersion = "26.10.25-alpha1"
+	native := start("program", "Native Client.mp4")
+	report(native, "viewer-native-12345", raw, 204)
+	concurrent := snapshot()
+	if len(concurrent) != 2 {
+		t.Fatalf("concurrent: %+v", concurrent)
+	}
+	versions := map[string]bool{}
+	for _, row := range concurrent {
+		versions[row.AppVersion] = true
+	}
+	if !versions["web-fixture_1234567"] || !versions["26.10.25-alpha1"] {
+		t.Fatalf("client versions mixed: %+v", concurrent)
+	}
+	call("DELETE", "/api/playback/activity", `{"viewerId":"viewer-native-12345"}`, raw)
+	clientVersion = ""
+	report(token, viewer, raw, 204)
+	if snapshot()[0].AppVersion != "" {
+		t.Fatal("unreported version retained stale value")
 	}
 	// Another principal cannot end this viewer even if it knows the public ID.
 	call("DELETE", "/api/playback/activity", `{"viewerId":"viewer-1234567890"}`, other)
