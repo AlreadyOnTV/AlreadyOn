@@ -2,7 +2,7 @@
 
 [![AlreadyOn](../web/public/branding/header-doc.svg)](../README.md)
 
-Channels contain persisted UTC airings generated from the normalized library and filter settings. Published airings stay stable: library additions or metadata refreshes extend future coverage rather than rewriting the current program.
+Channels contain persisted UTC airings generated from library filters. Published airings stay stable: library additions or metadata refreshes extend future coverage rather than rewriting the current program.
 
 Rotation is deterministic for a channel's existing state. Repeat limits, duration accounting and commercial placement must produce valid, non-overlapping entries. Changes to generation should be tested with a fixed clock and small synthetic catalogs.
 
