@@ -369,10 +369,10 @@ const wait = (ms) => new Promise((resolve) => setTimeout(resolve, ms));
       .click();
     let dialog = page.getByRole("dialog");
     const reviewNote = dialog.getByRole("note");
-    await reviewNote.waitFor();
-    assert.ok((await reviewNote.innerText()).includes("Why this needs review:"));
-    assert.equal(await reviewNote.evaluate(el => getComputedStyle(el).marginTop), "24px");
-    assert.equal(await reviewNote.evaluate(el => getComputedStyle(el).marginBottom), "24px");
+    assert.equal(await reviewNote.count(), 0, "Automatic PG audiences must not require manual review");
+    const automaticPG = await (await page.request.get(url + "/api/library/catalog?view=movies&rating=PG&limit=200")).json();
+    assert.ok(automaticPG.items.length > 0);
+    assert.ok(automaticPG.items.every(item => item.audience === "young_child" && !item.needsReview && item.audienceOverride == null), "PG films should automatically belong to Kids before owner edits");
     assert.equal(await dialog.getByText(/Apply Channels/).count(), 0);
     await dialog
       .getByLabel("Intended audience", { exact: true })
