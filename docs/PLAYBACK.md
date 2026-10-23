@@ -4,9 +4,11 @@
 
 Tuning selects the channel's current persisted airing. Delivery chooses direct playback when the browser supports the source, remuxing when the container alone needs changing, or a bounded transcoding path. GPU availability does not imply codec, HDR or browser support.
 
+WebUI capability checks use hls.js's selected media-source constructor, including Apple's `ManagedMediaSource`. Without MSE, native HLS remains available when supported.
+
 ## Touch browsers
 
-Tablets use a large guide player in portrait and a compact player in landscape, with no size toggle. Fullscreen is explicit; rotating to portrait exits it. Phones keep the large guide and automatically fill the landscape viewport, requesting native fullscreen when permitted. Exiting restores the large guide while held landscape; rotating through portrait re-enables automatic entry. Shared device orientation prevents viewport changes from cancelling fullscreen. All browsers use the same playback selection and fullscreen capability checks; native video fullscreen is the fallback when stage fullscreen is unavailable. If native entry is denied after rotation, phones use a viewport fallback. Orientation remains unlocked; desktop behavior is unchanged.
+Tablets use a large guide player in portrait and a compact player in landscape, with no size toggle. Fullscreen is explicit; rotating to portrait exits it. Phones keep the large guide and automatically fill the landscape viewport, requesting native fullscreen when permitted. Exiting restores the large guide while held landscape; rotating through portrait re-enables automatic entry. Shared device orientation prevents viewport changes from cancelling fullscreen. Browsers share capability checks; native video fullscreen is the fallback when stage fullscreen is unavailable. If native entry is denied after rotation, phones use a viewport fallback. Orientation remains unlocked; desktop behavior is unchanged.
 
 ## Session contract
 
