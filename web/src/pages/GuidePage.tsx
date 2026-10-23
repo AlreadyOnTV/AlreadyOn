@@ -1,4 +1,4 @@
-import { useTouchLayout } from "../playback/touchLayout";
+import { useIOSChromeViewport, useTouchLayout } from "../playback/touchLayout";
 import Brand from "../components/Brand";
 import { circularChannelIndex } from "../playback/channelNavigation";
 // Full-screen home page: a 1990s/2000s US cable TV guide, backed by the
@@ -400,8 +400,9 @@ export default function GuidePage() {
   const [mobilePlayer, setMobilePlayer] = useState(
     () => window.matchMedia(MOBILE_PLAYER_QUERY).matches,
   );
-  const { touch, portrait } = useTouchLayout();
-  const playerLarge = touch ? portrait : largePlayer || mobilePlayer;
+  useIOSChromeViewport();
+  const { touch, phone, portrait } = useTouchLayout();
+  const playerLarge = touch ? phone || portrait : largePlayer || mobilePlayer;
   useEffect(() => {
     const query = window.matchMedia(MOBILE_PLAYER_QUERY);
     const sync = () => setMobilePlayer(query.matches);
@@ -928,7 +929,7 @@ export default function GuidePage() {
   return (
     <div
       className={"guide-page" + (playerLarge ? " is-large-player" : "") +
-        (touch && !portrait ? " is-touch-landscape" : "")}
+        (touch && !phone && !portrait ? " is-touch-landscape" : "")}
       ref={pageRef}
     >
       <div className="page-header" ref={pageHeaderRef}>

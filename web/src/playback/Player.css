@@ -97,3 +97,14 @@
     min-height: 44px;
   }
 }
+
+/* Phone rotation remains fullscreen even if native entry needs a user gesture.
+   Keep the playing element mounted; the overlay can dismiss this fallback. */
+.playback-player.is-landscape-player {
+  position: fixed;
+  inset: 0;
+  z-index: 100;
+  width: 100vw;
+  height: 100dvh;
+  min-height: 0;
+}

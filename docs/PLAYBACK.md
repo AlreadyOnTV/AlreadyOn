@@ -6,7 +6,7 @@ Tuning selects the channel's current persisted airing. Delivery chooses direct p
 
 ## Touch browsers
 
-Phone and tablet browsers use the large guide player in portrait and the compact guide player in landscape, without a player-size toggle. Rotation never automatically enters fullscreen on touch devices. The overlay requests native fullscreen explicitly; exiting returns to the current orientation’s guide layout. Rotating from landscape to portrait exits fullscreen. Older Safari uses native video fullscreen where stage fullscreen is unavailable. Browser and OS policies control fullscreen availability and orientation; the WebUI does not lock orientation, so physical rotation remains available to leave fullscreen. Desktop behavior is unchanged.
+Tablets use a large guide player in portrait and a compact player in landscape, with no size toggle. Fullscreen is explicit; rotating to portrait exits it. Phones keep the large guide and automatically fill the landscape viewport, requesting native fullscreen when permitted. Exiting restores the large guide while held landscape; rotating through portrait re-enables automatic entry. Shared device orientation prevents viewport changes from cancelling fullscreen. Chrome on iOS uses inferred viewport sizing, native HLS, and native video fullscreen when available; Safari retains its playback path. If native entry is denied after rotation, phones use a viewport fallback. Orientation remains unlocked; desktop behavior is unchanged.
 
 ## Session contract
 

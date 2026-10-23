@@ -1,4 +1,5 @@
-import { isTouchBrowser } from "./touchLayout";
+import { isIOSChrome } from "./touchLayout";
+import { usePlayerFullscreen } from "./usePlayerFullscreen";
 import { useEffect, useMemo, useRef, useState } from "react";
 import Hls from "hls.js";
 import { APP_VERSION } from "../version";
@@ -90,6 +91,9 @@ export function Player({
 }) {
   const videoRef = useRef<HTMLVideoElement>(null);
   const stageRef = useRef<HTMLDivElement>(null);
+  const { viewportFullscreen, toggleFullscreen } = usePlayerFullscreen(
+    stageRef, videoRef, channelId !== null,
+  );
   const api = useRef<PlayerApi | null>(null);
   const [status, setStatus] = useState("Select a channel to watch");
   const [mode, setMode] = useState("");
@@ -1046,7 +1050,11 @@ export function Player({
       );
       setStatus("Tuning…");
       setError(false);
-      if (s.plan.mode !== "direct" && Hls.isSupported()) {
+      // Chrome on iOS supports native HLS. Prefer that path to avoid keeping a
+      // MediaSource video surface across native fullscreen transitions. Safari
+      // and other browsers retain their existing delivery path.
+      const nativeHls = isIOSChrome() && !!video!.canPlayType("application/vnd.apple.mpegurl");
+      if (s.plan.mode !== "direct" && !nativeHls && Hls.isSupported()) {
         // A ladder stream starts on its small rung, which is ready sooner; adaptive
         // selection then moves up to the main picture once it has loaded.
         // A prepared entry is already several segments ahead when attached. Load
@@ -1335,55 +1343,8 @@ export function Player({
     else void video.requestPictureInPicture?.().catch(() => {});
   };
   const fullscreen = () => {
-    const video = videoRef.current as (HTMLVideoElement & {
-      webkitDisplayingFullscreen?: boolean;
-      webkitEnterFullscreen?: () => void;
-      webkitExitFullscreen?: () => void;
-    }) | null;
-    if (document.fullscreenElement) void document.exitFullscreen().catch(() => {});
-    else if (video?.webkitDisplayingFullscreen) video.webkitExitFullscreen?.();
-    else {
-      setMuted(false);
-      // Prefer the stage so our controls remain available. Older Safari only
-      // supports native video fullscreen; call it in this same user gesture.
-      if (stageRef.current?.requestFullscreen)
-        void stageRef.current.requestFullscreen().catch(() => {});
-      else video?.webkitEnterFullscreen?.();
-    }
+    if (toggleFullscreen()) setMuted(false);
   };
-  useEffect(() => {
-    if (!isTouchBrowser()) return;
-    const orientation = window.screen.orientation;
-    let wasLandscape = orientation
-      ? orientation.type.startsWith("landscape")
-      : window.matchMedia("(orientation: landscape)").matches;
-    const sync = () => {
-      const landscape = orientation
-        ? orientation.type.startsWith("landscape")
-        : window.matchMedia("(orientation: landscape)").matches;
-      // Only a physical landscape-to-portrait transition exits fullscreen.
-      // Entering fullscreen from portrait must not immediately cancel it.
-      if (wasLandscape && !landscape) {
-        if (document.fullscreenElement === stageRef.current)
-          void document.exitFullscreen().catch(() => {});
-        const video = videoRef.current as (HTMLVideoElement & {
-          webkitDisplayingFullscreen?: boolean;
-          webkitExitFullscreen?: () => void;
-        }) | null;
-        if (video?.webkitDisplayingFullscreen) video.webkitExitFullscreen?.();
-      }
-      wasLandscape = landscape;
-    };
-    const query = window.matchMedia("(orientation: landscape)");
-    orientation?.addEventListener("change", sync);
-    window.addEventListener("orientationchange", sync);
-    if (!orientation) query.addEventListener("change", sync);
-    return () => {
-      orientation?.removeEventListener("change", sync);
-      window.removeEventListener("orientationchange", sync);
-      query.removeEventListener("change", sync);
-    };
-  }, []);
   // Leaving full screen first, so the large player (or small one) is actually shown.
   const toggleLarge =
     onToggleLarge &&
@@ -1449,6 +1410,7 @@ export function Player({
       className={
         "playback-player" +
         (large ? " is-large" : "") +
+        (viewportFullscreen ? " is-landscape-player" : "") +
         (paused ? " is-paused" : "") +
         (idle ? " is-idle" : "") +
         (controlsDismissed ? " controls-dismissed" : "") +
