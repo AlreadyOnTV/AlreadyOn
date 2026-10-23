@@ -1,5 +1,5 @@
 import { useEffect, useRef, useState, type RefObject } from "react";
-import { isIOSChrome, readTouchLayout, useTouchLayout } from "./touchLayout";
+import { readTouchLayout, useTouchLayout } from "./touchLayout";
 
 type NativeVideo = HTMLVideoElement & {
   webkitDisplayingFullscreen?: boolean;
@@ -27,10 +27,9 @@ export function usePlayerFullscreen(
   const enterNative = async () => {
     if (ownsNative()) return;
     const element = video.current as NativeVideo | null;
-    // Chrome's iOS embedded view can advertise container fullscreen but tear
-    // it down immediately. Use its native video player directly when available.
-    if (isIOSChrome() && element?.webkitEnterFullscreen) element.webkitEnterFullscreen();
-    else if (stage.current?.requestFullscreen) await stage.current.requestFullscreen();
+    // Keep one capability-based path for every browser: stage fullscreen
+    // preserves our controls; native video fullscreen is the fallback.
+    if (stage.current?.requestFullscreen) await stage.current.requestFullscreen();
     else element?.webkitEnterFullscreen?.();
   };
   useEffect(() => {

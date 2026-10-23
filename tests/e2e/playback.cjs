@@ -1385,6 +1385,10 @@ const noWorkers = async (unreleased = () => 0) => {
     // prevents Browser.setWindowBounds on hosted Chromium; exercise viewport
     // fallback here and leave accepted fullscreen to mobileLandscape's mock.
     await page.addInitScript(() => {
+      // Resizing the emulated viewport must not turn this physical phone into
+      // a tablet: setViewportSize can also replace Chromium's screen metrics.
+      Object.defineProperty(screen, "width", { get: () => 390 });
+      Object.defineProperty(screen, "height", { get: () => 844 });
       Element.prototype.requestFullscreen = () =>
         Promise.reject(
           new DOMException(
@@ -2091,6 +2095,7 @@ const noWorkers = async (unreleased = () => 0) => {
       window.__rotationFullscreen = { stageRequests: 0, videoRequests: 0 };
       Object.defineProperty(screen.orientation, "type", { get: () => orientation });
       if (apple) {
+        Object.defineProperty(navigator, "maxTouchPoints", { get: () => 5 });
         Object.defineProperty(navigator, "platform", { get: () => "MacIntel" });
         Object.defineProperty(window, "orientation", { get: () => angle });
       }
@@ -2216,42 +2221,47 @@ const noWorkers = async (unreleased = () => 0) => {
         await context.close();
       }
     }
-    // Chrome on iPad: legacy angle and viewport/ScreenOrientation can disagree.
-    // Exercise both first load in landscape and rotation from portrait.
-    for (const initialPortrait of [true, false]) {
-      seed();
-      const context = await browser.newContext({
-        viewport: initialPortrait ? { width: 768, height: 1024 } : { width: 1024, height: 768 },
-        screen: { width: 768, height: 1024 },
-        hasTouch: true,
-        userAgent: "Mozilla/5.0 (Macintosh; Intel Mac OS X 10_15_7) AppleWebKit/605.1.15 CriOS/156 Version/11.1.1 Safari/605.1.15",
-      });
-      const page = await context.newPage();
-      page.setDefaultTimeout(15000);
-      page.on("pageerror", (e) => errors.push(e.message));
-      await page.addInitScript(installFullscreen, { policy: "allowed", apple: true, portrait: initialPortrait });
-      await login(page);
-      await page.locator(".guide-slot-box").first().tap();
-      await playing(page);
-      assert((await state(page)).large === initialPortrait, "iPad Chrome initial layout follows physical orientation");
-      assert(await page.locator('meta[name="viewport"]').getAttribute("content") === "initial-scale=1.0, viewport-fit=cover",
-        "iPad Chrome infers viewport width after rotation without disabling zoom");
-      await page.evaluate(() => window.__rotateDevice(false));
-      await page.waitForFunction(() => !document.querySelector(".guide-page.is-large-player"));
-      await page.setViewportSize({ width: 1024, height: 768 });
-      await toggle(page);
-      await page.setViewportSize({ width: 768, height: 1024 });
-      assert((await state(page)).native, "Stale portrait viewport cannot cancel physical landscape fullscreen");
-      const requests = await page.evaluate(() => window.__rotationFullscreen);
-      assert(requests.videoRequests === 1 && requests.stageRequests === 0,
-        "iPad Chrome chooses native video fullscreen even when container fullscreen exists");
-      await page.evaluate(() => window.__rotateDevice(true));
-      await page.waitForFunction(() => document.querySelector(".guide-page.is-large-player") &&
-        !document.querySelector("video").webkitDisplayingFullscreen);
-      assert(await page.locator("video").evaluate((video) => !video.paused && video.videoWidth > 0),
-        "iPad Chrome landscape load/rotation retains decoded playback");
-      await leavePlaying(page);
-      await context.close();
+    // Safari and Chrome on iPad must share the standard viewport and fullscreen
+    // path, including delayed viewport changes and initial landscape loading.
+    for (const userAgent of [
+      "Mozilla/5.0 (Macintosh; Intel Mac OS X 10_15_7) AppleWebKit/605.1.15 Version/27.0 Safari/605.1.15",
+      "Mozilla/5.0 (Macintosh; Intel Mac OS X 10_15_7) AppleWebKit/605.1.15 CriOS/156 Version/11.1.1 Safari/605.1.15",
+    ]) {
+      for (const initialPortrait of [true, false]) {
+        seed();
+        const context = await browser.newContext({
+          viewport: initialPortrait ? { width: 768, height: 1024 } : { width: 1024, height: 768 },
+          screen: { width: 768, height: 1024 },
+          hasTouch: true,
+          userAgent,
+        });
+        const page = await context.newPage();
+        page.setDefaultTimeout(15000);
+        page.on("pageerror", (e) => errors.push(e.message));
+        await page.addInitScript(installFullscreen, { policy: "allowed", apple: true, portrait: initialPortrait });
+        await login(page);
+        await page.locator(".guide-slot-box").first().tap();
+        await playing(page);
+        assert((await state(page)).large === initialPortrait, "iPad initial layout follows physical orientation");
+        assert(await page.locator('meta[name="viewport"]').getAttribute("content") === "width=device-width, initial-scale=1.0",
+          "iPad browsers retain the standard viewport configuration");
+        await page.evaluate(() => window.__rotateDevice(false));
+        await page.waitForFunction(() => !document.querySelector(".guide-page.is-large-player"));
+        await page.setViewportSize({ width: 1024, height: 768 });
+        await toggle(page);
+        await page.setViewportSize({ width: 768, height: 1024 });
+        assert((await state(page)).native, "Stale portrait viewport cannot cancel physical landscape fullscreen");
+        const requests = await page.evaluate(() => window.__rotationFullscreen);
+        assert(requests.videoRequests === 0 && requests.stageRequests === 1,
+          "iPad browsers prefer stage fullscreen when supported");
+        await page.evaluate(() => window.__rotateDevice(true));
+        await page.waitForFunction(() => document.querySelector(".guide-page.is-large-player") &&
+          !document.fullscreenElement && !document.querySelector("video").webkitDisplayingFullscreen);
+        assert(await page.locator("video").evaluate((video) => !video.paused && video.videoWidth > 0),
+          "iPad landscape load/rotation retains decoded playback");
+        await leavePlaying(page);
+        await context.close();
+      }
     }
     const desktop = await browser.newContext({ viewport: { width: 1280, height: 800 } });
     const page = await desktop.newPage();
@@ -2262,7 +2272,7 @@ const noWorkers = async (unreleased = () => 0) => {
       "Desktop landscape never triggers automatic fullscreen");
     await leavePlaying(page);
     await desktop.close();
-    console.log("PASS: phone automatic fullscreen/dismissal, tablet guide layouts, iPad Chrome delayed viewport/native fullscreen, decoded playback and desktop behavior");
+    console.log("PASS: phone automatic fullscreen/dismissal, tablet guide layouts, Safari/Chrome parity with standard viewport/fullscreen, decoded playback and desktop behavior");
   }
 
   // Keyboard: small-player arrows browse; expanded Up/Down tunes and horizontal arrows navigate controls.

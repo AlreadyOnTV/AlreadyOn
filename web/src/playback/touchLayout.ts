@@ -5,12 +5,8 @@ export function isTouchBrowser() {
 }
 
 export function isAppleTouchBrowser() {
-  return isIOSChrome() || /iPad|iPhone|iPod/.test(navigator.userAgent + " " + navigator.platform) ||
+  return /iPad|iPhone|iPod/.test(navigator.userAgent + " " + navigator.platform) ||
     (navigator.platform === "MacIntel" && navigator.maxTouchPoints > 1);
-}
-
-export function isIOSChrome() {
-  return /CriOS\//.test(navigator.userAgent);
 }
 
 export function readTouchLayout() {
@@ -52,22 +48,4 @@ export function useTouchLayout() {
     };
   }, []);
   return layout;
-}
-
-export function useIOSChromeViewport() {
-  useEffect(() => {
-    if (!isIOSChrome()) return;
-    const viewport = document.querySelector('meta[name="viewport"]');
-    const original = viewport?.getAttribute("content");
-    if (!viewport || original == null) return;
-    // With initial-scale alone WebKit infers device-height as landscape width,
-    // instead of retaining a portrait device-width in Chrome's embedded view.
-    // Keep pinch zoom available and leave Safari's working configuration alone.
-    const content = "initial-scale=1.0, viewport-fit=cover";
-    viewport.setAttribute("content", content);
-    return () => {
-      if (viewport.getAttribute("content") === content)
-        viewport.setAttribute("content", original);
-    };
-  }, []);
 }

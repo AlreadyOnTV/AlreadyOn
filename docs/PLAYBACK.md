@@ -6,7 +6,7 @@ Tuning selects the channel's current persisted airing. Delivery chooses direct p
 
 ## Touch browsers
 
-Tablets use a large guide player in portrait and a compact player in landscape, with no size toggle. Fullscreen is explicit; rotating to portrait exits it. Phones keep the large guide and automatically fill the landscape viewport, requesting native fullscreen when permitted. Exiting restores the large guide while held landscape; rotating through portrait re-enables automatic entry. Shared device orientation prevents viewport changes from cancelling fullscreen. Chrome on iOS uses inferred viewport sizing, native HLS, and native video fullscreen when available; Safari retains its playback path. If native entry is denied after rotation, phones use a viewport fallback. Orientation remains unlocked; desktop behavior is unchanged.
+Tablets use a large guide player in portrait and a compact player in landscape, with no size toggle. Fullscreen is explicit; rotating to portrait exits it. Phones keep the large guide and automatically fill the landscape viewport, requesting native fullscreen when permitted. Exiting restores the large guide while held landscape; rotating through portrait re-enables automatic entry. Shared device orientation prevents viewport changes from cancelling fullscreen. All browsers use the same playback selection and fullscreen capability checks; native video fullscreen is the fallback when stage fullscreen is unavailable. If native entry is denied after rotation, phones use a viewport fallback. Orientation remains unlocked; desktop behavior is unchanged.
 
 ## Session contract
 

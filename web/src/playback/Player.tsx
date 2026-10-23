@@ -1,4 +1,3 @@
-import { isIOSChrome } from "./touchLayout";
 import { usePlayerFullscreen } from "./usePlayerFullscreen";
 import { useEffect, useMemo, useRef, useState } from "react";
 import Hls from "hls.js";
@@ -1050,11 +1049,7 @@ export function Player({
       );
       setStatus("Tuning…");
       setError(false);
-      // Chrome on iOS supports native HLS. Prefer that path to avoid keeping a
-      // MediaSource video surface across native fullscreen transitions. Safari
-      // and other browsers retain their existing delivery path.
-      const nativeHls = isIOSChrome() && !!video!.canPlayType("application/vnd.apple.mpegurl");
-      if (s.plan.mode !== "direct" && !nativeHls && Hls.isSupported()) {
+      if (s.plan.mode !== "direct" && Hls.isSupported()) {
         // A ladder stream starts on its small rung, which is ready sooner; adaptive
         // selection then moves up to the main picture once it has loaded.
         // A prepared entry is already several segments ahead when attached. Load
