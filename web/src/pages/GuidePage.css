@@ -597,3 +597,24 @@
   min-width: 0;
 }
 .guide-slot-history .guide-slot-time { white-space: nowrap; }
+
+/* Keep a compact preview and usable guide even on short landscape phones. */
+.guide-page.is-touch-landscape .preview-section {
+  flex-direction: row;
+  align-items: flex-start;
+}
+.guide-page.is-touch-landscape .preview-video-wrap {
+  width: min(360px, 48vw, 67dvh) !important;
+}
+.guide-page.is-touch-landscape .preview-detail {
+  min-height: 0;
+  max-height: 28dvh;
+  overflow-y: auto;
+  flex: 1;
+}
+
+@media (max-width: 700px) {
+  .is-touch-landscape .playback-player:not(:fullscreen) .playback-time {
+    display: none;
+  }
+}

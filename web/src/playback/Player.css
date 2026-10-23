@@ -98,8 +98,8 @@
   }
 }
 
-/* Touch landscape fills the viewport even when native fullscreen is denied.
-   Keep the existing player mounted so rotation never retunes or pauses video. */
+/* Phone rotation remains fullscreen even if native entry needs a user gesture.
+   Keep the playing element mounted; the overlay can dismiss this fallback. */
 .playback-player.is-landscape-player {
   position: fixed;
   inset: 0;

@@ -1,3 +1,4 @@
+import { usePlayerFullscreen } from "./usePlayerFullscreen";
 import { useEffect, useMemo, useRef, useState } from "react";
 import Hls from "hls.js";
 import { APP_VERSION } from "../version";
@@ -89,6 +90,9 @@ export function Player({
 }) {
   const videoRef = useRef<HTMLVideoElement>(null);
   const stageRef = useRef<HTMLDivElement>(null);
+  const { viewportFullscreen, toggleFullscreen } = usePlayerFullscreen(
+    stageRef, videoRef, channelId !== null,
+  );
   const api = useRef<PlayerApi | null>(null);
   const [status, setStatus] = useState("Select a channel to watch");
   const [mode, setMode] = useState("");
@@ -221,62 +225,6 @@ export function Player({
       stage.removeEventListener("keydown", wake);
     };
   }, []);
-  // Physical rotation should expand touch playback without relying on a mouse
-  // gesture. Native fullscreen can be denied; viewport filling remains available.
-  const [landscapePlayer, setLandscapePlayer] = useState(false);
-  const hasChannel = channelId !== null;
-  useEffect(() => {
-    const stage = stageRef.current;
-    if (!stage || !hasChannel) {
-      setLandscapePlayer(false);
-      return;
-    }
-    const query = window.matchMedia("(pointer: coarse) and (orientation: landscape)");
-    let disposed = false;
-    let requested = false;
-    let ownsFullscreen = false;
-    let wantsLandscape = false;
-    const orientation = window.screen.orientation;
-    const sync = (event?: Event) => {
-      // Screen orientation can change before viewport media queries catch up.
-      const landscape = orientation && event?.target === orientation
-        ? window.matchMedia("(pointer: coarse)").matches && orientation.type.startsWith("landscape")
-        : query.matches;
-      wantsLandscape = landscape;
-      setLandscapePlayer(landscape);
-      if (!landscape) {
-        if (ownsFullscreen && document.fullscreenElement === stage) {
-          ownsFullscreen = false;
-          void document.exitFullscreen().catch(() => {});
-        }
-        return;
-      }
-      if (document.fullscreenElement || requested || !stage.requestFullscreen) return;
-      requested = true;
-      // Call directly in the orientation event: browsers may permit user-driven
-      // rotation even when the usual transient click activation has expired.
-      void stage.requestFullscreen().then(() => {
-        ownsFullscreen = true;
-        if (disposed || !wantsLandscape) {
-          ownsFullscreen = false;
-          if (document.fullscreenElement === stage) void document.exitFullscreen().catch(() => {});
-        }
-      }).catch(() => {
-        // Browser/OS policy must not block playback or the landscape layout.
-      }).finally(() => { requested = false; });
-    };
-    query.addEventListener("change", sync);
-    orientation?.addEventListener("change", sync);
-    sync();
-    return () => {
-      disposed = true;
-      query.removeEventListener("change", sync);
-      orientation?.removeEventListener("change", sync);
-      if (ownsFullscreen && document.fullscreenElement === stage) {
-        void document.exitFullscreen().catch(() => {});
-      }
-    };
-  }, [hasChannel]);
   const hlsRef = useRef<Hls | null>(null);
   const fragmentRef = useRef<FragmentStat | null>(null);
   const transfersRef = useRef<Transfer[]>([]);
@@ -1390,11 +1338,7 @@ export function Player({
     else void video.requestPictureInPicture?.().catch(() => {});
   };
   const fullscreen = () => {
-    if (document.fullscreenElement) void document.exitFullscreen();
-    else {
-      setMuted(false);
-      void stageRef.current?.requestFullscreen?.().catch(() => {});
-    }
+    if (toggleFullscreen()) setMuted(false);
   };
   // Leaving full screen first, so the large player (or small one) is actually shown.
   const toggleLarge =
@@ -1461,7 +1405,7 @@ export function Player({
       className={
         "playback-player" +
         (large ? " is-large" : "") +
-        (landscapePlayer ? " is-landscape-player" : "") +
+        (viewportFullscreen ? " is-landscape-player" : "") +
         (paused ? " is-paused" : "") +
         (idle ? " is-idle" : "") +
         (controlsDismissed ? " controls-dismissed" : "") +

@@ -14,6 +14,8 @@ Use the active dated branch and [development setup](DEVELOPMENT.md). Test at <ht
 
 RC1 normally reuses alpha APKs. Approved direct RC1 builds require an unpublished draft targeting the exact dev source. Replacing RC1 requires explicit approval, removing its release/tag, and reserving a replacement draft with a new version code. Later hotfixes draft the next RC. Stable locks the date.
 
+Future phone and TV builds must offer newer alpha, RC and stable updates even when the installed release is Stable. Stable publication must not lock clients to stable-only updates. See [update policy and existing-client limitations](ANDROID_UPDATES.md).
+
 ## Approved direct Stable
 
 Dispatch **Build Date Release Image** on `dev` with `publication=stable`. Full validation and signed-image gates precede building/signing both Stable APKs once. Only the Stable release/tag is allocated; no alpha or RC is created.
