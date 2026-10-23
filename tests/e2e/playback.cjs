@@ -1429,7 +1429,7 @@ const noWorkers = async (unreleased = () => 0) => {
     );
 
     for (const viewport of [
-      { width: 844, height: 390 },
+      { width: 844, height: 390 }, { width: 667, height: 375 },
       { width: 768, height: 1024 },
       { width: 1280, height: 800 },
     ]) {
@@ -2065,107 +2065,90 @@ const noWorkers = async (unreleased = () => 0) => {
   // Native fullscreen policy varies across Android/iOS. Exercise accepted,
   // rejected and absent APIs while asserting the same rotation layout/playback.
   async function mobileLandscape() {
-    for (const policy of ["allowed", "denied", "unsupported"]) {
-      seed();
-      const context = await browser.newContext({
-        viewport: { width: 390, height: 844 },
-        isMobile: true,
-        hasTouch: true,
-      });
-      const page = await context.newPage();
-      page.on("pageerror", (e) => errors.push(e.message));
-      await page.addInitScript((policy) => {
-        let element = null;
-        window.__rotationFullscreen = { requests: 0, exits: 0 };
-        Object.defineProperty(document, "fullscreenElement", {
-          configurable: true,
-          get: () => element,
+    // Touch classification is independent of viewport size and Safari's
+    // desktop user agent. Fullscreen is synthetic here;
+    // physical Safari still needs device validation.
+    for (const device of [{ width: 1024, height: 768 }, { width: 844, height: 390 }]) {
+      for (const policy of ["allowed", "denied", "legacy", "unsupported"]) {
+        seed();
+        const context = await browser.newContext({
+          viewport: device,
+          screen: device,
+          hasTouch: true,
         });
-        Object.defineProperty(Element.prototype, "requestFullscreen", {
-          configurable: true,
-          value:
-            policy === "unsupported"
-              ? undefined
-              : function () {
-                  window.__rotationFullscreen.requests++;
-                  if (policy === "denied")
-                    return Promise.reject(
-                      new DOMException(
-                        "Denied by browser policy",
-                        "NotAllowedError",
-                      ),
-                    );
-                  element = this;
-                  document.dispatchEvent(new Event("fullscreenchange"));
-                  return Promise.resolve();
-                },
-        });
-        document.exitFullscreen = () => {
-          window.__rotationFullscreen.exits++;
-          element = null;
-          document.dispatchEvent(new Event("fullscreenchange"));
-          return Promise.resolve();
+        const page = await context.newPage();
+        page.setDefaultTimeout(15000);
+        page.on("pageerror", (e) => errors.push(e.message));
+        await page.addInitScript((policy) => {
+          let element = null;
+          let nativeVideo = null;
+          let orientation = "landscape-primary";
+          window.__tabletRequests = 0;
+          Object.defineProperty(screen.orientation, "type", { get: () => orientation });
+          window.__tabletRotate = (value) => {
+            orientation = value;
+            screen.orientation.dispatchEvent(new Event("change"));
+          };
+          Object.defineProperty(document, "fullscreenElement", { get: () => element });
+          Element.prototype.requestFullscreen = ["legacy", "unsupported"].includes(policy) ? undefined : function () {
+            window.__tabletRequests++;
+            if (policy === "denied") return Promise.reject(new Error("Denied"));
+            element = this;
+            document.dispatchEvent(new Event("fullscreenchange"));
+            return Promise.resolve();
+          };
+          document.exitFullscreen = () => {
+            element = null;
+            document.dispatchEvent(new Event("fullscreenchange"));
+            return Promise.resolve();
+          };
+          HTMLVideoElement.prototype.webkitEnterFullscreen = policy === "unsupported" ? undefined : function () {
+            window.__tabletRequests++;
+            nativeVideo = this;
+            this.dispatchEvent(new Event("webkitbeginfullscreen"));
+          };
+          HTMLVideoElement.prototype.webkitExitFullscreen = function () {
+            nativeVideo = null;
+            this.dispatchEvent(new Event("webkitendfullscreen"));
+          };
+          Object.defineProperty(HTMLVideoElement.prototype, "webkitDisplayingFullscreen", {
+            get() { return nativeVideo === this; },
+          });
+        }, policy);
+        await login(page);
+        await page.locator(".guide-slot-box").first().tap();
+        await playing(page);
+        const state = () => page.evaluate(() => ({
+          large: document.querySelector(".guide-page").classList.contains("is-large-player"),
+          fullscreen: !!document.fullscreenElement || !!document.querySelector("video").webkitDisplayingFullscreen,
+          requests: window.__tabletRequests,
+        }));
+        const toggle = async () => {
+          // Reveal overlay before invoking its button, independent of idle timing.
+          await page.locator(".playback-player").dispatchEvent("pointermove");
+          await page.getByRole("button", { name: "Full Screen", exact: true }).click();
         };
-      }, policy);
-      await login(page);
-      await page.locator(".guide-slot-box").first().tap();
-      await playing(page);
-      await page.locator("video").evaluate((el) => {
-        window.__rotationVideo = el;
-      });
-      assert(
-        (await page.locator(".is-landscape-player").count()) === 0,
-        "Portrait keeps the guide layout",
-      );
-      await page.setViewportSize({ width: 844, height: 390 });
-      await page.waitForFunction(() => {
-        const stage = document.querySelector(
-          ".playback-player.is-landscape-player",
-        );
-        if (!stage) return false;
-        const box = stage.getBoundingClientRect();
-        return (
-          Math.abs(box.x) < 1 &&
-          Math.abs(box.y) < 1 &&
-          Math.abs(box.width - innerWidth) < 1 &&
-          Math.abs(box.height - innerHeight) < 1
-        );
-      });
-      assert(
-        await page
-          .locator("video")
-          .evaluate((el) => el === window.__rotationVideo && !el.paused),
-        "Landscape preserves playing video element",
-      );
-      if (policy === "allowed")
-        await page.waitForFunction(
-          () =>
-            document.fullscreenElement ===
-            document.querySelector(".playback-player"),
-        );
-      else
-        assert(
-          await page.evaluate(() => document.fullscreenElement === null),
-          "Denied/unsupported fullscreen stays in viewport fallback",
-        );
-      await page.setViewportSize({ width: 390, height: 844 });
-      await page.waitForFunction(
-        () =>
-          !document.querySelector(".is-landscape-player") &&
-          !document.fullscreenElement,
-      );
-      assert(
-        await page
-          .locator("video")
-          .evaluate((el) => el === window.__rotationVideo && !el.paused),
-        "Portrait restores guide without pausing or replacing video",
-      );
-      assert(
-        (await page.evaluate(() => window.__rotationFullscreen.exits)) ===
-          (policy === "allowed" ? 1 : 0),
-        "Only automatic fullscreen is released",
-      );
-      await context.close();
+        assert(!(await state()).large && !(await state()).requests,
+          "Touch landscape starts with compact guide player without fullscreen");
+        assert(await page.getByRole("button", { name: /Large Player|Small Player/ }).count() === 0,
+          "Touch devices have no size toggle");
+        await toggle();
+        assert((await state()).fullscreen === (!["denied", "unsupported"].includes(policy)), "Explicit fullscreen obeys browser policy");
+        if (!["denied", "unsupported"].includes(policy)) {
+          await toggle();
+          assert(!(await state()).fullscreen && !(await state()).large, "Fullscreen exit restores compact landscape");
+          await toggle();
+        }
+        await page.setViewportSize({ width: device.height, height: device.width });
+        await page.evaluate(() => window.__tabletRotate("portrait-primary"));
+        await page.waitForFunction(() => document.querySelector(".guide-page.is-large-player"));
+        assert(!(await state()).fullscreen, "Rotating landscape fullscreen to portrait exits fullscreen");
+        await toggle();
+        assert((await state()).fullscreen === (!["denied", "unsupported"].includes(policy)), "Portrait fullscreen entry is not immediately cancelled");
+        if (!["denied", "unsupported"].includes(policy)) await toggle();
+        assert((await state()).large && !(await state()).fullscreen, "Portrait fullscreen exit restores large guide player");
+        await context.close();
+      }
     }
     const desktop = await browser.newContext({
       viewport: { width: 1280, height: 800 },
@@ -2180,7 +2163,7 @@ const noWorkers = async (unreleased = () => 0) => {
     );
     await desktop.close();
     console.log(
-      "PASS: touch rotation fills landscape, restores portrait and preserves playback with allowed/denied/unsupported fullscreen; desktop unchanged",
+      "PASS: phone/tablet guide layouts, explicit fullscreen, rotation exit and denied/unsupported/Safari fallback; desktop unchanged",
     );
   }
 

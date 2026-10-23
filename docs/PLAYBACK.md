@@ -4,6 +4,10 @@
 
 Tuning selects the channel's current persisted airing. Delivery chooses direct playback when the browser supports the source, remuxing when the container alone needs changing, or a bounded transcoding path. GPU availability does not imply codec, HDR or browser support.
 
+## Touch browsers
+
+Phone and tablet browsers use the large guide player in portrait and the compact guide player in landscape, without a player-size toggle. Rotation never automatically enters fullscreen on touch devices. The overlay requests native fullscreen explicitly; exiting returns to the current orientation’s guide layout. Rotating from landscape to portrait exits fullscreen. Older Safari uses native video fullscreen where stage fullscreen is unavailable. Browser and OS policies control fullscreen availability and orientation; the WebUI does not lock orientation, so physical rotation remains available to leave fullscreen. Desktop behavior is unchanged.
+
 ## Session contract
 
 The server authorizes each tune and scopes media credentials to playback. Management keys must not be exposed in manifests, browser logs or external receiver requests. Session status and leases drive activity tracking and cleanup. API fields and errors are defined in [OpenAPI](../api/openapi.yaml).

@@ -1,3 +1,4 @@
+import { isTouchBrowser } from "./touchLayout";
 import { useEffect, useMemo, useRef, useState } from "react";
 import Hls from "hls.js";
 import { APP_VERSION } from "../version";
@@ -221,62 +222,6 @@ export function Player({
       stage.removeEventListener("keydown", wake);
     };
   }, []);
-  // Physical rotation should expand touch playback without relying on a mouse
-  // gesture. Native fullscreen can be denied; viewport filling remains available.
-  const [landscapePlayer, setLandscapePlayer] = useState(false);
-  const hasChannel = channelId !== null;
-  useEffect(() => {
-    const stage = stageRef.current;
-    if (!stage || !hasChannel) {
-      setLandscapePlayer(false);
-      return;
-    }
-    const query = window.matchMedia("(pointer: coarse) and (orientation: landscape)");
-    let disposed = false;
-    let requested = false;
-    let ownsFullscreen = false;
-    let wantsLandscape = false;
-    const orientation = window.screen.orientation;
-    const sync = (event?: Event) => {
-      // Screen orientation can change before viewport media queries catch up.
-      const landscape = orientation && event?.target === orientation
-        ? window.matchMedia("(pointer: coarse)").matches && orientation.type.startsWith("landscape")
-        : query.matches;
-      wantsLandscape = landscape;
-      setLandscapePlayer(landscape);
-      if (!landscape) {
-        if (ownsFullscreen && document.fullscreenElement === stage) {
-          ownsFullscreen = false;
-          void document.exitFullscreen().catch(() => {});
-        }
-        return;
-      }
-      if (document.fullscreenElement || requested || !stage.requestFullscreen) return;
-      requested = true;
-      // Call directly in the orientation event: browsers may permit user-driven
-      // rotation even when the usual transient click activation has expired.
-      void stage.requestFullscreen().then(() => {
-        ownsFullscreen = true;
-        if (disposed || !wantsLandscape) {
-          ownsFullscreen = false;
-          if (document.fullscreenElement === stage) void document.exitFullscreen().catch(() => {});
-        }
-      }).catch(() => {
-        // Browser/OS policy must not block playback or the landscape layout.
-      }).finally(() => { requested = false; });
-    };
-    query.addEventListener("change", sync);
-    orientation?.addEventListener("change", sync);
-    sync();
-    return () => {
-      disposed = true;
-      query.removeEventListener("change", sync);
-      orientation?.removeEventListener("change", sync);
-      if (ownsFullscreen && document.fullscreenElement === stage) {
-        void document.exitFullscreen().catch(() => {});
-      }
-    };
-  }, [hasChannel]);
   const hlsRef = useRef<Hls | null>(null);
   const fragmentRef = useRef<FragmentStat | null>(null);
   const transfersRef = useRef<Transfer[]>([]);
@@ -1390,12 +1335,55 @@ export function Player({
     else void video.requestPictureInPicture?.().catch(() => {});
   };
   const fullscreen = () => {
-    if (document.fullscreenElement) void document.exitFullscreen();
+    const video = videoRef.current as (HTMLVideoElement & {
+      webkitDisplayingFullscreen?: boolean;
+      webkitEnterFullscreen?: () => void;
+      webkitExitFullscreen?: () => void;
+    }) | null;
+    if (document.fullscreenElement) void document.exitFullscreen().catch(() => {});
+    else if (video?.webkitDisplayingFullscreen) video.webkitExitFullscreen?.();
     else {
       setMuted(false);
-      void stageRef.current?.requestFullscreen?.().catch(() => {});
+      // Prefer the stage so our controls remain available. Older Safari only
+      // supports native video fullscreen; call it in this same user gesture.
+      if (stageRef.current?.requestFullscreen)
+        void stageRef.current.requestFullscreen().catch(() => {});
+      else video?.webkitEnterFullscreen?.();
     }
   };
+  useEffect(() => {
+    if (!isTouchBrowser()) return;
+    const orientation = window.screen.orientation;
+    let wasLandscape = orientation
+      ? orientation.type.startsWith("landscape")
+      : window.matchMedia("(orientation: landscape)").matches;
+    const sync = () => {
+      const landscape = orientation
+        ? orientation.type.startsWith("landscape")
+        : window.matchMedia("(orientation: landscape)").matches;
+      // Only a physical landscape-to-portrait transition exits fullscreen.
+      // Entering fullscreen from portrait must not immediately cancel it.
+      if (wasLandscape && !landscape) {
+        if (document.fullscreenElement === stageRef.current)
+          void document.exitFullscreen().catch(() => {});
+        const video = videoRef.current as (HTMLVideoElement & {
+          webkitDisplayingFullscreen?: boolean;
+          webkitExitFullscreen?: () => void;
+        }) | null;
+        if (video?.webkitDisplayingFullscreen) video.webkitExitFullscreen?.();
+      }
+      wasLandscape = landscape;
+    };
+    const query = window.matchMedia("(orientation: landscape)");
+    orientation?.addEventListener("change", sync);
+    window.addEventListener("orientationchange", sync);
+    if (!orientation) query.addEventListener("change", sync);
+    return () => {
+      orientation?.removeEventListener("change", sync);
+      window.removeEventListener("orientationchange", sync);
+      query.removeEventListener("change", sync);
+    };
+  }, []);
   // Leaving full screen first, so the large player (or small one) is actually shown.
   const toggleLarge =
     onToggleLarge &&
@@ -1461,7 +1449,6 @@ export function Player({
       className={
         "playback-player" +
         (large ? " is-large" : "") +
-        (landscapePlayer ? " is-landscape-player" : "") +
         (paused ? " is-paused" : "") +
         (idle ? " is-idle" : "") +
         (controlsDismissed ? " controls-dismissed" : "") +

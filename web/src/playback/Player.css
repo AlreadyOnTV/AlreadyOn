@@ -97,14 +97,3 @@
     min-height: 44px;
   }
 }
-
-/* Touch landscape fills the viewport even when native fullscreen is denied.
-   Keep the existing player mounted so rotation never retunes or pauses video. */
-.playback-player.is-landscape-player {
-  position: fixed;
-  inset: 0;
-  z-index: 100;
-  width: 100vw;
-  height: 100dvh;
-  min-height: 0;
-}

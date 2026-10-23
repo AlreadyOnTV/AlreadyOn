@@ -1,3 +1,4 @@
+import { useTouchLayout } from "../playback/touchLayout";
 import Brand from "../components/Brand";
 import { circularChannelIndex } from "../playback/channelNavigation";
 // Full-screen home page: a 1990s/2000s US cable TV guide, backed by the
@@ -68,9 +69,8 @@ const GUIDE_HOURS = 12;
 const DEFAULT_PREVIEW_WIDTH = 360;
 const SLOT_MINUTES = 30;
 const GUIDE_POLL_INTERVAL_MS = 30_000;
-// Phones and tablets keep the simplified large-player experience in either
-// orientation. The width fallback also covers narrow desktop windows where the
-// compact preview cannot lay out cleanly.
+// Touch browsers use orientation below; narrow desktop windows also need
+// the large player to fit their available width.
 const MOBILE_PLAYER_QUERY =
   "(hover: none) and (pointer: coarse), (max-width: 700px)";
 // One "chunk" is twice the width of a box's start - stop time line and stands for
@@ -400,7 +400,8 @@ export default function GuidePage() {
   const [mobilePlayer, setMobilePlayer] = useState(
     () => window.matchMedia(MOBILE_PLAYER_QUERY).matches,
   );
-  const playerLarge = largePlayer || mobilePlayer;
+  const { touch, portrait } = useTouchLayout();
+  const playerLarge = touch ? portrait : largePlayer || mobilePlayer;
   useEffect(() => {
     const query = window.matchMedia(MOBILE_PLAYER_QUERY);
     const sync = () => setMobilePlayer(query.matches);
@@ -411,7 +412,9 @@ export default function GuidePage() {
   const [fullscreen, setFullscreen] = useState(false);
   useEffect(() => {
     const sync = () => {
-      const active = document.fullscreenElement !== null;
+      const video = document.querySelector(".playback-player video") as
+        (HTMLVideoElement & { webkitDisplayingFullscreen?: boolean }) | null;
+      const active = document.fullscreenElement !== null || !!video?.webkitDisplayingFullscreen;
       setFullscreen(active);
       if (!active) {
         restoreGuideRef.current = true;
@@ -420,7 +423,13 @@ export default function GuidePage() {
       }
     };
     document.addEventListener("fullscreenchange", sync);
-    return () => document.removeEventListener("fullscreenchange", sync);
+    document.addEventListener("webkitbeginfullscreen", sync, true);
+    document.addEventListener("webkitendfullscreen", sync, true);
+    return () => {
+      document.removeEventListener("fullscreenchange", sync);
+      document.removeEventListener("webkitbeginfullscreen", sync, true);
+      document.removeEventListener("webkitendfullscreen", sync, true);
+    };
   }, []);
 
   // The large player is sized to the space below the header, so publish its height.
@@ -918,7 +927,8 @@ export default function GuidePage() {
 
   return (
     <div
-      className={"guide-page" + (playerLarge ? " is-large-player" : "")}
+      className={"guide-page" + (playerLarge ? " is-large-player" : "") +
+        (touch && !portrait ? " is-touch-landscape" : "")}
       ref={pageRef}
     >
       <div className="page-header" ref={pageHeaderRef}>
@@ -1012,7 +1022,7 @@ export default function GuidePage() {
               }
               large={playerLarge}
               onToggleLarge={
-                mobilePlayer
+                mobilePlayer || touch
                   ? undefined
                   : () => {
                       if (largePlayer) {
