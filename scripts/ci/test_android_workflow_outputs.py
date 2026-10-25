@@ -25,8 +25,7 @@ class PromotionOutputs(unittest.TestCase):
 
     def test_push_and_dispatch_outputs_are_machine_readable(self):
         workflow = yaml.safe_load((ROOT / '.github/workflows/android-release.yml').read_text())
-        for job, step_name in [('promote_test', 'Select tested source and release date'),
-                               ('stable', 'Promote the selected tested candidate without rebuilding')]:
+        for job, step_name in [('promotion', 'Select tested source and release date')]:
             script = next(s['run'] for s in workflow['jobs'][job]['steps'] if s.get('name') == step_name)
             for event in ('push', 'workflow_dispatch'):
                 for day in ('', '26.10.11'):
@@ -47,8 +46,7 @@ class PromotionOutputs(unittest.TestCase):
                                                 text=True, capture_output=True, check=True)
                         lines = output.read_text().splitlines()
                         self.assertTrue(all('=' in line for line in lines), lines)
-                        if job == 'promote_test' or event == 'push':
-                            self.assertIn('selected=' + SHA, lines)
+                        self.assertIn('selected=' + SHA, lines)
                         if event == 'push':
                             self.assertIn('Branch and promotion policy passed', result.stdout)
                         self.assertNotIn('Branch and promotion policy passed', output.read_text())

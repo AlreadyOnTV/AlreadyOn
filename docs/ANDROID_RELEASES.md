@@ -9,10 +9,12 @@ Use the active dated branch and [development setup](DEVELOPMENT.md). Test at <ht
 | Promotion | Artifact tag | Release title | Publication |
 | --- | --- | --- | --- |
 | Dated PR into `dev` | `YY.MM.DD-alphaN` | `YY.MM.DD-alphaN` | Signed APKs; image `nightly` and date tags |
-| Tested `dev` source into `test` | `YY.MM.DD-RCN` | `YY.MM.DD-rcN` | Image `latest`; exact tested APKs |
-| Current `test` into `main` | `YY.MM.DD-Stable` | `YY.MM.DD-stable` | Image `stable`; latest RC APKs |
+| Tested `dev` source into `test` | `YY.MM.DD-RCN` | `YY.MM.DD-rcN` | Image `latest`; freshly built RC APKs |
+| Current `test` into `main` | `YY.MM.DD-Stable` | `YY.MM.DD-stable` | Image `stable`; freshly built Stable APKs |
 
-RC1 normally reuses alpha APKs. Approved direct RC1 builds require an unpublished draft targeting the exact dev source. Replacing RC1 requires explicit approval, removing its release/tag, and reserving a replacement draft with a new version code. Later hotfixes draft the next RC. Stable locks the date.
+Each new release builds and signs both APKs with its target-stage version name and a strictly higher version code. RC builds use the tested source; Stable defaults to the newest published RC's exact source commit, independently of the workflow commit. A manual `source_sha` override must identify validated source in the selected branch history. Docker promotions reuse the tested digest without rebuilding.
+
+Dispatch **Android Alpha, RC and Stable** on `test` (`promote-test`) or `main`/`dev` (`stable`). Completed reruns verify published assets. `repair-stable` explicitly replaces historical copied-candidate Stable APKs with fresh Stable builds at the same source/tag; correctly versioned published APKs remain immutable. Stable locks the date.
 
 Future phone and TV builds must offer newer alpha, RC and stable updates even when the installed release is Stable. Stable publication must not lock clients to stable-only updates. See [update policy and existing-client limitations](ANDROID_UPDATES.md).
 
@@ -24,9 +26,9 @@ Reconcile historical promotion ancestry on the dated branch before its dev PR. A
 
 ## Artifacts and gates
 
-The date tag advances after dev validation. [Generated changelogs](RELEASE_NOTES.md) compare predecessor tags; identical-artifact promotions preserve tested descriptions.
+The date tag advances after dev validation. [Generated changelogs](RELEASE_NOTES.md) compare predecessor tags; promotions preserve predecessor known issues.
 
-Releases attach phone/tablet and TV APKs, `SHA256SUMS`, `android-release.json`, three inventory-only CycloneDX SBOMs and `sbom-manifest.json`. Inventories bind the image digest, signed APK hashes and source. Promotions preserve bytes, signing identity and embedded versions; titles never rename artifacts. Older releases without inventories remain compatible.
+Releases attach phone/tablet and TV APKs, `SHA256SUMS`, `android-release.json`, three inventory-only CycloneDX SBOMs and `sbom-manifest.json`. Inventories bind the image digest, signed APK hashes and source. Promotions retain signing identity and source provenance while rebuilding APK versions. Titles never rename artifacts. Older releases without inventories remain compatible.
 
 Date PRs require quality, CodeQL, full Go/browser tests, packaged-runtime and security checks. [Promotion helpers](CI_CD.md) verify provenance and exact trees. Review [Stable readiness](STABLE_READINESS.md); preserve branch protection and live data.
 

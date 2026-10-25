@@ -5,7 +5,7 @@ on:
   workflow_call:
     inputs:
       operation:
-        description: Build a validated candidate/direct Stable or promote exact tested APK artifacts
+        description: Build signed APKs from validated source without rebuilding the image
         type: string
         required: true
       release_date:
@@ -19,9 +19,9 @@ on:
   workflow_dispatch:
     inputs:
       operation:
-        description: Build an alpha on dev or promote exact tested APK artifacts
+        description: Build fresh APKs for the selected release stage
         type: choice
-        options: [candidate, promote-test, stable]
+        options: [candidate, promote-test, stable, repair-stable]
         default: promote-test
         required: true
       release_date:
@@ -29,7 +29,7 @@ on:
         type: string
         required: false
       source_sha:
-        description: Optional exact source SHA for a manual operation
+        description: Optional tested source override; Stable defaults to the latest published RC source
         type: string
         required: false
 permissions:
@@ -130,7 +130,7 @@ jobs:
           trap 'rm -f "$keystore"' EXIT
           printf '%s' "$ANDROID_KEYSTORE_BASE64" | base64 --decode > "$keystore"
           mkdir -p "$RUNNER_TEMP/android-assets"
-          tools="$ANDROID_HOME/build-tools/35.0.0"
+          tools="$ANDROID_HOME/build-tools/36.0.0"
           for variant in app tv; do
             asset="alreadyon-android.apk"
             if [ "$variant" = tv ]; then asset="alreadyon-tv.apk"; fi
@@ -178,13 +178,13 @@ jobs:
           GH_TOKEN: ${{ github.token }}
           RELEASE_DATE: ${{ steps.version.outputs.release_date }}
         run: python3 scripts/ci/android-release.py cleanup-legacy --repo "$GITHUB_REPOSITORY" --day "$RELEASE_DATE"
-  promote_test:
-    if: (github.event_name == 'push' && github.ref == 'refs/heads/test') || (github.event_name == 'workflow_dispatch' && github.ref == 'refs/heads/test' && inputs.operation == 'promote-test')
+  promotion:
+    if: (github.event_name == 'push' && contains(fromJSON('["test","main"]'), github.ref_name)) || (github.event_name == 'workflow_dispatch' && ((github.ref_name == 'test' && inputs.operation == 'promote-test') || (contains(fromJSON('["main","dev"]'), github.ref_name) && contains(fromJSON('["stable","repair-stable"]'), inputs.operation))))
     runs-on: ubuntu-24.04
-    timeout-minutes: 10
+    timeout-minutes: 30
     permissions:
       contents: write
-      pull-requests: read
+      packages: read
     steps:
       - uses: actions/checkout@v7
         with:
@@ -194,52 +194,150 @@ jobs:
         id: source
         env:
           GH_TOKEN: ${{ github.token }}
-          SOURCE_SHA: ${{ inputs.source_sha || github.sha }}
-          RELEASE_DATE: ${{ inputs.release_date }}
-        run: |
-          if [ "$GITHUB_EVENT_NAME" = push ]; then
-            python3 scripts/ci/branch-policy.py --delivery
-            source=$(sed -n 's/^selected=//p' "$GITHUB_OUTPUT" | tail -1)
-          else
-            source="$SOURCE_SHA"
-            echo "selected=$source" >> "$GITHUB_OUTPUT"
-          fi
-          if [ -n "$RELEASE_DATE" ]; then
-            day=$(python3 scripts/ci/release-context.py date --sha "$source" --date "$RELEASE_DATE")
-          else
-            day=$(python3 scripts/ci/release-context.py date-for-source --sha "$source")
-          fi
-          echo "release_date=$day" >> "$GITHUB_OUTPUT"
-      - name: Publish the next RC using exact tested APK bytes
-        env:
-          GH_TOKEN: ${{ github.token }}
-          SOURCE_SHA: ${{ steps.source.outputs.selected }}
-          RELEASE_DATE: ${{ steps.source.outputs.release_date }}
-        run: python3 scripts/ci/android-release.py promote-test --sha "$SOURCE_SHA" --day "$RELEASE_DATE" | tee -a "$GITHUB_STEP_SUMMARY"
-  stable:
-    if: (github.event_name == 'push' && github.ref == 'refs/heads/main') || (github.event_name == 'workflow_dispatch' && github.ref == 'refs/heads/main' && inputs.operation == 'stable')
-    runs-on: ubuntu-24.04
-    timeout-minutes: 10
-    permissions:
-      contents: write
-    steps:
-      - uses: actions/checkout@v7
-        with:
-          fetch-depth: 0
-          persist-credentials: false
-      - name: Promote the selected tested candidate without rebuilding
-        env:
-          GH_TOKEN: ${{ github.token }}
-          SOURCE_SHA: ${{ inputs.source_sha || github.sha }}
+          SOURCE_SHA: ${{ github.sha }}
           RELEASE_DATE: ${{ inputs.release_date }}
         run: |
           if [ "$GITHUB_EVENT_NAME" = push ]; then
             python3 scripts/ci/branch-policy.py --delivery
             SOURCE_SHA=$(sed -n 's/^selected=//p' "$GITHUB_OUTPUT" | tail -1)
           fi
+          echo "selected=$SOURCE_SHA" >> "$GITHUB_OUTPUT"
           if [ -n "$RELEASE_DATE" ]; then
             day=$(python3 scripts/ci/release-context.py date --sha "$SOURCE_SHA" --date "$RELEASE_DATE")
           else
             day=$(python3 scripts/ci/release-context.py date-for-source --sha "$SOURCE_SHA")
           fi
-          python3 scripts/ci/android-release.py promote-stable --sha "$SOURCE_SHA" --day "$day" | tee -a "$GITHUB_STEP_SUMMARY"
+          echo "release_date=$day" >> "$GITHUB_OUTPUT"
+      - name: Allocate fresh promotion APKs from tested source
+        id: plan
+        env:
+          GH_TOKEN: ${{ github.token }}
+          SOURCE_SHA: ${{ steps.source.outputs.selected }}
+          RELEASE_DATE: ${{ steps.source.outputs.release_date }}
+          SOURCE_OVERRIDE: ${{ inputs.source_sha }}
+          OPERATION: ${{ inputs.operation }}
+        run: |
+          stage=stable
+          if [ "$GITHUB_REF_NAME" = test ]; then stage=rc; fi
+          arguments=()
+          if [ "$OPERATION" = repair-stable ]; then arguments+=(--repair); fi
+          if [ -n "$SOURCE_OVERRIDE" ]; then arguments+=(--source-override "$SOURCE_OVERRIDE"); fi
+          python3 scripts/ci/android-release.py plan-promotion --sha "$SOURCE_SHA" \
+            --day "$RELEASE_DATE" --stage "$stage" "${arguments[@]}" >> "$GITHUB_OUTPUT"
+      - uses: actions/checkout@v7
+        if: steps.plan.outputs.existing != 'true'
+        with:
+          ref: ${{ steps.plan.outputs.source_sha }}
+          path: release-source
+          persist-credentials: false
+      - name: Verify exact APK source checkout
+        if: steps.plan.outputs.existing != 'true'
+        env:
+          SOURCE_SHA: ${{ steps.plan.outputs.source_sha }}
+        run: test "$(git -C release-source rev-parse HEAD)" = "$SOURCE_SHA"
+      - name: Require permanent maintainer signing credentials
+        if: steps.plan.outputs.existing != 'true'
+        env:
+          ANDROID_KEYSTORE_BASE64: ${{ secrets.ANDROID_KEYSTORE_BASE64 }}
+          ANDROID_KEYSTORE_PASSWORD: ${{ secrets.ANDROID_KEYSTORE_PASSWORD }}
+          ANDROID_KEY_ALIAS: ${{ secrets.ANDROID_KEY_ALIAS }}
+          ANDROID_KEY_PASSWORD: ${{ secrets.ANDROID_KEY_PASSWORD }}
+        run: |
+          for variable in ANDROID_KEYSTORE_BASE64 ANDROID_KEYSTORE_PASSWORD ANDROID_KEY_ALIAS ANDROID_KEY_PASSWORD; do
+            if [ -z "${!variable}" ]; then
+              echo "::error::Missing repository signing secret: $variable. See docs/ANDROID_RELEASES.md."
+              exit 1
+            fi
+          done
+      - uses: actions/setup-java@v6
+        if: steps.plan.outputs.existing != 'true'
+        with:
+          distribution: temurin
+          java-version: '17'
+      - uses: android-actions/setup-android@v4
+        if: steps.plan.outputs.existing != 'true'
+        with:
+          packages: 'platform-tools platforms;android-37.0 build-tools;36.0.0'
+      - name: Build release APK with allocated version
+        if: steps.plan.outputs.existing != 'true'
+        env:
+          VERSION_NAME: ${{ steps.plan.outputs.tag }}
+          VERSION_CODE: ${{ steps.plan.outputs.version_code }}
+        run: |
+          release-source/apps/android/gradlew -p release-source/apps/android --no-daemon :app:assembleRelease :tv:assembleRelease \
+            "-PandroidVersionName=$VERSION_NAME" "-PandroidVersionCode=$VERSION_CODE"
+      - name: Sign and verify release APK
+        if: steps.plan.outputs.existing != 'true'
+        env:
+          ANDROID_KEYSTORE_BASE64: ${{ secrets.ANDROID_KEYSTORE_BASE64 }}
+          ANDROID_KEYSTORE_PASSWORD: ${{ secrets.ANDROID_KEYSTORE_PASSWORD }}
+          ANDROID_KEY_ALIAS: ${{ secrets.ANDROID_KEY_ALIAS }}
+          ANDROID_KEY_PASSWORD: ${{ secrets.ANDROID_KEY_PASSWORD }}
+        run: |
+          umask 077
+          keystore="$RUNNER_TEMP/android-release.keystore"
+          trap 'rm -f "$keystore"' EXIT
+          printf '%s' "$ANDROID_KEYSTORE_BASE64" | base64 --decode > "$keystore"
+          mkdir -p "$RUNNER_TEMP/android-assets"
+          tools="$ANDROID_HOME/build-tools/36.0.0"
+          for variant in app tv; do
+            asset="alreadyon-android.apk"
+            if [ "$variant" = tv ]; then asset="alreadyon-tv.apk"; fi
+            "$tools/zipalign" -P 16 -f 4 "release-source/apps/android/$variant/build/outputs/apk/release/$variant-release-unsigned.apk" "$RUNNER_TEMP/android-aligned.apk"
+            "$tools/apksigner" sign --ks "$keystore" --ks-key-alias "$ANDROID_KEY_ALIAS" \
+              --ks-pass env:ANDROID_KEYSTORE_PASSWORD --key-pass env:ANDROID_KEY_PASSWORD \
+              --out "$RUNNER_TEMP/android-assets/$asset" "$RUNNER_TEMP/android-aligned.apk"
+            "$tools/apksigner" verify --verbose --print-certs "$RUNNER_TEMP/android-assets/$asset"
+          done
+      - name: Verify embedded versions and predecessor signing identity
+        if: steps.plan.outputs.existing != 'true'
+        env:
+          GH_TOKEN: ${{ github.token }}
+          VERSION_NAME: ${{ steps.plan.outputs.tag }}
+          VERSION_CODE: ${{ steps.plan.outputs.version_code }}
+          PREDECESSOR: ${{ steps.plan.outputs.predecessor }}
+        run: |
+          tools="$ANDROID_HOME/build-tools/36.0.0"
+          mkdir -p "$RUNNER_TEMP/predecessor-apks"
+          gh release download "$PREDECESSOR" --repo "$GITHUB_REPOSITORY" \
+            --dir "$RUNNER_TEMP/predecessor-apks" --pattern alreadyon-android.apk --pattern alreadyon-tv.apk
+          for asset in alreadyon-android.apk alreadyon-tv.apk; do
+            apk="$RUNNER_TEMP/android-assets/$asset"
+            badging=$("$tools/aapt2" dump badging "$apk")
+            grep -F "versionCode='$VERSION_CODE'" <<< "$badging"
+            grep -F "versionName='$VERSION_NAME'" <<< "$badging"
+            previous=$("$tools/apksigner" verify --print-certs "$RUNNER_TEMP/predecessor-apks/$asset" | sed -n '/certificate SHA-256 digest:/p')
+            current=$("$tools/apksigner" verify --print-certs "$apk" | sed -n '/certificate SHA-256 digest:/p')
+            test -n "$previous"
+            test "$current" = "$previous"
+          done
+      - name: Generate artifact-bound public inventory SBOMs
+        if: steps.plan.outputs.existing != 'true'
+        env:
+          GH_TOKEN: ${{ github.token }}
+          SOURCE_SHA: ${{ steps.plan.outputs.source_sha }}
+          REGISTRY_USER: ${{ github.actor }}
+        run: |
+          python3 scripts/security/install-trivy.py "$RUNNER_TEMP/security-tools"
+          image=$(PYTHONPATH=scripts/ci python3 -c 'import os; from image_registry import release_source; print(release_source(os.environ["GITHUB_REPOSITORY"], os.environ["SOURCE_SHA"]))')
+          printf '%s' "$GH_TOKEN" | python3 release-source/scripts/security/public_inventory.py \
+            --trivy "$RUNNER_TEMP/security-tools/trivy" --registry-user "$REGISTRY_USER" \
+            --image "$image" --revision "$SOURCE_SHA" \
+            --phone "$RUNNER_TEMP/android-assets/alreadyon-android.apk" \
+            --tv "$RUNNER_TEMP/android-assets/alreadyon-tv.apk" --output "$RUNNER_TEMP/android-assets"
+      - name: Publish fresh signed promotion APKs
+        if: steps.plan.outputs.existing != 'true'
+        env:
+          GH_TOKEN: ${{ github.token }}
+          SOURCE_SHA: ${{ steps.plan.outputs.source_sha }}
+          VERSION_NAME: ${{ steps.plan.outputs.tag }}
+          VERSION_CODE: ${{ steps.plan.outputs.version_code }}
+          PREDECESSOR: ${{ steps.plan.outputs.predecessor }}
+          OPERATION: ${{ inputs.operation }}
+        run: |
+          arguments=()
+          if [ "$OPERATION" = repair-stable ]; then arguments+=(--repair); fi
+          python3 scripts/ci/android-release.py publish-promotion --sha "$SOURCE_SHA" \
+            --tag "$VERSION_NAME" --version-code "$VERSION_CODE" --predecessor "$PREDECESSOR" \
+            --directory "$RUNNER_TEMP/android-assets" --require-inventory "${arguments[@]}"
+          echo "Published fresh phone/TV APKs for $VERSION_NAME from $SOURCE_SHA" >> "$GITHUB_STEP_SUMMARY"

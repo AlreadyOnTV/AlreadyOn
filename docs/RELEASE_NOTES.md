@@ -21,4 +21,4 @@ Metadata reads paginate and API failures stop generation. Review the resulting d
 
 Publication follows maintainer-approved [delivery gates](CI_CD.md).
 
-RC/Stable promotion reads the tested candidate’s published description and preserves its known issues and exact artifact bytes. Identical-artifact promotions add no new changes. Never regenerate an APK to edit a description.
+RC/Stable promotion reads the tested candidate’s published description and preserves its known issues. Promotions rebuild signed APKs with the target-stage version and a higher version code; Docker images retain the tested digest. Same-source promotions add no new product changes. Description-only edits never regenerate APKs.

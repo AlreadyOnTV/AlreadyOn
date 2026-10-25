@@ -1,5 +1,5 @@
 #!/usr/bin/env python3
-"""Publish signed Android candidates and copy tested assets for stable promotion."""
+"""Publish signed Android releases with fresh APKs for each release stage."""
 import argparse
 import sys
 from datetime import date, datetime
@@ -101,6 +101,15 @@ def cleanup_legacy_betas(repo, day):
     return removed
 
 
+def next_version_code(entries):
+    codes = [tag_version_code(entry) for entry in entries
+             if re.search(r"Android versionCode: `(\d+)`", entry.get("body") or "")]
+    code = max(int(time.time()) - 1577836800, max(codes, default=0) + 1)
+    if not 0 < code <= 2100000000:
+        raise ValueError("Android version code exhausted")
+    return code
+
+
 def tag_version_code(entry):
     match = re.search(r"Android versionCode: `(\d+)`", entry.get("body") or "")
     if match is None:
@@ -188,7 +197,7 @@ def download(repo, tag, directory):
             *(argument for name in SBOM_ASSETS for argument in ('--pattern', name)))
 
 
-def publish(repo, tag, sha, directory, notes, prerelease, publish_now=True):
+def publish(repo, tag, sha, directory, notes, prerelease, publish_now=True, *, repair=False):
     assets = release_assets(directory)
     existing = [r for r in releases(repo) if r["tag_name"] == tag]
     if existing:
@@ -197,6 +206,19 @@ def publish(repo, tag, sha, directory, notes, prerelease, publish_now=True):
                       else api(f"repos/{repo}/commits/{tag}")["sha"])
         if tagged_sha != sha:
             raise ValueError("Existing release tag points to a different source commit")
+    if repair:
+        if not existing or not STABLE.fullmatch(tag):
+            raise ValueError("Repair requires an existing Stable release")
+        # Explicit repair is limited to the historical copied-candidate mistake.
+        with tempfile.TemporaryDirectory() as temp:
+            download(repo, tag, Path(temp))
+            old = verify_assets(Path(temp), sha)
+            new = verify_assets(directory, sha)
+            if (not CANDIDATE.fullmatch(old["version_name"]) or new["version_name"] != tag
+                    or new["version_code"] <= old["version_code"]):
+                raise ValueError("Repair only replaces copied candidate APKs with a newer Stable build")
+        run("gh", "release", "edit", tag, "--repo", repo, "--draft=true")
+        existing[0]["draft"] = True
     if existing and not existing[0]["draft"]:
         # A rerun may verify a published release, but must never replace its assets.
         with tempfile.TemporaryDirectory() as temp:
@@ -264,9 +286,9 @@ def plan(repo, sha, day=None):
         else:
             run("gh", "release", "delete", tag, "--repo", repo, "--yes", "--cleanup-tag")
             # One unpublished RC draft may be refreshed as a hotfix advances before test promotion.
-            version_code = int(time.time()) - 1577836800
+            version_code = next_version_code(entries)
     else:
-        version_code = int(time.time()) - 1577836800
+        version_code = next_version_code(entries)
     tags = run("git", "tag", "--list").splitlines()
     if tag in tags and not draft:
         raise ValueError(f"Git tag {tag} exists without a matching release; investigate before rebuilding")
@@ -329,14 +351,14 @@ def plan_stable(repo, sha, day):
             run("gh", "release", "edit", tag, "--repo", repo, "--draft=false",
                 "--prerelease=false", "--latest=true")
         print(f"existing={'true' if complete else 'false'}")
-        code = tag_version_code(draft) if draft else int(time.time()) - 1577836800
+        code = tag_version_code(draft) if draft else next_version_code(entries)
         print(f"version_code={code}")
     print(f"tag={tag}")
     print("stage=stable")
     print(f"release_date={day}")
 
 
-def candidate(repo, tag, sha, code, directory, *, direct_stable=False):
+def candidate(repo, tag, sha, code, directory, *, direct_stable=False, predecessor=None, repair=False):
     parsed = stage_tag(tag)
     if parsed is not None and not tag.startswith(parsed[0] + "-"):
         raise ValueError("New candidate tags must use YY.MM.DD")
@@ -361,10 +383,15 @@ def candidate(repo, tag, sha, code, directory, *, direct_stable=False):
     verify_assets(directory, sha)
     entries = releases(repo)
     baseline_tag = changelog_baseline(entries, tag)
-    changes = candidate_changes(repo, entries, tag, sha, baseline_tag)
-    notes = release_body(repo, tag, sha, code, changes, changelog_baseline=baseline_tag)
-    publish_now = parsed[1] in {"alpha", "beta", "stable"}
-    publish(repo, tag, sha, directory, notes, not direct_stable, publish_now=publish_now)
+    changes = (promotion_changes(predecessor.get("body") or "") if predecessor and release_source(predecessor) == sha
+               else candidate_changes(repo, entries, tag, sha, baseline_tag))
+    notes = (release_body(repo, tag, sha, code, changes, candidate_tag=predecessor["tag_name"])
+             if predecessor else release_body(repo, tag, sha, code, changes, changelog_baseline=baseline_tag))
+    publish_now = bool(predecessor) or parsed[1] in {"alpha", "beta", "stable"}
+    if repair:
+        publish(repo, tag, sha, directory, notes, not direct_stable, publish_now=publish_now, repair=True)
+    else:
+        publish(repo, tag, sha, directory, notes, not direct_stable, publish_now=publish_now)
 
 
 def release_source(entry):
@@ -373,87 +400,98 @@ def release_source(entry):
 
 
 def promote_test(repo, day, sha):
-    """Publish the next RC by reusing the matching alpha or already-built RC draft."""
-    entries = releases(repo)
-    if stable := published_stable(repo, day, sha, entries):
-        print(f"Verified {stable}; test synchronization creates no RC release")
+    if stable := published_stable(repo, day, sha):
         return stable
-    published_rcs = [(int(match[2]), entry) for entry in entries
-                     if not entry["draft"] and (match := RC.fullmatch(entry["tag_name"]))
-                     and match[1] == day]
-    already_published = next((entry for _, entry in published_rcs if release_source(entry) == sha), None)
-    if already_published:
-        with tempfile.TemporaryDirectory() as temp:
-            directory = Path(temp)
-            download(repo, already_published["tag_name"], directory)
-            verify_assets(directory, sha)
-        print(f"Verified existing {already_published['tag_name']} without rebuilding APKs")
-        return already_published["tag_name"]
-
-    tag = f"{day}-RC{max((number for number, _ in published_rcs), default=0) + 1}"
-    draft = next((entry for entry in entries if entry["tag_name"] == tag and entry["draft"]), None)
-    if draft:
-        if release_source(draft) != sha:
-            raise ValueError(f"Draft {tag} does not contain the selected dev source")
-        with tempfile.TemporaryDirectory() as temp:
-            directory = Path(temp)
-            download(repo, tag, directory)
-            verify_assets(directory, sha)
-        run("gh", "release", "edit", tag, "--repo", repo, "--draft=false",
-            "--prerelease=true", "--latest=false")
-        print(f"Published {tag} from its existing draft without rebuilding APKs")
-        return tag
-
-    alphas = [(int(match[2]), entry) for entry in entries
-              if not entry["draft"] and (match := ALPHA.fullmatch(entry["tag_name"]))
-              and match[1] == day and release_source(entry) == sha]
-    if not alphas:
-        raise ValueError("No published alpha artifacts match the selected dev source")
-    _, alpha = max(alphas, key=lambda item: item[0])
-    alpha_tag = alpha["tag_name"]
-    with tempfile.TemporaryDirectory() as temp:
-        directory = Path(temp)
-        download(repo, alpha_tag, directory)
-        manifest = verify_assets(directory, sha)
-        notes = release_body(repo, tag, sha, manifest["version_code"],
-                             promotion_changes(alpha.get("body") or ""),
-                             candidate_tag=alpha_tag)
-        publish(repo, tag, sha, directory, notes, True)
-    print(f"Published {tag} from {alpha_tag} using the same signed APK bytes")
-    return tag
+    raise ValueError("RC publication requires fresh APKs; dispatch the Android release workflow")
 
 
 def promote_stable(repo, day, selected_sha):
-    """Promote the newest published RC in the selected source history without rebuilding."""
-    entries = releases(repo)
-    if stable := published_stable(repo, day, selected_sha, entries):
-        print(f"Verified existing {stable} without rebuilding APKs")
+    if stable := published_stable(repo, day, selected_sha):
         return stable
-    candidates = []
-    for entry in entries:
-        match = RC.fullmatch(entry["tag_name"])
-        source = release_source(entry)
-        if entry["draft"] or match is None or release_day(match[1], historical=True) != day or not source:
-            continue
-        ancestry = subprocess.run(["git", "merge-base", "--is-ancestor", source, selected_sha], check=False)
-        if ancestry.returncode == 0:
-            candidates.append((int(match[2]), entry, source))
-        elif ancestry.returncode != 1:
-            raise subprocess.CalledProcessError(ancestry.returncode, ancestry.args)
-    if not candidates:
-        raise ValueError("No published RC for this date is in the selected main source history")
-    _, candidate, artifact_sha = max(candidates, key=lambda item: item[0])
-    stable = f"{day}-Stable"
+    raise ValueError("Stable publication requires fresh APKs; dispatch the Android release workflow")
+
+
+def promotion_plan(repo, day, selected_sha, stage, *, repair=False, source_override=None):
+    """Select immutable tested source independently from the workflow revision."""
+    day = release_day(day)
+    entries = releases(repo)
+    if stage == "stable":
+        rcs = [entry for entry in entries if not entry["draft"]
+               and (parsed := stage_tag(entry["tag_name"])) and parsed[0] == day and parsed[1] == "rc"]
+        if not rcs:
+            raise ValueError("Stable requires a published RC for this release date")
+        predecessor = max(rcs, key=lambda entry: stage_tag(entry["tag_name"])[2])
+        tag = f"{day}-Stable"
+    else:
+        # A completed direct Stable synchronization creates no new RC.
+        if published_stable(repo, day, selected_sha, entries):
+            print("existing=true")
+            return
+        rcs = [entry for entry in entries if not entry["draft"]
+               and (parsed := stage_tag(entry["tag_name"])) and parsed[0] == day and parsed[1] == "rc"]
+        matching = [entry for entry in rcs if release_source(entry) == selected_sha]
+        if matching:
+            entry = max(matching, key=lambda entry: stage_tag(entry["tag_name"])[2])
+            with tempfile.TemporaryDirectory() as temp:
+                download(repo, entry["tag_name"], Path(temp))
+                verify_assets(Path(temp), selected_sha)
+            print("existing=true")
+            return
+        alphas = [entry for entry in entries if not entry["draft"]
+                  and (parsed := stage_tag(entry["tag_name"])) and parsed[0] == day
+                  and parsed[1] == "alpha" and release_source(entry) == selected_sha]
+        drafts = [entry for entry in entries if entry["draft"]
+                  and (parsed := stage_tag(entry["tag_name"])) and parsed[0] == day
+                  and parsed[1] == "rc" and release_source(entry) == selected_sha]
+        if not alphas and not drafts:
+            raise ValueError("RC requires a matching tested alpha or RC draft")
+        predecessor = max(alphas, key=lambda entry: stage_tag(entry["tag_name"])[2]) if alphas else drafts[0]
+        tag = f"{day}-RC{max((stage_tag(e['tag_name'])[2] for e in rcs), default=0) + 1}"
+    source = source_override or (release_source(predecessor) if stage == "stable" else selected_sha)
+    if not source or not re.fullmatch(r"[0-9a-f]{40}", source):
+        raise ValueError("Promotion source must be an exact commit")
+    subprocess.run(["git", "merge-base", "--is-ancestor", source, selected_sha], check=True)
+    if not predecessor["draft"] and api(f"repos/{repo}/commits/{predecessor['tag_name']}")["sha"] != release_source(predecessor):
+        raise ValueError("Predecessor tag and source provenance differ")
     with tempfile.TemporaryDirectory() as temp:
-        directory = Path(temp)
-        download(repo, candidate["tag_name"], directory)
-        manifest = verify_assets(directory, artifact_sha)
-        notes = release_body(repo, stable, selected_sha, manifest["version_code"],
-                             promotion_changes(candidate.get("body") or ""),
-                             candidate_tag=candidate["tag_name"])
-        publish(repo, stable, selected_sha, directory, notes, False)
-    print(f"Published {stable} from {candidate['tag_name']} without rebuilding APKs")
-    return stable
+        download(repo, predecessor["tag_name"], Path(temp))
+        prior = verify_assets(Path(temp), release_source(predecessor))
+    require_tested_image(repo, source)
+    existing = next((entry for entry in entries if entry["tag_name"] == tag), None)
+    if existing and not existing["draft"]:
+        if not repair:
+            published_stable(repo, day, source, entries)
+            print("existing=true")
+            return
+        with tempfile.TemporaryDirectory() as temp:
+            download(repo, tag, Path(temp))
+            old = verify_assets(Path(temp), source)
+            if not CANDIDATE.fullmatch(old["version_name"]):
+                raise ValueError("Stable already has its own APK build; refusing replacement")
+    elif repair:
+        raise ValueError("Repair requires an existing published Stable")
+    code = max(next_version_code(entries), prior["version_code"] + 1)
+    if code > 2100000000:
+        raise ValueError("Android version code exhausted")
+    print("existing=false")
+    print(f"tag={tag}")
+    print(f"version_code={code}")
+    print(f"source_sha={source}")
+    print(f"predecessor={predecessor['tag_name']}")
+
+
+def publish_promotion(repo, tag, sha, code, directory, predecessor_tag, *, repair=False):
+    """Publish newly signed target-stage APKs while preserving predecessor notes."""
+    predecessor = api(f"repos/{repo}/releases/tags/{predecessor_tag}")
+    if predecessor["draft"] and predecessor_tag != tag:
+        raise ValueError("Only the matching tested RC draft may be published")
+    with tempfile.TemporaryDirectory() as temp:
+        download(repo, predecessor_tag, Path(temp))
+        prior = verify_assets(Path(temp), release_source(predecessor))
+    if code <= prior["version_code"]:
+        raise ValueError("Promotion APK version code must increase")
+    candidate(repo, tag, sha, code, directory, direct_stable=bool(STABLE.fullmatch(tag)),
+              predecessor=predecessor, repair=repair)
 
 
 def promote(repo, tag):
@@ -479,7 +517,7 @@ def promote_selected_stable(repo, day, sha):
 
 def main():
     parser = argparse.ArgumentParser(description=__doc__)
-    parser.add_argument("operation", choices=("plan", "plan-stable", "candidate", "direct-stable", "promote", "promote-test", "promote-stable", "cleanup-legacy"))
+    parser.add_argument("operation", choices=("plan", "plan-stable", "candidate", "direct-stable", "promote", "promote-test", "promote-stable", "cleanup-legacy", "plan-promotion", "publish-promotion"))
     parser.add_argument("--repo", default=os.environ.get("GITHUB_REPOSITORY"), required=False)
     parser.add_argument("--sha")
     parser.add_argument("--day")
@@ -487,12 +525,26 @@ def main():
     parser.add_argument("--version-code", type=int)
     parser.add_argument("--directory", type=Path)
     parser.add_argument("--require-inventory", action="store_true")
+    parser.add_argument("--stage", choices=("rc", "stable"))
+    parser.add_argument("--repair", action="store_true")
+    parser.add_argument("--source-override")
+    parser.add_argument("--predecessor")
     args = parser.parse_args()
     if args.require_inventory and not (args.directory / "sbom-manifest.json").exists():
         parser.error("New candidates require public inventory SBOMs")
     if not args.repo:
         parser.error("--repo or GITHUB_REPOSITORY is required")
-    if args.operation == "plan":
+    if args.operation == "plan-promotion":
+        if not all((args.sha, args.day, args.stage)):
+            parser.error("plan-promotion requires --sha, --day and --stage")
+        promotion_plan(args.repo, args.day, args.sha, args.stage,
+                       repair=args.repair, source_override=args.source_override)
+    elif args.operation == "publish-promotion":
+        if not all((args.sha, args.tag, args.version_code, args.directory, args.predecessor)):
+            parser.error("publish-promotion requires source, version, assets and predecessor")
+        publish_promotion(args.repo, args.tag, args.sha, args.version_code, args.directory,
+                          args.predecessor, repair=args.repair)
+    elif args.operation == "plan":
         if not args.sha:
             parser.error("plan requires --sha")
         plan(args.repo, args.sha, args.day)
