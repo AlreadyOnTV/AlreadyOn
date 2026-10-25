@@ -35,6 +35,7 @@ class PromotionOutputs(unittest.TestCase):
                         helpers.mkdir(parents=True)
                         (helpers / 'branch-policy.py').write_text(
                             "import os\nwith open(os.environ['GITHUB_OUTPUT'],'a') as f: f.write('selected=" + SHA + "\\n')\nprint('Branch and promotion policy passed')\n")
+                        (helpers / 'release_dates.py').write_text((ROOT / 'scripts/ci/release_dates.py').read_text())
                         (helpers / 'release-context.py').write_text("print('26.10.11')\n")
                         (helpers / 'android-release.py').write_text(
                             "import sys\nassert sys.argv[1:] == ['promote-stable','--sha','" + SHA + "','--day','26.10.11']\nprint('Published synthetic promotion')\n")

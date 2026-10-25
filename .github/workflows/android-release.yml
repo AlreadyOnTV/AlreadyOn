@@ -203,7 +203,8 @@ jobs:
           fi
           echo "selected=$SOURCE_SHA" >> "$GITHUB_OUTPUT"
           if [ -n "$RELEASE_DATE" ]; then
-            day=$(python3 scripts/ci/release-context.py date --sha "$SOURCE_SHA" --date "$RELEASE_DATE")
+            # Promotion/repair may legitimately target an already Stable date.
+            day=$(PYTHONPATH=scripts/ci python3 -c 'import os; from release_dates import release_day; print(release_day(os.environ["RELEASE_DATE"]))')
           else
             day=$(python3 scripts/ci/release-context.py date-for-source --sha "$SOURCE_SHA")
           fi
