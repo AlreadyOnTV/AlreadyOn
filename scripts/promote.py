@@ -122,11 +122,12 @@ def main():
             raise ValueError(f'Date tag {day} does not point to the selected dev commit')
         candidate = next((entry for entry in release.releases(repo)
                           if (match := (release.ALPHA.fullmatch(entry['tag_name'])
-                                        or release.RC.fullmatch(entry['tag_name'])))
+                                        or release.RC.fullmatch(entry['tag_name'])
+                                        or release.NIGHTLY.fullmatch(entry['tag_name'])))
                           and match[1] == day and release.release_source(entry) == selected
                           and (not entry['draft'] or release.RC.fullmatch(entry['tag_name']))), None)
         if candidate is None:
-            raise ValueError('No published alpha or draft RC APKs match the selected dev source')
+            raise ValueError('No published nightly or draft RC APKs match the selected dev source')
         with tempfile.TemporaryDirectory(prefix='alreadyon-promotion-') as temp:
             assets = Path(temp)
             release.download(repo, candidate['tag_name'], assets)

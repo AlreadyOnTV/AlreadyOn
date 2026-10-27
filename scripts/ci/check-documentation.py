@@ -36,11 +36,32 @@ def namespace_only(name, lines):
     return bool(changed) and all(declaration.fullmatch(line) for line in changed)
 
 
+def dependency_pins_only(changes, read_diff):
+    """Version-only automated maintenance does not change a documented contract."""
+    if not changes or read_diff is None:
+        return False
+    manifests = {'go.mod', 'go.sum', 'package.json', 'package-lock.json',
+                 'build.gradle.kts', 'settings.gradle.kts', 'gradle.properties',
+                 'gradle-wrapper.properties', 'gradle-wrapper.jar', 'libs.versions.toml'}
+    for status, name in changes:
+        if status != 'M':
+            return False
+        if pathlib.PurePosixPath(name).name in manifests:
+            continue
+        if name.startswith(('.github/workflows/', '.github/actions/')):
+            lines = [line.strip() for line in read_diff(name) if line.strip()]
+            if lines and all(re.fullmatch(r'(?:- )?uses: [A-Za-z0-9_./-]+@[A-Za-z0-9_.-]+', line)
+                             for line in lines):
+                continue
+        return False
+    return True
+
+
 def check_changes(changes, read_text, read_diff=None):
     """Return actionable failures; deletions still require a documentation update."""
     sources = [(status, name) for status, name in changes if needs_documentation(name)]
     errors = []
-    if sources and not any(status != 'D' and name.endswith('.md') for status, name in changes):
+    if sources and not dependency_pins_only(changes, read_diff) and not any(status != 'D' and name.endswith('.md') for status, name in changes):
         errors.append('Code/infrastructure changed: update a relevant Markdown document in this diff.')
     for status, name in sources:
         if status != 'D' and not COMMENT.search(read_text(name)):

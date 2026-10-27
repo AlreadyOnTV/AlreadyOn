@@ -22,7 +22,7 @@ def source_tag(repository, selected):
     return release_source(repository, sha(selected))
 
 
-def image_tags(repository, branch, revision, now=None, release_date=None):
+def image_tags(repository, branch, revision, now=None, release_date=None, publication=None):
     """Dev builds get channel/date; promotions add only their channel."""
     sha(revision)
     channel = {'dev': 'nightly', 'test': 'latest', 'main': 'stable'}[branch]
@@ -33,6 +33,8 @@ def image_tags(repository, branch, revision, now=None, release_date=None):
     tags = [f'{image}:{channel}']
     if branch == 'dev':
         tags.append(f'{image}:{day}')
+        if publication == 'nightly':
+            tags.append(f'{image}:{day}-nightly')
     return tags
 
 
@@ -41,7 +43,7 @@ if __name__ == '__main__':
     branch = os.environ.get('CI_SOURCE_BRANCH') or os.environ['GITHUB_REF_NAME']
     revision = os.environ.get('CI_REVISION') or os.environ['GITHUB_SHA']
     release_date = os.environ.get('CI_RELEASE_DATE')
-    print('tags=' + ' '.join(image_tags(repository, branch, revision, release_date=release_date)))
+    print('tags=' + ' '.join(image_tags(repository, branch, revision, release_date=release_date, publication=os.environ.get('CI_PUBLICATION'))))
     if os.environ.get('CI_PR_NUMBER'):
         print(f"source=ghcr.io/{repository.lower()}:pr-{int(os.environ['CI_PR_NUMBER'])}")
     elif os.environ.get('CI_SELECTED_SHA'):

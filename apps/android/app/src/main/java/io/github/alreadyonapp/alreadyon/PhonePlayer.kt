@@ -97,14 +97,14 @@ private fun NativeVideo(playback: PhonePlayback, model: PhoneModel, modifier: Mo
                 override fun onRenderedFirstFrame() {
                     if (firstFrame) return
                     firstFrame = true
-                    if (android.util.Log.isLoggable("AlreadyOnPlayback", android.util.Log.DEBUG)) android.util.Log.d("AlreadyOnPlayback", "First frame revision=${playback.revision} playerMs=${SystemClock.elapsedRealtime()-preparedAt} tuneMs=${SystemClock.elapsedRealtime()-playback.requestedAt}")
+                    if (android.util.Log.isLoggable(PLAYBACK_LOG_TAG, android.util.Log.DEBUG)) android.util.Log.d(PLAYBACK_LOG_TAG, "First frame revision=${playback.revision} playerMs=${SystemClock.elapsedRealtime()-preparedAt} tuneMs=${SystemClock.elapsedRealtime()-playback.requestedAt}")
                 }
                 private var aligned = false
                 private var bufferingAt: Long? = null
                 override fun onPlaybackStateChanged(playbackState: Int) {
                     if (playbackState == Player.STATE_BUFFERING) bufferingAt = SystemClock.elapsedRealtime()
                     if (playbackState == Player.STATE_READY) bufferingAt?.let {
-                        if (android.util.Log.isLoggable("AlreadyOnPlayback", android.util.Log.DEBUG)) android.util.Log.d("AlreadyOnPlayback", "Buffer ready revision=${playback.revision} durationMs=${SystemClock.elapsedRealtime()-it}")
+                        if (android.util.Log.isLoggable(PLAYBACK_LOG_TAG, android.util.Log.DEBUG)) android.util.Log.d(PLAYBACK_LOG_TAG, "Buffer ready revision=${playback.revision} durationMs=${SystemClock.elapsedRealtime()-it}")
                         bufferingAt = null
                     }
                     if (playbackState != Player.STATE_READY || aligned) return

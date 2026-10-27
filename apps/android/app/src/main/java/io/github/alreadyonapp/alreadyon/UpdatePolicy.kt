@@ -10,7 +10,7 @@ internal data class AppUpdate(val release: String, val version: String, val code
     val target: String, val url: String, val hash: String, val size: Long)
 
 internal fun acceptsUpdateRelease(installed: String, tag: String, draft: Boolean, prerelease: Boolean): Boolean {
-    if (draft || !Regex("(?:\\d{2}\\.\\d{2}\\.\\d{2}|(?:20)?\\d{2}-\\d{2}-\\d{2})-(alpha\\d+|beta\\d*|rc\\d+|stable)", RegexOption.IGNORE_CASE).matches(tag)) return false
+    if (draft || !Regex("(?:\\d{2}\\.\\d{2}\\.\\d{2}|(?:20)?\\d{2}-\\d{2}-\\d{2})-(nightly|alpha\\d+|beta\\d*|rc\\d+|stable)", RegexOption.IGNORE_CASE).matches(tag)) return false
     val stable = installed.endsWith("-stable", ignoreCase = true)
     return !stable || (!prerelease && tag.endsWith("-stable", ignoreCase = true))
 }
@@ -20,7 +20,7 @@ internal fun validUpdateAsset(url: String): Boolean {
     val uri = runCatching { URI(url) }.getOrNull() ?: return false
     return uri.scheme == "https" && uri.host == "github.com" && uri.userInfo == null &&
         uri.port == -1 && uri.rawQuery == null && uri.fragment == null &&
-        Regex("/AlreadyOnTV/AlreadyOn/releases/download/(?:\\d{2}\\.\\d{2}\\.\\d{2}|(?:20)?\\d{2}-\\d{2}-\\d{2})-(alpha\\d+|beta\\d*|rc\\d+|stable)/(android-release\\.json|alreadyon-android\\.apk|alreadyon-tv\\.apk)", RegexOption.IGNORE_CASE).matches(uri.rawPath)
+        Regex("/AlreadyOnTV/AlreadyOn/releases/download/(?:\\d{2}\\.\\d{2}\\.\\d{2}|(?:20)?\\d{2}-\\d{2}-\\d{2})-(nightly|alpha\\d+|beta\\d*|rc\\d+|stable)/(android-release\\.json|alreadyon-android\\.apk|alreadyon-tv\\.apk)", RegexOption.IGNORE_CASE).matches(uri.rawPath)
 }
 
 internal fun verifiedUpdateMetadata(update: AppUpdate, installedCode: Long, target: String): Boolean =
@@ -29,10 +29,10 @@ internal fun verifiedUpdateMetadata(update: AppUpdate, installedCode: Long, targ
 
 /** Compare release stages numerically; RC10 follows RC9, regardless of tag casing. */
 internal fun releaseOrder(label: String): List<Int>? {
-    val match = Regex("(\\d{2}\\.\\d{2}\\.\\d{2}|(?:20)?\\d{2}-\\d{2}-\\d{2})-(alpha|beta|rc|stable)(\\d*)", RegexOption.IGNORE_CASE).matchEntire(label) ?: return null
+    val match = Regex("(\\d{2}\\.\\d{2}\\.\\d{2}|(?:20)?\\d{2}-\\d{2}-\\d{2})-(nightly|alpha|beta|rc|stable)(\\d*)", RegexOption.IGNORE_CASE).matchEntire(label) ?: return null
     val date = match.groupValues[1].replace(".", "-").split("-").map { it.toInt() }
     return listOf(if (date[0] < 100) date[0] + 2000 else date[0], date[1], date[2],
-        listOf("alpha", "beta", "rc", "stable").indexOf(match.groupValues[2].lowercase()),
+        listOf("nightly", "alpha", "beta", "rc", "stable").indexOf(match.groupValues[2].lowercase()),
         match.groupValues[3].toIntOrNull() ?: 0)
 }
 internal fun newerRelease(candidate: String, current: String): Boolean {

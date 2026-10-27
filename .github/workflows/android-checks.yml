@@ -1,0 +1,28 @@
+# Compile both native targets and run unit tests without signing/publication secrets.
+name: Android Checks
+on:
+  workflow_call:
+    inputs:
+      revision:
+        type: string
+        default: ''
+permissions:
+  contents: read
+jobs:
+  android:
+    runs-on: ubuntu-24.04
+    timeout-minutes: 40
+    steps:
+      - uses: actions/checkout@v7
+        with:
+          ref: ${{ inputs.revision }}
+          persist-credentials: false
+      - uses: actions/setup-java@v6
+        with:
+          distribution: temurin
+          java-version: '17'
+      - uses: android-actions/setup-android@v4
+        with:
+          packages: 'platform-tools platforms;android-37.0 build-tools;36.0.0'
+      - name: Phone and TV unit tests, lint and release compilation
+        run: apps/android/gradlew -p apps/android --no-daemon :app:testDebugUnitTest :tv:testDebugUnitTest :app:lintRelease :tv:lintRelease :app:assembleRelease :tv:assembleRelease

@@ -1,4 +1,4 @@
-name: Android Alpha, RC and Stable
+name: Android Nightly, RC and Stable
 on:
   push:
     branches: [test, main]
@@ -21,7 +21,7 @@ on:
       operation:
         description: Build fresh APKs for the selected release stage
         type: choice
-        options: [candidate, promote-test, stable, repair-stable]
+        options: [nightly, promote-test, stable, repair-stable]
         default: promote-test
         required: true
       release_date:
@@ -40,7 +40,7 @@ concurrency:
   cancel-in-progress: false
 jobs:
   candidate:
-    if: (inputs.operation == 'candidate' || (inputs.operation == 'direct-stable' && github.event_name == 'workflow_dispatch' && github.ref == 'refs/heads/dev' && github.workflow == 'Build Date Release Image')) && (github.ref == 'refs/heads/dev' || (github.ref_name == inputs.release_date && github.workflow == 'Build Date Release Image'))
+    if: inputs.operation == 'nightly' && github.ref == 'refs/heads/dev'
     runs-on: ubuntu-24.04
     timeout-minutes: 30
     permissions:
@@ -83,8 +83,7 @@ jobs:
         run: |
           day=$(python3 scripts/ci/release-context.py date --sha "$SOURCE_SHA" --date "$RELEASE_DATE")
           echo "release_date=$day" >> "$GITHUB_OUTPUT"
-          operation=plan
-          if [ "${{ inputs.operation }}" = direct-stable ]; then operation=plan-stable; fi
+          operation=plan-nightly
           python3 scripts/ci/android-release.py "$operation" --sha "$SOURCE_SHA" --day "$day" >> "$GITHUB_OUTPUT"
       - name: Require permanent maintainer signing credentials
         if: steps.version.outputs.existing != 'true'
@@ -162,8 +161,7 @@ jobs:
           VERSION_NAME: ${{ steps.version.outputs.tag }}
           VERSION_CODE: ${{ steps.version.outputs.version_code }}
         run: |
-          operation=candidate
-          if [ "${{ inputs.operation }}" = direct-stable ]; then operation=direct-stable; fi
+          operation=nightly
           python3 scripts/ci/android-release.py "$operation" --sha "$SOURCE_SHA" \
             --tag "$VERSION_NAME" --version-code "$VERSION_CODE" --directory "$RUNNER_TEMP/android-assets" --require-inventory
       - name: Summarize Android publication
@@ -172,14 +170,8 @@ jobs:
           RELEASE_STAGE: ${{ steps.version.outputs.stage }}
           REPOSITORY: ${{ github.repository }}
         run: echo "Android $RELEASE_STAGE [$CANDIDATE_TAG](https://github.com/$REPOSITORY/releases/tag/$CANDIDATE_TAG)" >> "$GITHUB_STEP_SUMMARY"
-      - name: Remove superseded same-day beta releases after alpha verifies
-        if: steps.version.outputs.stage == 'alpha'
-        env:
-          GH_TOKEN: ${{ github.token }}
-          RELEASE_DATE: ${{ steps.version.outputs.release_date }}
-        run: python3 scripts/ci/android-release.py cleanup-legacy --repo "$GITHUB_REPOSITORY" --day "$RELEASE_DATE"
   promotion:
-    if: (github.event_name == 'push' && contains(fromJSON('["test","main"]'), github.ref_name)) || (github.event_name == 'workflow_dispatch' && ((github.ref_name == 'test' && inputs.operation == 'promote-test') || (contains(fromJSON('["main","dev"]'), github.ref_name) && contains(fromJSON('["stable","repair-stable"]'), inputs.operation))))
+    if: (github.event_name == 'push' && contains(fromJSON('["test","main"]'), github.ref_name)) || (github.event_name == 'workflow_dispatch' && ((github.ref_name == 'test' && inputs.operation == 'promote-test') || (github.ref_name == 'main' && contains(fromJSON('["stable","repair-stable"]'), inputs.operation))))
     runs-on: ubuntu-24.04
     timeout-minutes: 30
     permissions:

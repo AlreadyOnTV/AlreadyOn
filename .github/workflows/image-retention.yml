@@ -33,7 +33,9 @@ jobs:
       - name: Detect a missed or failing weekly review
         env:
           GH_TOKEN: ${{ github.token }}
-        run: python3 scripts/ci/maintenance-health.py
+        run: |
+          python3 scripts/ci/maintenance-health.py
+          python3 scripts/ci/maintenance-health.py --workflow dependency-updates.yml
   cleanup:
     concurrency:
       group: base-images

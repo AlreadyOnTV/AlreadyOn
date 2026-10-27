@@ -18,6 +18,15 @@ class UpdatePolicyTest {
             assertTrue(acceptsUpdateRelease("26.10.10-alpha1", "26.10.11-$stage", false, stage != "Stable"))
         assertFalse(acceptsUpdateRelease("26.10.10-alpha1", "26.10.11", false, false))
     }
+    @Test fun nightliesAcceptUpdatesAndPromoteToRc() {
+        assertTrue(acceptsUpdateRelease("26.10.10-nightly", "26.10.11-nightly", false, true))
+        assertFalse(acceptsUpdateRelease("26.10.10-nightly", "26.10.11-nightly", true, true))
+        assertTrue(validUpdateAsset(update.url.replace("alpha1", "nightly")))
+        assertTrue(newerRelease("26.10.11-rc1", "26.10.11-nightly"))
+        assertFalse(newerRelease("26.10.11-nightly", "26.10.11-rc1"))
+        val rc = update.copy(release = "26.10.11-rc1", version = "26.10.11-nightly")
+        assertTrue(eligibleUpdate(rc, 24, "tv", "26.10.11-nightly", update.hash))
+    }
     @Test fun shortTagsAcceptHistoricalSignedMetadata() {
         assertTrue(acceptsUpdateRelease("2026-10-18-alpha2", "26.10.18-alpha3", false, true))
         assertTrue(verifiedUpdateMetadata(update.copy(version = "2026-10-11-alpha1"), 23, "tv"))

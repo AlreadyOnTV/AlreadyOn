@@ -21,9 +21,10 @@ from release_dates import release_day
 from release_notes import candidate_changes, promotion_changes, release_body
 
 # New lifecycle: alphaN on dev, RCN on test, Stable on main. Accept old tags for history.
+NIGHTLY = re.compile(r"(\d{2}\.\d{2}\.\d{2})-nightly\Z")
 ALPHA = re.compile(r"((?:\d{2}\.\d{2}\.\d{2}|(?:20)?\d{2}-\d{2}-\d{2}))-alpha([1-9]\d*)\Z")
-RC = re.compile(r"((?:\d{2}\.\d{2}\.\d{2}|(?:20)?\d{2}-\d{2}-\d{2}))-RC([1-9]\d*)\Z")
-STABLE = re.compile(r"((?:\d{2}\.\d{2}\.\d{2}|(?:20)?\d{2}-\d{2}-\d{2}))-Stable\Z")
+RC = re.compile(r"((?:\d{2}\.\d{2}\.\d{2}|(?:20)?\d{2}-\d{2}-\d{2}))-[Rr][Cc]([1-9]\d*)\Z")
+STABLE = re.compile(r"((?:\d{2}\.\d{2}\.\d{2}|(?:20)?\d{2}-\d{2}-\d{2}))-(?:Stable|stable)\Z")
 LEGACY = re.compile(r"((?:\d{2}\.\d{2}\.\d{2}|(?:20)?\d{2}-\d{2}-\d{2}))-(beta|rc|stable)([1-9]\d*)?\Z")
 LEGACY_BETA = re.compile(r"((?:\d{2}\.\d{2}\.\d{2}|(?:20)?\d{2}-\d{2}-\d{2}))-beta([1-9]\d*)?\Z")
 CANDIDATE = re.compile(r"((?:\d{2}\.\d{2}\.\d{2}|(?:20)?\d{2}-\d{2}-\d{2}))-(?:alpha[1-9]\d*|RC[1-9]\d*|beta(?:[1-9]\d*)?|rc[1-9]\d*)\Z")
@@ -45,6 +46,8 @@ def releases(repo):
 
 
 def stage_tag(tag):
+    if match := NIGHTLY.fullmatch(tag):
+        return release_day(match[1]), "nightly", 0
     if match := ALPHA.fullmatch(tag):
         return release_day(match[1], historical=True), "alpha", int(match[2])
     if match := RC.fullmatch(tag):
@@ -63,7 +66,7 @@ def previous_release_tag(entries, day):
         parsed = stage_tag(entry["tag_name"])
         if entry.get("draft", False) or parsed is None or parsed[0] >= day:
             continue
-        rank = {"alpha": 0, "beta": 1, "rc": 2, "stable": 3}[parsed[1]]
+        rank = {"nightly": -1, "alpha": 0, "beta": 1, "rc": 2, "stable": 3}[parsed[1]]
         candidates.append((parsed[0], rank, parsed[2], entry["tag_name"]))
     return max(candidates)[3] if candidates else None
 
@@ -127,12 +130,13 @@ def changelog_baseline(entries, tag):
         previous = stage_tag(entry["tag_name"])
         if entry.get("draft", False) or previous is None or previous[0] != current[0]:
             continue
-        before = (previous[1] == "alpha" and current[1] == "alpha" and previous[2] < current[2]
+        before = (previous[1] == "nightly" and current[1] != "nightly"
+                  or previous[1] == "alpha" and current[1] == "alpha" and previous[2] < current[2]
                   or previous[1] == "alpha" and current[1] == "rc"
                   or previous[1] == "rc" and current[1] == "rc" and previous[2] < current[2]
                   or current[1] == "stable" and previous[1] in {"alpha", "rc"})
         if before:
-            rank = {"alpha": 0, "rc": 1}[previous[1]]
+            rank = {"nightly": -1, "alpha": 0, "rc": 1}[previous[1]]
             same_day.append((rank, previous[2], entry["tag_name"]))
     return max(same_day)[2] if same_day else previous_release_tag(entries, current[0])
 
@@ -155,7 +159,8 @@ def verify_assets(directory, source=None):
     if source is not None and manifest.get("source_sha") != source:
         raise ValueError("Candidate source revision does not match its tag")
     if not (CANDIDATE.fullmatch(manifest.get("version_name", ""))
-            or STABLE.fullmatch(manifest.get("version_name", ""))):
+            or STABLE.fullmatch(manifest.get("version_name", ""))
+            or NIGHTLY.fullmatch(manifest.get("version_name", ""))):
         raise ValueError("Invalid candidate version")
     expected = digest(directory / ASSETS[0])
     if manifest.get("apk_sha256") != expected:
@@ -250,6 +255,55 @@ def publish(repo, tag, sha, directory, notes, prerelease, publish_now=True, *, r
             f"--latest={'false' if prerelease else 'true'}")
 
 
+def remote_tag_exists(repo, tag):
+    """Treat only an explicit API 404 as absence; network/auth failures block builds."""
+    result = subprocess.run(["gh", "api", f"repos/{repo}/git/ref/tags/{tag}"],
+                            text=True, capture_output=True, check=False)
+    if result.returncode == 0:
+        return True
+    try:
+        response = json.loads(result.stdout)
+    except json.JSONDecodeError:
+        response = {}
+    if str(response.get("status")) == "404":
+        return False
+    raise subprocess.CalledProcessError(result.returncode, result.args, result.stdout, result.stderr)
+
+
+def check_nightly(repo, sha, day):
+    """Reserve one immutable nightly per calendar date; verify completed retries."""
+    day = release_day(day)
+    if not re.fullmatch(r"[0-9a-f]{40}", sha):
+        raise ValueError("Nightly source must be an exact commit")
+    tag = f"{day}-nightly"
+    existing = next((entry for entry in releases(repo) if entry["tag_name"] == tag), None)
+    if existing and (release_source(existing) != sha or
+                     (existing["draft"] and existing.get("target_commitish") != sha)):
+        raise ValueError("This date already has a different nightly; select a new date, never overwrite it")
+    if existing and not existing["draft"]:
+        if api(f"repos/{repo}/commits/{tag}")["sha"] != sha:
+            raise ValueError("Nightly tag does not match its source")
+        with tempfile.TemporaryDirectory() as temp:
+            download(repo, tag, Path(temp))
+            verify_assets(Path(temp), sha)
+        require_tested_image(repo, sha)
+    elif not existing and any(not entry["draft"] and stage_tag(entry["tag_name"]) == (day, "stable", 0) for entry in releases(repo)):
+        raise ValueError("This date is already Stable; select a new nightly date")
+    elif not existing and remote_tag_exists(repo, tag):
+        raise ValueError("Nightly tag exists without a matching release")
+    return existing
+
+
+def plan_nightly(repo, sha, day):
+    """Allocate signed nightly APKs, preserving published assets on reruns."""
+    entry = check_nightly(repo, sha, day)
+    print(f"existing={'true' if entry and not entry['draft'] else 'false'}")
+    print(f"tag={release_day(day)}-nightly")
+    print("stage=nightly")
+    print(f"release_date={release_day(day)}")
+    print(f"version_code={tag_version_code(entry) if entry else next_version_code(releases(repo))}")
+
+
 def plan(repo, sha, day=None):
     day = release_day(day or datetime.now(ZoneInfo("America/New_York")).date().strftime('%y.%m.%d'))
     entries = releases(repo)
@@ -328,7 +382,8 @@ def plan_stable(repo, sha, day):
     require_tested_image(repo, sha)
     entries = releases(repo)
     existing = published_stable(repo, day, sha, entries)
-    tag = existing or f"{day}-Stable"
+    draft = next((entry for entry in entries if entry["draft"] and stage_tag(entry["tag_name"]) == (day, "stable", 0)), None)
+    tag = existing or (draft["tag_name"] if draft else f"{day}-stable")
     if existing:
         print("existing=true")
     else:
@@ -358,14 +413,14 @@ def plan_stable(repo, sha, day):
     print(f"release_date={day}")
 
 
-def candidate(repo, tag, sha, code, directory, *, direct_stable=False, predecessor=None, repair=False):
+def candidate(repo, tag, sha, code, directory, *, direct_stable=False, predecessor=None, repair=False, nightly=False):
     parsed = stage_tag(tag)
     if parsed is not None and not tag.startswith(parsed[0] + "-"):
         raise ValueError("New candidate tags must use YY.MM.DD")
-    allowed = {"stable"} if direct_stable else {"alpha", "rc", "beta"}
+    allowed = {"nightly"} if nightly else {"stable"} if direct_stable else {"alpha", "rc", "beta"}
     if parsed is None or parsed[1] not in allowed or not 0 < code <= 2100000000:
         raise ValueError("Invalid Android release version")
-    if direct_stable:
+    if direct_stable or nightly:
         require_tested_image(repo, sha)
     manifest = {"source_sha": sha, "version_name": tag, "version_code": code,
                 "package": "io.github.alreadyonapp.alreadyon",
@@ -387,7 +442,7 @@ def candidate(repo, tag, sha, code, directory, *, direct_stable=False, predecess
                else candidate_changes(repo, entries, tag, sha, baseline_tag))
     notes = (release_body(repo, tag, sha, code, changes, candidate_tag=predecessor["tag_name"])
              if predecessor else release_body(repo, tag, sha, code, changes, changelog_baseline=baseline_tag))
-    publish_now = bool(predecessor) or parsed[1] in {"alpha", "beta", "stable"}
+    publish_now = bool(predecessor) or parsed[1] in {"nightly", "alpha", "beta", "stable"}
     if repair:
         publish(repo, tag, sha, directory, notes, not direct_stable, publish_now=publish_now, repair=True)
     else:
@@ -421,7 +476,8 @@ def promotion_plan(repo, day, selected_sha, stage, *, repair=False, source_overr
         if not rcs:
             raise ValueError("Stable requires a published RC for this release date")
         predecessor = max(rcs, key=lambda entry: stage_tag(entry["tag_name"])[2])
-        tag = f"{day}-Stable"
+        existing_stable = next((entry for entry in entries if stage_tag(entry["tag_name"]) == (day, "stable", 0)), None)
+        tag = existing_stable["tag_name"] if existing_stable else f"{day}-stable"
     else:
         # A completed direct Stable synchronization creates no new RC.
         if published_stable(repo, day, selected_sha, entries):
@@ -439,14 +495,14 @@ def promotion_plan(repo, day, selected_sha, stage, *, repair=False, source_overr
             return
         alphas = [entry for entry in entries if not entry["draft"]
                   and (parsed := stage_tag(entry["tag_name"])) and parsed[0] == day
-                  and parsed[1] == "alpha" and release_source(entry) == selected_sha]
+                  and parsed[1] in {"nightly", "alpha"} and release_source(entry) == selected_sha]
         drafts = [entry for entry in entries if entry["draft"]
                   and (parsed := stage_tag(entry["tag_name"])) and parsed[0] == day
                   and parsed[1] == "rc" and release_source(entry) == selected_sha]
         if not alphas and not drafts:
-            raise ValueError("RC requires a matching tested alpha or RC draft")
+            raise ValueError("RC requires a matching tested nightly or RC draft")
         predecessor = max(alphas, key=lambda entry: stage_tag(entry["tag_name"])[2]) if alphas else drafts[0]
-        tag = f"{day}-RC{max((stage_tag(e['tag_name'])[2] for e in rcs), default=0) + 1}"
+        tag = f"{day}-rc{max((stage_tag(e['tag_name'])[2] for e in rcs), default=0) + 1}"
     source = source_override or (release_source(predecessor) if stage == "stable" else selected_sha)
     if not source or not re.fullmatch(r"[0-9a-f]{40}", source):
         raise ValueError("Promotion source must be an exact commit")
@@ -517,7 +573,7 @@ def promote_selected_stable(repo, day, sha):
 
 def main():
     parser = argparse.ArgumentParser(description=__doc__)
-    parser.add_argument("operation", choices=("plan", "plan-stable", "candidate", "direct-stable", "promote", "promote-test", "promote-stable", "cleanup-legacy", "plan-promotion", "publish-promotion"))
+    parser.add_argument("operation", choices=("check-nightly", "plan-nightly", "nightly", "plan", "plan-stable", "candidate", "direct-stable", "promote", "promote-test", "promote-stable", "cleanup-legacy", "plan-promotion", "publish-promotion"))
     parser.add_argument("--repo", default=os.environ.get("GITHUB_REPOSITORY"), required=False)
     parser.add_argument("--sha")
     parser.add_argument("--day")
@@ -544,6 +600,14 @@ def main():
             parser.error("publish-promotion requires source, version, assets and predecessor")
         publish_promotion(args.repo, args.tag, args.sha, args.version_code, args.directory,
                           args.predecessor, repair=args.repair)
+    elif args.operation in {"check-nightly", "plan-nightly"}:
+        if not args.sha or not args.day:
+            parser.error("Nightly planning requires --sha and --day")
+        if args.operation == "check-nightly":
+            entry = check_nightly(args.repo, args.sha, args.day)
+            print(f"existing={'true' if entry and not entry['draft'] else 'false'}")
+        else:
+            plan_nightly(args.repo, args.sha, args.day)
     elif args.operation == "plan":
         if not args.sha:
             parser.error("plan requires --sha")
@@ -552,11 +616,11 @@ def main():
         if not all((args.sha, args.day)):
             parser.error("plan-stable requires --sha and --day")
         plan_stable(args.repo, args.sha, args.day)
-    elif args.operation in {"candidate", "direct-stable"}:
+    elif args.operation in {"candidate", "direct-stable", "nightly"}:
         if not all((args.tag, args.sha, args.version_code, args.directory)):
             parser.error("candidate requires --tag, --sha, --version-code and --directory")
         candidate(args.repo, args.tag, args.sha, args.version_code, args.directory,
-                  direct_stable=args.operation == "direct-stable")
+                  direct_stable=args.operation == "direct-stable", nightly=args.operation == "nightly")
     elif args.operation == "promote":
         if not args.tag:
             parser.error("promote requires --tag")
