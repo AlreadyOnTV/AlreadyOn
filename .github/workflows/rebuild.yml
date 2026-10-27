@@ -53,9 +53,11 @@ jobs:
           test "$GITHUB_REF_NAME" = dev
           release_date=$(date +%y.%m.%d)
           if [ -n "$RELEASE_DATE" ]; then release_date="$RELEASE_DATE"; fi
-          python3 scripts/ci/android-release.py check-nightly --sha "$revision" --day "$release_date" >> "$GITHUB_OUTPUT"
-          echo "revision=$revision" >> "$GITHUB_OUTPUT"
-          echo "release_date=$release_date" >> "$GITHUB_OUTPUT"
+          {
+            python3 scripts/ci/android-release.py check-nightly --sha "$revision" --day "$release_date"
+            echo "revision=$revision"
+            echo "release_date=$release_date"
+          } >> "$GITHUB_OUTPUT"
   quality:
     needs: select
     if: needs.select.outputs.existing != 'true'
