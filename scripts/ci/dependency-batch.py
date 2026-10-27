@@ -8,7 +8,6 @@ validation, integration fails rather than merging an untested combination.
 import argparse
 import json
 import os
-from pathlib import Path
 import re
 import subprocess
 from datetime import datetime
@@ -62,33 +61,25 @@ def collect(repo):
                      'commit_message': f"Merge dependency update #{pr['number']} into weekly batch"})
         if merged:
             head = merged['sha']
-    body = ('## Problem and resulting behavior\n\nIntegrate all open Dependabot updates, including major versions, '
-            'as one tested change.\n\n' + '\n'.join(f"- {pr['html_url']}" for pr in prs)
-            + '\n\n## Validation\n\nFull quality, Go/browser e2e, packaged-runtime, Android and security gates '
-              'run before automatic integration. Failures leave dev unchanged. Nightly publication repeats '
-              'the gates at the exact integrated source.\n\n## Risks and compatibility\n\n'
-              'Major upgrades may require repairs. No alpha, RC, Stable or deployment is automatic.')
-    pr = api(repo, 'pulls', 'POST', {'title': f'chore(deps): weekly dependency batch {day}',
-                                   'base': 'dev', 'head': branch, 'body': body})
-    api(repo, f"issues/{pr['number']}/labels", 'POST', {'labels': ['dependencies']})
-    plan = {'base': base, 'head': head, 'branch': branch, 'number': pr['number'],
+    plan = {'base': base, 'head': head, 'branch': branch,
             'pulls': [{'number': p['number'], 'sha': p['head']['sha']} for p in prs]}
     output(changed='true', revision=head, plan=json.dumps(plan, separators=(',', ':')))
     with open(os.environ['GITHUB_STEP_SUMMARY'], 'a') as stream:
-        stream.write(f"Combined {len(prs)} Dependabot PRs: {pr['html_url']}\n")
+        stream.write(f"Combined {len(prs)} Dependabot PRs: https://github.com/{repo}/compare/{base}...{head}\n\n")
+        stream.write('\n'.join(f"- {pr['html_url']}" for pr in prs) + '\n')
+
 
 
 def integrate(repo, plan):
     head, base = plan['head'], plan['base']
-    pr = api(repo, f"pulls/{int(plan['number'])}")
-    if ((pr['state'] != 'open' and not pr.get('merged')) or pr['head']['sha'] != head or pr['base']['ref'] != 'dev'
-            or pr['head']['ref'] != plan['branch']):
-        raise ValueError('Batch PR changed during validation; create and test a new batch')
+    branch = api(repo, 'git/ref/heads/' + plan['branch'])['object']['sha']
+    if branch != head:
+        raise ValueError('Batch branch changed during validation; create and test a new batch')
     current = api(repo, 'git/ref/heads/dev')['object']['sha']
     if current != base and current != head:
         raise ValueError('Dev advanced during validation; create and test a new batch')
     # force:false cannot overwrite a concurrent independent dev commit. GitHub
-    # records the PR as merged when its exact head becomes reachable from dev.
+    # records original PRs as merged when their heads become reachable from dev.
     api(repo, 'git/refs/heads/dev', 'PATCH', {'sha': head, 'force': False})
     # GITHUB_TOKEN ref writes do not trigger push workflows; dispatch explicitly.
     api(repo, 'actions/workflows/rebuild.yml/dispatches', 'POST',

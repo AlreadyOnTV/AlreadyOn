@@ -34,23 +34,19 @@ class DependencyBatchTests(unittest.TestCase):
             self.assertFalse(batch.eligible(pr, 'owner/repo'))
 
     def plan(self):
-        return {'head': HEAD, 'base': BASE, 'branch': 'feature/batch', 'number': 2,
+        return {'head': HEAD, 'base': BASE, 'branch': 'feature/batch',
                 'pulls': [{'number': 1, 'sha': HEAD}]}
 
     def test_concurrent_dev_or_batch_changes_prevent_any_write(self):
-        for changed_pr in (True, False):
-            pr = proposal()
-            pr['head']['ref'] = 'feature/batch'
-            if changed_pr:
-                pr['head']['sha'] = 'c' * 40
-            with patch.object(batch, 'api', side_effect=[pr, {'object': {'sha': 'c' * 40}}]) as api:
+        for branch, dev in [('c' * 40, BASE), (HEAD, 'c' * 40)]:
+            with patch.object(batch, 'api', side_effect=[{'object': {'sha': branch}},
+                              {'object': {'sha': dev}}]) as api:
                 with self.assertRaises(ValueError):
                     batch.integrate('owner/repo', self.plan())
                 self.assertTrue(all(len(call.args) < 3 for call in api.call_args_list))
 
     def test_ref_rejection_prevents_dispatch_and_closure(self):
-        pr = proposal()
-        pr['head']['ref'] = 'feature/batch'
+        pr = {'object': {'sha': HEAD}}
         with patch.object(batch, 'api', side_effect=[pr, {'object': {'sha': BASE}},
                          subprocess.CalledProcessError(1, ['gh'])]) as api:
             with self.assertRaises(subprocess.CalledProcessError):
@@ -59,8 +55,7 @@ class DependencyBatchTests(unittest.TestCase):
             self.assertEqual(api.call_count, 3)
 
     def test_dispatch_uses_exact_tested_sha_and_rebased_proposal_stays_open(self):
-        pr = proposal()
-        pr['head']['ref'] = 'feature/batch'
+        pr = {'object': {'sha': HEAD}}
         rebased = proposal()
         rebased['head']['sha'] = 'c' * 40
         with patch.object(batch, 'api', side_effect=[pr, {'object': {'sha': BASE}}, {}, None, rebased]) as api:

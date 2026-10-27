@@ -218,6 +218,6 @@
   "overrides": {
     "brace-expansion": "5.0.12",
     "http-cache-semantics": "4.3.0",
-    "undici": "6.28.1"
+    "undici": "6.29.1"
   }
 }

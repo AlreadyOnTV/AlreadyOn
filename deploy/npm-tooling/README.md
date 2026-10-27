@@ -6,6 +6,6 @@ The CI image keeps Node 24 and npm 11.21.0. npm's published archive bundles olde
 
 Review package compatibility and advisory fixes before changing overrides. Regenerate the lock with `npm install --prefix deploy/npm-tooling --package-lock-only --ignore-scripts --no-audit --no-fund`. Both files are part of the CI base recipe fingerprint. No package is globally suppressed or hand-edited inside a running image.
 
-Validate npm installation, the WebUI build, Chromium launch and relevant Go checks in the rebuilt CI image. Rescan that exact image and retain private evidence before publication. npm major upgrades require separate review of lifecycle-script and build behavior.
+Validate npm installation, the WebUI build, Chromium launch and relevant Go checks in the rebuilt CI image. Rescan that exact image and retain private evidence before publication. Weekly dependency batches include major upgrades and validate lifecycle-script and build behavior through the full delivery gates. Compatibility failures require repair before integration.
 
 Respect the engine floors of the locked dependency tree when selecting the Node 24 patch version.
