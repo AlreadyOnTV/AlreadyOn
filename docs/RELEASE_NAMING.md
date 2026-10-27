@@ -2,7 +2,7 @@
 
 Release cycles use `YY.MM.DD`, for example `26.10.18`. Two-digit years mean 2000–2099, without the usual date-parser century pivot. Writers compare canonical date prefixes, so a valid short year `20` is not confused with the old century prefix. Calendar dates and audit timestamps still use ISO 8601. Server build identities remain `YY.MM.DD_shortsha`, distinct from release-cycle labels.
 
-The local/remote cycle branch, `release-date.txt`, source Git tag, GHCR date tag, APK version name for new builds and GitHub Release tag share that label. New releases append `-nightly`, `-rcN` or `-stable`. Historical alpha releases remain readable. Existing stage-tag casing (`RCN`, `Stable`) stays compatible; this migration shortens the year and changes date separators to periods. The product, repository, container package and installed Android application IDs retain their names.
+The dated checkout branch and `release-date.txt` identify maintainer workspace work. Nightlies use the build date in America/New_York, or an explicitly selected date; stage promotions retain the selected nightly's date. Source/date image aliases use `YY.MM.DD`; APK versions and release tags append `-nightly`, `-rcN` or `-stable`. Historical alpha releases remain readable. Existing stage-tag casing (`RCN`, `Stable`) stays compatible; this migration shortens the year and changes date separators to periods. The product, repository, container package and installed Android application IDs retain their names.
 
 Clients recognize dotted labels and historical hyphenated formats in signed metadata. Older APK updaters that accept only four-digit dates need a manual signed update, preserving app data.
 

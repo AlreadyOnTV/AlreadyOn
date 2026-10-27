@@ -81,5 +81,31 @@ class DependencyBatchTests(unittest.TestCase):
             self.assertFalse(any(call.args[1] == 'git/refs/heads/dev' for call in api.call_args_list))
 
 
+class InitialScheduleTests(unittest.TestCase):
+    def setUp(self):
+        from datetime import datetime, timezone
+        self.now = datetime(2026, 10, 27, 12, tzinfo=timezone.utc)
+        spec = importlib.util.spec_from_file_location('batch_health', Path(__file__).with_name('maintenance-health.py'))
+        self.module = importlib.util.module_from_spec(spec)
+        spec.loader.exec_module(self.module)
+
+    def test_activation_after_monday_waits_for_next_slot_across_dst(self):
+        due = self.module.first_update_due('2026-10-26T23:00:00-04:00')
+        self.assertEqual(due.isoformat(), '2026-11-02T06:30:00-05:00')
+        self.assertIn('Awaiting first scheduled', self.module.health([], self.now, due))
+
+    def test_manual_success_cannot_extend_first_schedule_deadline(self):
+        due = self.module.first_update_due('2026-10-12T23:00:00-04:00')
+        runs = [{'event': 'workflow_dispatch', 'conclusion': 'success', 'updated_at': self.now.isoformat()}]
+        with self.assertRaises(ValueError):
+            self.module.health(runs, self.now, due)
+
+    def test_failed_first_schedule_does_not_receive_activation_grace(self):
+        due = self.module.first_update_due('2026-10-26T23:00:00-04:00')
+        runs = [{'event': 'schedule', 'conclusion': 'failure', 'updated_at': self.now.isoformat()}]
+        with self.assertRaises(ValueError):
+            self.module.health(runs, self.now, due)
+
+
 if __name__ == '__main__':
     unittest.main()
