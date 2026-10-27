@@ -22,10 +22,12 @@ def health(runs, now):
 if __name__ == '__main__':
     parser = argparse.ArgumentParser(description=__doc__)
     parser.add_argument('--runs', type=argparse.FileType('r'), help='Synthetic/offline GitHub run response')
+    parser.add_argument('--workflow', choices=['dependency-maintenance.yml', 'dependency-updates.yml'],
+                        default='dependency-maintenance.yml')
     args = parser.parse_args()
     if args.runs:
         response = json.load(args.runs)
     else:
         response = json.loads(subprocess.check_output(['gh', 'api',
-            f'repos/{os.environ["GITHUB_REPOSITORY"]}/actions/workflows/dependency-maintenance.yml/runs?event=schedule&per_page=100'], text=True))
+            f'repos/{os.environ["GITHUB_REPOSITORY"]}/actions/workflows/{args.workflow}/runs?event=schedule&per_page=100'], text=True))
     print('Latest successful scheduled review:', health(response['workflow_runs'], datetime.now(timezone.utc)))

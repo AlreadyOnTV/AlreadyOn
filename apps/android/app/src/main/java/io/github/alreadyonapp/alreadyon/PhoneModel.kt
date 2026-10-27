@@ -23,6 +23,9 @@ import java.io.IOException
 import java.time.Instant
 import java.util.UUID
 
+// Use one tag for both the log-level guard and playback timing messages.
+internal const val PLAYBACK_LOG_TAG = "AlreadyOnPlayback"
+
 /** Authorized media metadata is ephemeral and never saved in Android instance state. */
 internal data class PhonePlayback(val url: String, val title: String, val startMs: Long, val revision: Long, val hlsTargetMs: Long? = null, val capturedAt: Long = SystemClock.elapsedRealtime(), val requestedAt: Long = capturedAt,
     val seriesTitle: String = "", val episodeLabel: String = "", val mediaFileId: Long = -1, val sourceHeight: Int = 720,
@@ -415,7 +418,7 @@ internal class PhoneModel(application: Application) : AndroidViewModel(applicati
                             delay(if (BuildConfig.IS_TV) 200 else 1000)
                             tune = status(api, channel.id, token)
                         }
-                        if (android.util.Log.isLoggable("AlreadyOnPlayback", android.util.Log.DEBUG)) android.util.Log.d("AlreadyOnPlayback", "Tune ready preparationMs=${SystemClock.elapsedRealtime()-requestedAt} mode=${tune.getJSONObject("plan").getString("mode")}")
+                        if (android.util.Log.isLoggable(PLAYBACK_LOG_TAG, android.util.Log.DEBUG)) android.util.Log.d(PLAYBACK_LOG_TAG, "Tune ready preparationMs=${SystemClock.elapsedRealtime()-requestedAt} mode=${tune.getJSONObject("plan").getString("mode")}")
                         val now = Instant.parse(tune.getString("serverTime"))
                         val end = Instant.parse(tune.getString("entryEndsAt"))
                         val delaySeconds = tune.optDouble("presentationDelaySeconds", 3.0)

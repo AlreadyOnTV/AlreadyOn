@@ -1,4 +1,4 @@
-# Dev merges and explicit active-date dispatches publish only after full release validation.
+# Dev publishes nightlies only after full release validation.
 name: Build Date Release Image
 on:
   push:
@@ -6,16 +6,16 @@ on:
   workflow_dispatch:
     inputs:
       revision:
-        description: Optional exact commit; empty selects the dispatched dev or active dated branch
+        description: Optional exact current dev commit; empty selects dev
         type: string
         default: ''
       publication:
-        description: Android publication after all validation gates (Stable requires explicit approval)
+        description: Nightly delivery; RC and Stable require test/main promotion
         type: choice
-        options: [candidate, stable]
-        default: candidate
+        options: [nightly]
+        default: nightly
       release_date:
-        description: Optional YY.MM.DD release branch date; push runs derive it from the merged PR
+        description: Optional YY.MM.DD nightly date; defaults to today in America/New_York
         type: string
         required: false
 permissions:
@@ -27,9 +27,10 @@ concurrency:
   cancel-in-progress: false
 jobs:
   select:
-    if: ${{ github.ref_name == 'dev' || github.event_name == 'workflow_dispatch' }}
+    if: github.ref_name == 'dev'
     runs-on: ubuntu-26.04
     outputs:
+      existing: ${{ steps.source.outputs.existing }}
       revision: ${{ steps.source.outputs.revision }}
       release_date: ${{ steps.source.outputs.release_date }}
     permissions:
@@ -46,29 +47,40 @@ jobs:
           GH_TOKEN: ${{ github.token }}
           RELEASE_DATE: ${{ inputs.release_date }}
         run: |
-          if [ "${{ inputs.publication }}" = stable ]; then test "$GITHUB_REF_NAME" = dev; fi
           revision=$(git rev-parse HEAD)
           current=$(gh api "repos/$GITHUB_REPOSITORY/git/ref/heads/$GITHUB_REF_NAME" --jq .object.sha)
           test "$revision" = "$current"
-          release_date=$(python3 scripts/ci/release-context.py build-date --sha "$revision" --date "$RELEASE_DATE")
+          test "$GITHUB_REF_NAME" = dev
+          release_date=$(date +%y.%m.%d)
+          if [ -n "$RELEASE_DATE" ]; then release_date="$RELEASE_DATE"; fi
+          python3 scripts/ci/android-release.py check-nightly --sha "$revision" --day "$release_date" >> "$GITHUB_OUTPUT"
           echo "revision=$revision" >> "$GITHUB_OUTPUT"
           echo "release_date=$release_date" >> "$GITHUB_OUTPUT"
   quality:
     needs: select
+    if: needs.select.outputs.existing != 'true'
     uses: ./.github/workflows/quality.yml
     with:
       revision: ${{ needs.select.outputs.revision }}
-  # Dated alpha dispatches must pass semantic analysis before artifact publication.
+  # Nightlies and explicit releases require semantic analysis before publication.
   codeql:
     needs: select
+    if: needs.select.outputs.existing != 'true'
     permissions:
       contents: read
       security-events: write
     uses: ./.github/workflows/codeql.yml
     with:
       revision: ${{ needs.select.outputs.revision }}
+  android_checks:
+    needs: select
+    if: needs.select.outputs.existing != 'true'
+    uses: ./.github/workflows/android-checks.yml
+    with:
+      revision: ${{ needs.select.outputs.revision }}
   bases:
     needs: select
+    if: needs.select.outputs.existing != 'true'
     runs-on: ubuntu-26.04
     timeout-minutes: 90
     concurrency:
@@ -118,7 +130,7 @@ jobs:
           ci-base: ${{ needs.bases.outputs.ci }}
   publish:
     name: Build, validate and publish fresh dev release
-    needs: [select, bases, quality, codeql, tests]
+    needs: [select, bases, quality, codeql, tests, android_checks]
     runs-on: ubuntu-26.04
     timeout-minutes: 120
     concurrency:
@@ -201,6 +213,7 @@ jobs:
           GH_TOKEN: ${{ github.token }}
           CI_REVISION: ${{ needs.select.outputs.revision }}
           CI_RELEASE_DATE: ${{ needs.select.outputs.release_date }}
+          CI_PUBLICATION: nightly
           SOURCE_IMAGE: ${{ steps.staged.outputs.source }}
         run: |
           IMAGE_TAGS=$(CI_SOURCE_BRANCH=dev python3 scripts/ci/image-tags.py | sed -n 's/^tags=//p')
@@ -212,13 +225,6 @@ jobs:
           CI_REVISION: ${{ needs.select.outputs.revision }}
           RELEASE_DATE: ${{ needs.select.outputs.release_date }}
         run: python3 scripts/ci/release-context.py tag --sha "$CI_REVISION" --date "$RELEASE_DATE"
-      - name: Delete the merged date branch after successful release
-        if: github.ref_name == 'dev' && inputs.publication != 'stable'
-        env:
-          GH_TOKEN: ${{ github.token }}
-          CI_REVISION: ${{ needs.select.outputs.revision }}
-          RELEASE_DATE: ${{ needs.select.outputs.release_date }}
-        run: python3 scripts/ci/release-context.py cleanup-branch --sha "$CI_REVISION" --date "$RELEASE_DATE"
       - name: Remove overwritten untagged versions, not closed PR tags
         env:
           GH_TOKEN: ${{ github.token }}
@@ -233,7 +239,7 @@ jobs:
       issues: read
     uses: ./.github/workflows/android-release.yml
     with:
-      operation: ${{ inputs.publication == 'stable' && 'direct-stable' || 'candidate' }}
+      operation: nightly
       release_date: ${{ needs.select.outputs.release_date }}
       source_sha: ${{ needs.select.outputs.revision }}
     secrets: inherit

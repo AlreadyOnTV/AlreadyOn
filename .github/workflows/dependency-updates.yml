@@ -1,0 +1,65 @@
+# Privileged jobs execute only trusted dev helpers; candidate jobs have no write token.
+name: Weekly Dependency Updates
+on:
+  schedule:
+    - cron: '30 6 * * 1'
+      timezone: America/New_York
+  workflow_dispatch:
+permissions:
+  contents: read
+concurrency:
+  group: weekly-dependency-updates
+  cancel-in-progress: false
+jobs:
+  collect:
+    if: github.ref == 'refs/heads/dev'
+    runs-on: ubuntu-26.04
+    permissions:
+      contents: write
+      pull-requests: write
+    outputs:
+      changed: ${{ steps.batch.outputs.changed }}
+      revision: ${{ steps.batch.outputs.revision }}
+      plan: ${{ steps.batch.outputs.plan }}
+    steps:
+      - uses: actions/checkout@v7
+        with:
+          ref: dev
+          persist-credentials: false
+      - name: Combine every open Dependabot proposal
+        id: batch
+        env:
+          GH_TOKEN: ${{ github.token }}
+        run: python3 scripts/ci/dependency-batch.py collect
+  validate:
+    needs: collect
+    if: needs.collect.outputs.changed == 'true'
+    uses: ./.github/workflows/pull-request.yml
+    with:
+      revision: ${{ needs.collect.outputs.revision }}
+  codeql:
+    needs: collect
+    if: needs.collect.outputs.changed == 'true'
+    permissions:
+      contents: read
+      security-events: write
+    uses: ./.github/workflows/codeql.yml
+    with:
+      revision: ${{ needs.collect.outputs.revision }}
+  integrate:
+    needs: [collect, validate, codeql]
+    runs-on: ubuntu-26.04
+    permissions:
+      contents: write
+      pull-requests: write
+      actions: write
+    steps:
+      - uses: actions/checkout@v7
+        with:
+          ref: dev
+          persist-credentials: false
+      - name: Advance dev to the tested commit and dispatch nightly publication
+        env:
+          GH_TOKEN: ${{ github.token }}
+          DEPENDENCY_BATCH: ${{ needs.collect.outputs.plan }}
+        run: python3 scripts/ci/dependency-batch.py integrate

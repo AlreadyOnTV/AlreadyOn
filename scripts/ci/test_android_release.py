@@ -232,10 +232,10 @@ class AndroidReleaseTests(unittest.TestCase):
                 patch.object(release, "releases", return_value=[{"tag_name": "26.10.10-RC1", "draft": False}]), \
                 patch.object(release, "run", return_value="") as run, patch("builtins.print") as output:
             release.plan_stable("owner/repo", "a" * 40, "26.10.10")
-            output.assert_any_call("tag=26.10.10-Stable")
+            output.assert_any_call("tag=26.10.10-stable")
             output.assert_any_call("stage=stable")
             output.assert_any_call("existing=false")
-            run.assert_called_once_with("git", "tag", "--list", "26.10.10-Stable")
+            run.assert_called_once_with("git", "tag", "--list", "26.10.10-stable")
 
     def test_direct_stable_draft_cannot_replace_another_source(self):
         entry = {"tag_name": "26.10.10-Stable", "draft": True, "body": "Source commit: `" + "b" * 40 + "`"}
@@ -311,7 +311,7 @@ class AndroidReleaseTests(unittest.TestCase):
     def test_stable_build_defaults_to_rc_commit_not_main_head(self):
         output, git = self.promotion_fixture()
         output.assert_any_call("source_sha=" + "a" * 40)
-        output.assert_any_call("tag=26.10.09-Stable")
+        output.assert_any_call("tag=26.10.09-stable")
         git.assert_called_once_with(["git", "merge-base", "--is-ancestor", "a" * 40, "b" * 40], check=True)
         code = int(next(call.args[0].split("=")[1] for call in output.call_args_list if call.args[0].startswith("version_code=")))
         self.assertGreater(code, 200000000)

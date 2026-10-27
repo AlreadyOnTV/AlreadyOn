@@ -1,4 +1,4 @@
-# Proposals are reviewed into the active date branch; never merge directly to dev.
+# All proposals enter one weekly batch; combined validation precedes dev integration.
 version: 2
 updates:
   - package-ecosystem: gomod

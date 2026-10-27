@@ -16,6 +16,7 @@ from release_dates import parse_day
 
 CHANNELS = {'nightly', 'latest', 'stable'}
 DATE = re.compile(r'(?:\d{2}\.\d{2}\.\d{2}|(?:20)?\d{2}-\d{2}-\d{2})')
+NIGHTLY = re.compile(r'(\d{2}\.\d{2}\.\d{2})-nightly')
 PR = re.compile(r'pr-(\d+)(?:-[0-9a-f]{40})?')
 REBUILD = re.compile(r'rebuild-(\d+)-\d+')
 
@@ -25,6 +26,7 @@ def retain(tags, today, open_pr, active_run):
     if CHANNELS.intersection(tags):
         return 'release channel'
     dates = [parse_day(tag, historical=True) for tag in tags if DATE.fullmatch(tag)]
+    dates += [parse_day(match[1]) for tag in tags if (match := NIGHTLY.fullmatch(tag))]
     if dates and max(dates) >= today - datetime.timedelta(days=90):
         return 'date within 90 days'
     for tag in tags:
@@ -37,7 +39,7 @@ def retain(tags, today, open_pr, active_run):
         # Legacy bases must not disappear while old branches still depend on them.
         if tag.startswith('base-'):
             return 'legacy base (migration requires separate approval)'
-        if not (DATE.fullmatch(tag) or PR.fullmatch(tag) or REBUILD.fullmatch(tag)
+        if not (DATE.fullmatch(tag) or NIGHTLY.fullmatch(tag) or PR.fullmatch(tag) or REBUILD.fullmatch(tag)
                 or re.fullmatch(r'sha-[0-9a-f]{40}', tag)):
             return 'unrecognized tag; review required'
     return None

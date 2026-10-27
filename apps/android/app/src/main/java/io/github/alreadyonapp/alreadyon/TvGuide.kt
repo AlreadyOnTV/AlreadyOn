@@ -104,7 +104,8 @@ internal fun TvGuide(state: PhoneState, palette: PhonePalette, modifier: Modifie
                         Triple(it, Instant.parse(it.startsAt).toEpochMilli(), Instant.parse(it.endsAt).toEpochMilli())
                     }
                 }
-                BoxWithConstraints(Modifier.fillMaxWidth()) {
+                // Row sizing uses the outer guide constraints; no subcomposition is needed here.
+                Box(Modifier.fillMaxWidth()) {
                     val windowMs = 120 * 60_000L
                     fun selectionIndex(at: Long = selectedTime): Int = programs.indexOfFirst { at >= it.second && at < it.third }
                         .takeIf { it >= 0 } ?: programs.indexOfFirst { it.second >= at }.takeIf { it >= 0 } ?: programs.lastIndex

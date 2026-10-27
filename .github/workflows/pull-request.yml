@@ -6,20 +6,32 @@ on:
   pull_request:
     branches: [dev]
   workflow_dispatch:
+  workflow_call:
+    inputs:
+      revision:
+        type: string
+        default: ''
 permissions:
   contents: read
 concurrency:
-  group: validation-${{ github.ref }}
+  group: validation-${{ inputs.revision || github.ref }}
   cancel-in-progress: true
 jobs:
   quality:
     uses: ./.github/workflows/quality.yml
+    with:
+      revision: ${{ inputs.revision }}
+  android:
+    uses: ./.github/workflows/android-checks.yml
+    with:
+      revision: ${{ inputs.revision }}
   tests:
     runs-on: ubuntu-26.04
     timeout-minutes: 90
     steps:
       - uses: actions/checkout@v7
         with:
+          ref: ${{ inputs.revision }}
           persist-credentials: false
       - uses: actions/setup-go@v7
         with:

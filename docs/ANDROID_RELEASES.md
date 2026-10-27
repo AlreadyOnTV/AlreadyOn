@@ -8,21 +8,19 @@ Use the active dated branch and [development setup](DEVELOPMENT.md). Test at <ht
 
 | Promotion | Artifact tag | Release title | Publication |
 | --- | --- | --- | --- |
-| Dated PR into `dev` | `YY.MM.DD-alphaN` | `YY.MM.DD-alphaN` | Signed APKs; image `nightly` and date tags |
-| Tested `dev` source into `test` | `YY.MM.DD-RCN` | `YY.MM.DD-rcN` | Image `latest`; freshly built RC APKs |
-| Current `test` into `main` | `YY.MM.DD-Stable` | `YY.MM.DD-stable` | Image `stable`; freshly built Stable APKs |
+| Validated `dev` source | `YY.MM.DD-nightly` | `YY.MM.DD-nightly` | Signed APKs; image `nightly` |
+| Tested `dev` source into `test` | `YY.MM.DD-rcN` | `YY.MM.DD-rcN` | Image `latest`; freshly built RC APKs |
+| Current `test` into `main` | `YY.MM.DD-stable` | `YY.MM.DD-stable` | Image `stable`; freshly built Stable APKs |
 
 Each new release builds and signs both APKs with its target-stage version name and a strictly higher version code. RC builds use the tested source; Stable defaults to the newest published RC's exact source commit, independently of the workflow commit. A manual `source_sha` override must identify validated source in the selected branch history. Docker promotions reuse the tested digest without rebuilding.
 
-Dispatch **Android Alpha, RC and Stable** on `test` (`promote-test`) or `main`/`dev` (`stable`). Completed reruns verify published assets. `repair-stable` explicitly replaces historical copied-candidate Stable APKs with fresh Stable builds at the same source/tag; correctly versioned published APKs remain immutable. Stable locks the date.
+After nightly acceptance, dispatch **Android Nightly, RC and Stable** on `test` (`promote-test`) or `main` (`stable`). Completed reruns verify published assets. `repair-stable` explicitly replaces historical copied-candidate Stable APKs with fresh Stable builds at the same source/tag; correctly versioned published APKs remain immutable. Stable locks the date.
 
-Future phone and TV builds must offer newer alpha, RC and stable updates even when the installed release is Stable. Stable publication must not lock clients to stable-only updates. See [update policy and existing-client limitations](ANDROID_UPDATES.md).
+Nightly APKs recognize nightly releases and their download URLs. Existing installed APKs require a signed update to gain this support. Future phone and TV builds must offer newer alpha, RC and stable updates even when the installed release is Stable. Stable publication must not lock clients to stable-only updates. See [update policy and existing-client limitations](ANDROID_UPDATES.md).
 
-## Approved direct Stable
+## Manual stage promotion
 
-Dispatch **Build Date Release Image** on `dev` with `publication=stable`. Full validation and signed-image gates precede building/signing both Stable APKs once. Only the Stable release/tag is allocated; no alpha or RC is created.
-
-Reconcile historical promotion ancestry on the dated branch before its dev PR. After publication, fast-forward `test` and `main` to the identical validated dev commit; their Android workflows verify existing Stable assets without rebuilding or creating an RC. Cancel the automatic candidate build before publication when selecting this path. Retire the retained dated branch after delivery verification.
+After nightly acceptance, run `python3 scripts/promote.py test YY.MM.DD` to promote its tested source and image digest. The test branch publishes the first `YY.MM.DD-rc1` APKs; later candidates increment the suffix. After RC acceptance, `python3 scripts/promote.py main` selects the current test head. Both branches build fresh target-stage APKs with higher version codes. Weekly automation never moves test/main. Retire dated development branches only after delivery and explicit cleanup approval.
 
 ## Artifacts and gates
 

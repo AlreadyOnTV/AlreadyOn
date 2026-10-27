@@ -11,17 +11,18 @@ SHA = 'a' * 40
 
 
 class PromotionOutputs(unittest.TestCase):
-    def test_direct_stable_only_runs_through_validated_manual_dev_build(self):
+    def test_dev_only_publishes_nightly_after_full_validation(self):
         workflow = yaml.safe_load((ROOT / '.github/workflows/android-release.yml').read_text())
-        guard = workflow['jobs']['candidate']['if']
-        for condition in ("inputs.operation == 'direct-stable'", "github.event_name == 'workflow_dispatch'",
-                          "github.ref == 'refs/heads/dev'", "github.workflow == 'Build Date Release Image'"):
-            self.assertIn(condition, guard)
+        self.assertEqual(workflow['jobs']['candidate']['if'],
+                         "inputs.operation == 'nightly' && github.ref == 'refs/heads/dev'")
         parent = yaml.safe_load((ROOT / '.github/workflows/rebuild.yml').read_text())
-        self.assertIn("inputs.publication == 'stable'", parent['jobs']['android']['with']['operation'])
-        self.assertIn('tests', parent['jobs']['android']['needs'])
+        self.assertEqual(parent['jobs']['android']['with']['operation'], 'nightly')
+        for check in ('codeql', 'quality', 'tests', 'android_checks'):
+            self.assertIn(check, parent['jobs']['publish']['needs'])
         self.assertIn('publish', parent['jobs']['android']['needs'])
-        self.assertIn('codeql', parent['jobs']['publish']['needs'])
+        promotion = workflow['jobs']['promotion']['if']
+        self.assertIn("github.ref_name == 'main'", promotion)
+        self.assertNotIn("'[\"main\",\"dev\"]'", promotion)
 
     def test_push_and_dispatch_outputs_are_machine_readable(self):
         workflow = yaml.safe_load((ROOT / '.github/workflows/android-release.yml').read_text())
