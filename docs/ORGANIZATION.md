@@ -4,7 +4,7 @@ AlreadyOn remains the application name. The GitHub organization is `AlreadyOnTV`
 
 Container instructions use `ghcr.io/alreadyontv/alreadyon`. Existing installations must update their image reference when pulling a new version. Repository redirects do not guarantee package-registry compatibility. The Go module and Android package/metadata identifiers deliberately retain their existing identities so internal imports and installed-app updates remain compatible. Use the permanent signing key for every Android release. Older apps restrict update URLs to the former owner and may need one manual signed APK update; install over the existing app without clearing data.
 
-The active checkout branch is `26.10.26`. Normal delivery follows the branch map:
+The active checkout branch is `26.10.28`. Normal delivery follows the branch map:
 
 | Branch | Docker channel | Phone/TV APK release |
 | --- | --- | --- |

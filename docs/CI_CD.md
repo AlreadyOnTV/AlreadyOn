@@ -6,9 +6,9 @@ Maintainers control releases; keep credentials private. [Release notes](RELEASE_
 
 ## Development and releases
 
-`release-date.txt` pins the active cycle to `26.10.26`. Reuse until Stable on main, then begin another.
+`release-date.txt` pins the active cycle to `26.10.28`. Reuse until Stable on main, then begin another.
 
-Use the primary checkout, `26.10.26`, and HTTPS preview on port 5173. Dev PRs run full quality, source/browser/runtime, Android and security gates. Dev publishes Docker `nightly` and signed phone/TV `YY.MM.DD-nightly` APKs after validation. Weekly dependency batches include major upgrades and integrate only their tested combined commit; see [maintenance](DEPENDENCY_MAINTENANCE.md). Published dated nightlies are immutable.
+Use the primary checkout, `26.10.28`, and HTTPS preview on port 5173. Dev PRs run full quality, source/browser/runtime, Android and security gates. Dev publishes Docker `nightly` and signed phone/TV `YY.MM.DD-nightly` APKs after validation. Weekly dependency batches include major upgrades and integrate only their tested combined commit; see [maintenance](DEPENDENCY_MAINTENANCE.md). Published dated nightlies are immutable.
 
 After the maintainer validates a nightly, promote its exact source to `test` for Docker `latest` and `YY.MM.DD-rc1` APKs, then `main` for Docker `stable` and `YY.MM.DD-stable` APKs. Further RCs increment their suffix; completed releases are never overwritten. These promotions remain manual.
 

@@ -35,6 +35,19 @@ class ServerTlsTest {
         return SSLContext.getInstance("TLS").apply { init(keys.keyManagers, null, null) } to pem
     }
 
+    @Test fun trustComparisonIgnoresFormattingAndOrderButRejectsChangedIdentity() {
+        val directory = kotlin.io.path.createTempDirectory("trust-identity").toFile()
+        try {
+            val first = identity(directory, "first", "one.example").second
+            val other = identity(directory, "other", "two.example").second
+            assertTrue(sameServerTrust(first, first.replace("\n", "\r\n")))
+            assertTrue(sameServerTrust(first + other, other + first))
+            assertFalse(sameServerTrust(first, other))
+            assertFalse(sameServerTrust(first, first + other))
+            assertFalse(sameServerTrust(first, "invalid"))
+        } finally { directory.deleteRecursively() }
+    }
+
     private fun request(context: SSLContext, trusted: String?, succeeds: Boolean) {
         val server = context.serverSocketFactory.createServerSocket(0) as SSLServerSocket
         server.soTimeout = 5000

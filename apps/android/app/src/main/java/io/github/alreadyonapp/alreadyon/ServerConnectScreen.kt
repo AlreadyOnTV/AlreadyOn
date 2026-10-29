@@ -1,6 +1,7 @@
 // Shared phone/tablet and TV discovery, address fallback and account PIN onboarding.
 package io.github.alreadyonapp.alreadyon
 
+import androidx.compose.foundation.clickable
 import androidx.compose.foundation.rememberScrollState
 import androidx.compose.foundation.verticalScroll
 import androidx.compose.foundation.layout.*
@@ -14,6 +15,7 @@ import androidx.compose.ui.Alignment
 import androidx.compose.ui.focus.FocusDirection
 import androidx.compose.ui.focus.FocusRequester
 import androidx.compose.ui.focus.focusRequester
+import androidx.compose.ui.focus.onFocusChanged
 import androidx.compose.ui.platform.LocalSoftwareKeyboardController
 import androidx.compose.ui.platform.LocalFocusManager
 import androidx.compose.ui.text.input.ImeAction
@@ -98,7 +100,7 @@ internal fun ServerConnectScreen(state: PhoneState, model: PhoneModel, modifier:
     LaunchedEffect(trust) { if (trust != null) usernameFocus.requestFocus() }
     val pinFocus = remember { FocusRequester() }
     val connectFocus = remember { FocusRequester() }
-    fun enterPin() { pinFocus.requestFocus(); keyboard?.show() }
+    fun enterPin() { pinFocus.requestFocus(); if (!BuildConfig.IS_TV) keyboard?.show() }
     fun closePin() {
         keyboard?.hide()
         focusManager.clearFocus(force = true)
@@ -114,7 +116,13 @@ internal fun ServerConnectScreen(state: PhoneState, model: PhoneModel, modifier:
             try {
                 // Saved trust and cookies are usable only for the exact recently connected origin.
                 // Validate with the server before presenting the PIN form or fetching new trust.
-                if (model.resumeSavedServer(server.origin)) return@launch
+                try {
+                    if (model.resumeSavedServer(server.origin)) return@launch
+                } catch (failure: Exception) {
+                    // A changed identity needs public trust review, not a dead-end retry.
+                    // Network outages keep the encrypted session and must not fetch new trust.
+                    if (!isServerTrustFailure(failure)) throw failure
+                }
                 val result = probe(server)
                 selected = server.copy(name = result.name); trust = result
             }
@@ -168,10 +176,9 @@ internal fun ServerConnectScreen(state: PhoneState, model: PhoneModel, modifier:
             Text("${selected!!.name} · ${selected!!.origin.removePrefix("https://")}", style = MaterialTheme.typography.headlineSmall)
             if (checking) Text("Checking server…")
             if (trust != null) {
-                val changedCa = state.origin == selected!!.origin && state.trustedCa != null && state.trustedCa != trust!!.certificate
+                val changedCa = state.origin == selected!!.origin && state.trustedCa != null && !sameServerTrust(state.trustedCa, trust!!.certificate)
                 if (changedCa) {
                     Text("The server CA has changed. Only accept it if you expected this change; another device may be impersonating your server.", color = MaterialTheme.colorScheme.error)
-                    Button(onClick = { model.acceptServerTrust(trust!!.certificate) }, enabled = !state.busy) { Text("Accept New CA") }
                 }
 
                 OutlinedTextField(username, { username = it }, label = { Text("Username") },
@@ -188,8 +195,22 @@ internal fun ServerConnectScreen(state: PhoneState, model: PhoneModel, modifier:
                 ServerPinField(pin, { pin = it }, pinVisible, { pinVisible = !pinVisible },
                     enabled = !state.busy, onDone = ::closePin,
                     modifier = Modifier.fillMaxWidth(if (BuildConfig.IS_TV) 0.6f else 1f).focusRequester(pinFocus))
-                Button(modifier = Modifier.focusRequester(connectFocus).tvFocusOutline(), onClick = { model.signInWithPIN(selected!!.origin, username, pin, trust!!.certificate, trust!!.name); pin = ""; pinVisible = false },
-                    enabled = !changedCa && username.isNotBlank() && pin.length in 6..12 && !state.busy) { Text("Connect") }
+                var acceptingTrust by remember { mutableStateOf(false) }
+                LaunchedEffect(changedCa, state.busy) {
+                    if (acceptingTrust && !changedCa && !state.busy) {
+                        acceptingTrust = false
+                        connectFocus.requestFocus()
+                    }
+                }
+                if (changedCa) {
+                    Button(modifier = Modifier.focusRequester(connectFocus).tvFocusOutline(), onClick = {
+                        acceptingTrust = true
+                        model.acceptServerTrust(trust!!.certificate)
+                    }, enabled = !state.busy) { Text("Accept New CA") }
+                } else Button(modifier = Modifier.focusRequester(connectFocus).tvFocusOutline(), onClick = {
+                    if (username.isBlank() || pin.length !in 6..12) error = "Enter your username and 6–12 digit TV PIN."
+                    else { model.signInWithPIN(selected!!.origin, username, pin, trust!!.certificate, trust!!.name); pin = ""; pinVisible = false }
+                }, enabled = !state.busy) { Text("Connect") }
             }
             Button(modifier = Modifier.tvFocusOutline(), onClick = { selected = null; trust = null; pin = ""; pinVisible = false; error = null; model.dismissError() }, enabled = !checking && !state.busy) { Text("Choose Another Server") }
         }
@@ -199,16 +220,54 @@ internal fun ServerConnectScreen(state: PhoneState, model: PhoneModel, modifier:
     }
 }
 
-/** Request the installed IME's numeric layout; each device owns its keyboard presentation. */
+/** Phones use their numeric IME; TV owns its keypad so every remote starts on 1. */
 @Composable
 internal fun ServerPinField(pin: String, onPin: (String) -> Unit, visible: Boolean,
     onToggleVisibility: () -> Unit, enabled: Boolean, onDone: () -> Unit, modifier: Modifier = Modifier) {
+    var keypad by remember { mutableStateOf(false) }
+    var returningFocus by remember { mutableStateOf(false) }
+    val firstDigit = remember { FocusRequester() }
+    val keyboard = LocalSoftwareKeyboardController.current
+    val fieldModifier = if (BuildConfig.IS_TV) modifier.onFocusChanged {
+        if (it.isFocused && enabled) {
+            if (returningFocus) returningFocus = false
+            else { keyboard?.hide(); keypad = true }
+        }
+    }.onPreviewKeyEvent {
+        if (it.key in listOf(Key.Enter, Key.NumPadEnter, Key.DirectionCenter)) {
+            if (it.type == KeyEventType.KeyUp && enabled) keypad = true
+            true
+        } else false
+    }.clickable(enabled = enabled) { keypad = true } else modifier
     OutlinedTextField(pin, { onPin(it.filter { digit -> digit in '0'..'9' }.take(12)) },
-        label = { Text("TV PIN") }, singleLine = true,
+        label = { Text("TV PIN") }, singleLine = true, readOnly = BuildConfig.IS_TV,
         visualTransformation = if (visible) VisualTransformation.None else PasswordVisualTransformation(),
         trailingIcon = { PinVisibilityButton(visible, enabled, onToggleVisibility) },
         keyboardOptions = KeyboardOptions(keyboardType = KeyboardType.NumberPassword, imeAction = ImeAction.Done),
-        keyboardActions = KeyboardActions(onDone = { onDone() }), modifier = modifier, enabled = enabled)
+        keyboardActions = KeyboardActions(onDone = { onDone() }), modifier = fieldModifier, enabled = enabled)
+    if (BuildConfig.IS_TV && keypad) {
+        LaunchedEffect(Unit) { firstDigit.requestFocus() }
+        fun close() { returningFocus = true; keypad = false; onDone() }
+        AlertDialog(onDismissRequest = { close() }, title = { Text("TV PIN") },
+            text = {
+                Column(verticalArrangement = Arrangement.spacedBy(8.dp)) {
+                    Text(if (visible) pin else "•".repeat(pin.length))
+                    for (row in listOf(listOf("1", "2", "3"), listOf("4", "5", "6"), listOf("7", "8", "9"), listOf("Delete", "0", "Done"))) {
+                        Row(horizontalArrangement = Arrangement.spacedBy(8.dp)) {
+                            row.forEach { key ->
+                                Button(onClick = {
+                                    when (key) {
+                                        "Delete" -> onPin(pin.dropLast(1))
+                                        "Done" -> close()
+                                        else -> if (pin.length < 12) onPin(pin + key)
+                                    }
+                                }, modifier = Modifier.weight(1f).then(if (key == "1") Modifier.focusRequester(firstDigit) else Modifier).tvFocusOutline()) { Text(key) }
+                            }
+                        }
+                    }
+                }
+            }, confirmButton = {})
+    }
 }
 
 /** Match the WebUI eye control without adding an icon library for two paths. */

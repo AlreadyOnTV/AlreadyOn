@@ -112,18 +112,6 @@ case "${1:-}" in
       fi
       exit 1
     fi
-    # A local test deployment deliberately starts with fresh browser auth while
-    # retaining its account, API keys, settings, catalog and media configuration.
-    if ! "$engine" "${engine_args[@]}" exec --user 1000:1000 "$name" alreadyon-clear-browser-sessions; then
-      echo 'The new container could not clear local browser sessions.' >&2
-      if [[ -n $previous ]]; then
-        echo 'Restoring the previous container.' >&2
-        start "$previous"
-      else
-        "$engine" "${engine_args[@]}" rm -f "$name" >/dev/null 2>&1 || true
-      fi
-      exit 1
-    fi
     ensure_autostart
     echo "Deployed $name from $(git rev-parse --short HEAD): https://localhost:$web_port (UI/API/media)"
     echo "Public trust export: $engine exec --user 1000:1000 $name alreadyon-tls trust"

@@ -141,7 +141,7 @@ internal class PhoneModel(application: Application) : AndroidViewModel(applicati
     /** Native clients accept an instance CA before sending its PIN or saving a session. */
     fun signInWithPIN(origin: String, username: String, pin: String, trustedCa: String, serverName: String = "AlreadyOn") = perform {
         val normalized = serverOrigin(origin) ?: throw IOException("Invalid local server address.")
-        if (normalized == state.value.origin && state.value.trustedCa != null && state.value.trustedCa != trustedCa) {
+        if (normalized == state.value.origin && state.value.trustedCa != null && !sameServerTrust(state.value.trustedCa, trustedCa)) {
             throw IOException("The server CA changed. Review and accept the new CA before connecting.")
         }
         client?.clearSession()
@@ -182,7 +182,7 @@ internal class PhoneModel(application: Application) : AndroidViewModel(applicati
     }
 
     private fun handleFailure(error: Exception) {
-        if (generateSequence<Throwable>(error) { it.cause }.any { it is javax.net.ssl.SSLException || it is java.security.cert.CertificateException }) {
+        if (isServerTrustFailure(error)) {
             stopWatching()
             update { it.copy(trustIssue = true) }
         }
