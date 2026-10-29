@@ -37,7 +37,7 @@ import java.util.Locale
 /** One focus target per channel avoids hundreds of invisible Compose focus/layout nodes on small TVs. */
 @OptIn(ExperimentalFoundationApi::class)
 @Composable
-internal fun TvGuide(state: PhoneState, palette: PhonePalette, modifier: Modifier, now: Long, resetSignal: Int = 0, onNavigation: () -> Unit = {}, onSelection: (GuideChannel, GuideProgram?) -> Unit = { _, _ -> }, onChannelFocus: (Long, Boolean) -> Unit = { _, _ -> }, onTune: (GuideChannel) -> Unit) {
+internal fun TvGuide(state: PhoneState, palette: PhonePalette, modifier: Modifier, now: Long, resetSignal: Int = 0, onNavigation: () -> Unit = {}, onGuideExit: () -> Unit = {}, onSelection: (GuideChannel, GuideProgram?) -> Unit = { _, _ -> }, onChannelFocus: (Long, Boolean) -> Unit = { _, _ -> }, onTune: (GuideChannel) -> Unit) {
     val channels = state.channels
     val rows = rememberLazyListState(initialFirstVisibleItemIndex = channels.indexOfFirst { it.id == state.channel?.id }.coerceAtLeast(0))
     val scope = rememberCoroutineScope()
@@ -53,7 +53,7 @@ internal fun TvGuide(state: PhoneState, palette: PhonePalette, modifier: Modifie
         if (selectedTime < origin) selectedTime = now
     }
     // Restoring the guide always restores the selected channel, independent of stream readiness.
-    LaunchedEffect(channels.isNotEmpty(), state.profile?.id, state.channel?.id, resetSignal) {
+    LaunchedEffect(channels.isNotEmpty(), state.profile?.id, state.channel?.id, resetSignal, now / GUIDE_REFRESH_INTERVAL_MS) {
         if (channels.isNotEmpty()) {
             val index = channels.indexOfFirst { it.id == state.channel?.id }.coerceAtLeast(0)
             val channel = channels[index]
@@ -67,7 +67,7 @@ internal fun TvGuide(state: PhoneState, palette: PhonePalette, modifier: Modifie
             targets[channels[index].id]?.requestFocus()
         }
     }
-    BoxWithConstraints(modifier) {
+    BoxWithConstraints(modifier.guideNavigationInput(onNavigation, onGuideExit)) {
     // Fit exactly two hours beside the fixed channel column at every viewport width.
     val minuteWidth = ((maxWidth.value - 100).coerceAtLeast(1f) / 120).dp
     val bottomPadding = (maxHeight - 34.dp - 56.dp).coerceAtLeast(0.dp)
@@ -137,7 +137,6 @@ internal fun TvGuide(state: PhoneState, palette: PhonePalette, modifier: Modifie
                                 if (event.key !in listOf(Key.DirectionUp, Key.DirectionDown, Key.DirectionLeft, Key.DirectionRight)) false
                                 else {
                                     if (event.type == KeyEventType.KeyDown) {
-                                        onNavigation()
                                         if (event.key == Key.DirectionUp || event.key == Key.DirectionDown) {
                                             val neighbour = nextPlayableChannel(channels, channel.id, if (event.key == Key.DirectionDown) 1 else -1)
                                                 ?: return@onPreviewKeyEvent true

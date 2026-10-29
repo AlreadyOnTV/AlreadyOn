@@ -71,7 +71,7 @@ internal fun TvShell(state: PhoneState, model: PhoneModel, guideNow: Long) {
     LaunchedEffect(fullscreen, controlsVisible) { if (fullscreen && !controlsVisible) focus.requestFocus() }
     val currentSettings by rememberUpdatedState(state.settings)
     LaunchedEffect(state.profile?.id) {
-        while (state.profile != null) { delay(30_000); if (currentSettings == null) model.refreshGuide() }
+        while (state.profile != null) { delay(GUIDE_REFRESH_INTERVAL_MS); if (currentSettings == null) model.refreshGuide() }
     }
     BackHandler(enabled = fullscreen || state.settings != null || state.profile != null) {
         when {
@@ -173,7 +173,8 @@ internal fun TvShell(state: PhoneState, model: PhoneModel, guideNow: Long) {
                     }
                     if (!fullscreen) TvGuide(state, palette, Modifier.weight(1f), now = guideNow, resetSignal = guideReset,
                         onSelection = { channel, program -> selection.value = channel to program },
-                        onNavigation = { guideAtCurrent = false },
+                        onNavigation = { model.noteGuideNavigation(); guideAtCurrent = false },
+                        onGuideExit = model::resetGuideNavigation,
                         onChannelFocus = { channelId, current -> region = "guide"; guideAtCurrent = channelId == state.channel?.id && current }) { channel ->
                         model.unmute(); model.watch(channel); fullscreen = true; controlsSignal++
                     }

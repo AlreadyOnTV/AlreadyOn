@@ -56,6 +56,10 @@ internal class PhoneModel(application: Application) : AndroidViewModel(applicati
     private var action: Job? = null
     private var viewing: Job? = null
     private var guideEntry: Job? = null
+    private val mutableGuideNavigationDeadline = MutableStateFlow(0L)
+    val guideNavigationDeadline = mutableGuideNavigationDeadline.asStateFlow()
+    private var guideNavigationResume: Job? = null
+    private var nextGuideRefresh = 0L
     private var serial = 0L
     private var subtitleOverride = false
     private var preferredSubtitle: PhoneTrack? = null
@@ -441,10 +445,33 @@ internal class PhoneModel(application: Application) : AndroidViewModel(applicati
         }
     }
 
-    fun refreshGuide() = perform {
-        val profile = state.value.profile ?: return@perform
-        val channels = requireNotNull(client).guide(profile)
-        update { it.copy(channels = channels) }
+    fun noteGuideNavigation() {
+        val deadline = SystemClock.elapsedRealtime() + GUIDE_NAVIGATION_PAUSE_MS
+        mutableGuideNavigationDeadline.value = deadline
+        guideNavigationResume?.cancel()
+        guideNavigationResume = viewModelScope.launch {
+            delay(guideNavigationRemaining(deadline, SystemClock.elapsedRealtime()))
+            if (mutableGuideNavigationDeadline.value == deadline) {
+                mutableGuideNavigationDeadline.value = 0L
+                refreshGuide()
+            }
+        }
+    }
+
+    fun resetGuideNavigation() {
+        guideNavigationResume?.cancel()
+        mutableGuideNavigationDeadline.value = 0L
+        nextGuideRefresh = 0L
+    }
+
+    fun refreshGuide() {
+        if (mutableGuideNavigationDeadline.value != 0L || SystemClock.elapsedRealtime() < nextGuideRefresh) return
+        perform {
+            val profile = state.value.profile ?: return@perform
+            nextGuideRefresh = SystemClock.elapsedRealtime() + GUIDE_REFRESH_INTERVAL_MS
+            val channels = requireNotNull(client).guide(profile)
+            if (mutableGuideNavigationDeadline.value == 0L) update { it.copy(channels = channels) }
+        }
     }
 
     fun changeProfile() {

@@ -6,4 +6,6 @@ WebUI large/fullscreen Up/Down tunes channels. Left/Right reveals the overlay an
 
 Channel changes retain player settings. The TV preview has no focusable controls. Guide Back restores the watched airing, then opens the profile menu; a quick second Back exits. See [TV remote navigation](TV_REMOTE_NAVIGATION.md) for timing and cancellation.
 
+WebUI, TV and phone/tablet pause automatic guide polling, timeline advancement and current-airing restoration for two minutes after the latest guide navigation. Arrow/D-pad keys, mouse wheel or scrollbar dragging, and touch scrolling/dragging restart the local inactivity window. Manual navigation remains responsive; programmatic scrolling does not extend the pause. The visible clock and playback remain independent. Expiry restores the current airing once and resumes one-minute polling/restoration without replaying missed refreshes. Leaving the native guide clears its pending pause; WebUI timers/listeners are removed on unmount.
+
 Run `node --test web/tests/channelNavigation.test.ts` for browser policy regressions. Android unit tests cover both directions, visible ordering, empty rows and single-channel/stale-selection cases. Device and fullscreen playback acceptance remain separate from policy tests.

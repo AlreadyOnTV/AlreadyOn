@@ -93,6 +93,7 @@ class MainActivity : ComponentActivity() {
         setContent {
             val model: PhoneModel = viewModel()
             val state by model.state.collectAsStateWithLifecycle()
+            val navigationDeadline by model.guideNavigationDeadline.collectAsStateWithLifecycle()
             val lifecycleOwner = LocalLifecycleOwner.current
             val refreshSharedProfiles = state.signedIn && state.profile != null
             LaunchedEffect(lifecycleOwner, model, refreshSharedProfiles) {
@@ -107,7 +108,7 @@ class MainActivity : ComponentActivity() {
                 (state.channel == null || state.playbackReady || state.error != null))
             PhoneTheme { UpdatePrompt(visible = !pip && (!BuildConfig.IS_TV || startupReady)) }
             StartupPreload(ready = startupReady, showContent = !BuildConfig.IS_TV || !state.restoringConnection) {
-                val guideNow = rememberGuideTime(state.channels)
+                val guideNow = rememberGuideTime(state.channels, navigationDeadline)
                 if (BuildConfig.IS_TV) {
                     TvShell(state, model, guideNow)
                     return@StartupPreload
@@ -156,7 +157,7 @@ class MainActivity : ComponentActivity() {
                     }
                 }
                 LaunchedEffect(state.profile?.id) {
-                    while (state.profile != null) { delay(30_000); model.refreshGuide() }
+                    while (state.profile != null) { delay(GUIDE_REFRESH_INTERVAL_MS); model.refreshGuide() }
                 }
                 PhoneTheme {
                     val palette = phonePalette
@@ -359,7 +360,7 @@ internal fun ChannelGuide(state: PhoneState, model: PhoneModel, palette: PhonePa
             Instant.parse(it.startsAt).toEpochMilli() <= now && Instant.parse(it.endsAt).toEpochMilli() > now
         } }
     val focusProgram = focusChannel?.liveProgram(now)
-    LaunchedEffect(focusChannel?.id, focusProgram?.startsAt) {
+    LaunchedEffect(focusChannel?.id, focusProgram?.startsAt, now / GUIDE_REFRESH_INTERVAL_MS) {
         if (focusChannel != null && focusProgram != null) {
             rows.scrollToItem(channels.indexOf(focusChannel))
             scroll.scrollTo(0)
@@ -375,7 +376,7 @@ internal fun ChannelGuide(state: PhoneState, model: PhoneModel, palette: PhonePa
     val width = (12 * 60 * minutesToDp).dp
     // Use nearest-edge focus scrolling, not a device's TV-style center pivot.
     CompositionLocalProvider(LocalBringIntoViewSpec provides remember { object : BringIntoViewSpec {} }) {
-    Column(modifier) {
+    Column(modifier.guideNavigationInput(model::noteGuideNavigation, model::resetGuideNavigation)) {
         Row(Modifier.fillMaxWidth().background(palette.alternate).testTag("guide-timeline").semantics { stateDescription = origin.toString() }) {
             GuideClock(state.profile?.timeFormat, palette, Modifier.width(100.dp).padding(4.dp))
             Row(Modifier.horizontalScroll(scroll).width(width)) {
