@@ -50,26 +50,39 @@ class UpdateClientTest {
             url.contains("26.10.12") -> manifest(24, "26.10.12-alpha1").toString()
             else -> manifest(25, "26.10.11-alpha1").toString()
         } }
-        val tv = checker.check("26.10.10-alpha1", 23, true)!!
+        val tv = checker.check("26.10.10-alpha1", 23, true, cycle = ReleaseCycle.NIGHTLY)!!
         assertEquals(25L, tv.code); assertTrue(tv.url.endsWith("alreadyon-tv.apk"))
-        val phone = checker.check("26.10.10-alpha1", 23, false)!!
+        val phone = checker.check("26.10.10-alpha1", 23, false, cycle = ReleaseCycle.NIGHTLY)!!
         assertTrue(phone.url.endsWith("alreadyon-android.apk"))
         assertNull(checker.check("26.10.10-Stable", 23, true))
-        assertNull(checker.check("26.10.11-alpha1", 25, true))
+        assertEquals(25L, checker.check("26.10.10-Stable", 23, true, cycle = ReleaseCycle.NIGHTLY)!!.code)
+        assertNull(checker.check("26.10.11-alpha1", 25, true, cycle = ReleaseCycle.NIGHTLY))
     }
-    @Test fun promotedAlphaBytesStayOnStableTrack() = runBlocking {
+    @Test fun selectedCycleControlsPhoneAndTvRegardlessOfStableCounterparts() = runBlocking {
         val checker = service { url -> when {
             url.contains("api.github.com") -> JSONArray().put(entry("26.10.10-Stable", 23, preview = false))
-                .put(entry("26.10.11-Stable", 24, preview = false)).put(entry("26.10.12-alpha1", 25)).toString()
+                .put(entry("26.10.11-Stable", 24, preview = false)).put(entry("26.10.12-rc1", 25))
+                .put(entry("26.10.13-nightly", 26)).toString()
             url.contains("26.10.10") -> manifest(23, "26.10.10-alpha1").toString()
+            url.contains("26.10.12") -> manifest(25, "26.10.12-rc1").toString()
+            url.contains("26.10.13") -> manifest(26, "26.10.13-nightly").toString()
             else -> manifest(24, "26.10.11-alpha1").toString()
         } }
-        assertEquals(24L, checker.check("26.10.10-alpha1", 23, true)!!.code)
+        for (tv in listOf(false, true)) {
+            for (installed in listOf("26.10.10-alpha1", "26.10.10-Stable", "26.10.10-nightly")) {
+                assertEquals(24L, checker.check(installed, 23, tv)!!.code)
+                assertEquals(25L, checker.check(installed, 23, tv, cycle = ReleaseCycle.RELEASE_CANDIDATE)!!.code)
+                val update = checker.check(installed, 23, tv, cycle = ReleaseCycle.NIGHTLY)!!
+                assertEquals(26L, update.code)
+                assertEquals("26.10.13-nightly", update.release)
+                assertNull(checker.check(installed, 27, tv, cycle = ReleaseCycle.NIGHTLY))
+            }
+        }
     }
     @Test fun missingTargetMetadataIsSkipped() = runBlocking {
         val checker = service { url -> if (url.contains("api.github.com")) JSONArray().put(entry("26.10.11-alpha1", 25)).toString()
             else manifest(25, "26.10.11-alpha1").apply { remove("artifacts") }.toString() }
-        assertNull(checker.check("26.10.10-alpha1", 23, true))
+        assertNull(checker.check("26.10.10-alpha1", 23, true, cycle = ReleaseCycle.NIGHTLY))
     }
     @Test fun corruptAndTruncatedDownloadsAreRemoved() = runBlocking {
         val checker = service { String(bytes) }
@@ -123,10 +136,10 @@ class UpdateClientTest {
             else -> manifest(24, "26.10.11-alpha4").toString()
         } }
         for (tv in listOf(false, true)) {
-            val update = checker.check("26.10.11-alpha4", 24, tv, installedHash = hash(bytes))!!
+            val update = checker.check("26.10.11-alpha4", 24, tv, installedHash = hash(bytes), cycle = ReleaseCycle.RELEASE_CANDIDATE)!!
             assertEquals("26.10.11-RC10", update.release)
-            assertNull(checker.check("26.10.11-alpha4", 24, tv, update.release, hash(bytes)))
-            assertNull(checker.check("26.10.11-alpha4", 24, tv, installedHash = "0".repeat(64)))
+            assertNull(checker.check("26.10.11-alpha4", 24, tv, update.release, hash(bytes), ReleaseCycle.RELEASE_CANDIDATE))
+            assertNull(checker.check("26.10.11-alpha4", 24, tv, installedHash = "0".repeat(64), cycle = ReleaseCycle.RELEASE_CANDIDATE))
         }
         val stable = service { url -> if (url.contains("api.github.com"))
             JSONArray().put(entry("26.10.11-Stable", 24, preview = false)).toString()

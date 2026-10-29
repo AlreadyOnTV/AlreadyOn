@@ -94,7 +94,15 @@ internal class ServerClient(val origin: String, store: SessionStore, trustedCa: 
                 val text = source?.readUtf8().orEmpty()
                 if (!it.isSuccessful) {
                     val code = runCatching { JSONObject(text).optString("code") }.getOrDefault("")
-                    val message = when (code) {
+                    val profileMessage = if (path.startsWith("/api/profiles")) when (runCatching { JSONObject(text).optString("error") }.getOrNull()) {
+                        "there must be at least one admin profile" -> "Keep at least one Admin profile in this account."
+                        "another profile already has that name" -> "A profile with that name already exists."
+                        "name must be 1-40 characters with no control characters" -> "Enter a name of 1-40 characters without control characters."
+                        "this account already has the maximum number of profiles" -> "This account already has the maximum of 12 profiles."
+                        "profile not found" -> "This profile is no longer available."
+                        else -> null
+                    } else null
+                    val message = profileMessage ?: when (code) {
                         "password_change_required" -> "Change your password before continuing."
                         "password_locked" -> "This account’s username and password are locked."
                         "username_taken" -> "That username is already in use."

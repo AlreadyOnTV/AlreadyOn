@@ -14,9 +14,16 @@ class PromotionOutputs(unittest.TestCase):
     def test_dev_only_publishes_nightly_after_full_validation(self):
         workflow = yaml.safe_load((ROOT / '.github/workflows/android-release.yml').read_text())
         self.assertEqual(workflow['jobs']['candidate']['if'],
-                         "inputs.operation == 'nightly' && github.ref == 'refs/heads/dev'")
+                         "contains(fromJSON('[\"nightly\",\"rc-candidate\"]'), inputs.operation) && github.ref == 'refs/heads/dev'")
         parent = yaml.safe_load((ROOT / '.github/workflows/rebuild.yml').read_text())
-        self.assertEqual(parent['jobs']['android']['with']['operation'], 'nightly')
+        self.assertEqual(parent['jobs']['android']['with']['operation'],
+                 "${{ inputs.publication == 'rc-candidate' && 'rc-candidate' || 'nightly' }}")
+        steps = parent['jobs']['publish']['steps']
+        channel = next(step for step in steps if step.get('name') == "Publish nightly and overwrite today's date tag")
+        self.assertEqual(channel['if'], "inputs.publication != 'rc-candidate'")
+        record = next(step for step in steps if step.get('name') == 'Record validated RC image without changing channels')
+        self.assertEqual(record['if'], "inputs.publication == 'rc-candidate'")
+        self.assertNotIn('publish-image.py', record['run'])
         for check in ('codeql', 'quality', 'tests', 'android_checks'):
             self.assertIn(check, parent['jobs']['publish']['needs'])
         self.assertIn('publish', parent['jobs']['android']['needs'])

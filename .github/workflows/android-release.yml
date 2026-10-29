@@ -40,7 +40,7 @@ concurrency:
   cancel-in-progress: false
 jobs:
   candidate:
-    if: inputs.operation == 'nightly' && github.ref == 'refs/heads/dev'
+    if: contains(fromJSON('["nightly","rc-candidate"]'), inputs.operation) && github.ref == 'refs/heads/dev'
     runs-on: ubuntu-24.04
     timeout-minutes: 30
     permissions:
@@ -80,10 +80,13 @@ jobs:
           GH_TOKEN: ${{ github.token }}
           SOURCE_SHA: ${{ inputs.source_sha || github.sha }}
           RELEASE_DATE: ${{ inputs.release_date }}
+          OPERATION: ${{ inputs.operation }}
         run: |
           day=$(python3 scripts/ci/release-context.py date --sha "$SOURCE_SHA" --date "$RELEASE_DATE")
           echo "release_date=$day" >> "$GITHUB_OUTPUT"
           operation=plan-nightly
+          if [ "$OPERATION" = rc-candidate ]; then operation=plan-rc; fi
+          PYTHONPATH=scripts/ci python3 -c 'import os; import importlib; importlib.import_module("android-release").require_tested_image(os.environ["GITHUB_REPOSITORY"], os.environ["SOURCE_SHA"])'
           python3 scripts/ci/android-release.py "$operation" --sha "$SOURCE_SHA" --day "$day" >> "$GITHUB_OUTPUT"
       - name: Require permanent maintainer signing credentials
         if: steps.version.outputs.existing != 'true'
@@ -160,8 +163,10 @@ jobs:
           SOURCE_SHA: ${{ inputs.source_sha || github.sha }}
           VERSION_NAME: ${{ steps.version.outputs.tag }}
           VERSION_CODE: ${{ steps.version.outputs.version_code }}
+          OPERATION: ${{ inputs.operation }}
         run: |
           operation=nightly
+          if [ "$OPERATION" = rc-candidate ]; then operation=candidate; fi
           python3 scripts/ci/android-release.py "$operation" --sha "$SOURCE_SHA" \
             --tag "$VERSION_NAME" --version-code "$VERSION_CODE" --directory "$RUNNER_TEMP/android-assets" --require-inventory
       - name: Summarize Android publication

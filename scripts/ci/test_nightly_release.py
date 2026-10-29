@@ -11,6 +11,21 @@ SHA = 'a' * 40
 
 
 class NightlyReleaseTests(unittest.TestCase):
+    def test_explicit_rc_plan_keeps_nightly_and_allocates_lowercase_draft(self):
+        entries = [{'tag_name': '26.10.26-nightly', 'draft': False, 'body': f'Source commit: `{"b" * 40}`'}]
+        with patch.object(release, 'releases', return_value=entries), \
+                patch.object(release, 'next_version_code', return_value=101), \
+                patch.object(release, 'run', return_value=''), patch('builtins.print') as output:
+            release.plan('owner/repo', SHA, '26.10.26', rc=True)
+            output.assert_any_call('tag=26.10.26-rc1')
+            output.assert_any_call('version_code=101')
+            output.assert_any_call('stage=rc')
+
+    def test_explicit_rc_plan_still_refuses_a_stable_date(self):
+        entries = [{'tag_name': '26.10.26-stable', 'draft': False, 'body': ''}]
+        with patch.object(release, 'releases', return_value=entries), self.assertRaisesRegex(ValueError, 'stable'):
+            release.plan('owner/repo', SHA, '26.10.26', rc=True)
+
     def test_new_tags_and_legacy_tags_share_calendar_and_stage_order(self):
         for tag, stage in [('26.10.26-nightly', 'nightly'), ('26.10.26-rc1', 'rc'),
                            ('26.10.26-stable', 'stable'), ('26.10.25-RC1', 'rc'),

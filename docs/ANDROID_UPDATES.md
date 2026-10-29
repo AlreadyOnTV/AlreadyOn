@@ -1,8 +1,14 @@
 # Android app updates
 
-Phone and TV release builds check public GitHub releases on startup. The required policy for future builds is to offer newer alpha, RC and stable releases regardless of the installed release stage. Installing or accepting Stable must not restrict subsequent checks to stable releases. For example, `26.10.18-stable` should offer `26.10.25-alpha1`, then newer alpha and RC releases as they become available. New nightly builds also recognize `YY.MM.DD-nightly` releases and asset URLs, ordered before RC/Stable on the same date. Previously installed APKs do not gain nightly recognition until updated. Drafts and non-Android tags are ignored. Checks inspect up to ten pages of thirty releases; offline/failed checks stay quiet.
+Phone and TV release builds check public GitHub releases on startup. Admin profiles choose the installation's Release Cycle in the top-right profile menu under Settings, above Sign Out. Stable is the default, independently of the installed release stage:
 
-The updater shipped through `26.10.25-alpha2` still restricts Stable installations, including preview APKs with a matching published Stable counterpart, to stable releases. Implementing the policy above requires an updater change; this documentation does not change existing APK behavior. Those installations may need one manual signed APK update preserving data to receive the revised updater.
+- **Stable:** published stable releases only.
+- **Release Candidate:** RC and stable releases.
+- **Nightly:** all supported stages, including nightlies and historical alpha/beta releases.
+
+The device-local preference survives restarts and sign-out. Changing it rechecks releases unless installation is underway. It never permits downgrades; returning to Stable may require waiting for a higher-code stable release. Drafts/non-Android tags are ignored. Checks inspect ten pages of thirty releases; offline/failed checks stay quiet.
+
+APKs through `26.10.29-nightly` lack this setting. `26.10.25-Stable` also predates nightly tag/URL recognition and needs a manual signed update preserving data. Published APKs remain immutable.
 
 Higher version codes offer APK installation. Identical-APK promotions to later RC/Stable stages also offer Update/Cancel. Acceptance verifies the installed APK checksum against published target metadata and saves the release label without reinstalling. The prompt and Dashboard App Version show that label across restarts and installer cleanup, only for the matching APK. Embedded package versions remain immutable. Numeric stage comparisons reject older labels and lower codes. Existing clients need a newer updater-enabled APK for promotion prompts.
 
