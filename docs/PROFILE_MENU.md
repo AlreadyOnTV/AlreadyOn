@@ -24,6 +24,8 @@ See [credential visibility](SAVED_CREDENTIALS.md) for draft-only controls.
 
 Clients refresh shared profiles/avatars every five minutes and on visibility/resume. Native Sign Out retains encrypted sessions for reconnection; WebUI revocation remains authoritative. PINs/drafts stay independent.
 
+The TV profile chooser updates automatically every five seconds, without a Refresh link or resetting remote focus. Sign Out remains available, including when no profiles exist.
+
 ## WebUI profile autosave
 
 WebUI stays on-page: dropdowns/icons save immediately; names save after typing pauses/blur, never blank. PINs require Save PIN with matching 4–6 digits; Cancel restores pre-edit view. Removal requires confirmation. No page-level Save Changes/Cancel; native save flows are unchanged.

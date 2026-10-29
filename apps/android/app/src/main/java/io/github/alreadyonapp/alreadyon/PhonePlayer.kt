@@ -97,6 +97,7 @@ private fun NativeVideo(playback: PhonePlayback, model: PhoneModel, modifier: Mo
                 override fun onRenderedFirstFrame() {
                     if (firstFrame) return
                     firstFrame = true
+                    if (BuildConfig.IS_TV) model.playbackStarted(playback.revision)
                     if (android.util.Log.isLoggable(PLAYBACK_LOG_TAG, android.util.Log.DEBUG)) android.util.Log.d(PLAYBACK_LOG_TAG, "First frame revision=${playback.revision} playerMs=${SystemClock.elapsedRealtime()-preparedAt} tuneMs=${SystemClock.elapsedRealtime()-playback.requestedAt}")
                 }
                 private var aligned = false

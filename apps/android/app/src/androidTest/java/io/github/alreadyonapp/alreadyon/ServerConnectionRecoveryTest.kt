@@ -24,6 +24,7 @@ import org.junit.Test
 import org.junit.runner.RunWith
 import java.util.concurrent.TimeUnit
 
+// Staged recovery checks use a disposable server and namespaced device preferences.
 @RunWith(AndroidJUnit4::class)
 class ServerConnectionRecoveryTest {
     @get:Rule val compose = createAndroidComposeRule<MainActivity>()
@@ -39,10 +40,12 @@ class ServerConnectionRecoveryTest {
         val scenario = arguments.getString("recoveryScenario")
         assumeTrue("Requires an isolated staged server fixture", scenario != null)
         val origin = requireNotNull(arguments.getString("recoveryOrigin"))
+        val serverName = arguments.getString("recoveryServerName") ?: "Recovery Fixture"
+        val username = arguments.getString("recoveryUsername") ?: "fixture"
         require(origin == "https://127.0.0.1:19950")
         val application = FixtureApplication(InstrumentationRegistry.getInstrumentation().targetContext)
         val preferences = application.getSharedPreferences("connection", Context.MODE_PRIVATE)
-        if (scenario == "login" || scenario == "cleanup") {
+        if (scenario in setOf("login", "form", "cleanup")) {
             preferences.edit().clear().commit()
             application.getSharedPreferences("encrypted_session", Context.MODE_PRIVATE).edit().clear().commit()
         }
@@ -53,7 +56,10 @@ class ServerConnectionRecoveryTest {
             model = ViewModelProvider(store, ViewModelProvider.AndroidViewModelFactory(application))[PhoneModel::class.java]
             compose.activity.setContent {
                 val state by model.state.collectAsState()
-                PhoneTheme { ServerConnectScreen(state, model, Modifier.fillMaxSize()) }
+                if (scenario in setOf("playback", "resumePlayback")) {
+                    StartupPreload(ready = !state.restoringConnection && (state.channel == null || state.playbackReady || state.error != null),
+                        showContent = !state.restoringConnection) { TvShell(state, model, rememberGuideTime(state.channels)) }
+                } else PhoneTheme { ServerConnectScreen(state, model, Modifier.fillMaxSize()) }
             }
         }
         fun settled() {
@@ -61,19 +67,64 @@ class ServerConnectionRecoveryTest {
             compose.waitUntil(30_000) { !model.state.value.busy }
         }
         fun signIn(certificate: String) {
-            compose.runOnUiThread { model.signInWithPIN(origin, "fixture", "123456", certificate, "Recovery Fixture") }
+            compose.runOnUiThread { model.signInWithPIN(origin, username, "123456", certificate, serverName) }
             settled()
             compose.runOnIdle { assertTrue(model.state.value.error.orEmpty(), model.state.value.signedIn) }
         }
         fun showCredentials() {
-            compose.onNodeWithText("Recovery Fixture (Recently connected)", substring = true).performClick()
+            if (!BuildConfig.IS_TV || !model.state.value.trustIssue) {
+                compose.onNodeWithText("$serverName (Recently connected)", substring = true).performClick()
+            }
             compose.waitUntil(20_000) { compose.onAllNodesWithText("Username").fetchSemanticsNodes().isNotEmpty() }
             compose.onNodeWithText("Username").assertIsDisplayed()
-            compose.onNodeWithText("TV PIN").assertIsDisplayed()
+            compose.onNodeWithText(if (BuildConfig.IS_TV) "TV Pairing Pin" else "TV PIN").assertIsDisplayed()
         }
         try {
             settled()
             when (scenario) {
+                "playback", "resumePlayback" -> {
+                    assumeTrue(BuildConfig.IS_TV)
+                    compose.runOnIdle { assertTrue(model.state.value.error.orEmpty(), model.state.value.signedIn) }
+                    if (scenario == "playback") {
+                        compose.runOnUiThread { model.selectProfile(model.state.value.profiles.first(), "") }
+                        settled()
+                    }
+                    compose.waitUntil(20_000) { model.state.value.playbackReady || model.state.value.error != null }
+                    compose.runOnIdle {
+                        assertTrue(model.state.value.error.orEmpty(), model.state.value.playbackReady)
+                        assertNotNull(model.state.value.profile)
+                        assertNotNull(model.state.value.channel)
+                        assertNotNull(model.state.value.playback)
+                    }
+                    compose.waitUntil(5_000) { compose.onAllNodesWithTag("startup-cover").fetchSemanticsNodes().isEmpty() }
+                    compose.onNodeWithText("Select Profile").assertDoesNotExist()
+                    compose.onNodeWithText("Connect to your AlreadyOn server").assertDoesNotExist()
+                    compose.onNodeWithText("Refresh").assertDoesNotExist()
+                    val device = androidx.test.uiautomator.UiDevice.getInstance(InstrumentationRegistry.getInstrumentation())
+                    device.takeScreenshot(java.io.File(application.getExternalFilesDir(null), "recovery-$scenario.png"))
+                }
+                "form" -> {
+                    assumeTrue(BuildConfig.IS_TV)
+                    compose.onNodeWithText("Hostname / IP").performTextInput("127.0.0.1")
+                    compose.onNodeWithText("Port").performTextClearance()
+                    compose.onNodeWithText("Port").performTextInput("19950")
+                    compose.onNodeWithText("Check Server").performClick()
+                    compose.waitUntil(20_000) { compose.onAllNodesWithText("Username").fetchSemanticsNodes().isNotEmpty() }
+                    compose.onNodeWithText("TV Pairing Pin").assertIsDisplayed()
+                    compose.onNodeWithText("Enter your 6–12 digit TV PIN").assertDoesNotExist()
+                    val connect = compose.onNodeWithText("Connect").fetchSemanticsNode().boundsInRoot
+                    val back = compose.onNodeWithText("Go Back").fetchSemanticsNode().boundsInRoot
+                    val help = compose.onNodeWithText("Help").fetchSemanticsNode().boundsInRoot
+                    assertEquals(connect.top, back.top, 1f)
+                    assertEquals(back.top, help.top, 1f)
+                    assertTrue(connect.right < back.left && back.right < help.left)
+                    compose.onNodeWithText("Help").performClick()
+                    compose.onNodeWithText("Set your username and TV Pairing Pin in your server’s WebUI under Settings.", substring = true).assertIsDisplayed()
+                    compose.onNodeWithText("Close").performClick()
+                    compose.onNodeWithText("Go Back").performClick()
+                    compose.onNodeWithText("127.0.0.1").assertExists()
+                    compose.onNodeWithText("19950").assertExists()
+                }
                 "login" -> {
                     val base = origin.toHttpUrl()
                     val http = OkHttpClient.Builder().bootstrapTls(base).callTimeout(10, TimeUnit.SECONDS).build()
@@ -97,7 +148,7 @@ class ServerConnectionRecoveryTest {
                         assertNotNull(model.state.value.error)
                     }
                     assertTrue(SessionStore(application).read(origin).isNotEmpty())
-                    compose.onNodeWithText("Recovery Fixture (Recently connected)", substring = true).assertIsDisplayed()
+                    compose.onNodeWithText("$serverName (Recently connected)", substring = true).assertIsDisplayed()
                 }
                 "revoked", "relogin" -> {
                     compose.runOnIdle { assertFalse(model.state.value.signedIn); assertFalse(model.state.value.trustIssue) }
@@ -113,20 +164,24 @@ class ServerConnectionRecoveryTest {
                     compose.runOnIdle { assertFalse(model.state.value.signedIn); assertTrue(model.state.value.trustIssue) }
                     assertTrue(SessionStore(application).read(origin).isNotEmpty())
                     val previousCa = preferences.getString("trusted_ca", null)
-                    compose.runOnUiThread { model.reviewServerTrust() }
+                    if (!BuildConfig.IS_TV) compose.runOnUiThread { model.reviewServerTrust() }
                     showCredentials()
                     val accept = compose.onNodeWithText("Accept New CA")
                     accept.assertIsDisplayed()
                     compose.onNodeWithText("Connect").assertDoesNotExist()
-                    assertTrue(accept.fetchSemanticsNode().boundsInRoot.top > compose.onNodeWithText("TV PIN").fetchSemanticsNode().boundsInRoot.bottom)
+                    assertTrue(accept.fetchSemanticsNode().boundsInRoot.top > compose.onNodeWithText(if (BuildConfig.IS_TV) "TV Pairing Pin" else "TV PIN").fetchSemanticsNode().boundsInRoot.bottom)
+                    if (BuildConfig.IS_TV) {
+                        compose.onNodeWithText("Username").performTextInput(username)
+                        compose.onNodeWithText("TV Pairing Pin").performTextInput("123456")
+                    }
                     accept.performClick()
                     settled()
                     compose.onNodeWithText("Accept New CA").assertDoesNotExist()
-                    compose.onNodeWithText("Connect").assertIsDisplayed()
-                    if (BuildConfig.IS_TV) compose.onNodeWithText("Connect").assertIsFocused()
+                    if (BuildConfig.IS_TV) compose.runOnIdle { assertTrue(model.state.value.error.orEmpty(), model.state.value.signedIn) }
+                    else compose.onNodeWithText("Connect").assertIsDisplayed()
                     val acceptedCa = requireNotNull(preferences.getString("trusted_ca", null))
                     assertFalse(sameServerTrust(previousCa, acceptedCa))
-                    signIn(acceptedCa)
+                    if (!BuildConfig.IS_TV) signIn(acceptedCa)
                 }
                 else -> error("Unknown recovery scenario")
             }

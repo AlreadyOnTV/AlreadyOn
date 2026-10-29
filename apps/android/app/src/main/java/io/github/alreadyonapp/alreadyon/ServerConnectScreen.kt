@@ -14,11 +14,9 @@ import androidx.compose.ui.Alignment
 import androidx.compose.ui.focus.FocusDirection
 import androidx.compose.ui.focus.FocusRequester
 import androidx.compose.ui.focus.focusRequester
-import androidx.compose.ui.focus.onFocusChanged
 import androidx.compose.ui.platform.LocalSoftwareKeyboardController
 import androidx.compose.ui.platform.LocalFocusManager
 import androidx.compose.ui.platform.LocalInputModeManager
-import androidx.compose.ui.platform.LocalWindowInfo
 import androidx.compose.ui.input.InputMode
 import androidx.compose.ui.text.input.ImeAction
 import androidx.compose.ui.input.key.*
@@ -74,19 +72,22 @@ internal fun ServerConnectScreen(state: PhoneState, model: PhoneModel, modifier:
     val recent = remember { serverOrigin(state.origin)?.let { TvServer("${state.serverName} (Recently connected)", it) } }
     val servers = remember { mutableStateListOf<TvServer>().apply { recent?.let { add(it) } } }
     var scan by remember { mutableIntStateOf(0) }
-    var selected by remember { mutableStateOf<TvServer?>(null) }
+    var selected by remember { mutableStateOf<TvServer?>(
+        if (BuildConfig.IS_TV && state.trustIssue) serverOrigin(state.origin)?.let { TvServer(state.serverName, it) } else null) }
     var trust by remember { mutableStateOf<TvTrust?>(null) }
     var error by remember { mutableStateOf<String?>(null) }
     var checking by remember { mutableStateOf(false) }
     var pin by remember { mutableStateOf("") }
     var pinVisible by remember { mutableStateOf(false) }
     var username by remember { mutableStateOf("") }
+    var help by remember { mutableStateOf(false) }
     var address by remember { mutableStateOf(ManualServerAddress()) }
     val portFocus = remember { FocusRequester() }
     var remaining by remember { mutableIntStateOf(30) }
     val scope = rememberCoroutineScope()
     val keyboard = LocalSoftwareKeyboardController.current
     val focusManager = LocalFocusManager.current
+    val inputMode = LocalInputModeManager.current
     // TV arrows leave the address editor vertically instead of moving its text cursor.
     // Keep Left/Right available for editing and leave phone keyboard behavior unchanged.
     val addressNavigation = Modifier.onPreviewKeyEvent { event ->
@@ -102,11 +103,15 @@ internal fun ServerConnectScreen(state: PhoneState, model: PhoneModel, modifier:
     LaunchedEffect(trust) { if (trust != null) usernameFocus.requestFocus() }
     val pinFocus = remember { FocusRequester() }
     val connectFocus = remember { FocusRequester() }
-    fun enterPin() { pinFocus.requestFocus(); if (!BuildConfig.IS_TV) keyboard?.show() }
+    fun enterPin() { pinFocus.requestFocus(); keyboard?.show() }
     fun closePin() {
         keyboard?.hide()
         focusManager.clearFocus(force = true)
-        if (username.isNotBlank() && pin.length in 6..12) connectFocus.requestFocus()
+        if (username.isNotBlank() && pin.length in 6..12) scope.launch {
+            if (BuildConfig.IS_TV) inputMode.requestInputMode(InputMode.Keyboard)
+            withFrameNanos { }
+            connectFocus.requestFocus()
+        }
     }
     LaunchedEffect(scan) {
         remaining = 30
@@ -132,6 +137,16 @@ internal fun ServerConnectScreen(state: PhoneState, model: PhoneModel, modifier:
             catch (e: Exception) { error = e.message ?: "Could not check server." }
             finally { checking = false }
         }
+    }
+    LaunchedEffect(state.trustIssue, state.origin) {
+        if (BuildConfig.IS_TV && state.trustIssue) {
+            serverOrigin(state.origin)?.let { select(TvServer(state.serverName, it)) }
+        }
+    }
+    fun goBack() {
+        keyboard?.hide()
+        selected = null; trust = null; pin = ""; pinVisible = false; error = null
+        model.dismissError(); model.dismissTrustIssue()
     }
     DisposableEffect(scan, remaining == 0, selected) {
         if (remaining == 0 || selected != null) return@DisposableEffect onDispose {}
@@ -193,10 +208,26 @@ internal fun ServerConnectScreen(state: PhoneState, model: PhoneModel, modifier:
                             true
                         } else false
                     }, enabled = !state.busy)
-                Text("Enter your 6–12 digit TV PIN")
+                if (!BuildConfig.IS_TV) Text("Enter your 6–12 digit TV PIN")
                 ServerPinField(pin, { pin = it }, pinVisible, { pinVisible = !pinVisible },
                     enabled = !state.busy, onDone = ::closePin,
                     modifier = Modifier.fillMaxWidth(if (BuildConfig.IS_TV) 0.6f else 1f).focusRequester(pinFocus))
+                if (BuildConfig.IS_TV) {
+                    Row(horizontalArrangement = Arrangement.spacedBy(12.dp)) {
+                        Button(modifier = Modifier.focusRequester(connectFocus).tvFocusOutline(), onClick = {
+                            if (username.isBlank() || pin.length !in 6..12) error = "Enter your username and 6–12 digit TV Pairing Pin."
+                            else {
+                                error = null
+                                keyboard?.hide()
+                                model.signInWithPIN(selected!!.origin, username, pin, trust!!.certificate, trust!!.name, acceptNewCa = changedCa)
+                            }
+                        }, enabled = !state.busy && !checking) { Text(if (changedCa) "Accept New CA" else "Connect") }
+                        Button(modifier = Modifier.tvFocusOutline(), onClick = ::goBack,
+                            enabled = !state.busy && !checking) { Text("Go Back") }
+                        Button(modifier = Modifier.tvFocusOutline(), onClick = { keyboard?.hide(); help = true },
+                            enabled = !state.busy) { Text("Help") }
+                    }
+                } else {
                 var acceptingTrust by remember { mutableStateOf(false) }
                 LaunchedEffect(changedCa, state.busy) {
                     if (acceptingTrust && !changedCa && !state.busy) {
@@ -213,78 +244,39 @@ internal fun ServerConnectScreen(state: PhoneState, model: PhoneModel, modifier:
                     if (username.isBlank() || pin.length !in 6..12) error = "Enter your username and 6–12 digit TV PIN."
                     else { model.signInWithPIN(selected!!.origin, username, pin, trust!!.certificate, trust!!.name); pin = ""; pinVisible = false }
                 }, enabled = !state.busy) { Text("Connect") }
+                }
             }
-            Button(modifier = Modifier.tvFocusOutline(), onClick = { selected = null; trust = null; pin = ""; pinVisible = false; error = null; model.dismissError() }, enabled = !checking && !state.busy) { Text("Choose Another Server") }
+            if (!BuildConfig.IS_TV || trust == null) Button(modifier = Modifier.tvFocusOutline(), onClick = ::goBack,
+                enabled = !checking && !state.busy) { Text(if (BuildConfig.IS_TV) "Go Back" else "Choose Another Server") }
         }
         error?.let { Text(it, color = MaterialTheme.colorScheme.error) }
         if (BuildConfig.IS_TV) state.error?.let { Text(it, color = MaterialTheme.colorScheme.error) }
     }
     }
+    if (help) AlertDialog(onDismissRequest = { help = false },
+        title = { Text("Connect to your server") },
+        text = { Text("Set your username and TV Pairing Pin in your server’s WebUI under Settings. Use that username and 6–12 digit pairing PIN to connect. Your profile PIN is separate.") },
+        confirmButton = { TextButton(onClick = { help = false }) { Text("Close") } })
 }
 
-/** Phones use their numeric IME; TV owns its keypad so every remote starts on 1. */
+/** Use the installed numeric keyboard for server pairing. */
 @Composable
 internal fun ServerPinField(pin: String, onPin: (String) -> Unit, visible: Boolean,
     onToggleVisibility: () -> Unit, enabled: Boolean, onDone: () -> Unit, modifier: Modifier = Modifier) {
-    var keypad by remember { mutableStateOf(false) }
-    var closingKeypad by remember { mutableStateOf(false) }
-    val firstDigit = remember { FocusRequester() }
-    val keyboard = LocalSoftwareKeyboardController.current
-    val parentWindowFocused = LocalWindowInfo.current.isWindowFocused
-    LaunchedEffect(closingKeypad, parentWindowFocused) {
-        if (closingKeypad && parentWindowFocused) {
-            withFrameNanos { }
-            onDone()
-            closingKeypad = false
-        }
+    val visibilityIcon: (@Composable () -> Unit)? = if (BuildConfig.IS_TV) null else {
+        { PinVisibilityButton(visible, enabled, onToggleVisibility) }
     }
-    val fieldModifier = if (BuildConfig.IS_TV) modifier.onFocusChanged {
-        if (it.isFocused && enabled && !closingKeypad) {
-            keyboard?.hide(); keypad = true
-        }
-    }.onPreviewKeyEvent {
-        if (it.key in listOf(Key.Enter, Key.NumPadEnter, Key.DirectionCenter)) {
-            if (it.type == KeyEventType.KeyUp && enabled) keypad = true
-            true
-        } else false
-    } else modifier
     OutlinedTextField(pin, { onPin(it.filter { digit -> digit in '0'..'9' }.take(12)) },
-        label = { Text("TV PIN") }, singleLine = true, readOnly = BuildConfig.IS_TV,
-        visualTransformation = if (visible) VisualTransformation.None else PasswordVisualTransformation(),
-        trailingIcon = { PinVisibilityButton(visible, enabled, onToggleVisibility) },
-        keyboardOptions = KeyboardOptions(keyboardType = KeyboardType.NumberPassword, imeAction = ImeAction.Done),
-        keyboardActions = KeyboardActions(onDone = { onDone() }), modifier = fieldModifier, enabled = enabled)
-    if (BuildConfig.IS_TV && keypad) {
-        fun close() { closingKeypad = true; keypad = false }
-        AlertDialog(onDismissRequest = { close() }, title = { Text("TV PIN") },
-            text = {
-                val inputMode = LocalInputModeManager.current
-                val windowFocused = LocalWindowInfo.current.isWindowFocused
-                LaunchedEffect(windowFocused) {
-                    if (windowFocused) {
-                        inputMode.requestInputMode(InputMode.Keyboard)
-                        withFrameNanos { }
-                        firstDigit.requestFocus()
-                    }
-                }
-                Column(verticalArrangement = Arrangement.spacedBy(8.dp)) {
-                    Text(if (visible) pin else "•".repeat(pin.length))
-                    for (row in listOf(listOf("1", "2", "3"), listOf("4", "5", "6"), listOf("7", "8", "9"), listOf("Delete", "0", "Done"))) {
-                        Row(horizontalArrangement = Arrangement.spacedBy(8.dp)) {
-                            row.forEach { key ->
-                                Button(onClick = {
-                                    when (key) {
-                                        "Delete" -> onPin(pin.dropLast(1))
-                                        "Done" -> close()
-                                        else -> if (pin.length < 12) onPin(pin + key)
-                                    }
-                                }, modifier = Modifier.weight(1f).then(if (key == "1") Modifier.focusRequester(firstDigit) else Modifier).tvFocusOutline()) { Text(key) }
-                            }
-                        }
-                    }
-                }
-            }, confirmButton = {})
-    }
+        label = { Text(if (BuildConfig.IS_TV) "TV Pairing Pin" else "TV PIN") }, singleLine = true,
+        visualTransformation = if (BuildConfig.IS_TV || visible) VisualTransformation.None else PasswordVisualTransformation(),
+        trailingIcon = visibilityIcon,
+        keyboardOptions = KeyboardOptions(keyboardType = if (BuildConfig.IS_TV) KeyboardType.Number else KeyboardType.NumberPassword, imeAction = ImeAction.Done),
+        keyboardActions = KeyboardActions(onDone = { onDone() }), modifier = modifier.onPreviewKeyEvent {
+            if (BuildConfig.IS_TV && enabled && it.key in listOf(Key.Enter, Key.NumPadEnter)) {
+                if (it.type == KeyEventType.KeyUp) onDone()
+                true
+            } else false
+        }, enabled = enabled)
 }
 
 /** Match the WebUI eye control without adding an icon library for two paths. */
@@ -306,7 +298,7 @@ private fun PinVisibilityButton(visible: Boolean, enabled: Boolean, toggle: () -
 
 @Composable
 internal fun ServerTrustAlert(state: PhoneState, model: PhoneModel) {
-    if (!state.trustIssue) return
+    if (BuildConfig.IS_TV || !state.trustIssue) return
     AlertDialog(onDismissRequest = model::dismissTrustIssue,
         title = { Text("Server certificate trust failed") },
         text = { Text("The server no longer validates against its saved CA, or its certificate has expired. Connections are blocked. Review the server and accept a new CA only if you expected a change.") },

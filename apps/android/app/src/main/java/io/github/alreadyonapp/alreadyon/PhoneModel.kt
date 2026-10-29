@@ -36,6 +36,7 @@ internal data class PhoneState(
     val passwordLocked: Boolean = true, val settings: String? = null, val notice: String? = null,
     val origin: String = "", val serverName: String = "AlreadyOn", val trustedCa: String? = null, val signedIn: Boolean = false, val busy: Boolean = false,
     val error: String? = null, val trustIssue: Boolean = false, val profiles: List<ViewerProfile> = emptyList(),
+    val restoringConnection: Boolean = false, val playbackReady: Boolean = false,
     val profile: ViewerProfile? = null, val channels: List<GuideChannel> = emptyList(),
     val channel: GuideChannel? = null, val playback: PhonePlayback? = null,
     val quality: Int = 0, val subtitleIndex: Int? = null, val subtitleFileId: Long? = null, val audioIndex: Int? = null, val audioFileId: Long? = null,
@@ -46,7 +47,7 @@ internal data class PhoneState(
 internal class PhoneModel(application: Application) : AndroidViewModel(application) {
     private val sessionStore = SessionStore(application)
     private val preferences = application.getSharedPreferences("connection", Application.MODE_PRIVATE)
-    private val mutable = MutableStateFlow(PhoneState(serverName = preferences.getString("server_name", "AlreadyOn").orEmpty(), origin = preferences.getString("server_origin", "").orEmpty(), trustedCa = preferences.getString("trusted_ca", null)))
+    private val mutable = MutableStateFlow(PhoneState(serverName = preferences.getString("server_name", "AlreadyOn").orEmpty(), origin = preferences.getString("server_origin", "").orEmpty(), trustedCa = preferences.getString("trusted_ca", null), restoringConnection = BuildConfig.IS_TV))
     val state = mutable.asStateFlow()
     private var client: ServerClient? = null
     private var action: Job? = null
@@ -73,7 +74,7 @@ internal class PhoneModel(application: Application) : AndroidViewModel(applicati
                 handleFailure(e)
                 update { it.copy(error = safeError(e)) }
             }
-            finally { update { it.copy(busy = false) } }
+            finally { update { it.copy(busy = false, restoringConnection = false) } }
         }
     }
 
@@ -139,13 +140,21 @@ internal class PhoneModel(application: Application) : AndroidViewModel(applicati
     }
 
     /** Native clients accept an instance CA before sending its PIN or saving a session. */
-    fun signInWithPIN(origin: String, username: String, pin: String, trustedCa: String, serverName: String = "AlreadyOn") = perform {
+    fun signInWithPIN(origin: String, username: String, pin: String, trustedCa: String, serverName: String = "AlreadyOn", acceptNewCa: Boolean = false) = perform {
         val normalized = serverOrigin(origin) ?: throw IOException("Invalid local server address.")
-        if (normalized == state.value.origin && state.value.trustedCa != null && !sameServerTrust(state.value.trustedCa, trustedCa)) {
+        if (acceptNewCa && (!BuildConfig.IS_TV || normalized != state.value.origin)) throw IOException("Select the saved server before accepting its new CA.")
+        if (username.isBlank() || pin.length !in 6..12 || pin.any { it !in '0'..'9' }) throw IOException("Enter your username and 6–12 digit TV PIN.")
+        if (normalized == state.value.origin && state.value.trustedCa != null && !sameServerTrust(state.value.trustedCa, trustedCa) && !acceptNewCa) {
             throw IOException("The server CA changed. Review and accept the new CA before connecting.")
         }
         client?.clearSession()
+        if (acceptNewCa) sessionStore.clear(normalized)
         val api = ServerClient(normalized, sessionStore, trustedCa = trustedCa)
+        if (acceptNewCa) {
+            preferences.edit().putString("trusted_ca", trustedCa).commit()
+            client = null
+            update { it.copy(trustedCa = trustedCa, trustIssue = false) }
+        }
         val status = JSONObject(api.request("/api/auth/tv-login", "POST", JSONObject().put("username", username.trim()).put("pin", pin)))
         if (!status.optBoolean("authenticated")) throw IOException("TV PIN was not accepted.")
         client = api
@@ -184,7 +193,8 @@ internal class PhoneModel(application: Application) : AndroidViewModel(applicati
     private fun handleFailure(error: Exception) {
         if (isServerTrustFailure(error)) {
             stopWatching()
-            update { it.copy(trustIssue = true) }
+            update { if (BuildConfig.IS_TV) it.copy(trustIssue = true, signedIn = false, profile = null, settings = null)
+                else it.copy(trustIssue = true) }
         }
         if (error is ServerFailure && error.sessionExpired) expireSession()
         if (error is ServerFailure && error.code == "password_change_required") {
@@ -392,7 +402,7 @@ internal class PhoneModel(application: Application) : AndroidViewModel(applicati
         val viewerId = UUID.randomUUID().toString()
         val previous = viewing
         previous?.cancel()
-        update { it.copy(channel = channel, playback = null, error = null) }
+        update { it.copy(channel = channel, playback = null, playbackReady = false, error = null) }
         viewing = viewModelScope.launch {
             previous?.join()
             var activityStarted = false
@@ -479,6 +489,10 @@ internal class PhoneModel(application: Application) : AndroidViewModel(applicati
                 if (activityStarted) withContext(NonCancellable) { endActivity(api, viewerId) }
             }
         }
+    }
+
+    fun playbackStarted(revision: Long) {
+        if (state.value.playback?.revision == revision) update { it.copy(playbackReady = true) }
     }
 
     // Backgrounding releases the lease but retains channel choice for a fresh live tune on return.

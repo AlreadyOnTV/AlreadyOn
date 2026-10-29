@@ -102,8 +102,10 @@ class MainActivity : ComponentActivity() {
                     }
                 }
             }
-            PhoneTheme { UpdatePrompt(visible = !pip) }
-            StartupPreload {
+            val startupReady = !BuildConfig.IS_TV || (!state.restoringConnection &&
+                (state.channel == null || state.playbackReady || state.error != null))
+            PhoneTheme { UpdatePrompt(visible = !pip && (!BuildConfig.IS_TV || startupReady)) }
+            StartupPreload(ready = startupReady, showContent = !BuildConfig.IS_TV || !state.restoringConnection) {
                 val guideNow = rememberGuideTime(state.channels)
                 if (BuildConfig.IS_TV) {
                     TvShell(state, model, guideNow)
@@ -290,8 +292,15 @@ internal fun ProfileScreen(state: PhoneState, model: PhoneModel, modifier: Modif
     var selected by remember { mutableStateOf<ViewerProfile?>(null) }
     var pin by remember { mutableStateOf("") }
     val firstProfile = remember { FocusRequester() }
+    var focusedInitialProfile by remember { mutableStateOf(false) }
+    LaunchedEffect(Unit) {
+        if (BuildConfig.IS_TV) while (true) { model.refreshProfiles(); delay(5_000) }
+    }
     LaunchedEffect(state.profiles.firstOrNull()?.id, state.busy) {
-        if (BuildConfig.IS_TV && state.profiles.isNotEmpty() && !state.busy) firstProfile.requestFocus()
+        if (BuildConfig.IS_TV && state.profiles.isNotEmpty() && !state.busy && !focusedInitialProfile) {
+            firstProfile.requestFocus()
+            focusedInitialProfile = true
+        }
     }
     val linkPixels = TypedValue.applyDimension(TypedValue.COMPLEX_UNIT_PT, 2f, LocalContext.current.resources.displayMetrics)
     val linkIncrease = with(LocalDensity.current) { linkPixels.toSp() }
@@ -311,11 +320,12 @@ internal fun ProfileScreen(state: PhoneState, model: PhoneModel, modifier: Modif
             }
         }
         if (state.profiles.isEmpty()) item {
-            Text("Create a viewer profile in your server’s web interface, then refresh.", textAlign = TextAlign.Center)
+            Text(if (BuildConfig.IS_TV) "Create a viewer profile in your server’s web interface. Profiles appear automatically."
+                else "Create a viewer profile in your server’s web interface, then refresh.", textAlign = TextAlign.Center)
         }
         item {
             Row(horizontalArrangement = Arrangement.Center) {
-                TextButton(onClick = model::refreshProfiles, enabled = !state.busy) { Text("Refresh", style = linkStyle) }
+                if (!BuildConfig.IS_TV) TextButton(onClick = model::refreshProfiles, enabled = !state.busy) { Text("Refresh", style = linkStyle) }
                 TextButton(onClick = model::logout, enabled = !state.busy) { Text("Sign Out", style = linkStyle) }
             }
         }
