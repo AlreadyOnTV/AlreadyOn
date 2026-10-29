@@ -542,7 +542,9 @@ def promotion_plan(repo, day, selected_sha, stage, *, repair=False, source_overr
 
 def publish_promotion(repo, tag, sha, code, directory, predecessor_tag, *, repair=False):
     """Publish newly signed target-stage APKs while preserving predecessor notes."""
-    predecessor = api(f"repos/{repo}/releases/tags/{predecessor_tag}")
+    predecessor = next((entry for entry in releases(repo) if entry["tag_name"] == predecessor_tag), None)
+    if predecessor is None:
+        raise ValueError("Promotion predecessor release was not found")
     if predecessor["draft"] and predecessor_tag != tag:
         raise ValueError("Only the matching tested RC draft may be published")
     with tempfile.TemporaryDirectory() as temp:
