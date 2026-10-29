@@ -99,25 +99,29 @@ class ServerConnectionRecoveryTest {
             settled()
             when (scenario) {
                 "chooser" -> {
-                    assumeTrue(BuildConfig.IS_TV)
-                    fun waitForFocus() {
+                    fun waitForChooser() {
                         compose.waitUntil(5_000) {
-                            compose.onNodeWithText("Admin").fetchSemanticsNode().config[androidx.compose.ui.semantics.SemanticsProperties.Focused]
+                            val admin = compose.onAllNodesWithText("Admin").fetchSemanticsNodes().singleOrNull() ?: return@waitUntil false
+                            if (BuildConfig.IS_TV) admin.config[androidx.compose.ui.semantics.SemanticsProperties.Focused]
+                            else !admin.config.contains(androidx.compose.ui.semantics.SemanticsProperties.Disabled)
                         }
                     }
-                    waitForFocus()
+                    waitForChooser()
+                    compose.onNodeWithText("Refresh").assertDoesNotExist()
+                    compose.onNodeWithText("Sign Out").assertIsDisplayed()
                     val initialRefreshes = refreshStarts.get()
                     val deadline = android.os.SystemClock.elapsedRealtime() + 6_500
                     compose.waitUntil(8_000) {
                         refreshStarts.get() != initialRefreshes || android.os.SystemClock.elapsedRealtime() >= deadline
                     }
                     assertEquals("Open chooser must not poll", initialRefreshes, refreshStarts.get())
-                    compose.onNodeWithText("Admin").assertIsFocused()
+                    if (BuildConfig.IS_TV) compose.onNodeWithText("Admin").assertIsFocused()
+                    else compose.onNodeWithText("Admin").assertIsEnabled()
                     compose.runOnIdle { chooserVisible = false }
                     compose.runOnIdle { chooserVisible = true }
                     compose.waitUntil(5_000) { refreshStarts.get() > initialRefreshes }
                     settled()
-                    waitForFocus()
+                    waitForChooser()
                     assertEquals("Reopening refreshes exactly once", initialRefreshes + 1, refreshStarts.get())
                 }
                 "playback", "resumePlayback" -> {

@@ -94,7 +94,7 @@ class MainActivity : ComponentActivity() {
             val model: PhoneModel = viewModel()
             val state by model.state.collectAsStateWithLifecycle()
             val lifecycleOwner = LocalLifecycleOwner.current
-            val refreshSharedProfiles = state.signedIn && (!BuildConfig.IS_TV || state.profile != null)
+            val refreshSharedProfiles = state.signedIn && state.profile != null
             LaunchedEffect(lifecycleOwner, model, refreshSharedProfiles) {
                 if (refreshSharedProfiles) lifecycleOwner.lifecycle.repeatOnLifecycle(Lifecycle.State.STARTED) {
                     while (true) {
@@ -293,12 +293,10 @@ internal fun ProfileScreen(state: PhoneState, model: PhoneModel, modifier: Modif
     var pin by remember { mutableStateOf("") }
     val firstProfile = remember { FocusRequester() }
     var focusedInitialProfile by remember { mutableStateOf(false) }
-    var profilesLoaded by remember { mutableStateOf(!BuildConfig.IS_TV) }
+    var profilesLoaded by remember { mutableStateOf(false) }
     LaunchedEffect(model) {
-        if (BuildConfig.IS_TV) {
-            model.refreshProfilesOnEntry()
-            profilesLoaded = true
-        }
+        model.refreshProfilesOnEntry()
+        profilesLoaded = true
     }
     LaunchedEffect(state.profiles.firstOrNull()?.id, state.busy, profilesLoaded) {
         if (BuildConfig.IS_TV && profilesLoaded && state.profiles.isNotEmpty() && !state.busy && !focusedInitialProfile) {
@@ -324,12 +322,10 @@ internal fun ProfileScreen(state: PhoneState, model: PhoneModel, modifier: Modif
             }
         }
         if (state.profiles.isEmpty()) item {
-            Text(if (BuildConfig.IS_TV) "Create a viewer profile in your server’s web interface, then reopen this screen."
-                else "Create a viewer profile in your server’s web interface, then refresh.", textAlign = TextAlign.Center)
+            Text("Create a viewer profile in your server’s web interface, then reopen this screen.", textAlign = TextAlign.Center)
         }
         item {
             Row(horizontalArrangement = Arrangement.Center) {
-                if (!BuildConfig.IS_TV) TextButton(onClick = model::refreshProfiles, enabled = !state.busy) { Text("Refresh", style = linkStyle) }
                 TextButton(onClick = model::logout, enabled = !state.busy) { Text("Sign Out", style = linkStyle) }
             }
         }
