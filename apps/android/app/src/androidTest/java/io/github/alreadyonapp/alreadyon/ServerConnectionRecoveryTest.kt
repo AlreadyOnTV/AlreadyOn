@@ -93,7 +93,7 @@ class ServerConnectionRecoveryTest {
             }
             compose.waitUntil(20_000) { compose.onAllNodesWithText("Username").fetchSemanticsNodes().isNotEmpty() }
             compose.onNodeWithText("Username").assertIsDisplayed()
-            compose.onNodeWithText(if (BuildConfig.IS_TV) "TV Pairing Pin" else "TV PIN").assertIsDisplayed()
+            compose.onNodeWithText("TV Pairing Pin").assertIsDisplayed()
         }
         try {
             settled()
@@ -142,7 +142,6 @@ class ServerConnectionRecoveryTest {
                     device.takeScreenshot(java.io.File(application.getExternalFilesDir(null), "recovery-$scenario.png"))
                 }
                 "form" -> {
-                    assumeTrue(BuildConfig.IS_TV)
                     compose.onNodeWithText("Hostname / IP").performTextInput("127.0.0.1")
                     compose.onNodeWithText("Port").performTextClearance()
                     compose.onNodeWithText("Port").performTextInput("19950")
@@ -207,7 +206,7 @@ class ServerConnectionRecoveryTest {
                     val accept = compose.onNodeWithText("Accept New CA")
                     accept.assertIsDisplayed()
                     compose.onNodeWithText("Connect").assertDoesNotExist()
-                    assertTrue(accept.fetchSemanticsNode().boundsInRoot.top > compose.onNodeWithText(if (BuildConfig.IS_TV) "TV Pairing Pin" else "TV PIN").fetchSemanticsNode().boundsInRoot.bottom)
+                    assertTrue(accept.fetchSemanticsNode().boundsInRoot.top > compose.onNodeWithText("TV Pairing Pin").fetchSemanticsNode().boundsInRoot.bottom)
                     if (BuildConfig.IS_TV) {
                         compose.onNodeWithText("Username").performTextInput(username)
                         compose.onNodeWithText("TV Pairing Pin").performTextInput("123456")

@@ -22,14 +22,6 @@ import androidx.compose.ui.text.input.ImeAction
 import androidx.compose.ui.input.key.*
 import androidx.compose.foundation.text.KeyboardOptions
 import androidx.compose.ui.text.input.KeyboardType
-import androidx.compose.ui.text.input.VisualTransformation
-import androidx.compose.ui.graphics.Color
-import androidx.compose.ui.graphics.SolidColor
-import androidx.compose.ui.graphics.vector.ImageVector
-import androidx.compose.ui.graphics.vector.PathParser
-import androidx.compose.ui.graphics.StrokeCap
-import androidx.compose.ui.graphics.StrokeJoin
-import androidx.compose.ui.text.input.PasswordVisualTransformation
 import kotlinx.coroutines.delay
 import kotlinx.coroutines.Dispatchers
 import kotlinx.coroutines.launch
@@ -78,7 +70,6 @@ internal fun ServerConnectScreen(state: PhoneState, model: PhoneModel, modifier:
     var error by remember { mutableStateOf<String?>(null) }
     var checking by remember { mutableStateOf(false) }
     var pin by remember { mutableStateOf("") }
-    var pinVisible by remember { mutableStateOf(false) }
     var username by remember { mutableStateOf("") }
     var help by remember { mutableStateOf(false) }
     var address by remember { mutableStateOf(ManualServerAddress()) }
@@ -145,7 +136,7 @@ internal fun ServerConnectScreen(state: PhoneState, model: PhoneModel, modifier:
     }
     fun goBack() {
         keyboard?.hide()
-        selected = null; trust = null; pin = ""; pinVisible = false; error = null
+        selected = null; trust = null; pin = ""; error = null
         model.dismissError(); model.dismissTrustIssue()
     }
     DisposableEffect(scan, remaining == 0, selected) {
@@ -208,8 +199,7 @@ internal fun ServerConnectScreen(state: PhoneState, model: PhoneModel, modifier:
                             true
                         } else false
                     }, enabled = !state.busy)
-                if (!BuildConfig.IS_TV) Text("Enter your 6–12 digit TV PIN")
-                ServerPinField(pin, { pin = it }, pinVisible, { pinVisible = !pinVisible },
+                ServerPinField(pin, { pin = it },
                     enabled = !state.busy, onDone = ::closePin,
                     modifier = Modifier.fillMaxWidth(if (BuildConfig.IS_TV) 0.6f else 1f).focusRequester(pinFocus))
                 if (BuildConfig.IS_TV) {
@@ -235,19 +225,26 @@ internal fun ServerConnectScreen(state: PhoneState, model: PhoneModel, modifier:
                         connectFocus.requestFocus()
                     }
                 }
+                Row(Modifier.fillMaxWidth().height(IntrinsicSize.Min), horizontalArrangement = Arrangement.spacedBy(8.dp)) {
+                val actionModifier = Modifier.weight(1f).fillMaxHeight()
                 if (changedCa) {
-                    Button(modifier = Modifier.focusRequester(connectFocus).tvFocusOutline(), onClick = {
+                    Button(modifier = actionModifier.focusRequester(connectFocus), onClick = {
                         acceptingTrust = true
                         model.acceptServerTrust(trust!!.certificate)
                     }, enabled = !state.busy) { Text("Accept New CA") }
-                } else Button(modifier = Modifier.focusRequester(connectFocus).tvFocusOutline(), onClick = {
-                    if (username.isBlank() || pin.length !in 6..12) error = "Enter your username and 6–12 digit TV PIN."
-                    else { model.signInWithPIN(selected!!.origin, username, pin, trust!!.certificate, trust!!.name); pin = ""; pinVisible = false }
+                } else Button(modifier = actionModifier.focusRequester(connectFocus), onClick = {
+                    if (username.isBlank() || pin.length !in 6..12) error = "Enter your username and 6–12 digit TV Pairing Pin."
+                    else { model.signInWithPIN(selected!!.origin, username, pin, trust!!.certificate, trust!!.name); pin = "" }
                 }, enabled = !state.busy) { Text("Connect") }
+                Button(modifier = actionModifier, onClick = ::goBack,
+                    enabled = !state.busy && !checking) { Text("Go Back") }
+                Button(modifier = actionModifier, onClick = { keyboard?.hide(); help = true },
+                    enabled = !state.busy) { Text("Help") }
+                }
                 }
             }
-            if (!BuildConfig.IS_TV || trust == null) Button(modifier = Modifier.tvFocusOutline(), onClick = ::goBack,
-                enabled = !checking && !state.busy) { Text(if (BuildConfig.IS_TV) "Go Back" else "Choose Another Server") }
+            if (trust == null) Button(modifier = Modifier.tvFocusOutline(), onClick = ::goBack,
+                enabled = !checking && !state.busy) { Text("Go Back") }
         }
         error?.let { Text(it, color = MaterialTheme.colorScheme.error) }
         if (BuildConfig.IS_TV) state.error?.let { Text(it, color = MaterialTheme.colorScheme.error) }
@@ -261,39 +258,17 @@ internal fun ServerConnectScreen(state: PhoneState, model: PhoneModel, modifier:
 
 /** Use the installed numeric keyboard for server pairing. */
 @Composable
-internal fun ServerPinField(pin: String, onPin: (String) -> Unit, visible: Boolean,
-    onToggleVisibility: () -> Unit, enabled: Boolean, onDone: () -> Unit, modifier: Modifier = Modifier) {
-    val visibilityIcon: (@Composable () -> Unit)? = if (BuildConfig.IS_TV) null else {
-        { PinVisibilityButton(visible, enabled, onToggleVisibility) }
-    }
+internal fun ServerPinField(pin: String, onPin: (String) -> Unit,
+    enabled: Boolean, onDone: () -> Unit, modifier: Modifier = Modifier) {
     OutlinedTextField(pin, { onPin(it.filter { digit -> digit in '0'..'9' }.take(12)) },
-        label = { Text(if (BuildConfig.IS_TV) "TV Pairing Pin" else "TV PIN") }, singleLine = true,
-        visualTransformation = if (BuildConfig.IS_TV || visible) VisualTransformation.None else PasswordVisualTransformation(),
-        trailingIcon = visibilityIcon,
-        keyboardOptions = KeyboardOptions(keyboardType = if (BuildConfig.IS_TV) KeyboardType.Number else KeyboardType.NumberPassword, imeAction = ImeAction.Done),
+        label = { Text("TV Pairing Pin") }, singleLine = true,
+        keyboardOptions = KeyboardOptions(keyboardType = KeyboardType.Number, imeAction = ImeAction.Done),
         keyboardActions = KeyboardActions(onDone = { onDone() }), modifier = modifier.onPreviewKeyEvent {
             if (BuildConfig.IS_TV && enabled && it.key in listOf(Key.Enter, Key.NumPadEnter)) {
                 if (it.type == KeyEventType.KeyUp) onDone()
                 true
             } else false
         }, enabled = enabled)
-}
-
-/** Match the WebUI eye control without adding an icon library for two paths. */
-@Composable
-private fun PinVisibilityButton(visible: Boolean, enabled: Boolean, toggle: () -> Unit) {
-    val vector = remember(visible) {
-        val path = if (visible)
-            "M2.5 12C3.5 9.5 7 5 12 5S20.5 9.5 21.5 12C20.5 14.5 17 19 12 19S3.5 14.5 2.5 12Z M14.5 12A2.5 2.5 0 1 1 9.5 12A2.5 2.5 0 1 1 14.5 12"
-        else
-            "M3 3L21 21 M10.6 10.6A2 2 0 0 0 13.4 13.4 M9.9 5.2A10.8 10.8 0 0 1 12 5C17 5 20.5 9.5 21.5 12C21.1 13 20.3 14.1 19.2 15.1 M6.2 6.2C3.9 7.6 2.8 9.5 2.5 12C3.5 14.5 7 19 12 19C13.4 19 14.7 18.6 15.8 18"
-        ImageVector.Builder(defaultWidth = 24.dp, defaultHeight = 24.dp, viewportWidth = 24f, viewportHeight = 24f)
-            .addPath(PathParser().parsePathString(path).toNodes(), stroke = SolidColor(Color.Black),
-                strokeLineWidth = 2f, strokeLineCap = StrokeCap.Round, strokeLineJoin = StrokeJoin.Round).build()
-    }
-    IconButton(onClick = toggle, enabled = enabled) {
-        Icon(vector, contentDescription = if (visible) "Hide PIN" else "Show PIN")
-    }
 }
 
 @Composable

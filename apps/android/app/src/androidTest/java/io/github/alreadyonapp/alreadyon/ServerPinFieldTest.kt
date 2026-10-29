@@ -26,13 +26,12 @@ class ServerPinFieldTest {
         val instrumentation = InstrumentationRegistry.getInstrumentation()
         val device = UiDevice.getInstance(instrumentation)
         var pin by mutableStateOf("")
-        var visible by mutableStateOf(false)
         var done = false
         val focus = FocusRequester()
         ActivityScenario.launch(MainActivity::class.java).use { scenario ->
             scenario.onActivity { activity -> activity.setContent {
                 val focusManager = LocalFocusManager.current
-                PhoneTheme { ServerPinField(pin, { pin = it }, visible, { visible = !visible }, true,
+                PhoneTheme { ServerPinField(pin, { pin = it }, true,
                     { done = true; focusManager.clearFocus(force = true) }, Modifier.padding(top = 80.dp).focusRequester(focus)) }
             } }
             val field = device.wait(Until.findObject(By.clazz("android.widget.EditText")), 10000)
@@ -45,16 +44,10 @@ class ServerPinFieldTest {
             field.text = "12a345678901234"
             device.waitForIdle()
             instrumentation.runOnMainSync { assertEquals("123456789012", pin) }
-            if (BuildConfig.IS_TV) {
-                assertTrue(device.hasObject(By.text("TV Pairing Pin")))
-                assertFalse(device.hasObject(By.desc("Show PIN")))
-                assertFalse(device.hasObject(By.desc("Hide PIN")))
-                assertTrue(device.hasObject(By.text("123456789012")))
-            } else {
-                device.findObject(By.desc("Show PIN")).click()
-                assertTrue(device.wait(Until.hasObject(By.text("123456789012")), 5000))
-                device.findObject(By.desc("Hide PIN")).click()
-            }
+            assertTrue(device.hasObject(By.text("TV Pairing Pin")))
+            assertFalse(device.hasObject(By.desc("Show PIN")))
+            assertFalse(device.hasObject(By.desc("Hide PIN")))
+            assertTrue(device.hasObject(By.text("123456789012")))
             device.findObject(By.clazz("android.widget.EditText")).text = "654321"
             device.waitForIdle()
             instrumentation.runOnMainSync { assertEquals("654321", pin) }
