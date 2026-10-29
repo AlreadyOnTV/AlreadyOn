@@ -4,6 +4,10 @@ import android.app.Application
 import android.content.Context
 import androidx.activity.compose.setContent
 import androidx.compose.foundation.layout.fillMaxSize
+import androidx.compose.material3.Text
+import androidx.compose.runtime.LaunchedEffect
+import androidx.compose.runtime.mutableStateOf
+import androidx.compose.runtime.setValue
 import androidx.compose.runtime.collectAsState
 import androidx.compose.runtime.getValue
 import androidx.compose.ui.Modifier
@@ -23,6 +27,9 @@ import org.junit.Rule
 import org.junit.Test
 import org.junit.runner.RunWith
 import java.util.concurrent.TimeUnit
+import java.util.concurrent.atomic.AtomicInteger
+import kotlinx.coroutines.flow.distinctUntilChanged
+import kotlinx.coroutines.flow.map
 
 // Staged recovery checks use a disposable server and namespaced device preferences.
 @RunWith(AndroidJUnit4::class)
@@ -52,11 +59,20 @@ class ServerConnectionRecoveryTest {
         if (scenario == "cleanup") return
         val store = ViewModelStore()
         lateinit var model: PhoneModel
+        var chooserVisible by mutableStateOf(true)
+        val refreshStarts = AtomicInteger()
         compose.runOnUiThread {
             model = ViewModelProvider(store, ViewModelProvider.AndroidViewModelFactory(application))[PhoneModel::class.java]
             compose.activity.setContent {
                 val state by model.state.collectAsState()
-                if (scenario in setOf("playback", "resumePlayback")) {
+                if (scenario == "chooser") {
+                    LaunchedEffect(model) {
+                        model.state.map { it.busy }.distinctUntilChanged().collect { if (it) refreshStarts.incrementAndGet() }
+                    }
+                    PhoneTheme {
+                        if (chooserVisible) ProfileScreen(state, model, Modifier.fillMaxSize()) else Text("Chooser closed")
+                    }
+                } else if (scenario in setOf("playback", "resumePlayback")) {
                     StartupPreload(ready = !state.restoringConnection && (state.channel == null || state.playbackReady || state.error != null),
                         showContent = !state.restoringConnection) { TvShell(state, model, rememberGuideTime(state.channels)) }
                 } else PhoneTheme { ServerConnectScreen(state, model, Modifier.fillMaxSize()) }
@@ -82,6 +98,28 @@ class ServerConnectionRecoveryTest {
         try {
             settled()
             when (scenario) {
+                "chooser" -> {
+                    assumeTrue(BuildConfig.IS_TV)
+                    fun waitForFocus() {
+                        compose.waitUntil(5_000) {
+                            compose.onNodeWithText("Admin").fetchSemanticsNode().config[androidx.compose.ui.semantics.SemanticsProperties.Focused]
+                        }
+                    }
+                    waitForFocus()
+                    val initialRefreshes = refreshStarts.get()
+                    val deadline = android.os.SystemClock.elapsedRealtime() + 6_500
+                    compose.waitUntil(8_000) {
+                        refreshStarts.get() != initialRefreshes || android.os.SystemClock.elapsedRealtime() >= deadline
+                    }
+                    assertEquals("Open chooser must not poll", initialRefreshes, refreshStarts.get())
+                    compose.onNodeWithText("Admin").assertIsFocused()
+                    compose.runOnIdle { chooserVisible = false }
+                    compose.runOnIdle { chooserVisible = true }
+                    compose.waitUntil(5_000) { refreshStarts.get() > initialRefreshes }
+                    settled()
+                    waitForFocus()
+                    assertEquals("Reopening refreshes exactly once", initialRefreshes + 1, refreshStarts.get())
+                }
                 "playback", "resumePlayback" -> {
                     assumeTrue(BuildConfig.IS_TV)
                     compose.runOnIdle { assertTrue(model.state.value.error.orEmpty(), model.state.value.signedIn) }

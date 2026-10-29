@@ -94,8 +94,9 @@ class MainActivity : ComponentActivity() {
             val model: PhoneModel = viewModel()
             val state by model.state.collectAsStateWithLifecycle()
             val lifecycleOwner = LocalLifecycleOwner.current
-            LaunchedEffect(lifecycleOwner, model, state.signedIn) {
-                if (state.signedIn) lifecycleOwner.lifecycle.repeatOnLifecycle(Lifecycle.State.STARTED) {
+            val refreshSharedProfiles = state.signedIn && (!BuildConfig.IS_TV || state.profile != null)
+            LaunchedEffect(lifecycleOwner, model, refreshSharedProfiles) {
+                if (refreshSharedProfiles) lifecycleOwner.lifecycle.repeatOnLifecycle(Lifecycle.State.STARTED) {
                     while (true) {
                         model.refreshProfiles()
                         delay(300_000)
@@ -293,11 +294,15 @@ internal fun ProfileScreen(state: PhoneState, model: PhoneModel, modifier: Modif
     var pin by remember { mutableStateOf("") }
     val firstProfile = remember { FocusRequester() }
     var focusedInitialProfile by remember { mutableStateOf(false) }
-    LaunchedEffect(Unit) {
-        if (BuildConfig.IS_TV) while (true) { model.refreshProfiles(); delay(5_000) }
+    var profilesLoaded by remember { mutableStateOf(!BuildConfig.IS_TV) }
+    LaunchedEffect(model) {
+        if (BuildConfig.IS_TV) {
+            model.refreshProfilesOnEntry()
+            profilesLoaded = true
+        }
     }
-    LaunchedEffect(state.profiles.firstOrNull()?.id, state.busy) {
-        if (BuildConfig.IS_TV && state.profiles.isNotEmpty() && !state.busy && !focusedInitialProfile) {
+    LaunchedEffect(state.profiles.firstOrNull()?.id, state.busy, profilesLoaded) {
+        if (BuildConfig.IS_TV && profilesLoaded && state.profiles.isNotEmpty() && !state.busy && !focusedInitialProfile) {
             firstProfile.requestFocus()
             focusedInitialProfile = true
         }
@@ -313,14 +318,14 @@ internal fun ProfileScreen(state: PhoneState, model: PhoneModel, modifier: Modif
         if (BuildConfig.IS_TV) item { Text("Select Profile", style = MaterialTheme.typography.headlineMedium) }
         items(state.profiles, key = { it.id }) { profile ->
             Button(onClick = { if (profile.hasPin) { selected = profile; pin = "" } else model.selectProfile(profile, "") },
-                enabled = !state.busy, modifier = Modifier.fillMaxWidth(if (BuildConfig.IS_TV) 0.5f else 1f).heightIn(min = 48.dp)
+                enabled = profilesLoaded && !state.busy, modifier = Modifier.fillMaxWidth(if (BuildConfig.IS_TV) 0.5f else 1f).heightIn(min = 48.dp)
                     .then(if (BuildConfig.IS_TV && profile.id == state.profiles.firstOrNull()?.id) Modifier.focusRequester(firstProfile) else Modifier)
                     .tvFocusOutline(), shape = RoundedCornerShape(4.dp)) {
                 ProfileName(profile, model)
             }
         }
         if (state.profiles.isEmpty()) item {
-            Text(if (BuildConfig.IS_TV) "Create a viewer profile in your server’s web interface. Profiles appear automatically."
+            Text(if (BuildConfig.IS_TV) "Create a viewer profile in your server’s web interface, then reopen this screen."
                 else "Create a viewer profile in your server’s web interface, then refresh.", textAlign = TextAlign.Center)
         }
         item {

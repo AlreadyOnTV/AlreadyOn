@@ -346,6 +346,12 @@ internal class PhoneModel(application: Application) : AndroidViewModel(applicati
     /** Poll shared preferences without retuning for names, avatars or another device's channel.
      * Explicit playback-track choices stay local; changed profile defaults apply automatically.
      */
+    suspend fun refreshProfilesOnEntry() {
+        action?.join()
+        refreshProfiles()
+        action?.join()
+    }
+
     fun refreshProfiles() = perform {
         val api = client ?: return@perform
         if (!state.value.signedIn) return@perform
