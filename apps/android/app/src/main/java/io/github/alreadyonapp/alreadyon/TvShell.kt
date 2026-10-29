@@ -84,7 +84,7 @@ internal fun TvShell(state: PhoneState, model: PhoneModel, guideNow: Long) {
         val palette = phonePalette
         Surface(Modifier.fillMaxSize(), color = palette.background, contentColor = palette.text) {
         Column(Modifier.fillMaxSize().padding(horizontal = if (fullscreen) 0.dp else 16.dp, vertical = if (fullscreen) 0.dp else 16.dp)
-            .padding(top = if (fullscreen) 0.dp else 12.dp)
+            .padding(top = if (fullscreen || !state.signedIn) 0.dp else 12.dp)
             .onPreviewKeyEvent { event ->
                 if (event.key != Key.Back && event.type == KeyEventType.KeyDown) exitBackAt = null
                 if (!fullscreen) {
@@ -125,7 +125,7 @@ internal fun TvShell(state: PhoneState, model: PhoneModel, guideNow: Long) {
             // In the guide and sign-in screens, focus belongs to the actionable children.
             }.then(if (fullscreen) Modifier.focusRequester(focus).focusable() else Modifier),
             verticalArrangement = Arrangement.spacedBy(if (fullscreen) 0.dp else 8.dp)) {
-            if (!fullscreen && state.profile == null) Row(Modifier.fillMaxWidth()) { PhoneBrand() }
+            if (!fullscreen && state.signedIn && state.profile == null) Row(Modifier.fillMaxWidth()) { PhoneBrand() }
             // Keep one named profile control in the header across Guide/settings,
             // independent of whether a channel's player panel is present.
             if (!fullscreen && state.profile != null) Row(Modifier.fillMaxWidth(),

@@ -157,9 +157,9 @@ internal fun ServerConnectScreen(state: PhoneState, model: PhoneModel, modifier:
         }, failed = { error = it })
         onDispose { discovery.close() }
     }
-    Box(modifier.fillMaxWidth(), contentAlignment = if (BuildConfig.IS_TV) Alignment.Center else Alignment.TopStart) {
+    Box(modifier.fillMaxWidth(), contentAlignment = if (BuildConfig.IS_TV) Alignment.TopCenter else Alignment.TopStart) {
     Column(Modifier.widthIn(max = if (BuildConfig.IS_TV) 560.dp else androidx.compose.ui.unit.Dp.Infinity).fillMaxWidth()
-        .verticalScroll(rememberScrollState()).padding(12.dp),
+        .verticalScroll(rememberScrollState()).padding(horizontal = 12.dp, vertical = if (BuildConfig.IS_TV) 0.dp else 12.dp),
         horizontalAlignment = if (BuildConfig.IS_TV) Alignment.CenterHorizontally else Alignment.Start,
         verticalArrangement = Arrangement.spacedBy(12.dp)) {
         if (selected == null) {
