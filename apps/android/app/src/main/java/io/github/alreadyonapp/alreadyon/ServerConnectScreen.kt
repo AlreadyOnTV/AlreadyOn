@@ -139,6 +139,13 @@ internal fun ServerConnectScreen(state: PhoneState, model: PhoneModel, modifier:
         selected = null; trust = null; pin = ""; error = null
         model.dismissError(); model.dismissTrustIssue()
     }
+    fun checkAddress() {
+        runCatching { address.origin() }.onSuccess { select(TvServer("AlreadyOn server", it)) }
+            .onFailure { error = it.message ?: "Enter a valid hostname or IP address." }
+    }
+    fun rescan() {
+        servers.clear(); recent?.let { servers.add(it) }; error = null; remaining = 30; scan++
+    }
     DisposableEffect(scan, remaining == 0, selected) {
         if (remaining == 0 || selected != null) return@DisposableEffect onDispose {}
         val discovery = TvDiscovery(context, found = { server ->
@@ -175,11 +182,16 @@ internal fun ServerConnectScreen(state: PhoneState, model: PhoneModel, modifier:
                     singleLine = true, keyboardOptions = KeyboardOptions(keyboardType = KeyboardType.Number),
                     modifier = Modifier.width(90.dp).focusRequester(portFocus).then(addressNavigation))
             }
-            Button(modifier = Modifier.tvFocusOutline(), onClick = {
-                runCatching { address.origin() }.onSuccess { select(TvServer("AlreadyOn server", it)) }
-                    .onFailure { error = it.message ?: "Enter a valid hostname or IP address." }
-            }, enabled = address.host.isNotBlank() && !checking && !state.busy) { Text("Check Server") }
-            Button(modifier = Modifier.tvFocusOutline(), onClick = { servers.clear(); recent?.let { servers.add(it) }; error = null; remaining = 30; scan++ }) { Text("Rescan") }
+            if (BuildConfig.IS_TV) {
+                Button(modifier = Modifier.tvFocusOutline(), onClick = ::checkAddress,
+                    enabled = address.host.isNotBlank() && !checking && !state.busy) { Text("Check Server") }
+                Button(modifier = Modifier.tvFocusOutline(), onClick = ::rescan) { Text("Rescan") }
+            } else Row(Modifier.fillMaxWidth().padding(top = 8.dp).height(IntrinsicSize.Min),
+                horizontalArrangement = Arrangement.spacedBy(8.dp)) {
+                Button(modifier = Modifier.weight(1f).fillMaxHeight(), onClick = ::checkAddress,
+                    enabled = address.host.isNotBlank() && !checking && !state.busy) { Text("Check Server") }
+                Button(modifier = Modifier.weight(1f).fillMaxHeight(), onClick = ::rescan) { Text("Rescan") }
+            }
         } else {
             Text("${selected!!.name} · ${selected!!.origin.removePrefix("https://")}", style = MaterialTheme.typography.headlineSmall)
             if (checking) Text("Checking server…")
@@ -225,7 +237,7 @@ internal fun ServerConnectScreen(state: PhoneState, model: PhoneModel, modifier:
                         connectFocus.requestFocus()
                     }
                 }
-                Row(Modifier.fillMaxWidth().height(IntrinsicSize.Min), horizontalArrangement = Arrangement.spacedBy(8.dp)) {
+                Row(Modifier.fillMaxWidth().padding(top = 8.dp).height(IntrinsicSize.Min), horizontalArrangement = Arrangement.spacedBy(8.dp)) {
                 val actionModifier = Modifier.weight(1f).fillMaxHeight()
                 if (changedCa) {
                     Button(modifier = actionModifier.focusRequester(connectFocus), onClick = {

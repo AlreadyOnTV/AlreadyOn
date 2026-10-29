@@ -145,6 +145,14 @@ class ServerConnectionRecoveryTest {
                     compose.onNodeWithText("Hostname / IP").performTextInput("127.0.0.1")
                     compose.onNodeWithText("Port").performTextClearance()
                     compose.onNodeWithText("Port").performTextInput("19950")
+                    val checkServer = compose.onNodeWithText("Check Server").fetchSemanticsNode().boundsInRoot
+                    val port = compose.onNodeWithText("Port").fetchSemanticsNode().boundsInRoot
+                    if (!BuildConfig.IS_TV) {
+                        val rescan = compose.onNodeWithText("Rescan").fetchSemanticsNode().boundsInRoot
+                        assertEquals(checkServer.top, rescan.top, 1f)
+                        assertTrue(checkServer.right < rescan.left)
+                        assertTrue(checkServer.top > port.bottom)
+                    }
                     compose.onNodeWithText("Check Server").performClick()
                     compose.waitUntil(20_000) { compose.onAllNodesWithText("Username").fetchSemanticsNodes().isNotEmpty() }
                     compose.onNodeWithText("TV Pairing Pin").assertIsDisplayed()
@@ -155,6 +163,11 @@ class ServerConnectionRecoveryTest {
                     assertEquals(connect.top, back.top, 1f)
                     assertEquals(back.top, help.top, 1f)
                     assertTrue(connect.right < back.left && back.right < help.left)
+                    if (!BuildConfig.IS_TV) {
+                        val pairingPin = compose.onNodeWithText("TV Pairing Pin").fetchSemanticsNode().boundsInRoot
+                        assertEquals("Both phone action rows use the same field spacing", checkServer.top - port.bottom,
+                            connect.top - pairingPin.bottom, 2f)
+                    }
                     compose.onNodeWithText("Help").performClick()
                     compose.onNodeWithText("Set your username and TV Pairing Pin in your server’s WebUI under Settings.", substring = true).assertIsDisplayed()
                     compose.onNodeWithText("Close").performClick()
