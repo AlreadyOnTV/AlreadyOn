@@ -1,7 +1,6 @@
 // Shared phone/tablet and TV discovery, address fallback and account PIN onboarding.
 package io.github.alreadyonapp.alreadyon
 
-import androidx.compose.foundation.clickable
 import androidx.compose.foundation.rememberScrollState
 import androidx.compose.foundation.verticalScroll
 import androidx.compose.foundation.layout.*
@@ -18,6 +17,9 @@ import androidx.compose.ui.focus.focusRequester
 import androidx.compose.ui.focus.onFocusChanged
 import androidx.compose.ui.platform.LocalSoftwareKeyboardController
 import androidx.compose.ui.platform.LocalFocusManager
+import androidx.compose.ui.platform.LocalInputModeManager
+import androidx.compose.ui.platform.LocalWindowInfo
+import androidx.compose.ui.input.InputMode
 import androidx.compose.ui.text.input.ImeAction
 import androidx.compose.ui.input.key.*
 import androidx.compose.foundation.text.KeyboardOptions
@@ -225,20 +227,27 @@ internal fun ServerConnectScreen(state: PhoneState, model: PhoneModel, modifier:
 internal fun ServerPinField(pin: String, onPin: (String) -> Unit, visible: Boolean,
     onToggleVisibility: () -> Unit, enabled: Boolean, onDone: () -> Unit, modifier: Modifier = Modifier) {
     var keypad by remember { mutableStateOf(false) }
-    var returningFocus by remember { mutableStateOf(false) }
+    var closingKeypad by remember { mutableStateOf(false) }
     val firstDigit = remember { FocusRequester() }
     val keyboard = LocalSoftwareKeyboardController.current
+    val parentWindowFocused = LocalWindowInfo.current.isWindowFocused
+    LaunchedEffect(closingKeypad, parentWindowFocused) {
+        if (closingKeypad && parentWindowFocused) {
+            withFrameNanos { }
+            onDone()
+            closingKeypad = false
+        }
+    }
     val fieldModifier = if (BuildConfig.IS_TV) modifier.onFocusChanged {
-        if (it.isFocused && enabled) {
-            if (returningFocus) returningFocus = false
-            else { keyboard?.hide(); keypad = true }
+        if (it.isFocused && enabled && !closingKeypad) {
+            keyboard?.hide(); keypad = true
         }
     }.onPreviewKeyEvent {
         if (it.key in listOf(Key.Enter, Key.NumPadEnter, Key.DirectionCenter)) {
             if (it.type == KeyEventType.KeyUp && enabled) keypad = true
             true
         } else false
-    }.clickable(enabled = enabled) { keypad = true } else modifier
+    } else modifier
     OutlinedTextField(pin, { onPin(it.filter { digit -> digit in '0'..'9' }.take(12)) },
         label = { Text("TV PIN") }, singleLine = true, readOnly = BuildConfig.IS_TV,
         visualTransformation = if (visible) VisualTransformation.None else PasswordVisualTransformation(),
@@ -246,10 +255,18 @@ internal fun ServerPinField(pin: String, onPin: (String) -> Unit, visible: Boole
         keyboardOptions = KeyboardOptions(keyboardType = KeyboardType.NumberPassword, imeAction = ImeAction.Done),
         keyboardActions = KeyboardActions(onDone = { onDone() }), modifier = fieldModifier, enabled = enabled)
     if (BuildConfig.IS_TV && keypad) {
-        LaunchedEffect(Unit) { firstDigit.requestFocus() }
-        fun close() { returningFocus = true; keypad = false; onDone() }
+        fun close() { closingKeypad = true; keypad = false }
         AlertDialog(onDismissRequest = { close() }, title = { Text("TV PIN") },
             text = {
+                val inputMode = LocalInputModeManager.current
+                val windowFocused = LocalWindowInfo.current.isWindowFocused
+                LaunchedEffect(windowFocused) {
+                    if (windowFocused) {
+                        inputMode.requestInputMode(InputMode.Keyboard)
+                        withFrameNanos { }
+                        firstDigit.requestFocus()
+                    }
+                }
                 Column(verticalArrangement = Arrangement.spacedBy(8.dp)) {
                     Text(if (visible) pin else "•".repeat(pin.length))
                     for (row in listOf(listOf("1", "2", "3"), listOf("4", "5", "6"), listOf("7", "8", "9"), listOf("Delete", "0", "Done"))) {

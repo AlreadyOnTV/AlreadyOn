@@ -76,6 +76,17 @@ class ServerTlsTest {
         }
     }
 
+    @Test fun onlyCertificateFailuresRequireTrustReview() {
+        assertTrue(isServerTrustFailure(javax.net.ssl.SSLHandshakeException("Untrusted chain").apply {
+            initCause(java.security.cert.CertificateException("Changed authority"))
+        }))
+        assertTrue(isServerTrustFailure(IOException(java.security.cert.CertPathValidatorException("Invalid chain"))))
+        assertTrue(isServerTrustFailure(javax.net.ssl.SSLPeerUnverifiedException("Unverified peer")))
+        assertFalse(isServerTrustFailure(javax.net.ssl.SSLException("Connection reset")))
+        assertFalse(isServerTrustFailure(javax.net.ssl.SSLHandshakeException("Peer closed connection")))
+        assertFalse(isServerTrustFailure(java.net.ConnectException("Connection refused")))
+    }
+
     @Test fun instanceTrustAcceptsLanNamesAndRejectsOtherAuthorities() {
         val directory = kotlin.io.path.createTempDirectory("tls-test").toFile()
         try {

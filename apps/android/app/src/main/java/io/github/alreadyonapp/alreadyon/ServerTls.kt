@@ -77,7 +77,10 @@ private fun certificateIdentity(cert: X509Certificate): String =
     java.security.MessageDigest.getInstance("SHA-256").digest(cert.encoded).joinToString("") { "%02x".format(it) }
 
 internal fun isServerTrustFailure(error: Throwable): Boolean =
-    generateSequence(error) { it.cause }.any { it is javax.net.ssl.SSLException || it is java.security.cert.CertificateException }
+    generateSequence(error) { it.cause }.any {
+        it is java.security.cert.CertificateException || it is java.security.cert.CertPathValidatorException ||
+            it is javax.net.ssl.SSLPeerUnverifiedException
+    }
 
 private fun trustAnchors(certificates: List<X509Certificate>): List<X509Certificate> {
     val roots = certificates.filter { cert ->
