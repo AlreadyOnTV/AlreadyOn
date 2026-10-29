@@ -207,39 +207,74 @@ const assert = require("node:assert/strict");
       await page.waitForFunction(() => document.fullscreenElement === null);
     };
     await assertRestored(101);
-    const guideViewport = () => page.evaluate(() => {
-      const scroll = document.querySelector(".guide-scroll");
-      return {
-        left: scroll.scrollLeft,
-        top: scroll.scrollTop,
-        origin: document.querySelector(".guide-head-slot").dataset.startMs,
-        selected: document.querySelector(".guide-slot-box-focused").dataset.startsAt,
-      };
-    });
+    const guideViewport = () =>
+      page.evaluate(() => {
+        const scroll = document.querySelector(".guide-scroll");
+        return {
+          left: scroll.scrollLeft,
+          top: scroll.scrollTop,
+          origin: document.querySelector(".guide-head-slot").dataset.startMs,
+          selected: document.querySelector(".guide-slot-box-focused").dataset
+            .startsAt,
+        };
+      });
     await page.keyboard.press("ArrowRight");
     const browsing = await guideViewport();
     const pausedReads = guideReads;
     await page.clock.runFor(90_000);
-    assert.deepEqual(await guideViewport(), browsing, "Airing/timeline ticks preserve manual browsing");
-    assert.equal(guideReads, pausedReads, "Polling pauses during keyboard navigation");
+    assert.deepEqual(
+      await guideViewport(),
+      browsing,
+      "Airing/timeline ticks preserve manual browsing",
+    );
+    assert.equal(
+      guideReads,
+      pausedReads,
+      "Polling pauses during keyboard navigation",
+    );
     await page.locator(".guide-scroll").dispatchEvent("wheel", { deltaY: 100 });
-    await page.evaluate(() => { document.querySelector(".guide-scroll").scrollTop = 400; });
+    await page.evaluate(() => {
+      document.querySelector(".guide-scroll").scrollTop = 400;
+    });
     const scrolled = await guideViewport();
     await page.clock.runFor(90_000);
-    assert.deepEqual(await guideViewport(), scrolled, "Wheel input restarts the full inactivity window");
+    assert.deepEqual(
+      await guideViewport(),
+      scrolled,
+      "Wheel input restarts the full inactivity window",
+    );
     assert.equal(guideReads, pausedReads);
-    await page.evaluate(() => { document.querySelector(".guide-scroll").scrollTop = 500; });
+    await page.evaluate(() => {
+      document.querySelector(".guide-scroll").scrollTop = 500;
+    });
     await page.clock.runFor(29_999);
-    assert.equal(guideReads, pausedReads, "No refresh before two minutes after wheel input");
+    assert.equal(
+      guideReads,
+      pausedReads,
+      "No refresh before two minutes after wheel input",
+    );
     await page.clock.runFor(1);
-    await page.waitForFunction(() => document.querySelector(".guide-scroll").scrollTop === 0);
+    await page.waitForFunction(
+      () => document.querySelector(".guide-scroll").scrollTop === 0,
+    );
     await assertRestored(101);
-    assert.equal(guideReads, pausedReads + 1, "Programmatic scrolling does not extend the pause or queue catch-up polls");
+    assert.equal(
+      guideReads,
+      pausedReads + 1,
+      "Programmatic scrolling does not extend the pause or queue catch-up polls",
+    );
     await page.clock.runFor(60_000);
-    assert.equal(guideReads, pausedReads + 2, "One-minute polling resumes after inactivity");
+    assert.equal(
+      guideReads,
+      pausedReads + 2,
+      "One-minute polling resumes after inactivity",
+    );
     for (const [type, event] of [
       ["pointermove", { buttons: 1, pointerType: "touch" }],
-      ["touchmove", { touches: [{ identifier: 1, clientX: 400, clientY: 500 }] }],
+      [
+        "touchmove",
+        { touches: [{ identifier: 1, clientX: 400, clientY: 500 }] },
+      ],
     ]) {
       const beforeDrag = guideReads;
       await page.locator(".guide-scroll").dispatchEvent(type, event);
@@ -247,7 +282,11 @@ const assert = require("node:assert/strict");
       assert.equal(guideReads, beforeDrag, `${type} pauses guide refresh`);
       await page.clock.runFor(1);
       await assertRestored(101);
-      assert.equal(guideReads, beforeDrag + 1, `${type} pause expires exactly once`);
+      assert.equal(
+        guideReads,
+        beforeDrag + 1,
+        `${type} pause expires exactly once`,
+      );
     }
     await enter();
     await changeChannels("ArrowDown", 14);
@@ -284,10 +323,14 @@ const assert = require("node:assert/strict");
     );
     // Responsive layouts can keep the same width, so transitionend is not
     // guaranteed. Wait for active width animations, then assert final geometry.
-    await page.locator(".preview-video-wrap").evaluate(element => Promise.all(
-      element.getAnimations().filter(animation => animation.transitionProperty === "width")
-        .map(animation => animation.finished.catch(() => {})),
-    ));
+    await page.locator(".preview-video-wrap").evaluate((element) =>
+      Promise.all(
+        element
+          .getAnimations()
+          .filter((animation) => animation.transitionProperty === "width")
+          .map((animation) => animation.finished.catch(() => {})),
+      ),
+    );
     await assertRestored(115);
     await page.setViewportSize({ width: 1280, height: 800 });
     await enter();

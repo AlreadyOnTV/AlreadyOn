@@ -431,8 +431,11 @@ export default function GuidePage() {
   useEffect(() => {
     const sync = () => {
       const video = document.querySelector(".playback-player video") as
-        (HTMLVideoElement & { webkitDisplayingFullscreen?: boolean }) | null;
-      const active = document.fullscreenElement !== null || !!video?.webkitDisplayingFullscreen;
+        | (HTMLVideoElement & { webkitDisplayingFullscreen?: boolean })
+        | null;
+      const active =
+        document.fullscreenElement !== null ||
+        !!video?.webkitDisplayingFullscreen;
       setFullscreen(active);
       if (!active) {
         restoreGuideRef.current = true;
@@ -483,13 +486,21 @@ export default function GuidePage() {
 
   useEffect(() => {
     let cancelled = false;
-    const query = JSON.stringify([currentUser.id, audienceTier, startupCompletions]);
+    const query = JSON.stringify([
+      currentUser.id,
+      audienceTier,
+      startupCompletions,
+    ]);
     // Refetch on entry, including after settings: the context may predate a
     // successful tune here or on another device.
 
     const loadGuide = () => {
-      if (navigationDeadline.current !== 0 ||
-        (loadedGuideQuery.current === query && performance.now() < nextGuideRefresh.current)) return;
+      if (
+        navigationDeadline.current !== 0 ||
+        (loadedGuideQuery.current === query &&
+          performance.now() < nextGuideRefresh.current)
+      )
+        return;
       nextGuideRefresh.current = performance.now() + GUIDE_POLL_INTERVAL_MS;
       const nowMs = Date.now();
 
@@ -498,7 +509,8 @@ export default function GuidePage() {
         getProfile(currentUser.id),
       ])
         .then(([data, viewer]) => {
-          if (cancelled || performance.now() < navigationDeadline.current) return;
+          if (cancelled || performance.now() < navigationDeadline.current)
+            return;
           loadedGuideQuery.current = query;
           // Commercial breaks are real, timed entries the schedule engine
           // tracks for playback purposes, but a cable guide never lists
@@ -565,7 +577,8 @@ export default function GuidePage() {
           }
         })
         .catch((err: Error) => {
-          if (!cancelled && navigationDeadline.current === 0) setLoadError(err.message);
+          if (!cancelled && navigationDeadline.current === 0)
+            setLoadError(err.message);
         });
     };
 
@@ -584,7 +597,12 @@ export default function GuidePage() {
       window.removeEventListener("focus", loadGuide);
       document.removeEventListener("visibilitychange", loadGuide);
     };
-  }, [currentUser.id, audienceTier, startupCompletions, refreshAfterNavigation]);
+  }, [
+    currentUser.id,
+    audienceTier,
+    startupCompletions,
+    refreshAfterNavigation,
+  ]);
 
   // Memoized (not just `channels ?? []` inline) so slotPixelWidth's own
   // useMemo below can depend on it without recomputing every render —
@@ -669,7 +687,8 @@ export default function GuidePage() {
     if (!focused) return;
     const selectionChanged = scrollSelection.current !== focused;
     scrollSelection.current = focused;
-    if (!selectionChanged && performance.now() < navigationDeadline.current) return;
+    if (!selectionChanged && performance.now() < navigationDeadline.current)
+      return;
     const key = `${focused.channelNumber}-${focused.programStartsAt}`;
     const el = slotRefs.current.get(key);
     const container = scrollRef.current;
@@ -848,7 +867,8 @@ export default function GuidePage() {
       }
       if (e.key === "ArrowLeft" || e.key === "ArrowRight") return;
     }
-    if (["ArrowRight", "ArrowLeft", "ArrowDown", "ArrowUp"].includes(e.key)) pauseGuideNavigation();
+    if (["ArrowRight", "ArrowLeft", "ArrowDown", "ArrowUp"].includes(e.key))
+      pauseGuideNavigation();
     if (e.key === "ArrowRight" || e.key === "ArrowLeft") {
       e.preventDefault();
       const delta = e.key === "ArrowRight" ? 1 : -1;
@@ -955,8 +975,11 @@ export default function GuidePage() {
 
   return (
     <div
-      className={"guide-page" + (playerLarge ? " is-large-player" : "") +
-        (touch && !phone && !portrait ? " is-touch-landscape" : "")}
+      className={
+        "guide-page" +
+        (playerLarge ? " is-large-player" : "") +
+        (touch && !phone && !portrait ? " is-touch-landscape" : "")
+      }
       ref={pageRef}
     >
       <div className="page-header" ref={pageHeaderRef}>
@@ -1102,13 +1125,19 @@ export default function GuidePage() {
         {!guideHasContent && (
           <StartupNotice status={startupStatus} variant="panel" />
         )}
-        <div className="guide-scroll no-scrollbar" ref={scrollRef} tabIndex={0}
+        <div
+          className="guide-scroll no-scrollbar"
+          ref={scrollRef}
+          tabIndex={0}
           onWheelCapture={pauseGuideNavigation}
           onPointerDownCapture={pauseGuideNavigation}
-          onPointerMoveCapture={(event) => { if (event.buttons !== 0) pauseGuideNavigation(); }}
+          onPointerMoveCapture={(event) => {
+            if (event.buttons !== 0) pauseGuideNavigation();
+          }}
           onPointerUpCapture={pauseGuideNavigation}
           onTouchMoveCapture={pauseGuideNavigation}
-          onTouchEndCapture={pauseGuideNavigation}>
+          onTouchEndCapture={pauseGuideNavigation}
+        >
           <div
             className="guide-head-row"
             ref={headRef}
