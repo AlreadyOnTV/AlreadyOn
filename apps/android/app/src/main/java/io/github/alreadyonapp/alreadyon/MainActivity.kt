@@ -94,16 +94,19 @@ class MainActivity : ComponentActivity() {
             val model: PhoneModel = viewModel()
             val state by model.state.collectAsStateWithLifecycle()
             val lifecycleOwner = LocalLifecycleOwner.current
-            LaunchedEffect(lifecycleOwner, model, state.signedIn) {
-                if (state.signedIn) lifecycleOwner.lifecycle.repeatOnLifecycle(Lifecycle.State.STARTED) {
+            val refreshSharedProfiles = state.signedIn && state.profile != null
+            LaunchedEffect(lifecycleOwner, model, refreshSharedProfiles) {
+                if (refreshSharedProfiles) lifecycleOwner.lifecycle.repeatOnLifecycle(Lifecycle.State.STARTED) {
                     while (true) {
                         model.refreshProfiles()
                         delay(300_000)
                     }
                 }
             }
-            PhoneTheme { UpdatePrompt(visible = !pip) }
-            StartupPreload {
+            val startupReady = !BuildConfig.IS_TV || (!state.restoringConnection &&
+                (state.channel == null || state.playbackReady || state.error != null))
+            PhoneTheme { UpdatePrompt(visible = !pip && (!BuildConfig.IS_TV || startupReady)) }
+            StartupPreload(ready = startupReady, showContent = !BuildConfig.IS_TV || !state.restoringConnection) {
                 val guideNow = rememberGuideTime(state.channels)
                 if (BuildConfig.IS_TV) {
                     TvShell(state, model, guideNow)
@@ -181,7 +184,6 @@ class MainActivity : ComponentActivity() {
                                 }
                                 if (state.busy) LinearProgressIndicator(Modifier.fillMaxWidth())
                             }
-                            ServerTrustAlert(state, model)
                             when {
                                 !state.signedIn -> ServerConnectScreen(state, model, Modifier.weight(1f))
                                 state.mustChangePassword -> AccountScreen(state, model, forced = true)
@@ -290,8 +292,17 @@ internal fun ProfileScreen(state: PhoneState, model: PhoneModel, modifier: Modif
     var selected by remember { mutableStateOf<ViewerProfile?>(null) }
     var pin by remember { mutableStateOf("") }
     val firstProfile = remember { FocusRequester() }
-    LaunchedEffect(state.profiles.firstOrNull()?.id, state.busy) {
-        if (BuildConfig.IS_TV && state.profiles.isNotEmpty() && !state.busy) firstProfile.requestFocus()
+    var focusedInitialProfile by remember { mutableStateOf(false) }
+    var profilesLoaded by remember { mutableStateOf(false) }
+    LaunchedEffect(model) {
+        model.refreshProfilesOnEntry()
+        profilesLoaded = true
+    }
+    LaunchedEffect(state.profiles.firstOrNull()?.id, state.busy, profilesLoaded) {
+        if (BuildConfig.IS_TV && profilesLoaded && state.profiles.isNotEmpty() && !state.busy && !focusedInitialProfile) {
+            firstProfile.requestFocus()
+            focusedInitialProfile = true
+        }
     }
     val linkPixels = TypedValue.applyDimension(TypedValue.COMPLEX_UNIT_PT, 2f, LocalContext.current.resources.displayMetrics)
     val linkIncrease = with(LocalDensity.current) { linkPixels.toSp() }
@@ -304,18 +315,17 @@ internal fun ProfileScreen(state: PhoneState, model: PhoneModel, modifier: Modif
         if (BuildConfig.IS_TV) item { Text("Select Profile", style = MaterialTheme.typography.headlineMedium) }
         items(state.profiles, key = { it.id }) { profile ->
             Button(onClick = { if (profile.hasPin) { selected = profile; pin = "" } else model.selectProfile(profile, "") },
-                enabled = !state.busy, modifier = Modifier.fillMaxWidth(if (BuildConfig.IS_TV) 0.5f else 1f).heightIn(min = 48.dp)
+                enabled = profilesLoaded && !state.busy, modifier = Modifier.fillMaxWidth(if (BuildConfig.IS_TV) 0.5f else 1f).heightIn(min = 48.dp)
                     .then(if (BuildConfig.IS_TV && profile.id == state.profiles.firstOrNull()?.id) Modifier.focusRequester(firstProfile) else Modifier)
                     .tvFocusOutline(), shape = RoundedCornerShape(4.dp)) {
                 ProfileName(profile, model)
             }
         }
         if (state.profiles.isEmpty()) item {
-            Text("Create a viewer profile in your server’s web interface, then refresh.", textAlign = TextAlign.Center)
+            Text("Create a viewer profile in your server’s web interface, then reopen this screen.", textAlign = TextAlign.Center)
         }
         item {
             Row(horizontalArrangement = Arrangement.Center) {
-                TextButton(onClick = model::refreshProfiles, enabled = !state.busy) { Text("Refresh", style = linkStyle) }
                 TextButton(onClick = model::logout, enabled = !state.busy) { Text("Sign Out", style = linkStyle) }
             }
         }

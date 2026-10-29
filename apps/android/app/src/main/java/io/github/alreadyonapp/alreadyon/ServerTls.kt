@@ -18,8 +18,9 @@ internal fun OkHttpClient.Builder.serverTls(origin: HttpUrl, trustedCa: String? 
         val certificates = CertificateFactory.getInstance("X.509").generateCertificates(ByteArrayInputStream(trustedCa.toByteArray()))
         require(certificates.isNotEmpty())
         val store = KeyStore.getInstance(KeyStore.getDefaultType()).apply { load(null) }
-        certificates.forEachIndexed { index, certificate ->
-            (certificate as X509Certificate).checkValidity()
+        val anchors = trustAnchors(certificates.map { it as X509Certificate })
+        anchors.forEachIndexed { index, certificate ->
+            certificate.checkValidity()
             store.setCertificateEntry("server-$index", certificate)
         }
         val manager = TrustManagerFactory.getInstance(TrustManagerFactory.getDefaultAlgorithm()).apply { init(store) }
@@ -56,4 +57,34 @@ internal fun OkHttpClient.Builder.bootstrapTls(origin: HttpUrl): OkHttpClient.Bu
             }
             chain.proceed(request)
         }
+}
+
+/** Compare certificate identities, not PEM formatting, bundle order or renewed intermediates.
+ * A self-signed root authenticates its intermediates; bundles without one retain exact pins.
+ */
+internal fun sameServerTrust(saved: String?, offered: String): Boolean {
+    if (saved == null) return false
+    fun anchors(pem: String): Set<String> {
+        val certificates = CertificateFactory.getInstance("X.509")
+            .generateCertificates(ByteArrayInputStream(pem.toByteArray())).map { it as X509Certificate }
+        require(certificates.isNotEmpty())
+        return trustAnchors(certificates).map { certificateIdentity(it) }.toSet()
+    }
+    return runCatching { anchors(saved) == anchors(offered) }.getOrDefault(false)
+}
+
+private fun certificateIdentity(cert: X509Certificate): String =
+    java.security.MessageDigest.getInstance("SHA-256").digest(cert.encoded).joinToString("") { "%02x".format(it) }
+
+internal fun isServerTrustFailure(error: Throwable): Boolean =
+    generateSequence(error) { it.cause }.any {
+        it is java.security.cert.CertificateException || it is java.security.cert.CertPathValidatorException ||
+            it is javax.net.ssl.SSLPeerUnverifiedException
+    }
+
+private fun trustAnchors(certificates: List<X509Certificate>): List<X509Certificate> {
+    val roots = certificates.filter { cert ->
+        cert.subjectX500Principal == cert.issuerX500Principal && runCatching { cert.verify(cert.publicKey) }.isSuccess
+    }
+    return roots.ifEmpty { certificates }
 }

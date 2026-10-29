@@ -3,6 +3,7 @@ package io.github.alreadyonapp.alreadyon
 import androidx.activity.compose.setContent
 import androidx.compose.foundation.layout.Box
 import androidx.compose.foundation.layout.fillMaxSize
+import androidx.compose.material3.Text
 import androidx.compose.runtime.*
 import androidx.compose.ui.Modifier
 import androidx.compose.ui.semantics.SemanticsProperties
@@ -20,6 +21,25 @@ import java.time.Instant
 @RunWith(AndroidJUnit4::class)
 class GuideRestorationTest {
     @get:Rule val compose = createAndroidComposeRule<MainActivity>()
+
+    @Test fun startupWaitsForRestorationAndPlaybackWithoutComposingOnboarding() {
+        var ready by mutableStateOf(false)
+        var showContent by mutableStateOf(false)
+        compose.runOnUiThread {
+            compose.activity.setContent {
+                StartupPreload(ready = ready, showContent = showContent) { Text("Restored guide") }
+            }
+        }
+        compose.onNodeWithTag("startup-cover").assertExists()
+        compose.onNodeWithText("Restored guide").assertDoesNotExist()
+        compose.runOnIdle { showContent = true }
+        compose.onNodeWithText("Restored guide").assertExists()
+        compose.onNodeWithTag("startup-cover").assertExists()
+        compose.runOnIdle { ready = true }
+        compose.waitUntil(5_000) { compose.onAllNodesWithTag("startup-cover").fetchSemanticsNodes().isEmpty() }
+        compose.runOnIdle { ready = false }
+        compose.onNodeWithTag("startup-cover").assertDoesNotExist()
+    }
 
     @Test fun fullscreenChannelChangesRestoreLiveAiringAtTopAcrossMidnight() {
         val start = Instant.parse("2026-10-24T23:29:59Z").toEpochMilli()

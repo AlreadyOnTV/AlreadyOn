@@ -8,6 +8,7 @@ import androidx.compose.foundation.layout.padding
 import androidx.compose.ui.focus.FocusRequester
 import androidx.compose.ui.focus.focusRequester
 import androidx.compose.ui.Modifier
+import androidx.compose.ui.platform.LocalFocusManager
 import androidx.compose.ui.unit.dp
 import androidx.test.core.app.ActivityScenario
 import androidx.test.ext.junit.runners.AndroidJUnit4
@@ -25,35 +26,28 @@ class ServerPinFieldTest {
         val instrumentation = InstrumentationRegistry.getInstrumentation()
         val device = UiDevice.getInstance(instrumentation)
         var pin by mutableStateOf("")
-        var visible by mutableStateOf(false)
         var done = false
         val focus = FocusRequester()
         ActivityScenario.launch(MainActivity::class.java).use { scenario ->
             scenario.onActivity { activity -> activity.setContent {
-                PhoneTheme { ServerPinField(pin, { pin = it }, visible, { visible = !visible }, true, { done = true }, Modifier.padding(top = 80.dp).focusRequester(focus)) }
+                val focusManager = LocalFocusManager.current
+                PhoneTheme { ServerPinField(pin, { pin = it }, true,
+                    { done = true; focusManager.clearFocus(force = true) }, Modifier.padding(top = 80.dp).focusRequester(focus)) }
             } }
             val field = device.wait(Until.findObject(By.clazz("android.widget.EditText")), 10000)
             assertNotNull("Editable PIN field", field)
-            if (BuildConfig.IS_TV) {
-                instrumentation.runOnMainSync { focus.requestFocus() }
-            } else field.click()
+            field.click()
             val imePackage = Settings.Secure.getString(instrumentation.targetContext.contentResolver,
                 Settings.Secure.DEFAULT_INPUT_METHOD).substringBefore("/")
             assertTrue("The installed device keyboard opens for PIN entry",
                 device.wait(Until.hasObject(By.pkg(imePackage)), 10000))
-            if (BuildConfig.IS_TV) {
-                device.pressDPadCenter() // 1
-                device.pressDPadRight(); device.pressDPadCenter() // 2
-                device.pressDPadDown(); device.pressDPadCenter() // 5
-                instrumentation.runOnMainSync { assertEquals("125", pin) }
-                device.pressDPadUp(); device.pressDPadLeft() // Return to 1.
-            }
             field.text = "12a345678901234"
             device.waitForIdle()
             instrumentation.runOnMainSync { assertEquals("123456789012", pin) }
-            device.findObject(By.desc("Show PIN")).click()
-            assertTrue(device.wait(Until.hasObject(By.text("123456789012")), 5000))
-            device.findObject(By.desc("Hide PIN")).click()
+            assertTrue(device.hasObject(By.text("TV Pairing Pin")))
+            assertFalse(device.hasObject(By.desc("Show PIN")))
+            assertFalse(device.hasObject(By.desc("Hide PIN")))
+            assertTrue(device.hasObject(By.text("123456789012")))
             device.findObject(By.clazz("android.widget.EditText")).text = "654321"
             device.waitForIdle()
             instrumentation.runOnMainSync { assertEquals("654321", pin) }
@@ -62,12 +56,29 @@ class ServerPinFieldTest {
             assertNotNull("Numeric keyboard Done key", doneKey)
             device.takeScreenshot(java.io.File(instrumentation.targetContext.getExternalFilesDir(null), "server-pin-keyboard.png"))
             if (BuildConfig.IS_TV) {
-                // TV IMEs receive remote key events; touch injection does not activate their keys.
-                repeat(3) { device.pressDPadRight() }
-                repeat(3) { device.pressDPadDown() }
+                repeat(16) {
+                    if (!doneKey.isFocused) {
+                        val focused = device.findObject(By.pkg(imePackage).focused(true))
+                        assertNotNull("Keyboard has remote focus", focused)
+                        val current = focused.visibleBounds
+                        val target = doneKey.visibleBounds
+                        when {
+                            current.centerY() < target.top -> device.pressDPadDown()
+                            current.centerY() > target.bottom -> device.pressDPadUp()
+                            current.centerX() < target.left -> device.pressDPadRight()
+                            else -> device.pressDPadLeft()
+                        }
+                        device.waitForIdle()
+                    }
+                }
+                assertTrue("Done has remote focus", doneKey.isFocused)
                 device.pressDPadCenter()
             } else doneKey.click()
             device.waitForIdle()
+            if (!done) {
+                device.dumpWindowHierarchy(System.out)
+                device.takeScreenshot(java.io.File(instrumentation.targetContext.getExternalFilesDir(null), "server-pin-after-done.png"))
+            }
             instrumentation.runOnMainSync { assertTrue(done) }
         }
     }

@@ -125,7 +125,7 @@ internal fun TvShell(state: PhoneState, model: PhoneModel, guideNow: Long) {
             // In the guide and sign-in screens, focus belongs to the actionable children.
             }.then(if (fullscreen) Modifier.focusRequester(focus).focusable() else Modifier),
             verticalArrangement = Arrangement.spacedBy(if (fullscreen) 0.dp else 8.dp)) {
-            if (!fullscreen && state.profile == null) Row(Modifier.fillMaxWidth()) { PhoneBrand() }
+            if (!fullscreen && state.signedIn && state.profile == null) Row(Modifier.fillMaxWidth()) { PhoneBrand() }
             // Keep one named profile control in the header across Guide/settings,
             // independent of whether a channel's player panel is present.
             if (!fullscreen && state.profile != null) Row(Modifier.fillMaxWidth(),
@@ -146,7 +146,6 @@ internal fun TvShell(state: PhoneState, model: PhoneModel, guideNow: Long) {
                 if (state.signedIn) state.error?.let { Text(it, color = MaterialTheme.colorScheme.error) }
                 // Routine background refreshes must not animate or shift the TV layout.
             }
-            ServerTrustAlert(state, model)
             when {
                 !state.signedIn -> ServerConnectScreen(state, model, Modifier.weight(1f))
                 state.mustChangePassword -> AccountScreen(state, model, forced = true)

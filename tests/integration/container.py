@@ -108,8 +108,8 @@ def main():
 
     credentials = {'username': 'ci-user', 'password': secrets.token_urlsafe(24)}
     api('POST', '/api/auth/setup', credentials, 201)
-    # The laptop deploy wrapper uses this packaged utility after health checks.
-    # It must revoke only browser auth; signing back in proves the account remains.
+    # Explicit operator revocation is separate from normal deployment.
+    # Signing back in proves revocation retains the account.
     engine('exec', '--user', '1000:1000', NAME, 'alreadyon-clear-browser-sessions')
     assert request('GET', '/api/server/details')[0] == 401
     api('POST', '/api/auth/login', credentials)
@@ -212,7 +212,7 @@ def main():
     wait_for(health, 'restart')
     assert engine('exec', '--user', '1000:1000', NAME, 'cat', '/config/tls/ca.pem').stdout == initial_ca, 'Restart changed instance trust'
     engine('exec', '--user', '1000:1000', NAME, 'alreadyon-tls', 'health')
-    api('POST', '/api/auth/login', credentials)
+    assert api('GET', '/api/auth/status')['authenticated'], 'Restart lost saved authentication'
     assert api('GET', '/api/settings/commercials')['enabled'] is False
     assert api('GET', f'/api/channels/{channel_id}')['name'] == 'Synthetic Integration'
     assert api('GET', '/api/settings/folders')['movies']['paths'][0]['path'] == '/fixture'

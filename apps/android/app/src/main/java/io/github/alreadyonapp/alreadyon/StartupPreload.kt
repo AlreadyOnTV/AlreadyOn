@@ -9,21 +9,24 @@ import androidx.compose.runtime.*
 import androidx.compose.runtime.saveable.rememberSaveable
 import androidx.compose.ui.Alignment
 import androidx.compose.ui.Modifier
+import androidx.compose.ui.platform.testTag
 import androidx.compose.ui.input.key.onPreviewKeyEvent
 import androidx.compose.ui.input.pointer.pointerInput
 import kotlinx.coroutines.delay
 
 /** Shared static startup cover; the session, guide and player load underneath without another request. */
 @Composable
-internal fun StartupPreload(content: @Composable () -> Unit) {
+internal fun StartupPreload(ready: Boolean = true, showContent: Boolean = true, content: @Composable () -> Unit) {
     var loading by rememberSaveable { mutableStateOf(true) }
+    var completed by rememberSaveable { mutableStateOf(false) }
     val deadline = rememberSaveable { SystemClock.elapsedRealtime() + 2_000 }
     // Configuration changes retain the acknowledgement rather than restarting the delay.
     LaunchedEffect(Unit) { delay((deadline - SystemClock.elapsedRealtime()).coerceAtLeast(0)); loading = false }
-    Box(Modifier.fillMaxSize().onPreviewKeyEvent { loading }) {
-        content()
-        if (loading) PhoneTheme {
-            Surface(Modifier.fillMaxSize().pointerInput(Unit) {
+    LaunchedEffect(loading, ready) { if (!loading && ready) completed = true }
+    Box(Modifier.fillMaxSize().onPreviewKeyEvent { !completed }) {
+        if (completed || showContent) content()
+        if (!completed) PhoneTheme {
+            Surface(Modifier.fillMaxSize().testTag("startup-cover").pointerInput(Unit) {
                 awaitPointerEventScope {
                     while (true) awaitPointerEvent().changes.forEach { it.consume() }
                 }
