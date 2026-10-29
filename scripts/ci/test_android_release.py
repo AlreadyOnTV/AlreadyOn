@@ -362,10 +362,29 @@ class AndroidReleaseTests(unittest.TestCase):
 
     def test_promotion_rejects_nonincreasing_version_code(self):
         prior = {"tag_name": "26.10.09-RC1", "draft": False, "body": "Source commit: `" + "a" * 40 + "`"}
-        with patch.object(release, "api", return_value=prior), patch.object(release, "download"), \
+        with patch.object(release, "releases", return_value=[prior]), patch.object(release, "download"), \
                 patch.object(release, "verify_assets", return_value={"version_code": 200000000}):
             with self.assertRaisesRegex(ValueError, "must increase"):
                 release.publish_promotion("owner/repo", "26.10.09-Stable", "a" * 40, 200000000, Path("unused"), prior["tag_name"])
+
+    def test_draft_promotion_uses_listing_instead_of_missing_tag_endpoint(self):
+        sha = "a" * 40
+        prior = {"tag_name": "26.10.09-rc1", "draft": True, "body": f"Source commit: `{sha}`"}
+        with patch.object(release, "releases", return_value=[prior]), \
+                patch.object(release, "api", side_effect=AssertionError("Draft tag endpoint is unavailable")), \
+                patch.object(release, "download"), \
+                patch.object(release, "verify_assets", return_value={"version_code": 100}), \
+                patch.object(release, "candidate") as candidate:
+            release.publish_promotion("owner/repo", prior["tag_name"], sha, 101, Path("unused"), prior["tag_name"])
+            self.assertEqual(candidate.call_args.kwargs["predecessor"], prior)
+            self.assertEqual(candidate.call_args.args[3], 101)
+
+    def test_missing_or_differently_named_draft_predecessors_stop_publication(self):
+        for entries, error in [([], "not found"), ([{"tag_name": "26.10.09-rc1", "draft": True}], "matching tested RC draft")]:
+            with patch.object(release, "releases", return_value=entries), patch.object(release, "candidate") as candidate:
+                with self.assertRaisesRegex(ValueError, error):
+                    release.publish_promotion("owner/repo", "26.10.09-rc2", "a" * 40, 101, Path("unused"), "26.10.09-rc1")
+                candidate.assert_not_called()
 
     def test_stable_rejects_drafts_and_non_candidates(self):
         for data in ({"draft": True, "prerelease": True}, {"draft": False, "prerelease": False}):
