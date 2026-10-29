@@ -16,7 +16,9 @@ Each new release builds and signs both APKs with its target-stage version name a
 
 After nightly acceptance, dispatch **Android Nightly, RC and Stable** on `test` (`promote-test`) or `main` (`stable`). Completed reruns verify published assets. `repair-stable` explicitly replaces historical copied-candidate Stable APKs with fresh Stable builds at the same source/tag; correctly versioned published APKs remain immutable. Stable locks the date.
 
-Nightly APKs recognize nightly releases and their download URLs. Existing installed APKs require a signed update to gain this support. Future phone and TV builds must offer newer alpha, RC and stable updates even when the installed release is Stable. Stable publication must not lock clients to stable-only updates. See [update policy and existing-client limitations](ANDROID_UPDATES.md).
+An approved direct RC can instead use **Build Date Release Image** on dev with `publication=rc-candidate`, an exact revision and date. Full validation and image attestations precede a signed draft RC; existing nightly artifacts/channels remain unchanged. The normal promotion helper accepts this matching draft and tested image before advancing test. Test builds fresh RC APKs with higher codes and publishes the matching draft.
+
+Updated phone and TV builds use the Admin-selected Stable (default), Release Candidate or Nightly cycle, not an installed-label track lock. Existing APKs need a signed update to gain the setting or nightly recognition. See [update policy and existing-client limitations](ANDROID_UPDATES.md).
 
 ## Manual stage promotion
 

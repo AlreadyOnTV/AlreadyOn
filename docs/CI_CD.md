@@ -12,6 +12,8 @@ Use the primary checkout, `26.10.29`, and HTTPS preview on port 5173. Dev PRs ru
 
 After the maintainer validates a nightly, promote its exact source to `test` for Docker `latest` and `YY.MM.DD-rc1` APKs, then `main` for Docker `stable` and `YY.MM.DD-stable` APKs. Further RCs increment their suffix; completed releases are never overwritten. These promotions remain manual.
 
+For approved direct RC delivery, dispatch **Build Date Release Image** on merged dev with `publication=rc-candidate` and exact revision/date. Full gates produce an attested image and draft RC without changing nightly artifacts/channels. Promote that commit using `scripts/promote.py test COMMIT`.
+
 Local checks: `make lint`, documentation and syntax checks.
 
 ## Approved release validation

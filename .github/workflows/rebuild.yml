@@ -10,9 +10,9 @@ on:
         type: string
         default: ''
       publication:
-        description: Nightly delivery; RC and Stable require test/main promotion
+        description: Nightly delivery or validated draft RC preparation before test promotion
         type: choice
-        options: [nightly]
+        options: [nightly, rc-candidate]
         default: nightly
       release_date:
         description: Optional YY.MM.DD nightly date; defaults to today in America/New_York
@@ -46,6 +46,7 @@ jobs:
         env:
           GH_TOKEN: ${{ github.token }}
           RELEASE_DATE: ${{ inputs.release_date }}
+          PUBLICATION: ${{ inputs.publication || 'nightly' }}
         run: |
           revision=$(git rev-parse HEAD)
           current=$(gh api "repos/$GITHUB_REPOSITORY/git/ref/heads/$GITHUB_REF_NAME" --jq .object.sha)
@@ -54,7 +55,13 @@ jobs:
           release_date=$(date +%y.%m.%d)
           if [ -n "$RELEASE_DATE" ]; then release_date="$RELEASE_DATE"; fi
           {
-            python3 scripts/ci/android-release.py check-nightly --sha "$revision" --day "$release_date"
+            if [ "$PUBLICATION" = rc-candidate ]; then
+              test "$GITHUB_EVENT_NAME" = workflow_dispatch
+              python3 scripts/ci/release-context.py date --sha "$revision" --date "$release_date" >/dev/null
+              echo "existing=false"
+            else
+              python3 scripts/ci/android-release.py check-nightly --sha "$revision" --day "$release_date"
+            fi
             echo "revision=$revision"
             echo "release_date=$release_date"
           } >> "$GITHUB_OUTPUT"
@@ -211,6 +218,7 @@ jobs:
           if-no-files-found: error
           retention-days: 90
       - name: Publish nightly and overwrite today's date tag
+        if: inputs.publication != 'rc-candidate'
         env:
           GH_TOKEN: ${{ github.token }}
           CI_REVISION: ${{ needs.select.outputs.revision }}
@@ -221,6 +229,14 @@ jobs:
           IMAGE_TAGS=$(CI_SOURCE_BRANCH=dev python3 scripts/ci/image-tags.py | sed -n 's/^tags=//p')
           export IMAGE_TAGS
           python3 scripts/ci/publish-image.py
+      - name: Record validated RC image without changing channels
+        if: inputs.publication == 'rc-candidate'
+        env:
+          GH_TOKEN: ${{ github.token }}
+          CI_REVISION: ${{ needs.select.outputs.revision }}
+          STAGED_IMAGE: ${{ steps.staged.outputs.source }}
+        run: |
+          PYTHONPATH=scripts/ci python3 -c 'import os; from image_registry import record; record(os.environ["GITHUB_REPOSITORY"], os.environ["CI_REVISION"], os.environ["STAGED_IMAGE"].rsplit("@", 1)[1])'
       - name: Create or advance the release date tag
         env:
           GH_TOKEN: ${{ github.token }}
@@ -241,7 +257,7 @@ jobs:
       issues: read
     uses: ./.github/workflows/android-release.yml
     with:
-      operation: nightly
+      operation: ${{ inputs.publication == 'rc-candidate' && 'rc-candidate' || 'nightly' }}
       release_date: ${{ needs.select.outputs.release_date }}
       source_sha: ${{ needs.select.outputs.revision }}
     secrets: inherit

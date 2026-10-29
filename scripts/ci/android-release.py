@@ -304,12 +304,12 @@ def plan_nightly(repo, sha, day):
     print(f"version_code={tag_version_code(entry) if entry else next_version_code(releases(repo))}")
 
 
-def plan(repo, sha, day=None):
+def plan(repo, sha, day=None, *, rc=False):
     day = release_day(day or datetime.now(ZoneInfo("America/New_York")).date().strftime('%y.%m.%d'))
     entries = releases(repo)
     marker = f"Source commit: `{sha}`"
     existing = next((entry for entry in entries
-                     if (ALPHA.fullmatch(entry["tag_name"]) or RC.fullmatch(entry["tag_name"]))
+                     if (RC.fullmatch(entry["tag_name"]) or (not rc and ALPHA.fullmatch(entry["tag_name"])))
                      and marker in (entry.get("body") or "")), None)
     if existing and not existing["draft"]:
         target = api(f"repos/{repo}/commits/{existing['tag_name']}")["sha"]
@@ -324,6 +324,10 @@ def plan(repo, sha, day=None):
         print(f"release_date={day}")
         return
     tag = next_dev_tag(entries, day)
+    if rc:
+        numbers = [parsed[2] for entry in entries if not entry["draft"]
+                   and (parsed := stage_tag(entry["tag_name"])) and parsed[:2] == (day, "rc")]
+        tag = f"{day}-rc{max(numbers, default=0) + 1}"
     draft = next((entry for entry in entries if entry["tag_name"] == tag and entry["draft"]), None)
     if draft:
         if existing and existing["tag_name"] == tag:
@@ -573,7 +577,7 @@ def promote_selected_stable(repo, day, sha):
 
 def main():
     parser = argparse.ArgumentParser(description=__doc__)
-    parser.add_argument("operation", choices=("check-nightly", "plan-nightly", "nightly", "plan", "plan-stable", "candidate", "direct-stable", "promote", "promote-test", "promote-stable", "cleanup-legacy", "plan-promotion", "publish-promotion"))
+    parser.add_argument("operation", choices=("check-nightly", "plan-nightly", "nightly", "plan", "plan-rc", "plan-stable", "candidate", "direct-stable", "promote", "promote-test", "promote-stable", "cleanup-legacy", "plan-promotion", "publish-promotion"))
     parser.add_argument("--repo", default=os.environ.get("GITHUB_REPOSITORY"), required=False)
     parser.add_argument("--sha")
     parser.add_argument("--day")
@@ -608,10 +612,10 @@ def main():
             print(f"existing={'true' if entry and not entry['draft'] else 'false'}")
         else:
             plan_nightly(args.repo, args.sha, args.day)
-    elif args.operation == "plan":
+    elif args.operation in {"plan", "plan-rc"}:
         if not args.sha:
             parser.error("plan requires --sha")
-        plan(args.repo, args.sha, args.day)
+        plan(args.repo, args.sha, args.day, rc=args.operation == "plan-rc")
     elif args.operation == "plan-stable":
         if not all((args.sha, args.day)):
             parser.error("plan-stable requires --sha and --day")
