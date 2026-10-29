@@ -65,7 +65,7 @@ internal fun ServerConnectScreen(state: PhoneState, model: PhoneModel, modifier:
     val servers = remember { mutableStateListOf<TvServer>().apply { recent?.let { add(it) } } }
     var scan by remember { mutableIntStateOf(0) }
     var selected by remember { mutableStateOf<TvServer?>(
-        if (BuildConfig.IS_TV && state.trustIssue) serverOrigin(state.origin)?.let { TvServer(state.serverName, it) } else null) }
+        if (state.trustIssue) serverOrigin(state.origin)?.let { TvServer(state.serverName, it) } else null) }
     var trust by remember { mutableStateOf<TvTrust?>(null) }
     var error by remember { mutableStateOf<String?>(null) }
     var checking by remember { mutableStateOf(false) }
@@ -130,7 +130,7 @@ internal fun ServerConnectScreen(state: PhoneState, model: PhoneModel, modifier:
         }
     }
     LaunchedEffect(state.trustIssue, state.origin) {
-        if (BuildConfig.IS_TV && state.trustIssue) {
+        if (state.trustIssue) {
             serverOrigin(state.origin)?.let { select(TvServer(state.serverName, it)) }
         }
     }
@@ -214,45 +214,21 @@ internal fun ServerConnectScreen(state: PhoneState, model: PhoneModel, modifier:
                 ServerPinField(pin, { pin = it },
                     enabled = !state.busy, onDone = ::closePin,
                     modifier = Modifier.fillMaxWidth(if (BuildConfig.IS_TV) 0.6f else 1f).focusRequester(pinFocus))
-                if (BuildConfig.IS_TV) {
-                    Row(horizontalArrangement = Arrangement.spacedBy(12.dp)) {
-                        Button(modifier = Modifier.focusRequester(connectFocus).tvFocusOutline(), onClick = {
-                            if (username.isBlank() || pin.length !in 6..12) error = "Enter your username and 6–12 digit TV Pairing Pin."
-                            else {
-                                error = null
-                                keyboard?.hide()
-                                model.signInWithPIN(selected!!.origin, username, pin, trust!!.certificate, trust!!.name, acceptNewCa = changedCa)
-                            }
-                        }, enabled = !state.busy && !checking) { Text(if (changedCa) "Accept New CA" else "Connect") }
-                        Button(modifier = Modifier.tvFocusOutline(), onClick = ::goBack,
-                            enabled = !state.busy && !checking) { Text("Go Back") }
-                        Button(modifier = Modifier.tvFocusOutline(), onClick = { keyboard?.hide(); help = true },
-                            enabled = !state.busy) { Text("Help") }
-                    }
-                } else {
-                var acceptingTrust by remember { mutableStateOf(false) }
-                LaunchedEffect(changedCa, state.busy) {
-                    if (acceptingTrust && !changedCa && !state.busy) {
-                        acceptingTrust = false
-                        connectFocus.requestFocus()
-                    }
-                }
-                Row(Modifier.fillMaxWidth().padding(top = 8.dp).height(IntrinsicSize.Min), horizontalArrangement = Arrangement.spacedBy(8.dp)) {
-                val actionModifier = Modifier.weight(1f).fillMaxHeight()
-                if (changedCa) {
-                    Button(modifier = actionModifier.focusRequester(connectFocus), onClick = {
-                        acceptingTrust = true
-                        model.acceptServerTrust(trust!!.certificate)
-                    }, enabled = !state.busy) { Text("Accept New CA") }
-                } else Button(modifier = actionModifier.focusRequester(connectFocus), onClick = {
+                Row(modifier = if (BuildConfig.IS_TV) Modifier else Modifier.fillMaxWidth().padding(top = 8.dp).height(IntrinsicSize.Min),
+                    horizontalArrangement = Arrangement.spacedBy(if (BuildConfig.IS_TV) 12.dp else 8.dp)) {
+                val actionModifier = if (BuildConfig.IS_TV) Modifier else Modifier.weight(1f).fillMaxHeight()
+                Button(modifier = actionModifier.focusRequester(connectFocus).tvFocusOutline(), onClick = {
                     if (username.isBlank() || pin.length !in 6..12) error = "Enter your username and 6–12 digit TV Pairing Pin."
-                    else { model.signInWithPIN(selected!!.origin, username, pin, trust!!.certificate, trust!!.name); pin = "" }
-                }, enabled = !state.busy) { Text("Connect") }
-                Button(modifier = actionModifier, onClick = ::goBack,
+                    else {
+                        error = null
+                        keyboard?.hide()
+                        model.signInWithPIN(selected!!.origin, username, pin, trust!!.certificate, trust!!.name, acceptNewCa = changedCa)
+                    }
+                }, enabled = !state.busy && !checking) { Text(if (changedCa) "Accept New CA" else "Connect") }
+                Button(modifier = actionModifier.tvFocusOutline(), onClick = ::goBack,
                     enabled = !state.busy && !checking) { Text("Go Back") }
-                Button(modifier = actionModifier, onClick = { keyboard?.hide(); help = true },
+                Button(modifier = actionModifier.tvFocusOutline(), onClick = { keyboard?.hide(); help = true },
                     enabled = !state.busy) { Text("Help") }
-                }
                 }
             }
             if (trust == null) Button(modifier = Modifier.tvFocusOutline(), onClick = ::goBack,
@@ -281,14 +257,4 @@ internal fun ServerPinField(pin: String, onPin: (String) -> Unit,
                 true
             } else false
         }, enabled = enabled)
-}
-
-@Composable
-internal fun ServerTrustAlert(state: PhoneState, model: PhoneModel) {
-    if (BuildConfig.IS_TV || !state.trustIssue) return
-    AlertDialog(onDismissRequest = model::dismissTrustIssue,
-        title = { Text("Server certificate trust failed") },
-        text = { Text("The server no longer validates against its saved CA, or its certificate has expired. Connections are blocked. Review the server and accept a new CA only if you expected a change.") },
-        confirmButton = { TextButton(onClick = model::reviewServerTrust) { Text("Review Server CA") } },
-        dismissButton = { TextButton(onClick = model::dismissTrustIssue) { Text("Cancel") } })
 }

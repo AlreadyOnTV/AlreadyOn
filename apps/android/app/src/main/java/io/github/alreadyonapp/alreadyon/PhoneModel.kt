@@ -142,7 +142,7 @@ internal class PhoneModel(application: Application) : AndroidViewModel(applicati
     /** Native clients accept an instance CA before sending its PIN or saving a session. */
     fun signInWithPIN(origin: String, username: String, pin: String, trustedCa: String, serverName: String = "AlreadyOn", acceptNewCa: Boolean = false) = perform {
         val normalized = serverOrigin(origin) ?: throw IOException("Invalid local server address.")
-        if (acceptNewCa && (!BuildConfig.IS_TV || normalized != state.value.origin)) throw IOException("Select the saved server before accepting its new CA.")
+        if (acceptNewCa && normalized != state.value.origin) throw IOException("Select the saved server before accepting its new CA.")
         if (username.isBlank() || pin.length !in 6..12 || pin.any { it !in '0'..'9' }) throw IOException("Enter your username and 6–12 digit TV PIN.")
         if (normalized == state.value.origin && state.value.trustedCa != null && !sameServerTrust(state.value.trustedCa, trustedCa) && !acceptNewCa) {
             throw IOException("The server CA changed. Review and accept the new CA before connecting.")
@@ -193,8 +193,7 @@ internal class PhoneModel(application: Application) : AndroidViewModel(applicati
     private fun handleFailure(error: Exception) {
         if (isServerTrustFailure(error)) {
             stopWatching()
-            update { if (BuildConfig.IS_TV) it.copy(trustIssue = true, signedIn = false, profile = null, settings = null)
-                else it.copy(trustIssue = true) }
+            update { it.copy(trustIssue = true, signedIn = false, profile = null, settings = null) }
         }
         if (error is ServerFailure && error.sessionExpired) expireSession()
         if (error is ServerFailure && error.code == "password_change_required") {

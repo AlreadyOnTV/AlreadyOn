@@ -88,7 +88,7 @@ class ServerConnectionRecoveryTest {
             compose.runOnIdle { assertTrue(model.state.value.error.orEmpty(), model.state.value.signedIn) }
         }
         fun showCredentials() {
-            if (!BuildConfig.IS_TV || !model.state.value.trustIssue) {
+            if (!model.state.value.trustIssue) {
                 compose.onNodeWithText("$serverName (Recently connected)", substring = true).performClick()
             }
             compose.waitUntil(20_000) { compose.onAllNodesWithText("Username").fetchSemanticsNodes().isNotEmpty() }
@@ -214,24 +214,26 @@ class ServerConnectionRecoveryTest {
                     compose.runOnIdle { assertFalse(model.state.value.signedIn); assertTrue(model.state.value.trustIssue) }
                     assertTrue(SessionStore(application).read(origin).isNotEmpty())
                     val previousCa = preferences.getString("trusted_ca", null)
-                    if (!BuildConfig.IS_TV) compose.runOnUiThread { model.reviewServerTrust() }
                     showCredentials()
                     val accept = compose.onNodeWithText("Accept New CA")
                     accept.assertIsDisplayed()
                     compose.onNodeWithText("Connect").assertDoesNotExist()
-                    assertTrue(accept.fetchSemanticsNode().boundsInRoot.top > compose.onNodeWithText("TV Pairing Pin").fetchSemanticsNode().boundsInRoot.bottom)
-                    if (BuildConfig.IS_TV) {
-                        compose.onNodeWithText("Username").performTextInput(username)
-                        compose.onNodeWithText("TV Pairing Pin").performTextInput("123456")
+                    compose.onNodeWithText("Review Server CA").assertDoesNotExist()
+                    accept.performClick()
+                    compose.runOnIdle {
+                        assertEquals(previousCa, preferences.getString("trusted_ca", null))
+                        assertFalse(model.state.value.signedIn)
                     }
+                    assertTrue(SessionStore(application).read(origin).isNotEmpty())
+                    assertTrue(accept.fetchSemanticsNode().boundsInRoot.top > compose.onNodeWithText("TV Pairing Pin").fetchSemanticsNode().boundsInRoot.bottom)
+                    compose.onNodeWithText("Username").performTextInput(username)
+                    compose.onNodeWithText("TV Pairing Pin").performTextInput("123456")
                     accept.performClick()
                     settled()
                     compose.onNodeWithText("Accept New CA").assertDoesNotExist()
-                    if (BuildConfig.IS_TV) compose.runOnIdle { assertTrue(model.state.value.error.orEmpty(), model.state.value.signedIn) }
-                    else compose.onNodeWithText("Connect").assertIsDisplayed()
+                    compose.runOnIdle { assertTrue(model.state.value.error.orEmpty(), model.state.value.signedIn) }
                     val acceptedCa = requireNotNull(preferences.getString("trusted_ca", null))
                     assertFalse(sameServerTrust(previousCa, acceptedCa))
-                    if (!BuildConfig.IS_TV) signIn(acceptedCa)
                 }
                 else -> error("Unknown recovery scenario")
             }

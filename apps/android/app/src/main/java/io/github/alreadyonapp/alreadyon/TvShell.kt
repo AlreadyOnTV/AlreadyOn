@@ -146,7 +146,6 @@ internal fun TvShell(state: PhoneState, model: PhoneModel, guideNow: Long) {
                 if (state.signedIn) state.error?.let { Text(it, color = MaterialTheme.colorScheme.error) }
                 // Routine background refreshes must not animate or shift the TV layout.
             }
-            ServerTrustAlert(state, model)
             when {
                 !state.signedIn -> ServerConnectScreen(state, model, Modifier.weight(1f))
                 state.mustChangePassword -> AccountScreen(state, model, forced = true)
