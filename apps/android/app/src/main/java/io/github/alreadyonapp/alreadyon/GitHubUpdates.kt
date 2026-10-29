@@ -50,39 +50,22 @@ internal class GitHubUpdates(private val client: OkHttpClient = updateHttpClient
         }
     }
 
-    suspend fun check(version: String, code: Long, tv: Boolean, release: String = version, installedHash: String? = null): AppUpdate? {
+    suspend fun check(version: String, code: Long, tv: Boolean, release: String = version, installedHash: String? = null,
+        cycle: ReleaseCycle = ReleaseCycle.STABLE): AppUpdate? {
         val releases = mutableListOf<JSONObject>()
         // Bound startup work while including prereleases and multiple pages of published history.
         for (page in 1..10) {
             val entries = JSONArray(json("https://api.github.com/repos/$UPDATE_REPOSITORY/releases?per_page=30&page=$page"))
             for (index in 0 until entries.length()) {
                 val entry = entries.getJSONObject(index)
-                if (acceptsUpdateRelease("preview", entry.optString("tag_name"), entry.optBoolean("draft"), entry.optBoolean("prerelease"))) releases.add(entry)
+                if (acceptsUpdateRelease(version, entry.optString("tag_name"), entry.optBoolean("draft"), entry.optBoolean("prerelease"), cycle)) releases.add(entry)
             }
             if (entries.length() < 30) break
-        }
-        // Stable promotion reuses the alpha/RC APK bytes and versionName. Once those
-        // installed bytes have a stable counterpart, keep this installation on stable.
-        var stableTrack = release.endsWith("-stable", ignoreCase = true)
-        if (!stableTrack) {
-            for (entry in releases.filter { acceptsUpdateRelease("-stable", it.optString("tag_name"), false, it.optBoolean("prerelease")) }) {
-                val hint = Regex("Android versionCode: `(\\d+)`").find(entry.optString("body"))?.groupValues?.get(1)?.toLongOrNull()
-                if (hint != null && hint != code) continue
-                val assets = entry.optJSONArray("assets") ?: continue
-                val descriptor = (0 until assets.length()).map { assets.getJSONObject(it) }.singleOrNull { it.optString("name") == "android-release.json" } ?: continue
-                val url = descriptor.optString("browser_download_url")
-                if (!validUpdateAsset(url)) continue
-                val metadata = JSONObject(json(url, 64 * 1024))
-                if (metadata.optString("package") == UPDATE_PACKAGE && metadata.optLong("version_code") == code) {
-                    stableTrack = true
-                    break
-                }
-            }
         }
         var newest: AppUpdate? = null
         val target = if (tv) "tv" else "phone"
         val assetName = if (tv) "alreadyon-tv.apk" else "alreadyon-android.apk"
-        for (entry in releases.filter { acceptsUpdateRelease(if (stableTrack) "-stable" else version, it.optString("tag_name"), false, it.optBoolean("prerelease")) }.sortedByDescending { it.getString("tag_name").lowercase() }) {
+        for (entry in releases.sortedByDescending { it.getString("tag_name").lowercase() }) {
             // The description is only a fetch optimization; manifest and APK verification are authoritative.
             val hint = Regex("Android versionCode: `(\\d+)`").find(entry.optString("body"))?.groupValues?.get(1)?.toLongOrNull()
             if (hint != null && hint < maxOf(code, newest?.code ?: 0)) continue

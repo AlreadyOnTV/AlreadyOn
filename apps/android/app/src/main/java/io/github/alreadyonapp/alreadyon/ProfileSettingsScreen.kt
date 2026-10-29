@@ -244,7 +244,7 @@ private fun SettingsCard(title: String, content: @Composable ColumnScope.() -> U
 }
 
 @Composable
-private fun SettingsChoice(label: String, value: String, options: List<Pair<String, String>>, modifier: Modifier = Modifier, changed: (String) -> Unit) {
+internal fun SettingsChoice(label: String, value: String, options: List<Pair<String, String>>, modifier: Modifier = Modifier, changed: (String) -> Unit) {
     var open by remember { mutableStateOf(false) }
     val selected = remember { FocusRequester() }
     LaunchedEffect(open) { if (open && BuildConfig.IS_TV) { withFrameNanos { }; selected.requestFocus() } }

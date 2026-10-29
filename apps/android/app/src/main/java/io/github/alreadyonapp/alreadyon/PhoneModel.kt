@@ -47,6 +47,9 @@ internal data class PhoneState(
 internal class PhoneModel(application: Application) : AndroidViewModel(application) {
     private val sessionStore = SessionStore(application)
     private val preferences = application.getSharedPreferences("connection", Application.MODE_PRIVATE)
+    private val updatePreferences = application.getSharedPreferences("app-updates", Application.MODE_PRIVATE)
+    private val mutableReleaseCycle = MutableStateFlow(ReleaseCycle.fromStored(updatePreferences.getString("release_cycle", null)))
+    val releaseCycle = mutableReleaseCycle.asStateFlow()
     private val mutable = MutableStateFlow(PhoneState(serverName = preferences.getString("server_name", "AlreadyOn").orEmpty(), origin = preferences.getString("server_origin", "").orEmpty(), trustedCa = preferences.getString("trusted_ca", null), restoringConnection = BuildConfig.IS_TV))
     val state = mutable.asStateFlow()
     private var client: ServerClient? = null
@@ -210,9 +213,70 @@ internal class PhoneModel(application: Application) : AndroidViewModel(applicati
     }
 
     fun openSettings(screen: String) {
-        if (screen == "account" && state.value.profile?.role != "admin") return
+        if (screen in listOf("account", "admin") && (!state.value.signedIn || state.value.profile?.role != "admin" || state.value.mustChangePassword)) return
         stopWatching()
         update { it.copy(settings = screen, error = null, notice = null) }
+    }
+
+    fun setReleaseCycle(cycle: ReleaseCycle) {
+        if (!state.value.signedIn || state.value.profile?.role != "admin" || state.value.mustChangePassword) return
+        if (!updatePreferences.edit().putString("release_cycle", cycle.name).commit()) {
+            update { it.copy(error = "Could not save the release cycle. Try again.") }
+            return
+        }
+        mutableReleaseCycle.value = cycle
+    }
+
+    private suspend fun profileAdminClient(target: Long? = null): ServerClient {
+        val current = state.value
+        if (!current.signedIn || current.mustChangePassword || current.profile?.role != "admin")
+            throw ServerFailure(403, "Select an Admin profile to manage settings.")
+        val api = requireNotNull(client)
+        val profiles = api.profiles()
+        applyManagedProfiles(profiles)
+        if (state.value.profile?.role != "admin") throw ServerFailure(403, "This profile no longer has the Admin role.")
+        if (target != null && profiles.none { it.id == target }) throw ServerFailure(404, "This profile is no longer available.")
+        return api
+    }
+
+    private fun applyManagedProfiles(profiles: List<ViewerProfile>) {
+        val previous = state.value.profile
+        val current = profiles.find { it.id == previous?.id }
+        update { it.copy(profiles = profiles, profile = current) }
+        if (previous != null && current == null) changeProfile()
+        else if (state.value.settings == "admin" && current?.role != "admin") closeSettings()
+    }
+
+    fun createManagedProfile(name: String, role: String, tier: String, onSaved: () -> Unit = {}) = perform {
+        val api = profileAdminClient()
+        api.request("/api/profiles", "POST", JSONObject().put("name", name.trim()).put("role", role).put("audienceTier", tier))
+        applyManagedProfiles(api.profiles())
+        update { it.copy(notice = "Profile created.") }
+        onSaved()
+    }
+
+    fun updateManagedProfile(id: Long, patch: JSONObject, onSaved: () -> Unit = {}) = perform {
+        val api = profileAdminClient(id)
+        api.request("/api/profiles/$id", "PATCH", patch)
+        applyManagedProfiles(api.profiles())
+        update { it.copy(notice = "Profile saved.") }
+        onSaved()
+    }
+
+    fun deleteManagedProfile(id: Long, onDeleted: () -> Unit = {}) = perform {
+        val api = profileAdminClient(id)
+        api.request("/api/profiles/$id", "DELETE")
+        applyManagedProfiles(api.profiles())
+        update { it.copy(notice = "Profile deleted.") }
+        onDeleted()
+    }
+
+    fun resetManagedProfilePin(id: Long, onReset: () -> Unit = {}) = perform {
+        val api = profileAdminClient(id)
+        api.request("/api/profiles/$id/pin", "DELETE")
+        applyManagedProfiles(api.profiles())
+        update { it.copy(notice = "Profile PIN reset.") }
+        onReset()
     }
     fun closeSettings() {
         update { it.copy(settings = null, error = null, notice = null) }
@@ -362,7 +426,10 @@ internal class PhoneModel(application: Application) : AndroidViewModel(applicati
             preferences.edit().remove("profile_id").apply()
         }
         val channels = if (current != null && updated != null && current.tier != updated.tier) api.guide(updated) else state.value.channels
-        update { it.copy(profiles = profiles, profile = updated, channels = if (current != null && updated == null) emptyList() else channels) }
+        val leaveAdminSettings = state.value.settings == "admin" && updated?.role != "admin"
+        update { it.copy(profiles = profiles, profile = updated, channels = if (current != null && updated == null) emptyList() else channels,
+            settings = if (current != null && updated == null) null else it.settings) }
+        if (leaveAdminSettings) closeSettings()
         if (updated != null && state.value.channel != null && channels.none { it.id == state.value.channel?.id }) {
             stopWatching()
         }

@@ -2,13 +2,19 @@
 
 All clients combine avatar/name top-right, visible at compact widths. Long names truncate; WebUI retains accessible names/tooltips.
 
-WebUI order: Switch Profile, Profile, Settings (Admin profiles), Server (owner accounts), Sign Out. Other entries appear for every signed-in profile. Native menus omit Settings/Server; TV adds Exit App after Sign Out, retaining sessions.
+WebUI order: Switch Profile, Profile, Settings (Admin profiles), Server (owner accounts), Sign Out. Other entries appear for every signed-in profile. Native phone/TV menus include Settings immediately above Sign Out only for Admin profiles and omit Server. TV adds Exit App after Sign Out, retaining sessions.
 
 WebUI Enter/Space opens; Escape/outside clicks close. Switching retains PIN checks and returns to Guide. TV opens focused on Switch Profile.
 
 Server tabs: Dashboard (default), Home Users, Media, Commercials, Channels, Server, Logs, API. `/admin/accounts` selects Home Users; `/dashboard` redirects to `/admin/dashboard`. Viewers return to Guide; monitoring authorization is unchanged.
 
 See [profile creation](PROFILE_CREATION.md) for Admin-only Add Profile and switch-list sorting.
+
+## Native Settings
+
+Settings contains Updates and Profiles. [Release Cycle](ANDROID_UPDATES.md) defaults to Stable and is stored per installation. Phone uses tabs; TV uses a category sidebar with D-pad focus and Back returning from controls to categories before leaving.
+
+Profiles lists only the signed-in account's profiles. Add/edit supports Name, Role and Audience, matching WebUI administration; edits patch only changed fields. Delete and PIN reset require confirmation, initially focused on Cancel on TV. Validation failures retain drafts. The server enforces account authorization and the last-Admin rule; native Admin gating does not change the account-session API security contract. Deleting the active profile returns to the chooser; removing its Admin role exits Settings. Personal avatar, PIN, language and playback preferences remain under Profile.
 
 ## Sessions
 

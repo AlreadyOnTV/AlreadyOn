@@ -150,6 +150,7 @@ internal fun TvShell(state: PhoneState, model: PhoneModel, guideNow: Long) {
                 !state.signedIn -> ServerConnectScreen(state, model, Modifier.weight(1f))
                 state.mustChangePassword -> AccountScreen(state, model, forced = true)
                 state.settings == "account" -> AccountScreen(state, model)
+                state.settings == "admin" -> AdminSettingsScreen(state, model, Modifier.weight(1f))
                 state.settings == "profile" -> ProfileSettingsScreen(state, model)
                 state.settings == "dashboard" -> DashboardScreen(state, model, Modifier.weight(1f))
                 state.profile == null -> ProfileScreen(state, model, Modifier.weight(1f))

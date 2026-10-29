@@ -1,6 +1,6 @@
 # Create a profile from Switch Profile
 
-In WebUI, an Admin profile can open the top-right profile control, choose Switch Profile, then select Add Profile beside Back. Viewer profiles do not see this action; native phone/TV menus are unchanged.
+In WebUI, an Admin profile can open the top-right profile control, choose Switch Profile, then select Add Profile beside Back. Viewer profiles do not see this action. Native phone/TV apps manage account profiles through Admin-only [Settings](PROFILE_MENU.md#native-settings).
 
 The menu closes and a centered modal asks for Name, Role (Admin or Viewer) and Audience (Kids, Teen or Unrestricted). Both dropdowns sort their labels alphabetically; defaults remain Viewer and Unrestricted. Create saves a trimmed, nonempty name through the existing authenticated profile API for the signed-in account. The current profile stays active. On success, the modal closes and the new profile is immediately available in Switch Profile without reloading. Cancel or Escape closes without creating anything; failed creation retains the form and shows an error.
 

@@ -188,6 +188,7 @@ class MainActivity : ComponentActivity() {
                                 !state.signedIn -> ServerConnectScreen(state, model, Modifier.weight(1f))
                                 state.mustChangePassword -> AccountScreen(state, model, forced = true)
                                 state.settings == "account" -> AccountScreen(state, model)
+                                state.settings == "admin" -> AdminSettingsScreen(state, model, Modifier.weight(1f))
                                 state.settings == "profile" -> ProfileSettingsScreen(state, model)
                                 state.settings == "dashboard" -> DashboardScreen(state, model, Modifier.weight(1f))
                                 state.profile == null -> ProfileScreen(state, model)
@@ -244,6 +245,7 @@ internal fun ProfileMenu(state: PhoneState, model: PhoneModel, modifier: Modifie
             }) {
             DropdownMenuItem(text = { Text("Switch Profile") }, modifier = Modifier.focusRequester(switchFocus).tvFocusOutline(), onClick = { open = false; model.changeProfile() })
             DropdownMenuItem(text = { Text("Profile") }, modifier = Modifier.tvFocusOutline(), onClick = { open = false; model.openSettings("profile") })
+            if (state.profile?.role == "admin") DropdownMenuItem(text = { Text("Settings") }, modifier = Modifier.tvFocusOutline(), onClick = { open = false; model.openSettings("admin") })
             DropdownMenuItem(text = { Text("Sign Out") }, modifier = Modifier.tvFocusOutline(), onClick = { open = false; model.logout() })
             if (BuildConfig.IS_TV && onExitApp != null) DropdownMenuItem(
                 text = { Text("Exit App") }, modifier = Modifier.tvFocusOutline(),

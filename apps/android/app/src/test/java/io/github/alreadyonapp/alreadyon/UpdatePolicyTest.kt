@@ -7,20 +7,36 @@ import org.junit.Test
 class UpdatePolicyTest {
     private val update = AppUpdate("26.10.11-alpha1", "26.10.11-alpha1", 24, "tv",
         "https://github.com/AlreadyOnTV/AlreadyOn/releases/download/26.10.11-alpha1/alreadyon-tv.apk", "a".repeat(64), 1024)
-    @Test fun stableInstallsExcludePreviewsAndDrafts() {
-        assertFalse(acceptsUpdateRelease("26.10.10-Stable", "26.10.11-alpha1", false, true))
-        assertTrue(acceptsUpdateRelease("26.10.10-Stable", "26.10.11-Stable", false, false))
-        assertFalse(acceptsUpdateRelease("26.10.10-Stable", "26.10.11-Stable", true, false))
+    @Test fun selectedCycleNotInstalledLabelControlsAllowedStages() {
+        for (installed in listOf("26.10.10-Stable", "26.10.10-RC1", "26.10.10-nightly")) {
+            for (stage in listOf("nightly", "alpha1", "beta2", "RC1", "Stable")) {
+                for (cycle in ReleaseCycle.entries) {
+                    val expected = stage == "Stable" || cycle == ReleaseCycle.NIGHTLY ||
+                        (stage == "RC1" && cycle == ReleaseCycle.RELEASE_CANDIDATE)
+                    assertEquals("$installed / $stage / $cycle", expected,
+                        acceptsUpdateRelease(installed, "26.10.11-$stage", false, stage != "Stable", cycle))
+                    assertFalse(acceptsUpdateRelease(installed, "26.10.11-$stage", true, stage != "Stable", cycle))
+                }
+            }
+        }
+    }
+    @Test fun stableIsDefaultAndInvalidPreferencesFailClosed() {
+        assertEquals(ReleaseCycle.STABLE, ReleaseCycle.fromStored(null))
+        assertEquals(ReleaseCycle.STABLE, ReleaseCycle.fromStored("unknown"))
+        for (cycle in ReleaseCycle.entries) assertEquals(cycle, ReleaseCycle.fromStored(cycle.name))
+        assertFalse(acceptsUpdateRelease("26.10.10-nightly", "26.10.11-nightly", false, true))
         assertFalse(acceptsUpdateRelease("26.10.10-Stable", "26.10.11-Stable", false, true))
+        assertTrue(acceptsUpdateRelease("26.10.10-nightly", "26.10.11-stable", false, false))
     }
     @Test fun previewInstallsAcceptNewerStagesButIgnoreNonAndroidReleases() {
         for (stage in listOf("alpha2", "RC1", "rc3", "Stable"))
-            assertTrue(acceptsUpdateRelease("26.10.10-alpha1", "26.10.11-$stage", false, stage != "Stable"))
-        assertFalse(acceptsUpdateRelease("26.10.10-alpha1", "26.10.11", false, false))
+            assertTrue(acceptsUpdateRelease("26.10.10-alpha1", "26.10.11-$stage", false, stage != "Stable", ReleaseCycle.NIGHTLY))
+        for (cycle in ReleaseCycle.entries)
+            assertFalse(acceptsUpdateRelease("26.10.10-alpha1", "26.10.11", false, false, cycle))
     }
     @Test fun nightliesAcceptUpdatesAndPromoteToRc() {
-        assertTrue(acceptsUpdateRelease("26.10.10-nightly", "26.10.11-nightly", false, true))
-        assertFalse(acceptsUpdateRelease("26.10.10-nightly", "26.10.11-nightly", true, true))
+        assertTrue(acceptsUpdateRelease("26.10.10-nightly", "26.10.11-nightly", false, true, ReleaseCycle.NIGHTLY))
+        assertFalse(acceptsUpdateRelease("26.10.10-nightly", "26.10.11-nightly", true, true, ReleaseCycle.NIGHTLY))
         assertTrue(validUpdateAsset(update.url.replace("alpha1", "nightly")))
         assertTrue(newerRelease("26.10.11-rc1", "26.10.11-nightly"))
         assertFalse(newerRelease("26.10.11-nightly", "26.10.11-rc1"))
@@ -28,7 +44,7 @@ class UpdatePolicyTest {
         assertTrue(eligibleUpdate(rc, 24, "tv", "26.10.11-nightly", update.hash))
     }
     @Test fun shortTagsAcceptHistoricalSignedMetadata() {
-        assertTrue(acceptsUpdateRelease("2026-10-18-alpha2", "26.10.18-alpha3", false, true))
+        assertTrue(acceptsUpdateRelease("2026-10-18-alpha2", "26.10.18-alpha3", false, true, ReleaseCycle.NIGHTLY))
         assertTrue(verifiedUpdateMetadata(update.copy(version = "2026-10-11-alpha1"), 23, "tv"))
         assertTrue(validUpdateAsset(update.url.replace("/26.10.11-alpha1/", "/2026-10-11-alpha1/")))
     }

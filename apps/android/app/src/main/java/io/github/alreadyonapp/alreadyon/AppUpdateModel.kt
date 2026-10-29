@@ -2,6 +2,7 @@ package io.github.alreadyonapp.alreadyon
 
 import android.app.Application
 import android.content.Intent
+import android.content.SharedPreferences
 import android.net.Uri
 import android.provider.Settings
 import androidx.lifecycle.AndroidViewModel
@@ -25,6 +26,10 @@ internal class AppUpdateModel(application: Application) : AndroidViewModel(appli
     private val context = application
     private val store = UpdateInstallStore(application)
     private val service = GitHubUpdates()
+    private val preferences = application.getSharedPreferences("app-updates", Application.MODE_PRIVATE)
+    private val preferenceListener = SharedPreferences.OnSharedPreferenceChangeListener { _, key ->
+        if (key == "release_cycle") checkForUpdates()
+    }
     private val mutable = MutableStateFlow(AppUpdateState())
     val state: StateFlow<AppUpdateState> = mutable
     private val accepted = AcceptedRelease(application)
@@ -33,9 +38,18 @@ internal class AppUpdateModel(application: Application) : AndroidViewModel(appli
     private var work: Job? = null
     private var dismissed = false
     init {
+        preferences.registerOnSharedPreferenceChangeListener(preferenceListener)
+        refreshInstallation()
+        checkForUpdates()
+    }
+    private fun checkForUpdates() {
+        if (mutable.value.phase in listOf(UpdatePhase.DOWNLOADING, UpdatePhase.PERMISSION, UpdatePhase.INSTALLING, UpdatePhase.ERROR)) return
+        work?.cancel()
+        service.cancel()
+        dismissed = false
+        mutable.value = AppUpdateState(currentRelease = releaseLabel.value)
+        val cycle = ReleaseCycle.fromStored(preferences.getString("release_cycle", null))
         work = viewModelScope.launch {
-            refreshInstallation()
-            if (mutable.value.phase == UpdatePhase.INSTALLING || mutable.value.phase == UpdatePhase.ERROR) return@launch
             // Debug/test packages never offer a production APK with a different identity or signing key.
             if (context.packageName != UPDATE_PACKAGE) return@launch
             try {
@@ -43,7 +57,7 @@ internal class AppUpdateModel(application: Application) : AndroidViewModel(appli
                 val hash = withContext(Dispatchers.IO) { installedApkHash(context) }
                 val label = accepted.current(hash)
                 releaseLabel.value = label
-                val update = service.check(info.versionName.orEmpty(), packageCode(info), BuildConfig.IS_TV, label, hash)
+                val update = service.check(info.versionName.orEmpty(), packageCode(info), BuildConfig.IS_TV, label, hash, cycle)
                 if (!dismissed) mutable.value = AppUpdateState(update, currentRelease = label,
                     promotion = update?.code == packageCode(info))
             } catch (_: CancellationException) { throw CancellationException() }
@@ -129,5 +143,9 @@ internal class AppUpdateModel(application: Application) : AndroidViewModel(appli
         store.clear()
         mutable.value = AppUpdateState()
     }
-    override fun onCleared() { service.cancel(); super.onCleared() }
+    override fun onCleared() {
+        preferences.unregisterOnSharedPreferenceChangeListener(preferenceListener)
+        service.cancel()
+        super.onCleared()
+    }
 }

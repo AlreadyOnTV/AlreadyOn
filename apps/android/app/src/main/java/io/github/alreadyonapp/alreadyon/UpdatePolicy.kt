@@ -9,10 +9,24 @@ internal const val MAX_UPDATE_BYTES = 256L * 1024 * 1024
 internal data class AppUpdate(val release: String, val version: String, val code: Long,
     val target: String, val url: String, val hash: String, val size: Long)
 
-internal fun acceptsUpdateRelease(installed: String, tag: String, draft: Boolean, prerelease: Boolean): Boolean {
-    if (draft || !Regex("(?:\\d{2}\\.\\d{2}\\.\\d{2}|(?:20)?\\d{2}-\\d{2}-\\d{2})-(nightly|alpha\\d+|beta\\d*|rc\\d+|stable)", RegexOption.IGNORE_CASE).matches(tag)) return false
-    val stable = installed.endsWith("-stable", ignoreCase = true)
-    return !stable || (!prerelease && tag.endsWith("-stable", ignoreCase = true))
+internal enum class ReleaseCycle(val label: String) {
+    STABLE("Stable"), RELEASE_CANDIDATE("Release Candidate"), NIGHTLY("Nightly");
+
+    companion object {
+        fun fromStored(value: String?): ReleaseCycle = entries.firstOrNull { it.name == value } ?: STABLE
+    }
+}
+
+internal fun acceptsUpdateRelease(installed: String, tag: String, draft: Boolean, prerelease: Boolean,
+    cycle: ReleaseCycle = ReleaseCycle.STABLE): Boolean {
+    if (draft) return false
+    val stage = Regex("(?:\\d{2}\\.\\d{2}\\.\\d{2}|(?:20)?\\d{2}-\\d{2}-\\d{2})-(nightly|alpha\\d+|beta\\d*|rc\\d+|stable)", RegexOption.IGNORE_CASE)
+        .matchEntire(tag)?.groupValues?.get(1)?.lowercase() ?: return false
+    return when (cycle) {
+        ReleaseCycle.STABLE -> stage == "stable" && !prerelease
+        ReleaseCycle.RELEASE_CANDIDATE -> (stage == "stable" && !prerelease) || stage.startsWith("rc")
+        ReleaseCycle.NIGHTLY -> true
+    }
 }
 
 /** Initial asset URLs must name this public repository; redirect hosts are checked separately. */
