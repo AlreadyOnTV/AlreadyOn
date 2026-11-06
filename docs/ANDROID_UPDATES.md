@@ -1,6 +1,6 @@
 # Android app updates
 
-Phone and TV release builds check public GitHub releases on startup. Admin profiles choose the installation's Release Cycle in the top-right profile menu under Settings, above Sign Out. Stable is the default, independently of the installed release stage:
+Phone and TV release builds check public GitHub releases on startup and when returning to the foreground, at most once every 15 minutes after a successful check; failures retry after one minute. Changing the Release Cycle triggers an immediate check. Admin profiles choose the installation's Release Cycle in the top-right profile menu under Settings, above Sign Out. Stable is the default, independently of the installed release stage:
 
 - **Stable:** published stable releases only.
 - **Release Candidate:** RC and stable releases.

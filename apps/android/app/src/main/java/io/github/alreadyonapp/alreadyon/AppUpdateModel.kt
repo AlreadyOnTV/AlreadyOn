@@ -4,6 +4,7 @@ import android.app.Application
 import android.content.Intent
 import android.content.SharedPreferences
 import android.net.Uri
+import android.os.SystemClock
 import android.provider.Settings
 import androidx.lifecycle.AndroidViewModel
 import androidx.lifecycle.viewModelScope
@@ -28,7 +29,7 @@ internal class AppUpdateModel(application: Application) : AndroidViewModel(appli
     private val service = GitHubUpdates()
     private val preferences = application.getSharedPreferences("app-updates", Application.MODE_PRIVATE)
     private val preferenceListener = SharedPreferences.OnSharedPreferenceChangeListener { _, key ->
-        if (key == "release_cycle") checkForUpdates()
+        if (key == "release_cycle") checkForUpdates(force = true)
     }
     private val mutable = MutableStateFlow(AppUpdateState())
     val state: StateFlow<AppUpdateState> = mutable
@@ -37,13 +38,24 @@ internal class AppUpdateModel(application: Application) : AndroidViewModel(appli
     val currentRelease: StateFlow<String> = releaseLabel
     private var work: Job? = null
     private var dismissed = false
+    private var lastUpdateCheckElapsedMs = 0L
+    private var lastUpdateCheckSucceeded = false
     init {
         preferences.registerOnSharedPreferenceChangeListener(preferenceListener)
         refreshInstallation()
+        checkForUpdates(force = true)
+    }
+    fun onResume() {
+        refreshInstallation()
         checkForUpdates()
     }
-    private fun checkForUpdates() {
+    private fun checkForUpdates(force: Boolean = false) {
         if (mutable.value.phase in listOf(UpdatePhase.DOWNLOADING, UpdatePhase.PERMISSION, UpdatePhase.INSTALLING, UpdatePhase.ERROR)) return
+        val now = SystemClock.elapsedRealtime()
+        if (!force && (work?.isActive == true || mutable.value.update != null ||
+            !updateCheckDue(now, lastUpdateCheckElapsedMs, lastUpdateCheckSucceeded))) return
+        lastUpdateCheckElapsedMs = now
+        lastUpdateCheckSucceeded = false
         work?.cancel()
         service.cancel()
         dismissed = false
@@ -58,6 +70,7 @@ internal class AppUpdateModel(application: Application) : AndroidViewModel(appli
                 val label = accepted.current(hash)
                 releaseLabel.value = label
                 val update = service.check(info.versionName.orEmpty(), packageCode(info), BuildConfig.IS_TV, label, hash, cycle)
+                lastUpdateCheckSucceeded = true
                 if (!dismissed) mutable.value = AppUpdateState(update, currentRelease = label,
                     promotion = update?.code == packageCode(info))
             } catch (_: CancellationException) { throw CancellationException() }

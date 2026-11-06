@@ -40,7 +40,7 @@ internal fun UpdatePrompt(visible: Boolean = true) {
         if (visible && lifecycle == Lifecycle.State.RESUMED && state.readyToInstall) model.continueInstallation()
     }
     DisposableEffect(owner, model) {
-        val observer = LifecycleEventObserver { _, event -> if (event == Lifecycle.Event.ON_RESUME) model.refreshInstallation() }
+        val observer = LifecycleEventObserver { _, event -> if (event == Lifecycle.Event.ON_RESUME) model.onResume() }
         owner.lifecycle.addObserver(observer)
         onDispose { owner.lifecycle.removeObserver(observer) }
     }
