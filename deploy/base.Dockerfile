@@ -42,6 +42,7 @@ ENV NVIDIA_DRIVER_CAPABILITIES=compute,video,utility
 # compilers, package indexes and dependency caches remain in earlier stages.
 COPY --from=ffmpeg-build /opt/ffmpeg/share/build/runtime-packages.txt /tmp/runtime-packages.txt
 RUN apt-get update \
+    && apt-get upgrade -y \
     && apt-get install -y --no-install-recommends ca-certificates tzdata util-linux \
     intel-media-va-driver-non-free i965-va-driver-shaders libmfx-gen1.2 libvpl2 \
     mesa-libgallium $(cat /tmp/runtime-packages.txt) \
