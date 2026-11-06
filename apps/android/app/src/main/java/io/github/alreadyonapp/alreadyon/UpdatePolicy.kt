@@ -17,6 +17,13 @@ internal enum class ReleaseCycle(val label: String) {
     }
 }
 
+internal const val UPDATE_CHECK_INTERVAL_MS = 15 * 60 * 1000L
+internal const val UPDATE_CHECK_RETRY_INTERVAL_MS = 60 * 1000L
+internal fun updateCheckDue(nowElapsedMs: Long, lastCheckElapsedMs: Long, lastCheckSucceeded: Boolean): Boolean {
+    val interval = if (lastCheckSucceeded) UPDATE_CHECK_INTERVAL_MS else UPDATE_CHECK_RETRY_INTERVAL_MS
+    return lastCheckElapsedMs <= 0 || nowElapsedMs - lastCheckElapsedMs >= interval
+}
+
 internal fun acceptsUpdateRelease(installed: String, tag: String, draft: Boolean, prerelease: Boolean,
     cycle: ReleaseCycle = ReleaseCycle.STABLE): Boolean {
     if (draft) return false

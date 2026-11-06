@@ -7,6 +7,13 @@ import org.junit.Test
 class UpdatePolicyTest {
     private val update = AppUpdate("26.10.11-alpha1", "26.10.11-alpha1", 24, "tv",
         "https://github.com/AlreadyOnTV/AlreadyOn/releases/download/26.10.11-alpha1/alreadyon-tv.apk", "a".repeat(64), 1024)
+    @Test fun foregroundUpdateChecksThrottleSuccessAndRetryFailuresSooner() {
+        assertTrue(updateCheckDue(1L, 0L, lastCheckSucceeded = false))
+        assertFalse(updateCheckDue(UPDATE_CHECK_INTERVAL_MS, 1L, lastCheckSucceeded = true))
+        assertTrue(updateCheckDue(UPDATE_CHECK_INTERVAL_MS + 1L, 1L, lastCheckSucceeded = true))
+        assertFalse(updateCheckDue(UPDATE_CHECK_RETRY_INTERVAL_MS, 1L, lastCheckSucceeded = false))
+        assertTrue(updateCheckDue(UPDATE_CHECK_RETRY_INTERVAL_MS + 1L, 1L, lastCheckSucceeded = false))
+    }
     @Test fun selectedCycleNotInstalledLabelControlsAllowedStages() {
         for (installed in listOf("26.10.10-Stable", "26.10.10-RC1", "26.10.10-nightly")) {
             for (stage in listOf("nightly", "alpha1", "beta2", "RC1", "Stable")) {
