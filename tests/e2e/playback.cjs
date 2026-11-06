@@ -3644,11 +3644,13 @@ const noWorkers = async (unreleased = () => 0) => {
     await page
       .getByRole("heading", { name: "Server Metrics", exact: true })
       .waitFor();
+    const dashboardCards = await page
+      .locator(".admin-card h2, .admin-card h3")
+      .allTextContents();
     assert(
-      (
-        await page.locator(".admin-card h2, .admin-card h3").allTextContents()
-      ).join(",") ===
-        "Active Streaming Sessions,Active Background Processes,Server Metrics",
+      /^Active Streaming Sessions(?: \(\d+\/\d+\))?$/.test(dashboardCards[0]) &&
+        dashboardCards.slice(1).join(",") ===
+          "Active Background Processes,Server Metrics",
       "Dashboard card order",
     );
     await page.setViewportSize({ width: 1100, height: 800 });
@@ -4884,15 +4886,27 @@ const noWorkers = async (unreleased = () => 0) => {
       a.sessions[0].videoReason && a.sessions[0].audioReason,
       "Activity includes video and audio reasons",
     );
-    await dashboard
-      .locator(".activity-reasons")
-      .filter({ hasText: a.sessions[0].videoReason })
-      .waitFor();
+    const sessionCard = dashboard.locator(".activity-session").first();
+    assert(
+      (await sessionCard.locator("dt").allTextContents()).join("|") ===
+        "User|Profile|App Version|Client Device|Playback Time|Client IP|Bandwidth|Transcoding",
+      "Activity metadata follows the identity and playback row order",
+    );
+    assert(
+      (await sessionCard.locator(".activity-formats h3").allTextContents()).join("|") ===
+        "Source Audio/Video|Output Audio/Video",
+      "Activity presents paired source and output formats",
+    );
+    await dashboard.waitForFunction(() =>
+      /^\d{2}:\d{2}\/\d{2}:\d{2}$/.test(
+        document.querySelector(".activity-details-secondary dd")?.textContent ?? "",
+      ),
+    );
     assert(
       !(
         await dashboard.locator(".server-activity").first().textContent()
       ).includes("Bandwidth measures media bytes"),
-      "Generic text should be replaced by per-track reasons",
+      "Activity omits generic diagnostic instructions",
     );
     const firstCard = await dashboard
       .locator(".admin-card")
