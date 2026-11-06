@@ -2,13 +2,13 @@
 
 [![AlreadyOn](../web/public/branding/header-doc.svg)](../README.md)
 
-Tuning selects the channel's current persisted airing. Delivery chooses direct playback when the browser supports the source, remuxing when the container alone needs changing, or a bounded transcoding path. GPU availability does not imply codec, HDR or browser support.
+Tuning selects the current persisted airing. Delivery uses direct play, remux or bounded transcoding according to browser support; GPU availability alone proves neither codec nor HDR compatibility.
 
 WebUI capability checks use hls.js's selected media-source constructor, including Apple's `ManagedMediaSource`. Without MSE, native HLS remains available when supported.
 
 ## Touch browsers
 
-Tablets use a large guide player in portrait and a compact player in landscape, with no size toggle. Fullscreen is explicit; rotating to portrait exits it. Phones keep the large guide and automatically fill the landscape viewport, requesting native fullscreen when permitted. Exiting restores the large guide while held landscape; rotating through portrait re-enables automatic entry. Shared device orientation prevents viewport changes from cancelling fullscreen. Browsers share capability checks; native video fullscreen is the fallback when stage fullscreen is unavailable. If native entry is denied after rotation, phones use a viewport fallback. Orientation remains unlocked; desktop behavior is unchanged.
+Tablets use the large guide player in portrait and compact player in landscape; fullscreen is explicit and exits on portrait rotation. Phones keep the large guide, fill landscape and request native fullscreen when allowed. Exit restores the guide; portrait rotation re-enables entry. Shared orientation prevents viewport changes cancelling fullscreen. Native video fullscreen or a viewport fallback covers unsupported or denied stage fullscreen. Orientation stays unlocked; desktop behavior is unchanged.
 
 ## Session contract
 
@@ -21,6 +21,8 @@ Schedule times are UTC. Presentation uses a four-second delay; transition prepar
 ## Processing
 
 FFmpeg work has bounded lifetimes and cooperative resource controls. Foreground reservations can pause governed background work for the specific high-cost HDR conversion path. These controls are sampled policies, not operating-system hard caps. Preserve cancellation, stream limits and process cleanup when changing delivery.
+
+At airing transitions, a conversion without a matching capacity sample may use the conservative single-rendition fallback only while aggregate CPU, memory and transcode-slot budgets allow it. A measured-unsustainable pipeline remains blocked.
 
 Media paths must stay within configured roots. Serve only authorized resources and reject unsupported or unsafe inputs. Keep read-only mounts for normal library playback.
 

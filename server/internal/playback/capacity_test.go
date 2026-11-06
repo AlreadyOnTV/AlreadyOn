@@ -160,8 +160,8 @@ func TestCapacityAdmissionUsesSelectedRungAndMixedResourceLoad(t *testing.T) {
 		t.Fatal("host-memory headroom was not applied")
 	}
 	c.status.Encoder = EncoderIntelVAAPI
-	if c.Allows(nil, h264Job(720)) {
-		t.Fatal("a software plan used a hardware-encoder capacity result")
+	if !c.Allows(nil, h264Job(720)) {
+		t.Fatal("an encoder-mismatched plan was rejected instead of using bounded fallback")
 	}
 }
 
@@ -201,6 +201,19 @@ func TestCapacityAllowsOneOptimisticStreamForAnUnmatchedOutputSize(t *testing.T)
 	job.Plan.Height, job.Plan.Width, job.Plan.FPS, job.Plan.VideoBitrate = 480, 640, 30, 2500000
 	if !errors.Is(c.AdmissionError(nil, job), ErrCapacityUnsustainable) {
 		t.Fatal("known-below-threshold source was overridden by the optimistic fallback")
+	}
+	c.mu.Lock()
+	c.status.Encoder = ""
+	c.mu.Unlock()
+	if err := c.AdmissionError(nil, job); err != nil {
+		t.Fatalf("hardware pipeline was rejected by a software measurement instead of bounded fallback: %v", err)
+	}
+	job.Plan.Encoder = ""
+	c.mu.Lock()
+	c.status.Encoder = EncoderIntelQSV
+	c.mu.Unlock()
+	if err := c.AdmissionError(nil, job); err != nil {
+		t.Fatalf("software pipeline was rejected by a hardware measurement instead of bounded fallback: %v", err)
 	}
 }
 
