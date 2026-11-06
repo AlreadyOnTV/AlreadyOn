@@ -27,13 +27,15 @@ type HDRCapacity struct {
 }
 
 // HDRLimit applies only to measured 4K-or-smaller, up-to-60fps sources and the
-// exact configured pipeline. Explicit quality choices are handled by the planner.
-func (c *Capacity) HDRLimit(encoder string, decode bool, v library.StreamInfo, threads int) (height int, fps float64, measured bool) {
+// exact configured pipeline. The final bool distinguishes a passing rung from
+// a measurement where even the 360p fallback misses the sustainability margin.
+func (c *Capacity) HDRLimit(encoder string, decode bool, v library.StreamInfo, threads int) (height int, fps float64, measured, sustainable bool) {
 	if c == nil || !IsHDRTransfer(v.ColorTransfer) || v.Codec != "hevc" || v.PixelFormat != "yuv420p10le" || v.Width > 3840 || v.Height > 2160 || v.FrameRate <= 0 || v.FrameRate > 60 {
 		return
 	}
 	c.mu.Lock()
 	defer c.mu.Unlock()
+	var selected *HDRCapacity
 	for _, r := range c.hdr {
 		if r.SourceFPS < v.FrameRate || r.Encoder != encoder || r.HardwareDecode != decode || r.Transfer != v.ColorTransfer || r.Threads != threads || time.Since(r.MeasuredAt) > 2*time.Hour {
 			continue
@@ -41,9 +43,14 @@ func (c *Capacity) HDRLimit(encoder string, decode bool, v library.StreamInfo, t
 		if r.ToneMapper == "gpu" && c.Hardware != nil && !c.Hardware.ToneMapOnGPU(context.Background(), encoder) {
 			continue
 		}
-		height, fps = pickRung("", r.Samples)
-		return height, fps, len(r.Samples) > 0
+		if selected == nil || r.SourceFPS < selected.SourceFPS {
+			selected = &r
+		}
 	}
+	if selected == nil {
+		return
+	}
+	height, fps, measured, sustainable = pickSourceRung(selected.Samples)
 	return
 }
 

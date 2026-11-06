@@ -223,8 +223,15 @@ func (p *PlaybackHTTP) serverActivity(w http.ResponseWriter, r *http.Request) {
 	if pipeline.Active && pipeline.StartedAt != nil && !pipelineVisible {
 		tasks = append(tasks, activity.Task{ID: "library-pipeline", Name: "Library Maintenance", Unit: string(pipeline.Phase), StartedAt: *pipeline.StartedAt, RuntimeSeconds: max(0, now.Sub(*pipeline.StartedAt).Seconds())})
 	}
+	transcodeSlots := struct {
+		Active int `json:"active"`
+		Limit  int `json:"limit"`
+	}{}
+	if p.Manager != nil {
+		transcodeSlots.Active, transcodeSlots.Limit = p.Manager.TranscodeSlots()
+	}
 	w.Header().Set("Cache-Control", "no-store")
-	writeJSON(w, 200, map[string]any{"sessions": sessions, "processes": tasks})
+	writeJSON(w, 200, map[string]any{"sessions": sessions, "processes": tasks, "transcodeSlots": transcodeSlots})
 }
 
 func deviceLabel(ua string) string {

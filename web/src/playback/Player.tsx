@@ -4,6 +4,7 @@ import Hls from "hls.js";
 import { APP_VERSION } from "../version";
 import { apiFetch } from "../api/access";
 import { clientCapabilities } from "./capabilities";
+import { AutoQualityAdapter } from "./qualityAdaptation";
 import { BROWSER_CODEC_MESSAGE, CodecHelp } from "./CodecHelp";
 import { responsivePlaylistLoader } from "./playlistLoader";
 import { PlayerControls } from "./PlayerControls";
@@ -39,6 +40,7 @@ type Prepared = {
   receivedAt: number;
   requestedAt: number;
   quality: number;
+  autoMaxHeight: number;
   audio: string;
 };
 type RequestError = Error & {
@@ -49,14 +51,13 @@ type RequestError = Error & {
   serverTime?: string;
 };
 // Server-provided presentation delay; this fallback matches older servers.
-const LIVE_DELAY = 4;
-// A first two-second segment is enough to show a picture without waiting for the next.
-const START_BUFFER_HLS = 1.5;
+const LIVE_DELAY = 8;
+const START_BUFFER_HLS = 2;
 const INITIAL_BUFFER_WAIT_MS = 500;
 const INITIAL_HARDWARE_BUFFER_WAIT_MS = 0;
-const HLS_ALIGNMENT_HEADROOM = 3;
-// The next program is prepared ahead of time, so it needs less in hand.
-const START_BUFFER_NEXT = 1.5;
+const HLS_ALIGNMENT_HEADROOM = 6;
+// The next program is prepared ahead of time but still gets the same runway.
+const START_BUFFER_NEXT = 5;
 const START_BUFFER_DIRECT = 1;
 const MAX_START_WAIT_MS = 12000;
 const sleep = (ms: number) => new Promise((resolve) => setTimeout(resolve, ms));
@@ -91,7 +92,9 @@ export function Player({
   const videoRef = useRef<HTMLVideoElement>(null);
   const stageRef = useRef<HTMLDivElement>(null);
   const { viewportFullscreen, toggleFullscreen } = usePlayerFullscreen(
-    stageRef, videoRef, channelId !== null,
+    stageRef,
+    videoRef,
+    channelId !== null,
   );
   const api = useRef<PlayerApi | null>(null);
   const [status, setStatus] = useState("Select a channel to watch");
@@ -199,15 +202,20 @@ export function Player({
       setControlsDismissed(false);
       setIdle(false);
       clearTimeout(timer);
-      timer = setTimeout(() => setIdle(true),
+      timer = setTimeout(
+        () => setIdle(true),
         window.matchMedia("(pointer: coarse)").matches
-          ? TOUCH_CONTROLS_IDLE_MS : CONTROLS_IDLE_MS);
+          ? TOUCH_CONTROLS_IDLE_MS
+          : CONTROLS_IDLE_MS,
+      );
     };
     // Remember the hidden state before pointerdown wakes React; the subsequent
     // click on the video should reveal controls without toggling playback.
     const pointerDown = (event: PointerEvent) => {
-      revealOnlyTap.current = event.pointerType === "touch" &&
-        event.target === videoRef.current && stage.classList.contains("is-idle");
+      revealOnlyTap.current =
+        event.pointerType === "touch" &&
+        event.target === videoRef.current &&
+        stage.classList.contains("is-idle");
       wake();
     };
     wakeControls.current = wake;
@@ -318,15 +326,19 @@ export function Player({
   }, [currentUserId, currentUser.audioLanguage]);
   const profileLanguage =
     currentUser.subtitleLanguage ?? DEFAULT_SUBTITLE_LANGUAGE;
-  const selectedAudio = session?.audioTracks?.find(track => track.index === session.plan.audioTrackIndex);
-  const defaultLanguage = preferredSubtitleLanguage(selectedAudio?.language, currentUser.audioLanguage ?? "en",
-    currentUser.subtitleMode ?? (currentUser.subtitlesEnabled ? "always" : "off"),
-    session?.subtitles ?? [], profileLanguage);
+  const selectedAudio = session?.audioTracks?.find(
+    (track) => track.index === session.plan.audioTrackIndex,
+  );
+  const defaultLanguage = preferredSubtitleLanguage(
+    selectedAudio?.language,
+    currentUser.audioLanguage ?? "en",
+    currentUser.subtitleMode ??
+      (currentUser.subtitlesEnabled ? "always" : "off"),
+    session?.subtitles ?? [],
+    profileLanguage,
+  );
   const wantedLanguage =
-    subtitleChoice === false
-      ? null
-      : (subtitleChoice ??
-        defaultLanguage);
+    subtitleChoice === false ? null : (subtitleChoice ?? defaultLanguage);
   const activeTrack =
     session && wantedLanguage
       ? pickTrack(session.subtitles ?? [], wantedLanguage)
@@ -355,9 +367,13 @@ export function Player({
   const quality = chosen?.profileId === currentUserId ? chosen.value : stored;
   const qualityRef = useRef(quality);
   const appliedQuality = useRef(quality);
+  const autoQualityHeight = useRef(1080);
   const chooseQuality = (height: number) => {
+    const resetAuto = height === 0 && autoQualityHeight.current !== 1080;
+    if (height === 0) autoQualityHeight.current = 1080;
     writeQuality(currentUserId, height);
     setChosen({ profileId: currentUserId, value: height });
+    if (resetAuto && qualityRef.current === 0) void api.current?.requality();
   };
 
   useEffect(() => {
@@ -420,12 +436,14 @@ export function Player({
     let recovery: ReturnType<typeof setTimeout> | undefined;
     let waiting: ReturnType<typeof setTimeout> | undefined;
     let startTimer: ReturnType<typeof setInterval> | undefined;
+    let qualityTimer: ReturnType<typeof setInterval> | undefined;
     let bufferTimer: ReturnType<typeof setTimeout> | undefined;
     let moving = false;
     let swapping = false;
     // Only the viewer's own pause counts: a paused player stays paused when new
     // data arrives or the next program starts.
     let userPaused = false;
+    const qualityAdapter = new AutoQualityAdapter();
     const viewerId = Array.from(
       crypto.getRandomValues(new Uint8Array(16)),
       (b) => b.toString(16).padStart(2, "0"),
@@ -549,6 +567,7 @@ export function Player({
       clearTimeout(waiting);
       clearTimeout(bufferTimer);
       clearInterval(startTimer);
+      clearInterval(qualityTimer);
       hls?.destroy();
       hls = null;
       hlsRef.current = null;
@@ -687,7 +706,10 @@ export function Player({
         1000;
       const headroom = direct
         ? 0.15
-        : Math.max(0.5, Math.min(HLS_ALIGNMENT_HEADROOM, remaining - 0.5));
+        : Math.max(
+            0.5,
+            Math.min(HLS_ALIGNMENT_HEADROOM, liveDelay() - 2, remaining - 0.5),
+          );
       return Math.max(
         ranges.start(first),
         Math.min(desired(), ranges.end(ranges.length - 1) - headroom),
@@ -708,6 +730,33 @@ export function Player({
         if (video.buffered.start(i) <= t + 0.25 && t < video.buffered.end(i))
           return video.buffered.end(i) - t;
       return 0;
+    };
+    const sampleQualityPressure = () => {
+      const active = current;
+      const frameQuality = video.getVideoPlaybackQuality?.();
+      const nextHeight = qualityAdapter.observe(
+        {
+          nowMs: performance.now(),
+          bufferedSeconds: active ? bufferedAt(video.currentTime) : 0,
+          outputHeight:
+            active?.value.details?.outputVideo.height ??
+            active?.value.sourceHeight ??
+            360,
+          droppedVideoFrames: frameQuality?.droppedVideoFrames,
+          totalVideoFrames: frameQuality?.totalVideoFrames,
+        },
+        !!active &&
+          qualityRef.current === 0 &&
+          !userPaused &&
+          !video.paused &&
+          video.readyState >= 2 &&
+          !moving &&
+          !swapping,
+      );
+      if (nextHeight !== null && nextHeight < autoQualityHeight.current) {
+        autoQualityHeight.current = nextHeight;
+        void requality();
+      }
     };
     // A browser that refuses sound autoplay still allows muted, so retry muted once.
     const refused = (e: unknown) => {
@@ -924,7 +973,10 @@ export function Player({
       for (let attempt = 0; attempt < (entryStartsAt ? 1 : 20); attempt++) {
         if (stopped) return null;
         const maxHeight = qualityRef.current;
+        const autoMaxHeight = maxHeight === 0 ? autoQualityHeight.current : 0;
         const audio = { ...audioRef.current };
+        const tunedCapabilities =
+          autoMaxHeight > 0 ? { ...capabilities, autoMaxHeight } : capabilities;
         const grant = await request<Authorization>(
           "/api/playback/sessions",
           { channelId },
@@ -945,7 +997,7 @@ export function Player({
             `/api/channels/${channelId}/tune`,
             {
               profileId: currentUserId,
-              capabilities,
+              capabilities: tunedCapabilities,
               token: grant.token,
               forceEncode: forced(entryStartsAt),
               entryStartsAt,
@@ -975,6 +1027,7 @@ export function Player({
             receivedAt,
             requestedAt,
             quality: maxHeight,
+            autoMaxHeight,
             audio: JSON.stringify(audio),
           };
         } catch (e) {
@@ -1007,6 +1060,7 @@ export function Player({
           receivedAt: performance.now(),
           requestedAt: active.requestedAt,
           quality: active.quality,
+          autoMaxHeight: active.autoMaxHeight,
           audio: active.audio,
         };
         setSession(value);
@@ -1025,6 +1079,9 @@ export function Player({
       detach();
       current = prepared;
       moving = false;
+      qualityAdapter.reset();
+      clearInterval(qualityTimer);
+      qualityTimer = setInterval(sampleQualityPressure, 10000);
       next = null;
       started = false;
       seekedToStart = false;
@@ -1059,7 +1116,7 @@ export function Player({
           startPosition: following ? 0 : -1,
           maxBufferLength: 12,
           backBufferLength: 6,
-          liveSyncDurationCount: 2,
+          liveSyncDurationCount: Math.max(2, Math.ceil(liveDelay() / 2)),
           startLevel: s.plan.lowHeight ? 0 : undefined,
           pLoader: responsivePlaylistLoader(),
         });
@@ -1181,6 +1238,7 @@ export function Player({
         ) {
           // The ceiling changes nothing for this title (for example it is below the ceiling already).
           old.quality = fresh.quality;
+          old.autoMaxHeight = fresh.autoMaxHeight;
           old.audio = fresh.audio;
           await drop(fresh.value.token);
         } else {
@@ -1219,6 +1277,8 @@ export function Player({
         !stopped &&
         current &&
         (current.quality !== qualityRef.current ||
+          current.autoMaxHeight !==
+            (qualityRef.current === 0 ? autoQualityHeight.current : 0) ||
           current.audio !== JSON.stringify(audioRef.current))
       )
         void requality();
@@ -1254,6 +1314,8 @@ export function Player({
           attach(prepared, true);
           if (
             prepared.quality !== qualityRef.current ||
+            prepared.autoMaxHeight !==
+              (qualityRef.current === 0 ? autoQualityHeight.current : 0) ||
             prepared.audio !== JSON.stringify(audioRef.current)
           )
             setTimeout(() => void requality(), 0);
@@ -1280,6 +1342,8 @@ export function Player({
           attach(prepared);
           if (
             prepared.quality !== qualityRef.current ||
+            prepared.autoMaxHeight !==
+              (qualityRef.current === 0 ? autoQualityHeight.current : 0) ||
             prepared.audio !== JSON.stringify(audioRef.current)
           )
             setTimeout(() => void requality(), 0);
@@ -1471,7 +1535,10 @@ export function Player({
       {channelId && session && (
         <PlayerControls
           onWakeControls={() => wakeControls.current()}
-          onHideControls={() => { setControlsDismissed(true); setIdle(true); }}
+          onHideControls={() => {
+            setControlsDismissed(true);
+            setIdle(true);
+          }}
           session={session.channelId === channelId ? session : undefined}
           paused={paused}
           time={clock.time}

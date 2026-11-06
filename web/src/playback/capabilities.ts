@@ -20,7 +20,7 @@ async function detect(): Promise<Capabilities> {
   const hls = nativeHLS || mseHLS;
   const video: VideoCapability[] = [];
   for (const [profile, prefix] of [['High', '6400'], ['Main', '4d00'], ['Constrained Baseline', '42e0'], ['Baseline', '4200']]) {
-    for (const [width, height, fps, level, rate] of [[3840, 2160, 30, 51, 25000000], [1920, 1080, 60, 42, 20000000], [1920, 1080, 30, 40, 20000000], [1280, 720, 30, 31, 20000000]]) {
+    for (const [width, height, fps, level, rate] of [[3840, 2160, 30, 51, 25000000], [1920, 1080, 60, 42, 20000000], [1920, 1080, 30, 40, 20000000], [1280, 720, 30, 31, 20000000], [854, 480, 30, 31, 2500000], [640, 360, 30, 30, 1500000]]) {
       const codec = `avc1.${prefix}${level.toString(16).padStart(2, '0')}`;
       const contentType = `video/mp4; codecs="${codec}"`;
       if (!element.canPlayType(contentType)) continue;
@@ -30,8 +30,8 @@ async function detect(): Promise<Capabilities> {
         try {
           const result = await navigator.mediaCapabilities.decodingInfo({ type: mseHLS ? 'media-source' : 'file', video: { contentType, width, height, bitrate: rate, framerate: fps } });
           supported = result.supported && result.smooth;
-        } catch { supported = width <= 1280 && fps <= 30; }
-      } else { supported = width <= 1280 && fps <= 30; }
+        } catch { supported = width <= 640 && height <= 360 && fps <= 30; }
+      } else { supported = width <= 640 && height <= 360 && fps <= 30; }
       if (supported) video.push({ codec: 'h264', profile, level, width, height, fps, bitrate: rate, pixelFormat: 'yuv420p' });
     }
   }

@@ -131,7 +131,7 @@ func Arguments(j Job) ([]string, error) {
 		filter, filterThreads := gpu.filter, "1"
 		if onGPU && p.ToneMap && p.ToneMapper == "cpu" {
 			// Hardware decode does not make the intervening CPU tone map single-threaded.
-			filterThreads = strconv.Itoa(min(max(4, threads), 16))
+			filterThreads = strconv.Itoa(min(threads, 16))
 		}
 		if !onGPU {
 			var err error
@@ -139,10 +139,10 @@ func Arguments(j Job) ([]string, error) {
 				return nil, err
 			}
 			if p.ToneMap {
-				filterThreads = strconv.Itoa(min(max(4, threads), 16))
+				filterThreads = strconv.Itoa(min(threads, 16))
 			}
 		}
-		encode := softwareVideoArgs(softwareEncoder(), p.Profile, filterThreads)
+		encode := softwareVideoArgs(softwareEncoder(), p.Profile, strconv.Itoa(threads), filterThreads)
 		if onGPU {
 			// Decode, scale and any tone map already ran on the GPU, in the filter.
 			encode = append([]string{"-filter_threads", filterThreads}, gpu.encode...)

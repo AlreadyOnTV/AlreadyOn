@@ -50,7 +50,7 @@ func TestTuneEntryFollowsPresentedTime(t *testing.T) {
 		position  time.Duration // expected job clock relative to the boundary
 	}{
 		// Viewer is still watching the program's last seconds.
-		{"fresh tune within delay of a boundary", 1 * time.Second, -1, 991, -3 * time.Second},
+		{"fresh tune within delay of a boundary", 1 * time.Second, -1, 991, 1*time.Second - PresentationDelay},
 		// First ad attaches when presentation reaches it; its two-second
 		// successor is already over on the server clock.
 		{"prepare second short ad", PresentationDelay, 2 * time.Second, 993, 2 * time.Second},

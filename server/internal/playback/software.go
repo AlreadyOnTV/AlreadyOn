@@ -25,11 +25,11 @@ var softwareEncoder = sync.OnceValue(func() string {
 	return "libopenh264"
 })
 
-func softwareVideoArgs(encoder, profile, filterThreads string) []string {
+func softwareVideoArgs(encoder, profile, threads, filterThreads string) []string {
 	if encoder == "libx264" && profile == "constrained_baseline" {
 		profile = "baseline"
 	}
-	args := []string{"-c:v", encoder, "-profile:v", profile, "-pix_fmt", "yuv420p", "-threads", "2", "-filter_threads", filterThreads}
+	args := []string{"-c:v", encoder, "-profile:v", profile, "-pix_fmt", "yuv420p", "-threads", threads, "-filter_threads", filterThreads}
 	if encoder == "libx264" {
 		args = append(args, "-preset", "veryfast", "-tune", "zerolatency")
 	}

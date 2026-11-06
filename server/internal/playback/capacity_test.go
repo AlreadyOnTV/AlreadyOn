@@ -7,6 +7,8 @@ import (
 	"strings"
 	"testing"
 	"time"
+
+	"github.com/alreadyonapp/alreadyon/server/internal/library"
 )
 
 func TestChooseCapsAutoQualityAtTheServersMeasuredLimit(t *testing.T) {
@@ -34,8 +36,8 @@ func TestChooseCapsAutoQualityAtTheServersMeasuredLimit(t *testing.T) {
 	}
 	picked := caps
 	picked.MaxHeight = 1080
-	if p, _ := Choose(s, picked, true, true); p.Height != 1080 || p.ServerLimited {
-		t.Errorf("a viewer's choice was capped: %+v", p)
+	if p, _ := Choose(s, picked, true, true); p.Height != 720 || !p.ServerLimited {
+		t.Errorf("an unsafe viewer target was not bounded: %+v", p)
 	}
 	// A source already within the limit is not "limited".
 	small := sourceInfo()
@@ -64,11 +66,181 @@ func TestCapacityLimitAppliesOnlyToTheMeasuredSoftwareEncoder(t *testing.T) {
 	}
 }
 
+func TestCapacityLimitForUsesTheMeasuredSourceClass(t *testing.T) {
+	c := &Capacity{}
+	c.Load(CapacityRecord{MeasuredAt: time.Now(), Samples: []RungSample{
+		{SourceClass: SourceHEVCPQ, Height: 1080, FPS: 60, Speed: 0.8},
+		{SourceClass: SourceHEVCPQ, Height: 720, FPS: 30, Speed: 1.5},
+		{SourceClass: SourceHEVCPQ, Height: 480, FPS: 30, Speed: 2},
+		{SourceClass: SourceH264HD, Height: 1080, FPS: 60, Speed: 2},
+	}})
+	hdr := library.StreamInfo{Index: 0, Kind: library.StreamVideo, Codec: "hevc", PixelFormat: "yuv420p10le", Width: 3840, Height: 2160, FrameRate: 60, ColorTransfer: "smpte2084"}
+	if height, fps, measured, sustainable := c.LimitFor("", hdr); height != 720 || fps != 30 || !measured || !sustainable {
+		t.Fatalf("HDR limit %dp%g measured=%t sustainable=%t", height, fps, measured, sustainable)
+	}
+	h264 := sourceInfo().Streams[0]
+	if height, fps, measured, sustainable := c.LimitFor("", h264); height != 1080 || fps != 60 || !measured || !sustainable {
+		t.Fatalf("H.264 limit %dp%g measured=%t sustainable=%t", height, fps, measured, sustainable)
+	}
+	if _, _, measured, _ := c.LimitFor("", library.StreamInfo{Codec: "vp9", Width: 1920, Height: 1080}); measured {
+		t.Fatal("an unmeasured source class inherited another codec's result")
+	}
+}
+
+func TestCapacityMarksTheSmallestRungUnsustainable(t *testing.T) {
+	c := &Capacity{}
+	c.Load(CapacityRecord{MeasuredAt: time.Now(), Samples: []RungSample{
+		{SourceClass: SourceH264HD, Height: 1080, FPS: 60, Speed: 0.4},
+		{SourceClass: SourceH264HD, Height: 720, FPS: 30, Speed: 0.7},
+		{SourceClass: SourceH264HD, Height: 480, FPS: 30, Speed: 0.9},
+		{SourceClass: SourceH264HD, Height: 360, FPS: 30, Speed: 1.1},
+	}})
+	if height, fps, measured, sustainable := c.LimitFor("", sourceInfo().Streams[0]); height != 360 || fps != 30 || !measured || sustainable {
+		t.Fatalf("fallback %dp%g measured=%t sustainable=%t", height, fps, measured, sustainable)
+	}
+	caps := clientCaps()
+	caps.ServerMeasured, caps.ServerSustainable = true, false
+	source := sourceInfo()
+	source.Streams[0].Codec = "mpeg2video"
+	if _, err := Choose(source, caps, false, false); !errors.Is(err, ErrCapacityUnsustainable) {
+		t.Fatalf("unsustainable conversion error = %v", err)
+	}
+}
+
+func TestUnsustainableHDRDoesNotReduceSupportedSDRConcurrency(t *testing.T) {
+	samples := []RungSample{
+		{SourceClass: SourceHEVCPQ, Height: 1080, FPS: 60, Speed: 0.6},
+		{SourceClass: SourceHEVCPQ, Height: 720, FPS: 30, Speed: 0.9},
+		{SourceClass: SourceHEVCPQ, Height: 480, FPS: 30, Speed: 1.1},
+		{SourceClass: SourceHEVCPQ, Height: 360, FPS: 30, Speed: 1.15},
+	}
+	for _, source := range capacitySources[2:] {
+		for _, rung := range OutputRungs {
+			if rung.Height > source.height {
+				continue
+			}
+			samples = append(samples, RungSample{SourceClass: source.class, Height: rung.Height, FPS: min(rung.FPS, source.fps), Speed: 2})
+		}
+	}
+	c := &Capacity{Threads: func() int { return 2 }, memory: func() uint64 { return 16 << 30 }, cpus: 16}
+	c.Load(CapacityRecord{MeasuredAt: time.Now(), Samples: samples, MaxHeight: 1080, MaxFPS: 60})
+	c.RecomputeProcesses(context.Background())
+	if got := c.Processes(); got != MaxParallel {
+		t.Fatalf("SDR concurrency = %d, want %d while unsustainable HDR remains separately blocked", got, MaxParallel)
+	}
+}
+
+func TestCapacityAdmissionUsesSelectedRungAndMixedResourceLoad(t *testing.T) {
+	c := &Capacity{Threads: func() int { return 8 }, memory: func() uint64 { return 16 << 30 }, cpus: 16}
+	samples := []RungSample{
+		{SourceClass: SourceHEVCPQ, Height: 1080, FPS: 60, Speed: 0.79},
+		{SourceClass: SourceHEVCPQ, Height: 720, FPS: 30, Speed: 1.5},
+		{SourceClass: SourceHEVCPQ, Height: 480, FPS: 30, Speed: 1.73},
+		{SourceClass: SourceHEVCPQ, Height: 360, FPS: 30, Speed: 1.86},
+		{SourceClass: SourceH264HD, Height: 1080, FPS: 60, Speed: 1.92},
+		{SourceClass: SourceH264HD, Height: 720, FPS: 30, Speed: 5.67},
+	}
+	c.Load(CapacityRecord{MeasuredAt: time.Now(), Samples: samples})
+	h264Job := func(height int) Job {
+		return Job{Source: sourceInfo(), Plan: Plan{Mode: "transcode", Height: height, FPS: 30, VideoBitrate: heightBitrate(height)}}
+	}
+	if c.Allows([]Job{h264Job(1080), h264Job(1080), h264Job(1080)}, h264Job(1080)) {
+		t.Fatal("four 1080p H.264 jobs exceeded the measured CPU budget")
+	}
+	if !c.Allows([]Job{h264Job(720), h264Job(720), h264Job(720)}, h264Job(720)) {
+		t.Fatal("four lower-rung SDR jobs should fit the measured budget")
+	}
+	hdr := library.StreamInfo{Codec: "hevc", PixelFormat: "yuv420p10le", Width: 3840, Height: 2160, FrameRate: 60, ColorTransfer: "smpte2084"}
+	hdrJob := Job{Source: library.ProbeResult{Streams: []library.StreamInfo{hdr}}, Plan: Plan{Mode: "transcode", Height: 720, FPS: 30}}
+	if c.Allows([]Job{hdrJob, hdrJob}, hdrJob) {
+		t.Fatal("three 720p HDR jobs exceeded the measured CPU budget")
+	}
+	c.memory = func() uint64 { return 1 << 30 }
+	if c.Allows([]Job{hdrJob}, hdrJob) {
+		t.Fatal("host-memory headroom was not applied")
+	}
+	c.status.Encoder = EncoderIntelVAAPI
+	if c.Allows(nil, h264Job(720)) {
+		t.Fatal("a software plan used a hardware-encoder capacity result")
+	}
+}
+
+func TestCapacityAllowsOneOptimisticStreamForAnUnmatchedOutputSize(t *testing.T) {
+	c := &Capacity{Threads: func() int { return 2 }, memory: func() uint64 { return 16 << 30 }, cpus: 16}
+	c.Load(CapacityRecord{MeasuredAt: time.Now(), Encoder: EncoderIntelQSV, Samples: []RungSample{
+		{SourceClass: SourceSDRSmall, Height: 480, FPS: 30, Speed: 11.98},
+	}})
+	source := sourceInfo()
+	source.Streams[0].Width, source.Streams[0].Height, source.Streams[0].FrameRate = 768, 576, 30000.0/1001
+	job := Job{Source: source, Threads: 2, Plan: Plan{Mode: "transcode", Encoder: EncoderIntelQSV, Width: 768, Height: 576, FPS: 30000.0 / 1001, VideoBitrate: 5000000}}
+	if err := c.AdmissionError(nil, job); err != nil {
+		t.Fatalf("single unmatched SD conversion was rejected: %v", err)
+	}
+	knownSource := sourceInfo()
+	known := Job{Source: knownSource, Threads: 2, Plan: Plan{Mode: "transcode", Encoder: EncoderIntelQSV, Width: 1280, Height: 720, FPS: 30, VideoBitrate: 5000000}}
+	c.mu.Lock()
+	c.status.Samples = append(c.status.Samples, RungSample{SourceClass: SourceH264HD, Height: 720, FPS: 30, Speed: 5.67})
+	c.mu.Unlock()
+	if err := c.AdmissionError([]Job{known}, job); err != nil {
+		t.Fatalf("one optimistic stream could not share remaining measured budget: %v", err)
+	}
+	if err := c.AdmissionError([]Job{job, job, job}, job); err != nil {
+		t.Fatalf("four optimistic streams did not fit the aggregate budget: %v", err)
+	}
+	if !errors.Is(c.AdmissionError([]Job{job, job, job, job}, job), ErrBusy) {
+		t.Fatal("an optimistic stream passed the four-slot limit")
+	}
+	job.Plan.LowHeight = 360
+	if !errors.Is(c.AdmissionError(nil, job), ErrBusy) {
+		t.Fatal("an unmeasured two-rendition ladder was admitted")
+	}
+	job.Plan.LowHeight = 0
+	c.mu.Lock()
+	c.status.Samples[0].Speed = 0.8
+	c.mu.Unlock()
+	job.Plan.Height, job.Plan.Width, job.Plan.FPS, job.Plan.VideoBitrate = 480, 640, 30, 2500000
+	if !errors.Is(c.AdmissionError(nil, job), ErrCapacityUnsustainable) {
+		t.Fatal("known-below-threshold source was overridden by the optimistic fallback")
+	}
+}
+
+func TestCapacityBenchmarksEveryValidSourceOutputPairing(t *testing.T) {
+	type pairing struct {
+		class  SourceClass
+		height int
+		fps    float64
+	}
+	var got []pairing
+	c := &Capacity{measure: func(_ context.Context, class SourceClass, rung RungSample, _ int, _, _ string) (float64, error) {
+		got = append(got, pairing{class, rung.Height, rung.FPS})
+		return 2, nil
+	}}
+	samples, err := c.benchmark(context.Background(), "")
+	if err != nil || len(samples) != 18 || len(got) != 18 {
+		t.Fatalf("benchmark pairings=%d samples=%d err=%v", len(got), len(samples), err)
+	}
+	if got[0] != (pairing{SourceHEVCPQ, 1080, 60}) || got[4] != (pairing{SourceHEVCHLG, 1080, 60}) {
+		t.Fatalf("highest-cost PQ/HLG pairings were not prioritized: %+v", got[:5])
+	}
+	for _, sample := range samples {
+		var source capacitySource
+		for _, candidate := range capacitySources {
+			if candidate.class == sample.SourceClass {
+				source = candidate
+				break
+			}
+		}
+		if sample.SourceClass == "" || sample.Height > source.height || sample.FPS > source.fps {
+			t.Errorf("invalid/upscaled pairing: %+v from %+v", sample, source)
+		}
+	}
+}
+
 func TestCapacityMeasuresDownTheLadderAndStopsAtTheFirstSustainedSize(t *testing.T) {
 	speeds := map[int]float64{1080: 0.7, 720: 1.0, 480: 2.0, 360: 4.0} // by height; 60 fps is half as fast
 	c := &Capacity{
 		Threads: func() int { return 4 },
-		measure: func(_ context.Context, r RungSample, _ int, _, _ string) (float64, error) {
+		measure: func(_ context.Context, _ SourceClass, r RungSample, _ int, _, _ string) (float64, error) {
 			s := speeds[r.Height]
 			if r.FPS > 30 {
 				s /= 2
@@ -85,8 +257,8 @@ func TestCapacityMeasuresDownTheLadderAndStopsAtTheFirstSustainedSize(t *testing
 		t.Fatal(err)
 	}
 	// 1080p60 .35x, 1080p30 .7x, 720p60 .5x, 720p30 1.0x, 480p30 2.0x: first at or above 1.3x is 480p30.
-	if h, f := pickRung("", samples); h != 480 || f != 30 || len(samples) != 5 {
-		t.Fatalf("picked %dp%g from %d samples %+v, want 480p30 after 5", h, f, len(samples), samples)
+	if h, f := pickRung("", samples, SourceH264HD); h != 480 || f != 30 {
+		t.Fatalf("picked %dp%g from the H.264 class, want 480p30", h, f)
 	}
 
 	c.Load(CapacityRecord{})
@@ -95,19 +267,19 @@ func TestCapacityMeasuresDownTheLadderAndStopsAtTheFirstSustainedSize(t *testing
 	c.status.MaxHeight, c.status.MaxFPS = pickRung("", samples)
 	c.mu.Unlock()
 	c.RecomputeProcesses(context.Background())
-	// 0.8 * 8 CPUs * 2.0x / 4 threads = 3.2 conversions.
-	if got := c.Processes(); got != 3 {
-		t.Errorf("processes = %d, want 3", got)
+	// The 360p30 measurement supports four conversions under the CPU budget.
+	if got := c.Processes(); got != MaxParallel {
+		t.Errorf("processes = %d, want %d", got, MaxParallel)
 	}
-	if saved.Processes != 3 || saved.MaxHeight != 480 {
+	if saved.Processes != MaxParallel || saved.MaxHeight != 480 {
 		t.Errorf("saved %+v, want the processes and limit stored", saved)
 	}
 }
 
 func TestCapacityWhenNothingKeepsUpUsesTheSmallestSize(t *testing.T) {
-	c := &Capacity{measure: func(context.Context, RungSample, int, string, string) (float64, error) { return 0.5, nil }}
+	c := &Capacity{measure: func(context.Context, SourceClass, RungSample, int, string, string) (float64, error) { return 0.5, nil }}
 	samples, err := c.benchmark(context.Background(), "")
-	if err != nil || len(samples) != len(capacityRungs) {
+	if err != nil || len(samples) != 18 {
 		t.Fatalf("samples = %+v, %v; want every size tried", samples, err)
 	}
 	if h, f := pickRung("", samples); h != 360 || f != 30 {
@@ -117,15 +289,15 @@ func TestCapacityWhenNothingKeepsUpUsesTheSmallestSize(t *testing.T) {
 
 func TestCapacityHardwareMeasuresOneSizeAndSetsNoLimit(t *testing.T) {
 	calls := 0
-	c := &Capacity{measure: func(_ context.Context, r RungSample, threads int, encoder, _ string) (float64, error) {
+	c := &Capacity{measure: func(_ context.Context, _ SourceClass, r RungSample, threads int, encoder, _ string) (float64, error) {
 		calls++
-		if r.Height != 1080 || r.FPS != 30 || threads != 1 || encoder != EncoderIntelVAAPI {
+		if r.Height > 1080 || threads != DefaultThreads || encoder != EncoderIntelVAAPI {
 			t.Errorf("unexpected measurement %+v threads=%d encoder=%q", r, threads, encoder)
 		}
 		return 6, nil
 	}}
 	samples, err := c.benchmark(context.Background(), EncoderIntelVAAPI)
-	if err != nil || calls != 1 {
+	if err != nil || calls != 18 {
 		t.Fatalf("samples %+v err %v calls %d", samples, err, calls)
 	}
 	if h, _ := pickRung(EncoderIntelVAAPI, samples); h != 0 {
@@ -134,7 +306,9 @@ func TestCapacityHardwareMeasuresOneSizeAndSetsNoLimit(t *testing.T) {
 }
 
 func TestCapacityMeasurementFailureKeepsThePreviousResult(t *testing.T) {
-	c := &Capacity{measure: func(context.Context, RungSample, int, string, string) (float64, error) { return 0, errors.New("boom") }}
+	c := &Capacity{measure: func(context.Context, SourceClass, RungSample, int, string, string) (float64, error) {
+		return 0, errors.New("boom")
+	}}
 	if _, err := c.benchmark(context.Background(), ""); err == nil {
 		t.Fatal("a failed measurement must be reported")
 	}
@@ -150,12 +324,12 @@ func TestDetectProcesses(t *testing.T) {
 		want          int
 	}{
 		{"small NAS", 1.5, 4, 2, 16 << 30, "", 2},
-		{"big desktop", 6, 18, 8, 32 << 30, "", 10},
+		{"big desktop caps at four", 6, 18, 8, 32 << 30, "", 4},
 		{"slower than real time still gets one", 0.3, 4, 4, 16 << 30, "", 1},
-		{"memory bound", 6, 18, 2, 1 << 30, "", 2},
-		{"never above the supported maximum", 50, 64, 2, 64 << 30, "", 16},
-		{"nvenc session limit", 20, 16, 1, 0, EncoderNvidiaNVENC, 8},
-		{"hardware ignores free memory", 20, 4, 1, 1 << 20, EncoderIntelVAAPI, 16},
+		{"memory bound", 6, 18, 2, 1 << 30, "", 1},
+		{"never above the supported maximum", 50, 64, 2, 64 << 30, "", 4},
+		{"unknown memory is conservative", 20, 16, 1, 0, EncoderNvidiaNVENC, 1},
+		{"hardware respects host memory", 20, 4, 1, 1 << 20, EncoderIntelVAAPI, 1},
 	} {
 		if got := DetectProcesses(tc.speed, tc.cpus, tc.threads, tc.free, tc.encoder); got != tc.want {
 			t.Errorf("%s: %d, want %d", tc.name, got, tc.want)
@@ -167,8 +341,8 @@ func TestEffectiveSettingsFollowTheDetectedLimitUnlessTheAdminChoseOne(t *testin
 	c := &Capacity{}
 	c.Load(CapacityRecord{MeasuredAt: time.Now(), Processes: 6, MaxHeight: 1080, MaxFPS: 60})
 	s := DefaultSettings()
-	if got := EffectiveSettings(s, c).MaxProcesses; got != 6 {
-		t.Errorf("auto limit = %d, want the detected 6", got)
+	if got := EffectiveSettings(s, c).MaxProcesses; got != MaxParallel {
+		t.Errorf("auto limit = %d, want the four-process ceiling", got)
 	}
 	s.AutoProcesses, s.MaxProcesses = false, 3
 	if got := EffectiveSettings(s, c).MaxProcesses; got != 3 {
@@ -190,28 +364,48 @@ func TestCapacityMeasuresRealFFmpeg(t *testing.T) {
 	if _, err := exec.LookPath("ffprobe"); err != nil {
 		t.Skip("ffprobe not available")
 	}
-	// State becomes idle before the save callback; synchronize on persistence
-	// rather than racing the worker's write to an ordinary local variable.
-	records := make(chan CapacityRecord, 1)
-	c := &Capacity{Context: t.Context(), Threads: func() int { return 2 }, Save: func(_ context.Context, r CapacityRecord) { records <- r }}
-	c.Start(true)
-	var saved CapacityRecord
-	select {
-	case saved = <-records:
-	case <-time.After(3 * time.Minute):
-		t.Fatal("capacity measurement did not save its result")
+	dir := t.TempDir()
+	source := capacitySources[len(capacitySources)-1]
+	sample, err := makeCapacitySample(t.Context(), "ffmpeg", dir, source)
+	if err != nil {
+		t.Fatal(err)
 	}
-	s := c.Status()
-	if s.MeasuredAt == nil || len(s.Samples) == 0 || s.MaxHeight == 0 || s.Processes < 1 {
-		t.Fatalf("status = %+v, want a measurement with a size limit and a parallel limit", s)
+	speed, err := measureRung(t.Context(), "ffmpeg", dir, source.class, RungSample{Height: 360, FPS: 30}, DefaultThreads, "", sample)
+	if err != nil || speed <= 0 {
+		t.Fatalf("complete synthetic conversion speed=%g err=%v", speed, err)
 	}
-	for _, r := range s.Samples {
-		if r.Speed <= 0 {
-			t.Errorf("sample %+v has no speed", r)
+	t.Logf("measured %s 854x480 H.264 SDR -> 640x360 H.264/AAC at %.2fx real time", source.class, speed)
+}
+
+func BenchmarkCapacityMatrix(b *testing.B) {
+	ctx := context.Background()
+	c := &Capacity{}
+	tuner := &Tuner{cpus: c.cpuCount()}
+	tuneSamples, workload, err := tuner.benchmark(ctx, "", c.cpuCount())
+	if err != nil {
+		b.Fatal(err)
+	}
+	threads := PickThreads(tuneSamples)
+	c.Threads = func() int { return threads }
+	b.Logf("thread measurement: %s; selected %d", workload, threads)
+	for i := 0; i < b.N; i++ {
+		samples, err := c.benchmark(ctx, "")
+		if err != nil {
+			b.Fatal(err)
+		}
+		for _, source := range capacitySources {
+			classSamples := sourceSamples(samples, source.class)
+			height, fps, measured, sustainable := pickSourceRung(classSamples)
+			if !measured {
+				b.Fatalf("missing capacity for %s", source.class)
+			}
+			processes := 0
+			for _, sample := range classSamples {
+				if sample.Speed >= CapacityRealTime {
+					processes = max(processes, DetectProcesses(sample.Speed, c.cpuCount(), threads, memoryAvailable(), ""))
+				}
+			}
+			b.Logf("%s: ceiling=%dp%g; %s; %d worker threads; max streams across rungs=%d; ceiling sustainable=%t", source.class, height, fps, describeRungs(classSamples), threads, processes, sustainable)
 		}
 	}
-	if saved.Processes != s.Processes || saved.MaxHeight != s.MaxHeight {
-		t.Errorf("saved %+v does not match %+v", saved, s)
-	}
-	t.Logf("measured %s; %d parallel", describeRungs(s.Samples), s.Processes)
 }

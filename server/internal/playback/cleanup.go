@@ -5,6 +5,7 @@ import (
 	"errors"
 	"os"
 	"path/filepath"
+	"runtime"
 	"strings"
 	"sync"
 	"time"
@@ -20,6 +21,8 @@ type Worker interface {
 	Run(context.Context, Job) error
 }
 
+type AdmissionPolicy func(active []Job, candidate Job) error
+
 type ManagedStream struct {
 	Job     Job
 	Runtime RuntimeStats
@@ -30,6 +33,7 @@ type ManagedStream struct {
 type managed struct {
 	ManagedStream
 	key     string
+	cost    int
 	leases  map[string]time.Time
 	cancel  context.CancelFunc
 	closing bool
@@ -38,16 +42,18 @@ type managed struct {
 // Manager owns private output, workers and viewer leases. Its clock and worker
 // are injectable; Sweep can be called deterministically without timer sleeps.
 type Manager struct {
-	mu       sync.Mutex
-	root     string
-	unlock   func() error
-	clock    schedule.Clock
-	worker   Worker
-	settings Settings
-	streams  map[string]*managed
-	active   int
-	closed   bool
-	wg       sync.WaitGroup
+	mu         sync.Mutex
+	root       string
+	unlock     func() error
+	clock      schedule.Clock
+	worker     Worker
+	admission  AdmissionPolicy
+	settings   Settings
+	streams    map[string]*managed
+	active     int
+	activeCost int
+	closed     bool
+	wg         sync.WaitGroup
 }
 
 func NewManager(root string, clock schedule.Clock, worker Worker, settings Settings) (*Manager, error) {
@@ -101,6 +107,12 @@ func (m *Manager) Configure(s Settings) error {
 	return nil
 }
 
+func (m *Manager) SetAdmissionPolicy(policy AdmissionPolicy) {
+	m.mu.Lock()
+	defer m.mu.Unlock()
+	m.admission = policy
+}
+
 // Acquire deduplicates concurrent starts using a server-derived rendition key.
 // viewer is the opaque session ID, never a user-chosen channel name or path.
 // A successful acquisition persists beyond its HTTP request via a lease.
@@ -126,8 +138,28 @@ func (m *Manager) Acquire(ctx context.Context, key, viewer string, job Job) (Man
 		s.leases[viewer] = m.clock.Now().Add(m.settings.Lease())
 		return s.ManagedStream, nil
 	}
-	if len(m.streams) >= m.settings.MaxRenditions || m.viewerCount() >= m.settings.MaxViewers || (job.Plan.Mode != "direct" && m.active >= m.settings.MaxProcesses) {
+	cost := jobResourceCost(job)
+	if len(m.streams) >= m.settings.MaxRenditions || m.viewerCount() >= m.settings.MaxViewers || (cost > 0 && m.activeCost+cost > m.settings.MaxProcesses) {
 		return ManagedStream{}, ErrBusy
+	}
+	if cost > 0 {
+		cpus := min(runtime.NumCPU(), runtime.GOMAXPROCS(0))
+		threads := job.Threads
+		if threads == 0 {
+			threads = DefaultThreads
+		}
+		job.Threads = FairThreads(threads, cpus, m.activeCost+cost)
+	}
+	if cost > 0 && m.admission != nil {
+		var active []Job
+		for _, stream := range m.streams {
+			if stream.cost > 0 && !stream.Done {
+				active = append(active, stream.Job)
+			}
+		}
+		if err := m.admission(active, job); err != nil {
+			return ManagedStream{}, err
+		}
 	}
 	if job.Plan.Mode != "direct" {
 		dir, err := os.MkdirTemp(m.root, "stream-")
@@ -137,13 +169,14 @@ func (m *Manager) Acquire(ctx context.Context, key, viewer string, job Job) (Man
 		job.OutputDir = dir
 	}
 	workerCtx, cancel := context.WithCancel(context.Background())
-	s := &managed{ManagedStream: ManagedStream{Job: job}, key: key, leases: map[string]time.Time{viewer: m.clock.Now().Add(m.settings.Lease())}, cancel: cancel}
+	s := &managed{ManagedStream: ManagedStream{Job: job}, key: key, cost: cost, leases: map[string]time.Time{viewer: m.clock.Now().Add(m.settings.Lease())}, cancel: cancel}
 	m.streams[key] = s
 	if job.Plan.Mode == "direct" {
 		s.Done = true
 		return s.ManagedStream, nil
 	}
 	m.active++
+	m.activeCost += cost
 	m.wg.Add(1)
 	// A fallback inside the runner changes how the stream is made; keep the plan and details true.
 	job.Report = func(p Plan, pipeline Pipeline) {
@@ -165,6 +198,7 @@ func (m *Manager) Acquire(ctx context.Context, key, viewer string, job Job) (Man
 		m.mu.Lock()
 		defer m.mu.Unlock()
 		m.active-- // includes cancelling processes until Run has reaped them
+		m.activeCost -= s.cost
 		s.Done, s.Err = true, err
 		if err != nil && !s.closing {
 			logging.Error("stream failed: %s (%s): %v", filepath.Base(job.Path), job.Plan.Mode, err)
@@ -174,6 +208,16 @@ func (m *Manager) Acquire(ctx context.Context, key, viewer string, job Job) (Man
 		}
 	}()
 	return s.ManagedStream, nil
+}
+
+func jobResourceCost(job Job) int {
+	if job.Plan.Mode == "direct" || (job.Plan.VideoCopy && job.Plan.AudioCopy) {
+		return 0
+	}
+	if job.Plan.LowHeight > 0 {
+		return 2
+	}
+	return 1
 }
 
 func (m *Manager) viewerCount() int {
@@ -290,6 +334,14 @@ func (m *Manager) Counts() (processes, renditions, viewers int) {
 	m.mu.Lock()
 	defer m.mu.Unlock()
 	return m.active, len(m.streams), m.viewerCount()
+}
+
+// TranscodeSlots reports active encode resource slots and the manager's current
+// allowed slot limit. Rendition ladders count as two slots; copy-only streams do not.
+func (m *Manager) TranscodeSlots() (active, limit int) {
+	m.mu.Lock()
+	defer m.mu.Unlock()
+	return m.activeCost, m.settings.MaxProcesses
 }
 
 // Inspect observes an existing viewer without renewing its lease.

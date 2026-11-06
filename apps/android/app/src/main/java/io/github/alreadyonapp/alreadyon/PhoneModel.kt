@@ -664,10 +664,21 @@ internal class PhoneModel(application: Application) : AndroidViewModel(applicati
         val codecs = MediaCodecList(MediaCodecList.REGULAR_CODECS)
         val video = JSONArray()
         val audio = JSONArray()
-        val format = MediaFormat.createVideoFormat("video/avc", 1280, 720).apply { setInteger(MediaFormat.KEY_FRAME_RATE, 30); setInteger(MediaFormat.KEY_PROFILE, MediaCodecInfo.CodecProfileLevel.AVCProfileConstrainedBaseline); setInteger(MediaFormat.KEY_LEVEL, MediaCodecInfo.CodecProfileLevel.AVCLevel31) }
-        if (codecs.findDecoderForFormat(format) != null) video.put(JSONObject().put("codec", "h264")
-            .put("profile", "Constrained Baseline").put("level", 31).put("width", 1280).put("height", 720)
-            .put("fps", 30).put("bitrate", 5_000_000).put("pixelFormat", "yuv420p"))
+        for ((width, height, level, bitrate) in listOf(
+            intArrayOf(1280, 720, MediaCodecInfo.CodecProfileLevel.AVCLevel31, 5_000_000),
+            intArrayOf(640, 360, MediaCodecInfo.CodecProfileLevel.AVCLevel3, 1_500_000),
+        )) {
+            val format = MediaFormat.createVideoFormat("video/avc", width, height).apply {
+                setInteger(MediaFormat.KEY_FRAME_RATE, 30)
+                setInteger(MediaFormat.KEY_PROFILE, MediaCodecInfo.CodecProfileLevel.AVCProfileConstrainedBaseline)
+                setInteger(MediaFormat.KEY_LEVEL, level)
+                setInteger(MediaFormat.KEY_BIT_RATE, bitrate)
+            }
+            if (codecs.findDecoderForFormat(format) != null) video.put(JSONObject().put("codec", "h264")
+                .put("profile", "Constrained Baseline").put("level", if (height == 360) 30 else 31)
+                .put("width", width).put("height", height).put("fps", 30).put("bitrate", bitrate)
+                .put("pixelFormat", "yuv420p"))
+        }
         if (codecs.findDecoderForFormat(MediaFormat.createAudioFormat("audio/mp4a-latm", 48000, 2).apply { setInteger(MediaFormat.KEY_AAC_PROFILE, MediaCodecInfo.CodecProfileLevel.AACObjectLC); setInteger(MediaFormat.KEY_BIT_RATE, 192000) }) != null) {
             audio.put(JSONObject().put("codec", "aac").put("channels", 2).put("sampleRate", 48000).put("bitrate", 192000).put("profile", "LC").put("hls", true))
         }

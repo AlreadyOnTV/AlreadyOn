@@ -5,7 +5,6 @@ import (
 	"fmt"
 	"os"
 	"os/exec"
-	"path/filepath"
 	"runtime"
 	"strings"
 	"sync"
@@ -57,9 +56,6 @@ type Tuner struct {
 	Hardware   *Hardware
 	// Encoder is the hardware encoder in use ("" for software).
 	Encoder func(context.Context) string
-	// Processes is how many transcodes may run at once; the count is capped so
-	// that many streams together do not exceed the CPU.
-	Processes func(context.Context) int
 	// Busy reports running transcodes, which would distort a measurement.
 	Busy func() bool
 	// Save keeps the result across restarts.
@@ -114,7 +110,7 @@ func (t *Tuner) cpuCount() int {
 	if t.cpus > 0 {
 		return t.cpus
 	}
-	return runtime.NumCPU()
+	return min(runtime.NumCPU(), runtime.GOMAXPROCS(0))
 }
 
 // Start measures in the background. It does nothing when a measurement is
@@ -158,11 +154,10 @@ func (t *Tuner) run(ctx context.Context) {
 	if !IsHardwareEncoder(encoder) || (t.Hardware != nil && !t.Hardware.Check(ctx, encoder, false).OK) {
 		encoder = "" // software, or streams use software while the encoder does not work
 	}
-	processes := 1
-	if t.Processes != nil {
-		processes = max(1, t.Processes(ctx))
-	}
-	limit := max(2, t.cpuCount()/processes)
+	// This benchmark measures one process at a time. Dividing by the stream
+	// limit would strand CPU when fewer streams are active; FFmpeg's thread
+	// count is a worker ceiling, not a CPU quota.
+	limit := max(2, t.cpuCount())
 	samples, workload, err := t.benchmark(ctx, encoder, limit)
 
 	t.mu.Lock()
@@ -209,6 +204,14 @@ func PickThreads(samples []TuneSample) int {
 	return DefaultThreads
 }
 
+// FairThreads assigns a bounded worker-thread ceiling to a newly admitted job.
+// FFmpeg threads are not a CPU quota; the OS scheduler remains responsible for
+// sharing the measured host budget among already-running processes.
+func FairThreads(maxThreads, cpus, active int) int {
+	maxThreads, cpus, active = max(maxThreads, 1), max(cpus, 1), max(active, 1)
+	return min(maxThreads, max(1, (cpus+active-1)/active))
+}
+
 func bestSpeed(samples []TuneSample) float64 {
 	best := 0.0
 	for _, s := range samples {
@@ -251,11 +254,15 @@ func (t *Tuner) benchmark(ctx context.Context, encoder string, limit int) ([]Tun
 	if exe == "" {
 		exe = "ffmpeg"
 	}
-	sample, codec, err := makeTuneSample(ctx, exe, dir)
-	if err != nil {
-		return nil, "", err
+	sample := "synthetic:" + string(SourceHEVCPQ)
+	if t.measure == nil {
+		var err error
+		sample, err = makeCapacitySample(ctx, exe, dir, capacitySources[0])
+		if err != nil {
+			return nil, "", err
+		}
 	}
-	workload := fmt.Sprintf("2160p %s HDR10 to 1080p, CPU decode and tone map, %s encode", strings.ToUpper(codec), EncoderLabel(encoder))
+	workload := fmt.Sprintf("3840x2160p60 HEVC Main 10 PQ to 1080p60, CPU decode and tone map, %s encode", EncoderLabel(encoder))
 	measure := t.measure
 	if measure == nil {
 		measure = func(ctx context.Context, threads int, encoder, sample string) (float64, error) {
@@ -279,34 +286,6 @@ func (t *Tuner) benchmark(ctx context.Context, encoder string, limit int) ([]Tun
 
 const tuneSeconds = 3
 
-// makeTuneSample encodes a few seconds of noisy 2160p HDR10 video to disk, as
-// HEVC 10-bit when this FFmpeg can, else as 8-bit H.264 tagged the same way.
-func makeTuneSample(ctx context.Context, exe, dir string) (path, codec string, err error) {
-	path = filepath.Join(dir, "sample.mkv")
-	base := []string{"-hide_banner", "-loglevel", "error", "-nostdin", "-y", "-f", "lavfi", "-i",
-		fmt.Sprintf("testsrc2=size=3840x2160:rate=24:duration=%d,noise=alls=6:allf=t", tuneSeconds)}
-	attempts := []struct {
-		codec string
-		args  []string
-	}{
-		{"hevc", []string{"-vf", "setparams=color_primaries=bt2020:color_trc=smpte2084:colorspace=bt2020nc:range=tv,format=yuv420p10le", "-c:v", "libx265", "-preset", "ultrafast", "-crf", "18", "-x265-params", "log-level=error"}},
-		{"h264", []string{"-vf", "setparams=color_primaries=bt2020:color_trc=smpte2084:colorspace=bt2020nc:range=tv,format=yuv420p", "-c:v", "libx264", "-preset", "ultrafast", "-crf", "18"}},
-		{"h264", []string{"-vf", "setparams=color_primaries=bt2020:color_trc=smpte2084:colorspace=bt2020nc:range=tv,format=yuv420p", "-c:v", "libopenh264", "-b:v", "60M"}},
-	}
-	var last error
-	for _, a := range attempts {
-		args := append(append([]string{}, base...), a.args...)
-		args = append(args, path)
-		if out, e := governor.BackgroundOutput(ctx, lowPriority(ctx, exe, args...)); e != nil {
-			last = fmt.Errorf("%s: %v %s", a.codec, e, strings.TrimSpace(string(out)))
-			_ = os.Remove(path)
-			continue
-		}
-		return path, a.codec, nil
-	}
-	return "", "", fmt.Errorf("no encoder could make the test video: %v", last)
-}
-
 // measureThreads runs the stream pipeline on the sample at one thread count,
 // without real-time pacing, and returns how many times faster than real time it ran.
 func measureThreads(ctx context.Context, exe, dir string, threads int, encoder, sample string) (float64, error) {
@@ -320,7 +299,7 @@ func measureThreads(ctx context.Context, exe, dir string, threads int, encoder, 
 			probe.Streams[i].ColorTransfer = "smpte2084"
 		}
 	}
-	plan := Plan{Mode: "transcode", ToneMap: true, ToneMapper: "cpu", Width: 1920, Height: 1080, FPS: 24, VideoBitrate: 12000000, Profile: "high", Encoder: encoder}
+	plan := Plan{Mode: "transcode", ToneMap: true, ToneMapper: "cpu", Width: 1920, Height: 1080, FPS: 60, VideoBitrate: 12000000, AudioBitrate: 192000, AudioChannels: 2, Profile: "high", Encoder: encoder}
 	return timePlan(ctx, exe, dir, sample, probe, plan, threads)
 }
 

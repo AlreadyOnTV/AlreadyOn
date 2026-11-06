@@ -17,10 +17,9 @@ const MaxProcessBytes = ScratchFloorBytes / 16 / 2
 const SegmentsOnDisk = 9
 
 // MaxCopyKeyframeGap is the longest keyframe spacing at which video may be
-// copied into HLS. Copied video is cut only at keyframes, so a segment lasts as
-// long as the gap; it must be readable within the presentation delay, which is
-// also the burst the runner reads ahead, or every start and handoff buffers.
-const MaxCopyKeyframeGap = PresentationDelay
+// copied into HLS. Keep it independent of the longer presentation delay so a
+// copy segment cannot consume most of the client's buffer budget.
+const MaxCopyKeyframeGap = 4 * time.Second
 
 // copyFitsKeyframes reports whether video with this keyframe gap and bitrate may
 // be copied, and why not otherwise. An unknown or failed measurement fails

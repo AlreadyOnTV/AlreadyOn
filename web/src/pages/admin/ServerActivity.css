@@ -1,19 +1,71 @@
-.server-activity h2 { margin: 0 0 1rem; font-size: 1.1rem; }
-.activity-table-scroll { overflow-x: auto; }
-.server-activity table { width: 100%; border-collapse: collapse; text-align: left; font-size: .875rem; }
-.server-activity th, .server-activity td { padding: .7rem .75rem; border-bottom: 1px solid rgba(128,128,128,.25); vertical-align: top; }
-.server-activity th { white-space: nowrap; }
-.server-activity td { overflow-wrap: anywhere; min-width: 6rem; }
-.server-activity progress { width: 9rem; margin-right: .75rem; accent-color: var(--accent, #82aaff); }
-.server-activity .admin-section-hint { margin-top: 1rem; }
-.activity-session { border-top: 1px solid rgba(128,128,128,.25); padding-top: 1rem; }
-.activity-session + .activity-session { margin-top: 1rem; }
-.activity-session header { display: flex; flex-wrap: wrap; gap: .5rem 1.5rem; overflow-wrap: anywhere; }
-.activity-session header span { color: var(--text-muted, #9aa4b4); }
-.activity-details { display: grid; grid-template-columns: repeat(4, minmax(0, 1fr)); gap: 1rem; margin: 1rem 0 0; font-size: .875rem; }
-.activity-details dt { color: var(--text-muted, #9aa4b4); margin-bottom: .35rem; }
-.activity-details dd { margin: 0; overflow-wrap: anywhere; }
-@media (max-width: 700px) { .activity-details { grid-template-columns: repeat(2, minmax(0, 1fr)); } }
-
-.activity-reasons { font-size: .875rem; margin-top: 1rem; }
-.activity-reasons p { margin: .4rem 0 0; }
+.server-activity h2 {
+  margin: 0 0 1rem;
+  font-size: 1.1rem;
+}
+.activity-table-scroll {
+  overflow-x: auto;
+}
+.server-activity table {
+  width: 100%;
+  border-collapse: collapse;
+  text-align: left;
+  font-size: 0.875rem;
+}
+/* Active session and background-process layout. */
+.server-activity th,
+.server-activity td {
+  padding: 0.7rem 0.75rem;
+  border-bottom: 1px solid rgba(128, 128, 128, 0.25);
+  vertical-align: top;
+}
+.server-activity th {
+  white-space: nowrap;
+}
+.server-activity td {
+  overflow-wrap: anywhere;
+  min-width: 6rem;
+}
+.server-activity progress {
+  width: 9rem;
+  margin-right: 0.75rem;
+  accent-color: var(--accent, #82aaff);
+}
+.server-activity .admin-section-hint {
+  margin-top: 1rem;
+}
+.activity-session {
+  border-top: 1px solid rgba(128, 128, 128, 0.25);
+  padding-top: 1rem;
+}
+.activity-session + .activity-session {
+  margin-top: 1rem;
+}
+.activity-session header {
+  display: flex;
+  flex-wrap: wrap;
+  gap: 0.5rem 1.5rem;
+  overflow-wrap: anywhere;
+}
+.activity-session header span {
+  color: var(--text-muted, #9aa4b4);
+}
+.activity-details {
+  display: grid;
+  grid-template-columns: repeat(4, minmax(0, 1fr));
+  gap: 1rem;
+  margin: 1rem 0 0;
+  font-size: 0.875rem;
+}
+.activity-details dt {
+  color: var(--text-muted, #9aa4b4);
+  margin-bottom: 0.35rem;
+}
+.activity-details dd {
+  margin: 0;
+  overflow-wrap: anywhere;
+}
+@media (max-width: 700px) {
+  .activity-details {
+    grid-template-columns: repeat(2, minmax(0, 1fr));
+  }
+}

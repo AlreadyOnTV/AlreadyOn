@@ -7,7 +7,11 @@ import (
 	"github.com/alreadyonapp/alreadyon/server/internal/library"
 )
 
+// Copy GOP timing remains bounded even as viewers are allowed more presentation delay.
 func TestCopyNeedsKnownKeyframesThatFitThePresentationDelay(t *testing.T) {
+	if PresentationDelay != 8*time.Second || MaxCopyKeyframeGap != 4*time.Second {
+		t.Fatalf("presentation delay=%v copy keyframe limit=%v", PresentationDelay, MaxCopyKeyframeGap)
+	}
 	for _, tc := range []struct {
 		name  string
 		gap   time.Duration

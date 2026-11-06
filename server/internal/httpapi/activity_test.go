@@ -51,6 +51,16 @@ func TestServerActivityLifecycleCommercialsAndAuthorization(t *testing.T) {
 		handler.ServeHTTP(w, r)
 		return w
 	}
+	var capacityResponse struct {
+		TranscodeSlots struct {
+			Active int `json:"active"`
+			Limit  int `json:"limit"`
+		} `json:"transcodeSlots"`
+	}
+	capacity := call("GET", "/api/server/activity", "", raw)
+	if capacity.Code != http.StatusOK || json.Unmarshal(capacity.Body.Bytes(), &capacityResponse) != nil || capacityResponse.TranscodeSlots.Active != 0 || capacityResponse.TranscodeSlots.Limit != playback.DefaultSettings().MaxProcesses {
+		t.Fatalf("initial transcode slots=%+v status=%d body=%s", capacityResponse.TranscodeSlots, capacity.Code, capacity.Body.String())
+	}
 	snapshot := func() []viewerActivity {
 		t.Helper()
 		w := call("GET", "/api/server/activity", "", raw)

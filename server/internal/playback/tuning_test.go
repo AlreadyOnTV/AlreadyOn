@@ -64,6 +64,17 @@ func TestPickThreadsTakesTheSmallestCountNearTheBest(t *testing.T) {
 	}
 }
 
+func TestFairThreadsDivideTheHostWorkerCeilingAcrossActiveJobs(t *testing.T) {
+	for active, want := range map[int]int{1: 16, 2: 8, 4: 4} {
+		if got := FairThreads(32, 16, active); got != want {
+			t.Errorf("%d active jobs: %d threads, want %d", active, got, want)
+		}
+	}
+	if got := FairThreads(8, 4, 4); got != 1 {
+		t.Errorf("small host with four active jobs: %d threads, want 1", got)
+	}
+}
+
 func TestCandidatesStayWithinTheCPUShare(t *testing.T) {
 	for limit, want := range map[int][]int{1: {2}, 6: {2, 4}, 18: {2, 4, 8, 16}, 64: {2, 4, 8, 16, 32}} {
 		if got := candidatesUpTo(limit); !slices.Equal(got, want) {
@@ -147,12 +158,11 @@ func TestTunerKeepsTheOldCountWhenMeasuringFails(t *testing.T) {
 	}
 }
 
-func TestTunerCapsByConcurrentTranscodes(t *testing.T) {
+func TestTunerSearchesTheSingleProcessBudgetRegardlessOfConcurrency(t *testing.T) {
 	var tried []int
 	tn := &Tuner{
 		Executable: fakeTuneFFmpeg(t),
 		cpus:       16,
-		Processes:  func(context.Context) int { return 4 }, // 16 CPUs / 4 streams = 4 each
 		measure: func(_ context.Context, threads int, _, _ string) (float64, error) {
 			tried = append(tried, threads)
 			return float64(threads), nil
@@ -160,7 +170,7 @@ func TestTunerCapsByConcurrentTranscodes(t *testing.T) {
 	}
 	tn.Start(false)
 	waitIdle(t, tn)
-	if !slices.Equal(tried, []int{2, 4}) {
+	if !slices.Equal(tried, []int{2, 4, 8, 16}) {
 		t.Errorf("tried %v", tried)
 	}
 }

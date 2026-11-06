@@ -13,20 +13,21 @@ func TestHDRLimitMatchesPipelineAndLeavesExplicitQualityAlone(t *testing.T) {
 	src, caps := detailsFixture()
 	v, _ := Tracks(src)
 	c := &Capacity{hdr: []HDRCapacity{{SourceFPS: 30, Encoder: EncoderIntelVAAPI, HardwareDecode: true, Transfer: "smpte2084", ToneMapper: "cpu", Threads: 2, MeasuredAt: time.Now(), Samples: []RungSample{{Height: 1080, FPS: 30, Speed: .8}, {Height: 720, FPS: 30, Speed: 1.6}}}}}
-	h, f, ok := c.HDRLimit(EncoderIntelVAAPI, true, v, 2)
-	if !ok || h != 720 || f != 30 {
-		t.Fatalf("limit %d %g %t", h, f, ok)
+	h, f, measured, sustainable := c.HDRLimit(EncoderIntelVAAPI, true, v, 2)
+	if !measured || !sustainable || h != 720 || f != 30 {
+		t.Fatalf("limit %d %g measured=%t sustainable=%t", h, f, measured, sustainable)
 	}
 	for _, tc := range []struct {
 		encoder string
 		decode  bool
 		threads int
 	}{{EncoderIntelQSV, true, 2}, {EncoderIntelVAAPI, false, 2}, {EncoderIntelVAAPI, true, 4}} {
-		if _, _, ok := c.HDRLimit(tc.encoder, tc.decode, v, tc.threads); ok {
+		if _, _, measured, _ := c.HDRLimit(tc.encoder, tc.decode, v, tc.threads); measured {
 			t.Fatal("mismatched pipeline limited")
 		}
 	}
 	caps.Encoder, caps.HWDecode, caps.HDRMeasured = EncoderIntelVAAPI, true, true
+	caps.ServerMeasured, caps.ServerSustainable = true, sustainable
 	caps.ServerMaxHeight, caps.ServerMaxFPS = h, f
 	p, err := Choose(src, caps, false, true)
 	if err != nil || p.Height != 720 || !p.ServerLimited {
@@ -34,7 +35,7 @@ func TestHDRLimitMatchesPipelineAndLeavesExplicitQualityAlone(t *testing.T) {
 	}
 	caps.MaxHeight = 1080
 	p, err = Choose(src, caps, false, true)
-	if err != nil || p.Height != 1080 || p.ServerLimited {
+	if err != nil || p.Height != 720 || !p.ServerLimited {
 		t.Fatalf("explicit %+v %v", p, err)
 	}
 	caps.MaxHeight = 0
@@ -44,8 +45,74 @@ func TestHDRLimitMatchesPipelineAndLeavesExplicitQualityAlone(t *testing.T) {
 		t.Fatalf("SDR %+v %v", p, err)
 	}
 	c.hdr[0].MeasuredAt = time.Now().Add(-3 * time.Hour)
-	if _, _, ok := c.HDRLimit(EncoderIntelVAAPI, true, v, 2); ok {
+	if _, _, measured, _ := c.HDRLimit(EncoderIntelVAAPI, true, v, 2); measured {
 		t.Fatal("stale capacity used")
+	}
+}
+
+func TestHDRLimitReportsMeasuredButUnsustainablePipeline(t *testing.T) {
+	source, caps := detailsFixture()
+	video, _ := Tracks(source)
+	c := &Capacity{hdr: []HDRCapacity{{
+		SourceFPS: 24, Encoder: EncoderIntelVAAPI, HardwareDecode: true,
+		Transfer: video.ColorTransfer, ToneMapper: "gpu", Threads: 2, MeasuredAt: time.Now(),
+		Samples: []RungSample{{Height: 1080, FPS: 24, Speed: 0.9}, {Height: 720, FPS: 24, Speed: 1.1}, {Height: 360, FPS: 24, Speed: 1.2}},
+	}}}
+	height, fps, measured, sustainable := c.HDRLimit(EncoderIntelVAAPI, true, video, 2)
+	if height != 360 || fps != 24 || !measured || sustainable {
+		t.Fatalf("limit=%dp%g measured=%t sustainable=%t", height, fps, measured, sustainable)
+	}
+	caps.Encoder, caps.HWDecode, caps.HDRMeasured = EncoderIntelVAAPI, true, true
+	caps.ServerMeasured, caps.ServerSustainable = true, false
+	caps.ServerMaxHeight, caps.ServerMaxFPS = height, fps
+	if _, err := Choose(source, caps, false, true); !errors.Is(err, ErrCapacityUnsustainable) {
+		t.Fatalf("unsustainable HDR conversion error = %v", err)
+	}
+}
+
+func TestCapacityAdmissionUsesTheMatchingHDRPipeline(t *testing.T) {
+	source, _ := detailsFixture()
+	c := &Capacity{
+		Threads: func() int { return 2 },
+		memory:  func() uint64 { return 16 << 30 },
+		cpus:    16,
+		hdr: []HDRCapacity{
+			{SourceFPS: 24, Encoder: EncoderIntelVAAPI, HardwareDecode: true, Transfer: "smpte2084", ToneMapper: "gpu", Threads: 2, MeasuredAt: time.Now(), Samples: []RungSample{{Height: 1080, FPS: 24, Speed: 5.9}}},
+			{SourceFPS: 60, Encoder: EncoderIntelVAAPI, HardwareDecode: true, Transfer: "arib-std-b67", ToneMapper: "cpu", Threads: 2, MeasuredAt: time.Now(), Samples: []RungSample{{Height: 1080, FPS: 60, Speed: 0.58}, {Height: 720, FPS: 30, Speed: 1.58}}},
+		},
+	}
+	c.Load(CapacityRecord{MeasuredAt: time.Now(), Encoder: EncoderIntelVAAPI, Samples: []RungSample{
+		{SourceClass: SourceHEVCPQ, Height: 1080, FPS: 60, Speed: 0.72},
+		{SourceClass: SourceHEVCPQ, Height: 720, FPS: 30, Speed: 1.10},
+		{SourceClass: SourceHEVCHLG, Height: 1080, FPS: 60, Speed: 0.78},
+	}})
+	pq := Job{Source: source, Threads: 2, Plan: Plan{Mode: "transcode", Encoder: EncoderIntelVAAPI, Decoder: "hardware", ToneMap: true, ToneMapper: "gpu", Height: 1080, FPS: 23.976}}
+	if !c.Allows(nil, pq) {
+		t.Fatal("measured sustainable PQ GPU pipeline was rejected by the slower generic matrix")
+	}
+	pq.Plan.ToneMapper = "cpu"
+	if !c.Allows(nil, pq) {
+		t.Fatal("a single unmatched PQ pipeline did not receive the optimistic default")
+	}
+	if !c.Allows([]Job{pq}, pq) {
+		t.Fatal("two unmatched PQ pipelines should fit this host's aggregate default budget")
+	}
+	hlgSource := source
+	hlgSource.Streams[0].ColorTransfer = "arib-std-b67"
+	hlgSource.Streams[0].FrameRate = 60
+	hlg := Job{Source: hlgSource, Threads: 2, Plan: Plan{Mode: "transcode", Encoder: EncoderIntelVAAPI, Decoder: "hardware", ToneMap: true, ToneMapper: "cpu", Height: 720, FPS: 30}}
+	if !c.Allows(nil, hlg) {
+		t.Fatal("measured sustainable HLG CPU tone-map pipeline was rejected")
+	}
+	hlg.Plan.ToneMapper = "gpu"
+	if !c.Allows(nil, hlg) {
+		t.Fatal("a single unmatched HLG pipeline did not receive the optimistic default")
+	}
+	if !c.Allows([]Job{hlg}, hlg) {
+		t.Fatal("two unmatched HLG pipelines should fit this host's aggregate default budget")
+	}
+	if height, fps, measured, sustainable := c.HDRLimit(EncoderIntelVAAPI, true, hlgSource.Streams[0], 2); !measured || !sustainable || height != 720 || fps != 30 {
+		t.Fatalf("HLG limit=%dp%g measured=%t sustainable=%t", height, fps, measured, sustainable)
 	}
 }
 
@@ -55,8 +122,13 @@ func TestHDRMixedPipelineUsesCPUFilterThreads(t *testing.T) {
 	if err != nil {
 		t.Fatal(err)
 	}
-	if !strings.Contains(strings.Join(args, " "), "-filter_threads 4") {
-		t.Fatal("CPU tone mapping has no parallel filter budget")
+	if !strings.Contains(strings.Join(args, " "), "-filter_threads 2") {
+		t.Fatal("CPU tone mapping ignored the job thread ceiling")
+	}
+	j.Threads = 4
+	args, err = Arguments(j)
+	if err != nil || !strings.Contains(strings.Join(args, " "), "-filter_threads 4") {
+		t.Fatalf("CPU tone mapping did not use the expanded thread ceiling: %v", err)
 	}
 	j.Plan.ToneMapper = "gpu"
 	args, err = Arguments(j)
@@ -157,15 +229,15 @@ func TestHDRUsesFilmRateMeasurementsWithoutCappingFasterSourcesByThem(t *testing
 		{SourceFPS: 24, Transfer: "smpte2084", ToneMapper: "cpu", Threads: 2, MeasuredAt: time.Now(), Samples: []RungSample{{Height: 1080, FPS: 24, Speed: 1.5}}},
 		{SourceFPS: 30, Transfer: "smpte2084", ToneMapper: "cpu", Threads: 2, MeasuredAt: time.Now(), Samples: []RungSample{{Height: 1080, FPS: 30, Speed: .8}, {Height: 720, FPS: 30, Speed: 1.5}}},
 	}}
-	if h, _, ok := c.HDRLimit("", false, v, 2); !ok || h != 1080 {
+	if h, _, measured, sustainable := c.HDRLimit("", false, v, 2); !measured || !sustainable || h != 1080 {
 		t.Fatal("film inherited faster source limit")
 	}
 	v.FrameRate = 30
-	if h, _, ok := c.HDRLimit("", false, v, 2); !ok || h != 720 {
+	if h, _, measured, sustainable := c.HDRLimit("", false, v, 2); !measured || !sustainable || h != 720 {
 		t.Fatal("faster source used film measurement")
 	}
 	v.Codec = "av1"
-	if _, _, ok := c.HDRLimit("", false, v, 2); ok {
+	if _, _, measured, _ := c.HDRLimit("", false, v, 2); measured {
 		t.Fatal("unmeasured codec used HEVC result")
 	}
 }
