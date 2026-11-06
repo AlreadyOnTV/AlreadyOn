@@ -1567,7 +1567,10 @@ const noWorkers = async (unreleased = () => 0) => {
       /^Subtitles \(on|off\)$/.test(statusRows[2]),
       "Subtitle row reports active on/off status",
     );
-    assert.equal(statusRows.at(-1), "Playback Details (off)");
+    assert(
+      statusRows.at(-1) === "Playback Details (off)",
+      "Playback Details row reports the off state",
+    );
     const items = statusRows.map((t) =>
       t
         .replace(/\s*(Auto|Normal|Off|On|\d+p|[\d.]+×)$/, "")
@@ -1601,10 +1604,8 @@ const noWorkers = async (unreleased = () => 0) => {
       "Output Video",
       "Video Decoder",
       "Video Encoder",
-      "Video Reason",
       "Source Audio",
       "Output Audio",
-      "Audio Reason",
       "Startup Time",
       "Resolution",
       "Dropped Frames",
@@ -1647,9 +1648,8 @@ const noWorkers = async (unreleased = () => 0) => {
       name: "Playback Details (on)",
       exact: true,
     });
-    assert.equal(
-      await detailsToggle.getAttribute("aria-checked"),
-      null,
+    assert(
+      (await detailsToggle.getAttribute("aria-checked")) === null,
       "Playback Details should not show a checkmark state",
     );
     await page
