@@ -85,12 +85,13 @@ module.exports = async function adminMetricsAndLogs({
       },
     });
   });
+  const videoFormat = { codec: "h264", width: 1280, height: 720, fps: 30 };
   await page.route("**/api/server/activity", (route) =>
     route.fulfill({ json: { sessions: [
       { id: 'web-client', channel: '101 · Kids', video: 'movie.mp4', profile: 'Viewer', sourceIp: '192.0.2.1', device: 'Desktop · Browser', mode: 'direct', encoder: '', bandwidthMbps: 2, latencyMs: 12, commercial: false, paused: false, appVersion: 'web-fixture_1234567' },
       { id: 'tv-client', channel: '102 · TV', video: 'show.mp4', profile: 'Viewer', sourceIp: '192.0.2.2', device: 'TV · Android', mode: 'direct', encoder: '', bandwidthMbps: 3, latencyMs: 20, commercial: false, paused: false, appVersion: '26.10.25-alpha1' },
       { id: 'old-client', channel: '103 · Older', video: 'legacy.mp4', profile: 'Viewer', sourceIp: '192.0.2.3', device: 'Mobile', mode: 'direct', encoder: '', bandwidthMbps: null, latencyMs: null, commercial: false, paused: false },
-    ], processes: [] } }),
+    ].map((session) => ({ ...session, sourceVideo: videoFormat, outputVideo: videoFormat })), processes: [] } }),
   );
   await page.goto(url + "/admin/dashboard");
   await page
