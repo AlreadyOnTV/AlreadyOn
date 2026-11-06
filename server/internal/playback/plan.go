@@ -2,10 +2,11 @@ package playback
 
 import (
 	"errors"
-	"github.com/alreadyonapp/alreadyon/server/internal/loudness"
 	"math"
 	"slices"
 	"strings"
+
+	"github.com/alreadyonapp/alreadyon/server/internal/loudness"
 
 	"github.com/alreadyonapp/alreadyon/server/internal/library"
 )
@@ -24,13 +25,18 @@ type Capabilities struct {
 	// MaxHeight is the viewer's chosen quality ceiling (0 = automatic). It is set
 	// per tune from the request, never from the cached snapshot.
 	MaxHeight int `json:"-"`
+	// AutoMaxHeight is a temporary player pressure ceiling and applies only when
+	// MaxHeight is zero; it does not become an explicit user quality selection.
+	AutoMaxHeight int `json:"autoMaxHeight,omitempty"`
 	// Ladder is the server's opt-in for a low rung on large conversions.
 	Ladder bool `json:"-"`
 	// ServerMaxHeight and ServerMaxFPS are the largest software conversion this
 	// server keeps ahead of real time (from Capacity.Limit); zero means no limit.
 	// They bound only Auto quality: a size the viewer picked is honored.
-	ServerMaxHeight int     `json:"-"`
-	ServerMaxFPS    float64 `json:"-"`
+	ServerMaxHeight   int     `json:"-"`
+	ServerMaxFPS      float64 `json:"-"`
+	ServerMeasured    bool    `json:"-"`
+	ServerSustainable bool    `json:"-"`
 	// Encoder is a hardware encoder that has passed its test; empty means software.
 	Encoder string `json:"-"`
 	// HWDecode: Hardware Decoding is on, Encoder is set, and the GPU can decode this
@@ -48,17 +54,30 @@ var QualityHeights = []int{360, 480, 720, 1080, UHDHeight}
 // UHDHeight is the 4K picture height, offered with hardware encoding.
 const UHDHeight = 2160
 
+// OutputRungs define the supported H.264 output ceilings shared by planning
+// and capacity measurements. Video bitrate excludes AAC audio.
+type OutputRung struct {
+	Height       int
+	FPS          float64
+	VideoBitrate int64
+	PixelFormat  string
+	Profile      string
+}
+
+var OutputRungs = []OutputRung{
+	{Height: 1080, FPS: 60, VideoBitrate: 12000000, PixelFormat: "yuv420p", Profile: "high"},
+	{Height: 720, FPS: 30, VideoBitrate: 5000000, PixelFormat: "yuv420p", Profile: "high"},
+	{Height: 480, FPS: 30, VideoBitrate: 2500000, PixelFormat: "yuv420p", Profile: "high"},
+	{Height: 360, FPS: 30, VideoBitrate: 1500000, PixelFormat: "yuv420p", Profile: "high"},
+}
+
 // heightBitrate is the video bitrate ceiling for a chosen output height.
 func heightBitrate(h int) int64 {
-	switch {
-	case h <= 360:
-		return 1500000
-	case h <= 480:
-		return 2500000
-	case h <= 720:
-		return 5000000
-	case h <= 1080:
-		return 12000000
+	for i := len(OutputRungs) - 1; i >= 0; i-- {
+		rung := OutputRungs[i]
+		if h <= rung.Height {
+			return rung.VideoBitrate
+		}
 	}
 	return 25000000
 }
@@ -242,8 +261,15 @@ func ChooseScheduled(source library.ProbeResult, caps Capabilities, forceEncode 
 func choose(source library.ProbeResult, caps Capabilities, allowDirect, forceEncode, accurateSeek bool) (Plan, error) {
 	v, a := Tracks(source)
 	budget := Budget(caps.Mbps)
-	if v.Index < 0 || v.Width <= 0 || v.Height <= 0 || budget <= 0 || len(caps.Video) > 64 || len(caps.Audio) > 32 {
+	if v.Index < 0 || v.Width <= 0 || v.Height <= 0 || budget <= 0 || len(caps.Video) > 64 || len(caps.Audio) > 32 || caps.AutoMaxHeight < 0 {
 		return Plan{}, ErrUnsupported
+	}
+	requestedHeight := caps.MaxHeight
+	if requestedHeight == 0 && caps.AutoMaxHeight > 0 {
+		if caps.AutoMaxHeight == UHDHeight || !slices.Contains(QualityHeights, caps.AutoMaxHeight) {
+			return Plan{}, ErrUnsupported
+		}
+		requestedHeight = caps.AutoMaxHeight
 	}
 	// Preserve HDR only for a matching, explicitly reported client configuration.
 	hdr := IsHDRTransfer(v.ColorTransfer)
@@ -265,7 +291,7 @@ func choose(source library.ProbeResult, caps Capabilities, allowDirect, forceEnc
 		audioOK = false
 	}
 	// Anything taller than the chosen ceiling must be converted, never copied.
-	if caps.MaxHeight > 0 && v.Height > caps.MaxHeight {
+	if requestedHeight > 0 && v.Height > requestedHeight {
 		videoOK = false
 	}
 	// Average bitrate is not a peak guarantee: reserve a further 50% for VBR
@@ -354,6 +380,9 @@ func choose(source library.ProbeResult, caps Capabilities, allowDirect, forceEnc
 	if p.VideoCopy {
 		return p, nil
 	}
+	if caps.ServerMeasured && !caps.ServerSustainable {
+		return Plan{}, ErrCapacityUnsustainable
+	}
 	audioRate := p.AudioBitrate
 	if p.AudioCopy {
 		audioRate = a.BitRate
@@ -364,7 +393,7 @@ func choose(source library.ProbeResult, caps Capabilities, allowDirect, forceEnc
 		return Plan{}, ErrUnsupported
 	}
 	for _, c := range caps.Video {
-		if c.Codec != "h264" || c.PixelFormat != "yuv420p" || c.Width < 2 || c.Height < 2 || c.FPS <= 0 || math.IsNaN(c.FPS) || math.IsInf(c.FPS, 0) || c.Level < 31 {
+		if c.Codec != "h264" || c.PixelFormat != "yuv420p" || c.Width < 2 || c.Height < 2 || c.FPS <= 0 || math.IsNaN(c.FPS) || math.IsInf(c.FPS, 0) || c.Level < 30 {
 			continue
 		}
 		profile := ""
@@ -374,6 +403,8 @@ func choose(source library.ProbeResult, caps Capabilities, allowDirect, forceEnc
 		case "Main":
 			profile = "main"
 		case "Constrained Baseline":
+			profile = "constrained_baseline"
+		case "Baseline":
 			profile = "constrained_baseline"
 		}
 		if profile == "" {
@@ -385,8 +416,8 @@ func choose(source library.ProbeResult, caps Capabilities, allowDirect, forceEnc
 			maxW, maxH, rateCap = 3840, UHDHeight, 25000000
 		}
 		w, h := min(c.Width, maxW), min(c.Height, maxH)
-		if caps.MaxHeight > 0 {
-			h = min(h, caps.MaxHeight)
+		if requestedHeight > 0 {
+			h = min(h, requestedHeight)
 			w = min(w, (h*16+8)/9)
 		}
 		fps := math.Min(c.FPS, 60)
@@ -400,16 +431,14 @@ func choose(source library.ProbeResult, caps Capabilities, allowDirect, forceEnc
 		if c.Level < 40 {
 			w, h = min(w, 1280), min(h, 720)
 		}
-		serverCap := (caps.Encoder == "" || (p.ToneMap && caps.HDRMeasured)) && caps.MaxHeight == 0 && caps.ServerMaxHeight > 0
+		serverCap := (caps.Encoder == "" || (p.ToneMap && caps.HDRMeasured)) && caps.ServerMaxHeight > 0
 		if serverCap {
 			h = min(h, caps.ServerMaxHeight)
 			w = min(w, (h*16+8)/9)
 			fps = math.Min(fps, caps.ServerMaxFPS)
 		}
 		bitrate := min(available, c.Bitrate, rateCap)
-		if caps.MaxHeight > 0 || serverCap {
-			bitrate = min(bitrate, heightBitrate(h))
-		}
+		bitrate = min(bitrate, heightBitrate(h))
 		if bitrate < 300000 {
 			continue
 		}

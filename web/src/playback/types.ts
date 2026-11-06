@@ -1,7 +1,7 @@
 import type { GuideProgram } from '../api/client';
 export interface VideoCapability { container?: string; colorTransfer?: string; hdrMetadata?: string; dolbyVisionProfile?: number; dolbyVisionLevel?: number; codecTag?: string; codec: string; profile: string; level: number; width: number; height: number; fps: number; bitrate: number; pixelFormat: string }
 export interface AudioCapability { hls?: boolean; container?: string; profile?: string; spatial?: boolean; codec: string; channels: number; sampleRate: number; bitrate: number }
-export interface Capabilities { video: VideoCapability[]; audio: AudioCapability[]; containers: string[]; hls: boolean; mbps: number }
+export interface Capabilities { video: VideoCapability[]; audio: AudioCapability[]; containers: string[]; hls: boolean; mbps: number; autoMaxHeight?: number }
 export interface Snapshot { version: number; browser: string; capturedAt: number; capabilities: Capabilities; network?: { origin: string; capturedAt: number; mbps: number; latencyMs?: number } }
 // Authorized tune metadata and delivery plan; overlay fields may be absent on older servers.
 export interface PlaybackSession {

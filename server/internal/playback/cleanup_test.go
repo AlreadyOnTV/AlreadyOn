@@ -125,6 +125,89 @@ func TestManagerSharesAndHoldsSlotUntilReaped(t *testing.T) {
 	}
 }
 
+func TestManagerChargesOptionalLadderAsTwoResourceSlots(t *testing.T) {
+	settings := DefaultSettings()
+	settings.MaxProcesses = MaxParallel
+	m, err := NewManager(t.TempDir(), &testClock{now: time.Now()}, workerFunc(func(ctx context.Context, _ Job) error {
+		<-ctx.Done()
+		return ctx.Err()
+	}), settings)
+	if err != nil {
+		t.Fatal(err)
+	}
+	defer m.Close()
+	ladder := Job{Plan: Plan{Mode: "transcode", Width: 1920, Height: 1080, LowHeight: 360}}
+	if _, err := m.Acquire(context.Background(), "ladder-1", "viewer-1", ladder); err != nil {
+		t.Fatal(err)
+	}
+	if _, err := m.Acquire(context.Background(), "ladder-2", "viewer-2", ladder); err != nil {
+		t.Fatal(err)
+	}
+	if _, err := m.Acquire(context.Background(), "single", "viewer-3", Job{Plan: Plan{Mode: "transcode"}}); !errors.Is(err, ErrBusy) {
+		t.Fatalf("ladder load admitted another conversion: %v", err)
+	}
+	processes, _, viewers := m.Counts()
+	if processes != 2 || viewers != 2 || m.activeCost != MaxParallel {
+		t.Fatalf("processes=%d viewers=%d slots=%d", processes, viewers, m.activeCost)
+	}
+	if active, limit := m.TranscodeSlots(); active != MaxParallel || limit != MaxParallel {
+		t.Fatalf("transcode slots=%d/%d, want %d/%d", active, limit, MaxParallel, MaxParallel)
+	}
+}
+
+func TestManagerDoesNotChargeStreamCopyRemuxAsAnEncode(t *testing.T) {
+	settings := DefaultSettings()
+	settings.MaxProcesses = 1
+	m, err := NewManager(t.TempDir(), &testClock{now: time.Now()}, workerFunc(func(ctx context.Context, _ Job) error {
+		<-ctx.Done()
+		return ctx.Err()
+	}), settings)
+	if err != nil {
+		t.Fatal(err)
+	}
+	defer m.Close()
+	if _, err := m.Acquire(context.Background(), "encode", "viewer-1", Job{Plan: Plan{Mode: "transcode"}}); err != nil {
+		t.Fatal(err)
+	}
+	remux := Job{Plan: Plan{Mode: "remux", VideoCopy: true, AudioCopy: true}}
+	if _, err := m.Acquire(context.Background(), "remux", "viewer-2", remux); err != nil {
+		t.Fatalf("stream-copy remux consumed an encode slot: %v", err)
+	}
+	if _, err := m.Acquire(context.Background(), "encode-2", "viewer-3", Job{Plan: Plan{Mode: "transcode"}}); !errors.Is(err, ErrBusy) {
+		t.Fatalf("a second conversion passed the one-slot limit: %v", err)
+	}
+	if m.activeCost != 1 {
+		t.Fatalf("resource cost = %d, want one encode slot", m.activeCost)
+	}
+}
+
+func TestManagerAppliesTheMeasuredAdmissionPolicyToNewEncodes(t *testing.T) {
+	m, err := NewManager(t.TempDir(), &testClock{now: time.Now()}, workerFunc(func(ctx context.Context, _ Job) error {
+		<-ctx.Done()
+		return ctx.Err()
+	}), DefaultSettings())
+	if err != nil {
+		t.Fatal(err)
+	}
+	defer m.Close()
+	m.SetAdmissionPolicy(func(active []Job, candidate Job) error {
+		if len(active) == 0 && candidate.Plan.Height == 720 {
+			return nil
+		}
+		return ErrCapacityMeasurementUnavailable
+	})
+	job := Job{Plan: Plan{Mode: "transcode", Height: 720}}
+	if _, err := m.Acquire(context.Background(), "first", "viewer-1", job); err != nil {
+		t.Fatal(err)
+	}
+	if _, err := m.Acquire(context.Background(), "second", "viewer-2", job); !errors.Is(err, ErrCapacityMeasurementUnavailable) {
+		t.Fatalf("measured admission policy was ignored: %v", err)
+	}
+	if _, err := m.Acquire(context.Background(), "direct", "viewer-3", Job{Plan: Plan{Mode: "direct"}}); err != nil {
+		t.Fatalf("direct play was passed through conversion admission: %v", err)
+	}
+}
+
 func TestManagerPublishesWorkerRuntimeStats(t *testing.T) {
 	clock := &testClock{now: time.Now()}
 	reported := make(chan struct{})
@@ -217,6 +300,13 @@ func TestPlaybackSettingsPersistAndValidate(t *testing.T) {
 	s.MaxProcesses = 0
 	if err := SaveSettings(context.Background(), db.DB, s); err == nil {
 		t.Fatal("unbounded setting accepted")
+	}
+	if _, err := db.Exec(`UPDATE playback_settings SET max_processes=16 WHERE id=1`); err != nil {
+		t.Fatal(err)
+	}
+	legacy, err := GetSettings(context.Background(), db.DB)
+	if err != nil || legacy.MaxProcesses != MaxParallel || legacy.Validate() != nil {
+		t.Fatalf("legacy process limit was not clamped: %+v %v", legacy, err)
 	}
 }
 

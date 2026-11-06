@@ -113,6 +113,10 @@ func (p *PlaybackHTTP) tune(w http.ResponseWriter, r *http.Request) {
 		writeJSONError(w, 400, "maxHeight must be 0, 360, 480, 720, 1080 or 2160")
 		return
 	}
+	if body.Capabilities.AutoMaxHeight != 0 && (body.Capabilities.AutoMaxHeight == playback.UHDHeight || !slices.Contains(playback.QualityHeights, body.Capabilities.AutoMaxHeight)) {
+		writeJSONError(w, 400, "autoMaxHeight must be 0, 360, 480, 720 or 1080")
+		return
+	}
 	if len(body.AudioLanguage) > 32 {
 		writeJSONError(w, 400, "audioLanguage is too long")
 		return
@@ -136,7 +140,6 @@ func (p *PlaybackHTTP) tune(w http.ResponseWriter, r *http.Request) {
 			}
 		}
 	}
-	body.Capabilities.ServerMaxHeight, body.Capabilities.ServerMaxFPS = p.Capacity.Limit(body.Capabilities.Encoder)
 	label := channelLabel(r.Context(), p.DB, id)
 	e, jobClock, err := playback.TuneEntry(r.Context(), p.DB, p.Clock, id, body.EntryStartsAt)
 	if err != nil {
@@ -193,12 +196,17 @@ func (p *PlaybackHTTP) tune(w http.ResponseWriter, r *http.Request) {
 		body.Capabilities.HWToneMap = p.Hardware.ToneMapOnGPU(r.Context(), body.Capabilities.Encoder)
 	}
 	video, _ := playback.Tracks(source)
+	if height, fps, measured, sustainable := p.Capacity.LimitFor(body.Capabilities.Encoder, video); measured {
+		body.Capabilities.ServerMaxHeight, body.Capabilities.ServerMaxFPS = height, fps
+		body.Capabilities.ServerMeasured, body.Capabilities.ServerSustainable = true, sustainable
+	}
 	threads := playback.DefaultThreads
 	if p.Tuner != nil {
 		threads = p.Tuner.Threads()
 	}
-	if height, fps, ok := p.Capacity.HDRLimit(body.Capabilities.Encoder, body.Capabilities.HWDecode, video, threads); ok {
+	if height, fps, measured, sustainable := p.Capacity.HDRLimit(body.Capabilities.Encoder, body.Capabilities.HWDecode, video, threads); measured {
 		body.Capabilities.ServerMaxHeight, body.Capabilities.ServerMaxFPS = height, fps
+		body.Capabilities.ServerMeasured, body.Capabilities.ServerSustainable = true, sustainable
 		body.Capabilities.HDRMeasured = true
 	}
 	_, audioTrack := playback.Tracks(source)
@@ -211,6 +219,9 @@ func (p *PlaybackHTTP) tune(w http.ResponseWriter, r *http.Request) {
 	plan, err := playback.ChooseScheduled(source, body.Capabilities, body.ForceEncode, jobClock.Now().Sub(e.StartsAt).Seconds()+e.SourceOffsetSeconds)
 	if err != nil {
 		logging.Warn("stream failed: %s: %s: %v", label, filepath.Base(path), err)
+		if writeCapacityFailure(w, err) {
+			return
+		}
 		code := "playback_incompatible"
 		// Only absent baseline capabilities justify browser setup advice. Other
 		// planning failures can reflect bandwidth, source metadata or HDR limits.
@@ -283,6 +294,9 @@ func (p *PlaybackHTTP) tune(w http.ResponseWriter, r *http.Request) {
 		p.Sessions.Revoke(token)
 		// Capacity is expected under rapid channel changes and retried by the client.
 		logging.Warn("stream failed: %s: %s: %v", label, filepath.Base(path), err)
+		if writeCapacityFailure(w, err) {
+			return
+		}
 		if errors.Is(err, playback.ErrBusy) {
 			w.Header().Set("Retry-After", "1")
 			writeJSON(w, 503, map[string]string{"error": "stream capacity reached; retry shortly", "code": "stream_capacity"})
@@ -318,6 +332,22 @@ func (p *PlaybackHTTP) tune(w http.ResponseWriter, r *http.Request) {
 	}
 	logging.Info("stream started: %s, %s %q (%s: %s)", label, e.Kind, filepath.Base(path), plan.Mode, plan.Reason)
 	writeJSON(w, 201, response)
+}
+
+func writeCapacityFailure(w http.ResponseWriter, err error) bool {
+	code, message := "", ""
+	switch {
+	case errors.Is(err, playback.ErrCapacityMeasurementUnavailable):
+		code = "server_capacity_measurement_unavailable"
+		message = "The server has no current capacity measurement for this video pipeline, so it could not safely start the conversion."
+	case errors.Is(err, playback.ErrCapacityUnsustainable):
+		code = "server_capacity_unsustainable"
+		message = "The server's measured transcoding pipeline cannot sustain this output quality. Choose a lower quality or try again after capacity is remeasured."
+	default:
+		return false
+	}
+	writeJSON(w, http.StatusUnprocessableEntity, map[string]string{"error": message, "code": code})
+	return true
 }
 
 func channelLabel(ctx context.Context, db *sql.DB, id int64) string {

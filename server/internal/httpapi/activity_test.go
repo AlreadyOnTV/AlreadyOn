@@ -12,6 +12,7 @@ import (
 
 	"github.com/alreadyonapp/alreadyon/server/internal/activity"
 	"github.com/alreadyonapp/alreadyon/server/internal/auth"
+	"github.com/alreadyonapp/alreadyon/server/internal/library"
 	"github.com/alreadyonapp/alreadyon/server/internal/playback"
 	"github.com/alreadyonapp/alreadyon/server/internal/schedule"
 )
@@ -19,6 +20,9 @@ import (
 func TestServerActivityLifecycleCommercialsAndAuthorization(t *testing.T) {
 	db := openTestDB(t)
 	if _, err := db.Exec(`INSERT INTO channels(id,number,name) VALUES(999,999,'Synthetic')`); err != nil {
+		t.Fatal(err)
+	}
+	if _, err := db.Exec(`INSERT INTO media_files(id,root_kind,path,size_bytes,modified_unix,first_seen_unix,last_seen_unix,status) VALUES(999,'media','synthetic',1,0,0,0,'ok'); INSERT INTO identified_items(media_file_id,media_type,title,release_year) VALUES(999,'movie','Mayday',2026)`); err != nil {
 		t.Fatal(err)
 	}
 	raw, key, err := auth.GenerateAPIKey(context.Background(), db, testOwnerID(t, db), "activity test")
@@ -51,6 +55,16 @@ func TestServerActivityLifecycleCommercialsAndAuthorization(t *testing.T) {
 		handler.ServeHTTP(w, r)
 		return w
 	}
+	var capacityResponse struct {
+		TranscodeSlots struct {
+			Active int `json:"active"`
+			Limit  int `json:"limit"`
+		} `json:"transcodeSlots"`
+	}
+	capacity := call("GET", "/api/server/activity", "", raw)
+	if capacity.Code != http.StatusOK || json.Unmarshal(capacity.Body.Bytes(), &capacityResponse) != nil || capacityResponse.TranscodeSlots.Active != 0 || capacityResponse.TranscodeSlots.Limit != playback.DefaultSettings().MaxProcesses {
+		t.Fatalf("initial transcode slots=%+v status=%d body=%s", capacityResponse.TranscodeSlots, capacity.Code, capacity.Body.String())
+	}
 	snapshot := func() []viewerActivity {
 		t.Helper()
 		w := call("GET", "/api/server/activity", "", raw)
@@ -80,7 +94,19 @@ func TestServerActivityLifecycleCommercialsAndAuthorization(t *testing.T) {
 		if len(plans) > 0 {
 			plan = plans[0]
 		}
-		_, err = manager.Acquire(context.Background(), streamKey, s.ID, playback.Job{Plan: plan, Entry: schedule.Entry{Kind: schedule.Kind(kind)}, Details: playback.Details{FileName: name, VideoReason: "Video reason for " + name, AudioReason: "Audio reason for " + name, SourceAudio: &playback.AudioDetails{}}})
+		durationSeconds := float64(22 * 60)
+		if kind == "commercial" {
+			durationSeconds = 30
+		}
+		_, err = manager.Acquire(context.Background(), streamKey, s.ID, playback.Job{Plan: plan, Source: library.ProbeResult{DurationSeconds: durationSeconds}, Entry: schedule.Entry{Kind: schedule.Kind(kind), MediaFileID: 999, SourceOffsetSeconds: 10 * 60, StartsAt: clock.now.Add(-5 * time.Minute), EndsAt: clock.now.Add(7 * time.Minute)}, Details: playback.Details{
+			FileName:    name,
+			SourceVideo: playback.VideoDetails{Codec: "hevc", Profile: "Main 10", Width: 3840, Height: 2160, FPS: 23.976, PixelFormat: "yuv420p10le", DynamicRange: "HDR10 (PQ)"},
+			OutputVideo: playback.VideoDetails{Codec: "h264", Profile: "high", Width: 1280, Height: 720, FPS: 23.976, PixelFormat: "yuv420p", DynamicRange: "SDR"},
+			VideoReason: "Video reason for " + name,
+			AudioReason: "Audio reason for " + name,
+			SourceAudio: &playback.AudioDetails{Codec: "eac3", Profile: "Dolby Digital Plus + Dolby Atmos", Channels: 6, Layout: "5.1"},
+			OutputAudio: &playback.AudioDetails{Codec: "aac", Profile: "LC", Channels: 2, Layout: "stereo"},
+		}})
 		if err != nil {
 			t.Fatal(err)
 		}
@@ -112,8 +138,14 @@ func TestServerActivityLifecycleCommercialsAndAuthorization(t *testing.T) {
 	report(token, viewer, other, 401)
 	report(token, viewer, raw, 204)
 	first := snapshot()
-	if len(first) != 1 || first[0].Profile != "Admin" || first[0].SourceIP != "192.0.2.10" || first[0].BandwidthMbps != nil || first[0].AppVersion != "" {
+	if len(first) != 1 || first[0].User != "owner" || first[0].Profile != "Admin" || first[0].Channel != "CH 999 - Synthetic" || first[0].Program != "Mayday (2026)" || first[0].SourceIP != "192.0.2.10" || first[0].BandwidthMbps != nil || first[0].AppVersion != "" || !first[0].StartedAt.Equal(clock.now) || first[0].PlaybackPositionSeconds == nil || *first[0].PlaybackPositionSeconds != 900 {
 		t.Fatalf("first=%+v", first)
+	}
+	if first[0].PlaybackDurationSeconds == nil || *first[0].PlaybackDurationSeconds != 1320 {
+		t.Fatalf("program duration=%v, want 1320 seconds", first[0].PlaybackDurationSeconds)
+	}
+	if first[0].SourceVideo.Codec != "hevc" || first[0].OutputVideo.Codec != "h264" || first[0].SourceAudio == nil || first[0].SourceAudio.Codec != "eac3" || first[0].OutputAudio == nil || first[0].OutputAudio.Codec != "aac" {
+		t.Fatalf("source/output media formats missing: %+v", first[0])
 	}
 	for _, version := range []string{strings.Repeat("v", 101), "bad\nversion", "bad\u0085version"} {
 		clientVersion = version
@@ -127,8 +159,8 @@ func TestServerActivityLifecycleCommercialsAndAuthorization(t *testing.T) {
 	clock.now = clock.now.Add(5 * time.Second)
 	report(token, viewer, raw, 204)
 	program := snapshot()[0]
-	if program.AppVersion != clientVersion || program.VideoReason == "" || program.AudioReason == "" {
-		t.Fatal("missing per-track playback reasons")
+	if program.AppVersion != clientVersion || program.VideoReason == "" || program.AudioReason == "" || !program.StartedAt.Equal(first[0].StartedAt) || program.PlaybackPositionSeconds == nil || *program.PlaybackPositionSeconds != 905 {
+		t.Fatalf("missing per-track playback reasons: %+v", program)
 	}
 	if program.BandwidthMbps == nil || *program.BandwidthMbps != 1 {
 		t.Fatalf("bandwidth=%v", program.BandwidthMbps)
@@ -136,8 +168,11 @@ func TestServerActivityLifecycleCommercialsAndAuthorization(t *testing.T) {
 	ad := start("commercial", "Do Not Display.avi")
 	report(ad, viewer, raw, 204)
 	during := snapshot()[0]
-	if !during.Commercial || during.Video != program.Video || during.VideoReason != program.VideoReason || during.AudioReason != program.AudioReason || *during.BandwidthMbps != *program.BandwidthMbps || during.UpdatedAt != program.UpdatedAt {
+	if !during.Commercial || during.Video != program.Video || during.VideoReason != program.VideoReason || during.AudioReason != program.AudioReason || *during.BandwidthMbps != *program.BandwidthMbps || during.UpdatedAt != program.UpdatedAt || during.PlaybackPositionSeconds == nil || *during.PlaybackPositionSeconds != 905 {
 		t.Fatalf("commercial changed program: %+v", during)
+	}
+	if during.PlaybackDurationSeconds == nil || *during.PlaybackDurationSeconds != 1320 {
+		t.Fatalf("commercial changed program duration: %+v", during)
 	}
 	// A second player joining during an ad remains hidden until its first program.
 	report(ad, "viewer-0987654321", raw, 204)

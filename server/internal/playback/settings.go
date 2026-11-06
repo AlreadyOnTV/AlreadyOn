@@ -8,8 +8,8 @@ import (
 )
 
 type Settings struct {
-	// MaxProcesses is the administrator's own limit on parallel conversions; it is
-	// used only when AutoProcesses is off (see Effective).
+	// MaxProcesses is the administrator's resource-slot limit; a two-rendition
+	// ladder consumes two slots. It is used only when AutoProcesses is off.
 	MaxProcesses  int  `json:"maxProcesses"`
 	AutoProcesses bool `json:"autoProcesses"`
 	MaxRenditions int  `json:"maxRenditions"`
@@ -30,7 +30,7 @@ func DefaultSettings() Settings {
 }
 func (s Settings) Lease() time.Duration { return time.Duration(s.LeaseSeconds) * time.Second }
 func (s Settings) Validate() error {
-	if s.MaxProcesses < 1 || s.MaxProcesses > 16 || s.MaxRenditions < 1 || s.MaxRenditions > 32 || s.MaxViewers < 1 || s.MaxViewers > 1024 || s.LeaseSeconds < MinLeaseSeconds || s.LeaseSeconds > 120 {
+	if s.MaxProcesses < 1 || s.MaxProcesses > MaxParallel || s.MaxRenditions < 1 || s.MaxRenditions > 32 || s.MaxViewers < 1 || s.MaxViewers > 1024 || s.LeaseSeconds < MinLeaseSeconds || s.LeaseSeconds > 120 {
 		return errors.New("playback: invalid resource limits")
 	}
 	return nil
@@ -38,6 +38,9 @@ func (s Settings) Validate() error {
 func GetSettings(ctx context.Context, db *sql.DB) (Settings, error) {
 	var s Settings
 	err := db.QueryRowContext(ctx, `SELECT max_processes,auto_processes,max_renditions,max_viewers,lease_seconds,ladder FROM playback_settings WHERE id=1`).Scan(&s.MaxProcesses, &s.AutoProcesses, &s.MaxRenditions, &s.MaxViewers, &s.LeaseSeconds, &s.Ladder)
+	if s.MaxProcesses > MaxParallel {
+		s.MaxProcesses = MaxParallel
+	}
 	return s, err
 }
 func SaveSettings(ctx context.Context, db *sql.DB, s Settings) error {

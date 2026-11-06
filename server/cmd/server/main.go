@@ -263,13 +263,6 @@ func run() (restart bool) {
 			}
 			return hardware.Resolve(c, ss.Transcoding, ss.HardwareDecoding)
 		},
-		Processes: func(c context.Context) int {
-			s, err := playback.GetSettings(c, db.DB)
-			if err != nil {
-				return 1
-			}
-			return playback.EffectiveSettings(s, capacity).MaxProcesses
-		},
 		Busy: func() bool { processes, _, viewers := streams.Counts(); return processes > 0 || viewers > 0 },
 		Save: func(c context.Context, threads int, at time.Time) {
 			if err := serversettings.SaveTunedThreads(c, db.DB, threads, at); err != nil {
@@ -282,6 +275,7 @@ func run() (restart bool) {
 	}
 	playbackHTTP.Tuner = tuner
 	capacity.Threads = tuner.Threads
+	streams.SetAdmissionPolicy(capacity.AdmissionError)
 	capacity.TunerRunning = func() bool { return tuner.Status().State == "running" }
 	if record, err := playback.LoadCapacity(ctx, db.DB); err == nil {
 		capacity.Load(record)

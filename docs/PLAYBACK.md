@@ -12,7 +12,9 @@ Tablets use a large guide player in portrait and a compact player in landscape, 
 
 ## Session contract
 
-The server authorizes each tune and scopes media credentials to playback. Management keys must not be exposed in manifests, browser logs or external receiver requests. Session status and leases drive activity tracking and cleanup. API fields and errors are defined in [OpenAPI](../api/openapi.yaml).
+Tunes require scoped playback credentials. Never expose management keys in manifests, browser logs or receiver requests. Session status and leases govern activity and cleanup. [OpenAPI](../api/openapi.yaml) defines fields and errors.
+
+Dashboard Playback Time shows program position/full duration as `HH:MM/HH:MM`, retained during commercials, or `Unavailable`.
 
 Schedule times are UTC. Presentation uses a four-second delay; transition preparation may start up to eight seconds before a boundary. Clients must respect server timing and retry hints, cancel obsolete work after channel changes and handle expired sessions without retry storms.
 

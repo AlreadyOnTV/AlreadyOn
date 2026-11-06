@@ -14,7 +14,7 @@ import (
 // and stream positions follow the presented moment rather than the server
 // clock, so an entry shorter than the delay is neither skipped nor started
 // late, and a program resumed after commercials does not replay or skip.
-const PresentationDelay = 4 * time.Second
+const PresentationDelay = 8 * time.Second
 
 const PrepareAhead = 8 * time.Second
 

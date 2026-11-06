@@ -1,11 +1,14 @@
 package playback
 
 import (
-	"github.com/alreadyonapp/alreadyon/server/internal/loudness"
+	"errors"
 	"math"
+	"slices"
 	"strings"
 	"testing"
 	"time"
+
+	"github.com/alreadyonapp/alreadyon/server/internal/loudness"
 
 	"github.com/alreadyonapp/alreadyon/server/internal/library"
 	"github.com/alreadyonapp/alreadyon/server/internal/schedule"
@@ -75,6 +78,59 @@ func TestChooseQualityAndBandwidth(t *testing.T) {
 	}
 	if Budget(0) != 20000000 || Budget(100) != 80000000 || Budget(10) != 8000000 || Budget(math.NaN()) != 0 {
 		t.Fatal("invalid budget")
+	}
+}
+
+func TestOutputRungsMatchSupportedH264Ceilings(t *testing.T) {
+	want := []OutputRung{
+		{Height: 1080, FPS: 60, VideoBitrate: 12000000, PixelFormat: "yuv420p", Profile: "high"},
+		{Height: 720, FPS: 30, VideoBitrate: 5000000, PixelFormat: "yuv420p", Profile: "high"},
+		{Height: 480, FPS: 30, VideoBitrate: 2500000, PixelFormat: "yuv420p", Profile: "high"},
+		{Height: 360, FPS: 30, VideoBitrate: 1500000, PixelFormat: "yuv420p", Profile: "high"},
+	}
+	if !slices.Equal(OutputRungs, want) {
+		t.Fatalf("output rung definitions = %+v, want %+v", OutputRungs, want)
+	}
+	for _, rung := range want {
+		if got := heightBitrate(rung.Height); got != rung.VideoBitrate {
+			t.Errorf("%dp bitrate ceiling = %d, want %d", rung.Height, got, rung.VideoBitrate)
+		}
+	}
+}
+
+func TestChooseSupportsReported360p30H264BaselineAndAacFallback(t *testing.T) {
+	caps := Capabilities{
+		HLS:   true,
+		Mbps:  5,
+		Video: []VideoCapability{{Codec: "h264", Profile: "Baseline", Level: 30, Width: 640, Height: 360, FPS: 30, Bitrate: 1500000, PixelFormat: "yuv420p"}},
+		Audio: []AudioCapability{{Codec: "aac", Profile: "LC", Channels: 2, SampleRate: 48000, Bitrate: 192000, HLS: true}},
+	}
+	source := sourceInfo()
+	source.Streams[0].Codec = "mpeg2video"
+	source.Streams[1].Codec = "ac3"
+	plan, err := Choose(source, caps, false, false)
+	if err != nil || plan.Mode != "transcode" || plan.Height != 360 || plan.FPS > 30 || plan.VideoBitrate > 1500000 || plan.Profile != "constrained_baseline" || plan.AudioBitrate != 192000 {
+		t.Fatalf("fallback plan = %+v, %v", plan, err)
+	}
+}
+
+func TestChooseAppliesAutoAdaptiveCeilingWithoutChangingExplicitQuality(t *testing.T) {
+	source := sourceInfo()
+	source.Streams[0].Codec = "mpeg2video"
+	caps := clientCaps()
+	caps.AutoMaxHeight = 720
+	plan, err := Choose(source, caps, false, true)
+	if err != nil || plan.Height != 720 || plan.VideoBitrate > 5000000 {
+		t.Fatalf("Auto adaptive plan = %+v, %v", plan, err)
+	}
+	caps.MaxHeight, caps.AutoMaxHeight = 1080, 360
+	plan, err = Choose(source, caps, false, true)
+	if err != nil || plan.Height != 1080 {
+		t.Fatalf("explicit quality was changed by Auto adaptation: %+v, %v", plan, err)
+	}
+	caps.MaxHeight, caps.AutoMaxHeight = 0, UHDHeight
+	if _, err := Choose(source, caps, false, true); !errors.Is(err, ErrUnsupported) {
+		t.Fatalf("invalid adaptive ceiling error = %v", err)
 	}
 }
 
@@ -400,11 +456,11 @@ func TestSurroundConversionRequiresHLSProbe(t *testing.T) {
 }
 
 func TestSoftwareEncoderProfiles(t *testing.T) {
-	args := strings.Join(softwareVideoArgs("libx264", "constrained_baseline", "1"), " ")
-	if !strings.Contains(args, "-profile:v baseline") || !strings.Contains(args, "-preset veryfast -tune zerolatency") {
+	args := strings.Join(softwareVideoArgs("libx264", "constrained_baseline", "2", "1"), " ")
+	if !strings.Contains(args, "-profile:v baseline") || !strings.Contains(args, "-threads 2") || !strings.Contains(args, "-preset veryfast -tune zerolatency") {
 		t.Fatal(args)
 	}
-	args = strings.Join(softwareVideoArgs("libopenh264", "constrained_baseline", "1"), " ")
+	args = strings.Join(softwareVideoArgs("libopenh264", "constrained_baseline", "2", "1"), " ")
 	if !strings.Contains(args, "-profile:v constrained_baseline") || strings.Contains(args, "-preset") {
 		t.Fatal(args)
 	}

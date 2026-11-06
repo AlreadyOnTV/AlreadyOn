@@ -3,6 +3,7 @@ package httpapi
 import (
 	"context"
 	"encoding/json"
+	"net/http"
 	"net/http/httptest"
 	"os"
 	"path/filepath"
@@ -15,6 +16,34 @@ import (
 	"github.com/alreadyonapp/alreadyon/server/internal/playback"
 	"github.com/alreadyonapp/alreadyon/server/internal/schedule"
 )
+
+func TestCapacityFailureMessagesDistinguishUnavailableFromUnsustainable(t *testing.T) {
+	for _, tc := range []struct {
+		err     error
+		code    string
+		message string
+	}{
+		{playback.ErrCapacityMeasurementUnavailable, "server_capacity_measurement_unavailable", "no current capacity measurement"},
+		{playback.ErrCapacityUnsustainable, "server_capacity_unsustainable", "cannot sustain this output quality"},
+	} {
+		t.Run(tc.code, func(t *testing.T) {
+			w := httptest.NewRecorder()
+			if !writeCapacityFailure(w, tc.err) || w.Code != http.StatusUnprocessableEntity {
+				t.Fatalf("capacity response handled=%t status=%d", writeCapacityFailure(w, tc.err), w.Code)
+			}
+			var response struct {
+				Code  string `json:"code"`
+				Error string `json:"error"`
+			}
+			if err := json.Unmarshal(w.Body.Bytes(), &response); err != nil {
+				t.Fatal(err)
+			}
+			if response.Code != tc.code || !strings.Contains(response.Error, tc.message) {
+				t.Fatalf("response %+v", response)
+			}
+		})
+	}
+}
 
 func TestTuneDirectOffsetScopeAndRange(t *testing.T) {
 	db := openTestDB(t)
@@ -82,6 +111,7 @@ func TestTuneDirectOffsetScopeAndRange(t *testing.T) {
 		{"/api/channels/999/tune", strings.Replace(body, `"profileId":1`, `"profileId":99999`, 1), 404},
 		{"/api/channels/998/tune", strings.Replace(body, `"profileId":1`, `"profileId":2`, 1), 404},
 		{"/api/channels/999/tune", strings.Replace(body, `"profileId":1`, `"profileId":2,"maxHeight":500`, 1), 400},
+		{"/api/channels/999/tune", strings.Replace(body, `"hls":true`, `"hls":true,"autoMaxHeight":2160`, 1), 400},
 		{"/api/channels/999/tune", strings.Replace(body, `"profileId":1,`, "", 1), 201},
 	} {
 		if rec := client.do("POST", attempt.path, attempt.body); rec.Code != attempt.status {
@@ -98,9 +128,9 @@ func TestTuneDirectOffsetScopeAndRange(t *testing.T) {
 	if result.ChannelNumber != 999 || result.ChannelName != "test" || result.Program == nil || result.Program.MediaFileID != 999 || result.Program.Title != "sample" {
 		t.Fatalf("missing stream display metadata: %+v", result)
 	}
-	// 10s into the entry on the server clock, presented 4s behind, plus the
+	// 10s into the entry on the server clock, presented 8s behind, plus the
 	// entry's 15s source offset.
-	if result.Plan.VolumeOffsetDB != 0 || result.Plan.Mode != "direct" || result.StreamOffsetSeconds != 21 || result.PresentationDelaySeconds != 4 || !result.Ready {
+	if result.Plan.VolumeOffsetDB != 0 || result.Plan.Mode != "direct" || result.StreamOffsetSeconds != 17 || result.PresentationDelaySeconds != 8 || !result.Ready {
 		t.Fatalf("%+v", result)
 	}
 	if result.DurationSeconds != 120 || result.SourceHeight != 240 || result.Subtitles == nil || len(result.Subtitles) != 0 {
