@@ -254,9 +254,6 @@ func (c *Capacity) AdmissionError(active []Job, candidate Job) error {
 	if !hasSourceMeasurements {
 		return nil
 	}
-	if candidate.Plan.Encoder != encoder {
-		return ErrCapacityMeasurementUnavailable
-	}
 	free := memoryAvailable()
 	if c.memory != nil {
 		free = c.memory()

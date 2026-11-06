@@ -22,6 +22,8 @@ Schedule times are UTC. Presentation uses a four-second delay; transition prepar
 
 FFmpeg work has bounded lifetimes and cooperative resource controls. Foreground reservations can pause governed background work for the specific high-cost HDR conversion path. These controls are sampled policies, not operating-system hard caps. Preserve cancellation, stream limits and process cleanup when changing delivery.
 
+At airing transitions, a conversion without a matching capacity sample may use the conservative single-rendition fallback only while aggregate CPU, memory and transcode-slot budgets allow it. A measured-unsustainable pipeline remains blocked.
+
 Media paths must stay within configured roots. Serve only authorized resources and reject unsupported or unsafe inputs. Keep read-only mounts for normal library playback.
 
 ## Validation
