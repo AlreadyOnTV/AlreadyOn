@@ -1,3 +1,4 @@
+// Auto-only hysteresis lowers quality after sustained buffer or decode pressure.
 export interface PlaybackPressure {
   nowMs: number;
   bufferedSeconds: number;

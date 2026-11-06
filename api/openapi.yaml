@@ -2991,7 +2991,9 @@ paths:
       summary: List shared age restrictions and date ranges
       responses:
         "200":
-          { description: Catalog keyed by age and legacy era with arrays of age restrictions and date ranges }
+          {
+            description: Catalog keyed by age and legacy era with arrays of age restrictions and date ranges,
+          }
   /api/channel-filter-options/{kind}/{id}:
     parameters:
       - in: path
@@ -3601,6 +3603,14 @@ components:
         appVersion:
           type: string
           description: Client-reported application version; empty when unknown. Dashboards display Unknown for absent or empty values. Never inferred from the server version.
+        playbackPositionSeconds:
+          type: number
+          minimum: 0
+          description: Current scheduled program position including its in-file resume offset; frozen during commercials. Omitted when unavailable.
+        playbackDurationSeconds:
+          type: number
+          exclusiveMinimum: 0
+          description: Full program media duration, not the remaining airing segment; retained during commercials. Omitted when unavailable.
         latencyMs:
           {
             type: [number, "null"],

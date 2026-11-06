@@ -1,3 +1,4 @@
+// Adaptation-state tests use controlled timestamps instead of browser timing.
 import assert from 'node:assert/strict';
 import { test } from 'node:test';
 import { AutoQualityAdapter } from '../src/playback/qualityAdaptation.ts';

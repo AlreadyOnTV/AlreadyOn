@@ -194,9 +194,12 @@ const noWorkers = async (unreleased = () => 0) => {
   // These layout scenarios create many browsers under one synthetic principal.
   // Wait for grant revocation before closing its transport, not just DOM removal.
   const leavePlaying = async (page) => {
-    const released = page.waitForResponse((response) => response.ok() &&
-      response.request().method() === "DELETE" &&
-      /\/api\/playback\/sessions$/.test(response.url()));
+    const released = page.waitForResponse(
+      (response) =>
+        response.ok() &&
+        response.request().method() === "DELETE" &&
+        /\/api\/playback\/sessions$/.test(response.url()),
+    );
     await leave(page);
     await released;
   };
@@ -1443,7 +1446,8 @@ const noWorkers = async (unreleased = () => 0) => {
     );
 
     for (const viewport of [
-      { width: 844, height: 390 }, { width: 667, height: 375 },
+      { width: 844, height: 390 },
+      { width: 667, height: 375 },
       { width: 768, height: 1024 },
       { width: 1280, height: 800 },
     ]) {
@@ -1545,7 +1549,7 @@ const noWorkers = async (unreleased = () => 0) => {
       (await height()) === 720,
       `Expected the 720p source to play as-is, got ${await height()}p`,
     );
-    // The Settings menu order, and Show Playback Details puts the live panel in the top left corner.
+    // The Settings menu order; Playback Details puts the live panel in the top left corner.
     await page.locator(".playback-player").hover();
     await page.getByRole("button", { name: "Settings", exact: true }).click();
     const statusRows = await page
@@ -1563,6 +1567,7 @@ const noWorkers = async (unreleased = () => 0) => {
       /^Subtitles \(on|off\)$/.test(statusRows[2]),
       "Subtitle row reports active on/off status",
     );
+    assert.equal(statusRows.at(-1), "Playback Details (off)");
     const items = statusRows.map((t) =>
       t
         .replace(/\s*(Auto|Normal|Off|On|\d+p|[\d.]+×)$/, "")
@@ -1575,17 +1580,17 @@ const noWorkers = async (unreleased = () => 0) => {
       "Audio Tracks",
       "Subtitles",
       "Picture In Picture",
-      "Show Playback Details",
+      "Playback Details",
     ].filter((n) => items.includes(n));
     assert(
       items.join("|") === wanted.join("|") &&
         items[0] === "Quality" &&
-        items.at(-1) === "Show Playback Details" &&
+        items.at(-1) === "Playback Details" &&
         !items.includes("Playback Speed"),
-      `Menu order should be Quality, Audio Tracks, Subtitles, Picture In Picture, Show Playback Details: ${JSON.stringify(items)}`,
+      `Menu order should be Quality, Audio Tracks, Subtitles, Picture In Picture, Playback Details: ${JSON.stringify(items)}`,
     );
     await page
-      .getByRole("menuitemcheckbox", { name: /^Show Playback Details/ })
+      .getByRole("menuitem", { name: "Playback Details (off)", exact: true })
       .click();
     const panel = page.locator(".playback-details");
     await panel.waitFor();
@@ -1638,8 +1643,17 @@ const noWorkers = async (unreleased = () => 0) => {
     );
     await page.locator(".playback-player").hover();
     await page.getByRole("button", { name: "Settings", exact: true }).click();
+    const detailsToggle = page.getByRole("menuitem", {
+      name: "Playback Details (on)",
+      exact: true,
+    });
+    assert.equal(
+      await detailsToggle.getAttribute("aria-checked"),
+      null,
+      "Playback Details should not show a checkmark state",
+    );
     await page
-      .locator(".playback-menu button", { hasText: "Show Playback Details" })
+      .getByRole("menuitem", { name: "Playback Details (on)", exact: true })
       .click();
     await panel.waitFor({ state: "detached" });
     await menu();
@@ -2093,7 +2107,9 @@ const noWorkers = async (unreleased = () => 0) => {
       let orientation = portrait ? "portrait-primary" : "landscape-primary";
       let angle = portrait ? 0 : 90;
       window.__rotationFullscreen = { stageRequests: 0, videoRequests: 0 };
-      Object.defineProperty(screen.orientation, "type", { get: () => orientation });
+      Object.defineProperty(screen.orientation, "type", {
+        get: () => orientation,
+      });
       if (apple) {
         Object.defineProperty(navigator, "maxTouchPoints", { get: () => 5 });
         Object.defineProperty(navigator, "platform", { get: () => "MacIntel" });
@@ -2103,60 +2119,94 @@ const noWorkers = async (unreleased = () => 0) => {
         angle = nextPortrait ? 0 : 90;
         // Apple regression deliberately keeps ScreenOrientation stale while its
         // legacy physical angle changes, as well as delaying viewport resize.
-        if (!apple) orientation = nextPortrait ? "portrait-primary" : "landscape-primary";
+        if (!apple)
+          orientation = nextPortrait ? "portrait-primary" : "landscape-primary";
         window.dispatchEvent(new Event("orientationchange"));
         screen.orientation.dispatchEvent(new Event("change"));
       };
-      Object.defineProperty(document, "fullscreenElement", { get: () => element });
-      Element.prototype.requestFullscreen = ["legacy", "unsupported"].includes(policy) ? undefined : function () {
-        window.__rotationFullscreen.stageRequests++;
-        if (policy === "denied") return Promise.reject(new Error("Denied"));
-        element = this;
-        document.dispatchEvent(new Event("fullscreenchange"));
-        return Promise.resolve();
-      };
+      Object.defineProperty(document, "fullscreenElement", {
+        get: () => element,
+      });
+      Element.prototype.requestFullscreen = ["legacy", "unsupported"].includes(
+        policy,
+      )
+        ? undefined
+        : function () {
+            window.__rotationFullscreen.stageRequests++;
+            if (policy === "denied") return Promise.reject(new Error("Denied"));
+            element = this;
+            document.dispatchEvent(new Event("fullscreenchange"));
+            return Promise.resolve();
+          };
       document.exitFullscreen = () => {
         element = null;
         document.dispatchEvent(new Event("fullscreenchange"));
         return Promise.resolve();
       };
-      HTMLVideoElement.prototype.webkitEnterFullscreen = policy === "unsupported" ? undefined : function () {
-        window.__rotationFullscreen.videoRequests++;
-        nativeVideo = this;
-        this.dispatchEvent(new Event("webkitbeginfullscreen"));
-      };
+      HTMLVideoElement.prototype.webkitEnterFullscreen =
+        policy === "unsupported"
+          ? undefined
+          : function () {
+              window.__rotationFullscreen.videoRequests++;
+              nativeVideo = this;
+              this.dispatchEvent(new Event("webkitbeginfullscreen"));
+            };
       HTMLVideoElement.prototype.webkitExitFullscreen = function () {
         nativeVideo = null;
         this.dispatchEvent(new Event("webkitendfullscreen"));
       };
-      Object.defineProperty(HTMLVideoElement.prototype, "webkitDisplayingFullscreen", {
-        get() { return nativeVideo === this; },
-      });
+      Object.defineProperty(
+        HTMLVideoElement.prototype,
+        "webkitDisplayingFullscreen",
+        {
+          get() {
+            return nativeVideo === this;
+          },
+        },
+      );
     };
-    const state = (page) => page.evaluate(() => ({
-      large: document.querySelector(".guide-page").classList.contains("is-large-player"),
-      native: !!document.fullscreenElement || !!document.querySelector("video").webkitDisplayingFullscreen,
-      viewport: !!document.querySelector(".playback-player.is-landscape-player"),
-    }));
+    const state = (page) =>
+      page.evaluate(() => ({
+        large: document
+          .querySelector(".guide-page")
+          .classList.contains("is-large-player"),
+        native:
+          !!document.fullscreenElement ||
+          !!document.querySelector("video").webkitDisplayingFullscreen,
+        viewport: !!document.querySelector(
+          ".playback-player.is-landscape-player",
+        ),
+      }));
     const toggle = async (page) => {
       await page.locator(".playback-player").dispatchEvent("pointermove");
-      await page.getByRole("button", { name: "Full Screen", exact: true }).click();
+      await page
+        .getByRole("button", { name: "Full Screen", exact: true })
+        .click();
     };
     const rotate = async (page, portrait, device) => {
       await page.evaluate((value) => window.__rotateDevice(value), portrait);
-      await page.setViewportSize(portrait
-        ? { width: device.height, height: device.width }
-        : { width: device.width, height: device.height });
+      await page.setViewportSize(
+        portrait
+          ? { width: device.height, height: device.width }
+          : { width: device.width, height: device.height },
+      );
     };
     for (const device of devices) {
       for (const policy of ["allowed", "denied", "legacy", "unsupported"]) {
-        console.log(`Rotation case: ${device.phone ? "phone" : "tablet"} ${device.width}x${device.height}, ${policy}`);
+        console.log(
+          `Rotation case: ${device.phone ? "phone" : "tablet"} ${device.width}x${device.height}, ${policy}`,
+        );
         seed();
         const context = await browser.newContext({
           viewport: { width: device.width, height: device.height },
           screen: { width: device.width, height: device.height },
           hasTouch: true,
-          ...(device.phone ? {userAgent: "Mozilla/5.0 (Linux; Android 16) AppleWebKit/537.36 Chrome/156.0.0.0 Mobile Safari/537.36"} : {}),
+          ...(device.phone
+            ? {
+                userAgent:
+                  "Mozilla/5.0 (Linux; Android 16) AppleWebKit/537.36 Chrome/156.0.0.0 Mobile Safari/537.36",
+              }
+            : {}),
         });
         const page = await context.newPage();
         page.setDefaultTimeout(15000);
@@ -2167,56 +2217,116 @@ const noWorkers = async (unreleased = () => 0) => {
         try {
           await playing(page);
         } catch (error) {
-          console.log("Rotation playback state:", await page.locator("video").evaluate((v) => ({
-            paused: v.paused, muted: v.muted, readyState: v.readyState,
-            time: v.currentTime, width: v.videoWidth, error: v.error?.code,
-            message: document.querySelector(".playback-message")?.textContent,
-          })));
+          console.log(
+            "Rotation playback state:",
+            await page.locator("video").evaluate((v) => ({
+              paused: v.paused,
+              muted: v.muted,
+              readyState: v.readyState,
+              time: v.currentTime,
+              width: v.videoWidth,
+              error: v.error?.code,
+              message: document.querySelector(".playback-message")?.textContent,
+            })),
+          );
           throw error;
         }
-        await page.locator("video").evaluate((video) => { window.__rotationVideo = video; });
+        await page.locator("video").evaluate((video) => {
+          window.__rotationVideo = video;
+        });
         const supported = !["denied", "unsupported"].includes(policy);
-        assert((await state(page)).large === device.phone, "Phone guide stays large; tablet landscape guide stays compact");
-        assert((await state(page)).viewport === device.phone, "Only phones automatically fill landscape");
-        assert(await page.getByRole("button", { name: /Large Player|Small Player/ }).count() === 0,
-          "Touch browsers have no size toggle");
+        assert(
+          (await state(page)).large === device.phone,
+          "Phone guide stays large; tablet landscape guide stays compact",
+        );
+        assert(
+          (await state(page)).viewport === device.phone,
+          "Only phones automatically fill landscape",
+        );
+        assert(
+          (await page
+            .getByRole("button", { name: /Large Player|Small Player/ })
+            .count()) === 0,
+          "Touch browsers have no size toggle",
+        );
         if (device.phone) {
           const bounds = await page.locator(".playback-player").boundingBox();
-          assert(Math.abs(bounds.width - device.width) < 1 && Math.abs(bounds.height - device.height) < 1,
-            "Phone landscape playback fills the viewport");
-          assert((await state(page)).native === supported, "Phone rotation requests native fullscreen when possible");
+          assert(
+            Math.abs(bounds.width - device.width) < 1 &&
+              Math.abs(bounds.height - device.height) < 1,
+            "Phone landscape playback fills the viewport",
+          );
+          assert(
+            (await state(page)).native === supported,
+            "Phone rotation requests native fullscreen when possible",
+          );
           // Browser Done/Escape must dismiss the viewport fallback too.
-          if (supported) await page.evaluate(() => {
-            if (document.fullscreenElement) return document.exitFullscreen();
-            document.querySelector("video").webkitExitFullscreen();
-          });
+          if (supported)
+            await page.evaluate(() => {
+              if (document.fullscreenElement) return document.exitFullscreen();
+              document.querySelector("video").webkitExitFullscreen();
+            });
           else await toggle(page);
-          assert(!(await state(page)).viewport && !(await state(page)).native && (await state(page)).large,
-            "Phone fullscreen exit returns to the large guide while still landscape");
+          assert(
+            !(await state(page)).viewport &&
+              !(await state(page)).native &&
+              (await state(page)).large,
+            "Phone fullscreen exit returns to the large guide while still landscape",
+          );
           await page.evaluate(() => window.dispatchEvent(new Event("resize")));
           await page.evaluate(() => new Promise(requestAnimationFrame));
-          assert(!(await state(page)).viewport, "Resize cannot immediately re-enter dismissed phone fullscreen");
+          assert(
+            !(await state(page)).viewport,
+            "Resize cannot immediately re-enter dismissed phone fullscreen",
+          );
         } else {
-          assert(!(await state(page)).native, "Tablet landscape never enters fullscreen automatically");
+          assert(
+            !(await state(page)).native,
+            "Tablet landscape never enters fullscreen automatically",
+          );
           await toggle(page);
-          assert((await state(page)).native === supported, "Tablet explicit fullscreen obeys browser policy");
+          assert(
+            (await state(page)).native === supported,
+            "Tablet explicit fullscreen obeys browser policy",
+          );
           if (supported) await toggle(page);
-          assert(!(await state(page)).large && !(await state(page)).native, "Tablet exit restores compact guide");
+          assert(
+            !(await state(page)).large && !(await state(page)).native,
+            "Tablet exit restores compact guide",
+          );
         }
         await toggle(page);
         await rotate(page, true, device);
-        await page.waitForFunction(() => !document.fullscreenElement &&
-          !document.querySelector("video").webkitDisplayingFullscreen &&
-          !document.querySelector(".is-landscape-player") &&
-          document.querySelector(".guide-page.is-large-player"));
+        await page.waitForFunction(
+          () =>
+            !document.fullscreenElement &&
+            !document.querySelector("video").webkitDisplayingFullscreen &&
+            !document.querySelector(".is-landscape-player") &&
+            document.querySelector(".guide-page.is-large-player"),
+        );
         await toggle(page);
-        assert((await state(page)).native === supported, "Manual portrait fullscreen stays open");
+        assert(
+          (await state(page)).native === supported,
+          "Manual portrait fullscreen stays open",
+        );
         if (supported) await toggle(page);
         await rotate(page, false, device);
         if (device.phone) await page.waitForSelector(".is-landscape-player");
-        assert((await state(page)).viewport === device.phone, "New physical landscape rotation re-enables phone fullscreen only");
-        assert(await page.locator("video").evaluate((video) => video === window.__rotationVideo &&
-          !video.paused && video.videoWidth > 0), "Rotation preserves mounted, decoded, playing video");
+        assert(
+          (await state(page)).viewport === device.phone,
+          "New physical landscape rotation re-enables phone fullscreen only",
+        );
+        assert(
+          await page
+            .locator("video")
+            .evaluate(
+              (video) =>
+                video === window.__rotationVideo &&
+                !video.paused &&
+                video.videoWidth > 0,
+            ),
+          "Rotation preserves mounted, decoded, playing video",
+        );
         await leavePlaying(page);
         await context.close();
       }
@@ -2230,7 +2340,9 @@ const noWorkers = async (unreleased = () => 0) => {
       for (const initialPortrait of [true, false]) {
         seed();
         const context = await browser.newContext({
-          viewport: initialPortrait ? { width: 768, height: 1024 } : { width: 1024, height: 768 },
+          viewport: initialPortrait
+            ? { width: 768, height: 1024 }
+            : { width: 1024, height: 768 },
           screen: { width: 768, height: 1024 },
           hasTouch: true,
           userAgent,
@@ -2238,41 +2350,74 @@ const noWorkers = async (unreleased = () => 0) => {
         const page = await context.newPage();
         page.setDefaultTimeout(15000);
         page.on("pageerror", (e) => errors.push(e.message));
-        await page.addInitScript(installFullscreen, { policy: "allowed", apple: true, portrait: initialPortrait });
+        await page.addInitScript(installFullscreen, {
+          policy: "allowed",
+          apple: true,
+          portrait: initialPortrait,
+        });
         await login(page);
         await page.locator(".guide-slot-box").first().tap();
         await playing(page);
-        assert((await state(page)).large === initialPortrait, "iPad initial layout follows physical orientation");
-        assert(await page.locator('meta[name="viewport"]').getAttribute("content") === "width=device-width, initial-scale=1.0",
-          "iPad browsers retain the standard viewport configuration");
+        assert(
+          (await state(page)).large === initialPortrait,
+          "iPad initial layout follows physical orientation",
+        );
+        assert(
+          (await page
+            .locator('meta[name="viewport"]')
+            .getAttribute("content")) ===
+            "width=device-width, initial-scale=1.0",
+          "iPad browsers retain the standard viewport configuration",
+        );
         await page.evaluate(() => window.__rotateDevice(false));
-        await page.waitForFunction(() => !document.querySelector(".guide-page.is-large-player"));
+        await page.waitForFunction(
+          () => !document.querySelector(".guide-page.is-large-player"),
+        );
         await page.setViewportSize({ width: 1024, height: 768 });
         await toggle(page);
         await page.setViewportSize({ width: 768, height: 1024 });
-        assert((await state(page)).native, "Stale portrait viewport cannot cancel physical landscape fullscreen");
+        assert(
+          (await state(page)).native,
+          "Stale portrait viewport cannot cancel physical landscape fullscreen",
+        );
         const requests = await page.evaluate(() => window.__rotationFullscreen);
-        assert(requests.videoRequests === 0 && requests.stageRequests === 1,
-          "iPad browsers prefer stage fullscreen when supported");
+        assert(
+          requests.videoRequests === 0 && requests.stageRequests === 1,
+          "iPad browsers prefer stage fullscreen when supported",
+        );
         await page.evaluate(() => window.__rotateDevice(true));
-        await page.waitForFunction(() => document.querySelector(".guide-page.is-large-player") &&
-          !document.fullscreenElement && !document.querySelector("video").webkitDisplayingFullscreen);
-        assert(await page.locator("video").evaluate((video) => !video.paused && video.videoWidth > 0),
-          "iPad landscape load/rotation retains decoded playback");
+        await page.waitForFunction(
+          () =>
+            document.querySelector(".guide-page.is-large-player") &&
+            !document.fullscreenElement &&
+            !document.querySelector("video").webkitDisplayingFullscreen,
+        );
+        assert(
+          await page
+            .locator("video")
+            .evaluate((video) => !video.paused && video.videoWidth > 0),
+          "iPad landscape load/rotation retains decoded playback",
+        );
         await leavePlaying(page);
         await context.close();
       }
     }
-    const desktop = await browser.newContext({ viewport: { width: 1280, height: 800 } });
+    const desktop = await browser.newContext({
+      viewport: { width: 1280, height: 800 },
+    });
     const page = await desktop.newPage();
     await login(page);
     await page.locator(".guide-slot-box").first().click();
     await playing(page);
-    assert((await page.locator(".is-landscape-player").count()) === 0,
-      "Desktop landscape never triggers automatic fullscreen");
+    assert(
+      (await page.locator(".is-landscape-player").count()) === 0,
+      "Desktop landscape never triggers automatic fullscreen",
+    );
     await leavePlaying(page);
     await desktop.close();
-    console.log("PASS: phone automatic fullscreen/dismissal, tablet guide layouts, Safari/Chrome parity with standard viewport/fullscreen, decoded playback and desktop behavior");
+    console.log(
+      "PASS: phone automatic fullscreen/dismissal, tablet guide layouts, Safari/Chrome parity with standard viewport/fullscreen, decoded playback and desktop behavior",
+    );
   }
 
   // Keyboard: small-player arrows browse; expanded Up/Down tunes and horizontal arrows navigate controls.
@@ -2846,7 +2991,9 @@ const noWorkers = async (unreleased = () => 0) => {
     // The heading renders before session rows arrive. Hold the response until
     // the heading is visible so this regression also covers a slow sessions API.
     let releaseSessions;
-    const sessionsReady = new Promise((resolve) => { releaseSessions = resolve; });
+    const sessionsReady = new Promise((resolve) => {
+      releaseSessions = resolve;
+    });
     const pendingSessions = async (route) => {
       await sessionsReady;
       await route.continue();
@@ -2863,7 +3010,10 @@ const noWorkers = async (unreleased = () => 0) => {
         .count()) === 0,
       "Session Type column is removed",
     );
-    await page.getByRole("cell", { name: "Linux", exact: true }).first().waitFor();
+    await page
+      .getByRole("cell", { name: "Linux", exact: true })
+      .first()
+      .waitFor();
     await page.unroute("**/api/auth/sessions", pendingSessions);
     const toggle = page.getByRole("switch", {
       name: "Remove Inactive Sessions",
@@ -3759,28 +3909,40 @@ const noWorkers = async (unreleased = () => 0) => {
     const folderRuns = () => {
       const log = fs.readFileSync(path.join(root, "server.log"), "utf8");
       return {
-        started: (log.match(/content folders changed: rescanning/g) ?? []).length,
-        finished: (log.match(/content folders changed: rescan complete/g) ?? []).length,
+        started: (log.match(/content folders changed: rescanning/g) ?? [])
+          .length,
+        finished: (log.match(/content folders changed: rescan complete/g) ?? [])
+          .length,
       };
     };
     const beforeRestore = folderRuns();
-    const restoredFolders = await page.request.put(url + "/api/settings/folders", {
-      data: {
-        commercials:
-          originalFolders.commercials.source === "default"
-            ? null
-            : originalFolders.commercials.paths.map((p) => p.path),
+    const restoredFolders = await page.request.put(
+      url + "/api/settings/folders",
+      {
+        data: {
+          commercials:
+            originalFolders.commercials.source === "default"
+              ? null
+              : originalFolders.commercials.paths.map((p) => p.path),
+        },
       },
-    });
-    assert(restoredFolders.ok(), "Restore the original synthetic folder settings");
+    );
+    assert(
+      restoredFolders.ok(),
+      "Restore the original synthetic folder settings",
+    );
     // A successful folder save queues a debounced rescan. Drain that exact
     // restore before later scenarios reseed schedules; otherwise it can erase
     // their guide after login has already started on a slower CI runner.
     const rescanDeadline = Date.now() + 120000;
     for (;;) {
       const runs = folderRuns();
-      if (runs.started > beforeRestore.started && runs.finished >= runs.started) break;
-      assert(Date.now() < rescanDeadline, "Restored folder rescan did not finish");
+      if (runs.started > beforeRestore.started && runs.finished >= runs.started)
+        break;
+      assert(
+        Date.now() < rescanDeadline,
+        "Restored folder rescan did not finish",
+      );
       await delay(100);
     }
     await page.goto(url + "/admin/server");
@@ -4110,7 +4272,9 @@ const noWorkers = async (unreleased = () => 0) => {
             .getBoundingClientRect();
           return {
             menuRight: menuBox.right,
-            headerRight: headerBox.right - parseFloat(getComputedStyle(header).paddingRight),
+            headerRight:
+              headerBox.right -
+              parseFloat(getComputedStyle(header).paddingRight),
             panelLeft: panelBox.left,
             panelRight: panelBox.right,
             contentTop: contentBox.top,
@@ -4621,7 +4785,11 @@ const noWorkers = async (unreleased = () => 0) => {
       "Server controls align about four characters after the longest label: " +
         JSON.stringify(serverAlignment),
     );
-    assert((await page.getByText("Automatic Metadata", { exact: true }).count()) === 0, "Automatic Metadata has no configurable setting");
+    assert(
+      (await page.getByText("Automatic Metadata", { exact: true }).count()) ===
+        0,
+      "Automatic Metadata has no configurable setting",
+    );
     await page.goto(url + "/admin/logs");
     await page.waitForURL("**/admin/logs");
     // The Logs box fits the window; the page itself does not scroll.
@@ -4691,7 +4859,10 @@ const noWorkers = async (unreleased = () => 0) => {
         a.sessions[0].device,
       "Activity identifies the active viewer",
     );
-    assert(/^\d{2}\.\d{2}\.\d{2}_[a-f0-9]{7}$/.test(a.sessions[0].appVersion), 'Player must report its bundled app version');
+    assert(
+      /^\d{2}\.\d{2}\.\d{2}_[a-f0-9]{7}$/.test(a.sessions[0].appVersion),
+      "Player must report its bundled app version",
+    );
     assert(
       !JSON.stringify(a).includes("token"),
       "Activity never exposes playback tokens",
