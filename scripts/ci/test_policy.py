@@ -4,6 +4,7 @@ import datetime
 import importlib.util
 import pathlib
 import os
+import re
 import subprocess
 import unittest
 from unittest.mock import patch
@@ -29,6 +30,9 @@ def load(name):
 tags_module = load('image-tags')
 tags = tags_module.image_tags
 docs = load('check-documentation').check_changes
+PROMOTE_SPEC = importlib.util.spec_from_file_location('promote', pathlib.Path(__file__).parents[1] / 'promote.py')
+promote = importlib.util.module_from_spec(PROMOTE_SPEC)
+PROMOTE_SPEC.loader.exec_module(promote)
 
 
 class PublicationPolicy(unittest.TestCase):
@@ -45,6 +49,47 @@ class PublicationPolicy(unittest.TestCase):
         for branch in ['feature/a', 'fix/a', 'bugfix/a', 'release']:
             with self.assertRaises(KeyError):
                 tags('owner/repo', branch, SHA, instant)
+
+    def test_only_main_can_synchronize_all_image_channels(self):
+        result = tags('AlreadyOnTV/AlreadyOn', 'main', SHA,
+                      sync_channels=True)
+        self.assertEqual(result, ['ghcr.io/alreadyontv/alreadyon:nightly',
+                                  'ghcr.io/alreadyontv/alreadyon:latest',
+                                  'ghcr.io/alreadyontv/alreadyon:stable'])
+        with self.assertRaisesRegex(ValueError, 'only available on main'):
+            tags('AlreadyOnTV/AlreadyOn', 'test', SHA, sync_channels=True)
+
+    def test_main_cli_syncs_channels_only_for_marked_selected_source(self):
+        import image_registry
+        path = str(pathlib.Path(__file__).with_name('image-tags.py'))
+        environment = {'GITHUB_REPOSITORY': 'AlreadyOnTV/AlreadyOn',
+                       'GITHUB_REF_NAME': 'main', 'GITHUB_SHA': OTHER,
+                       'CI_SELECTED_SHA': SHA}
+        with patch.dict(os.environ, environment), \
+            patch.object(image_registry, 'has_stable_reissue', return_value=True) as marker, \
+                patch.object(sys, 'argv', [path]), redirect_stdout(io.StringIO()) as output:
+            runpy.run_path(path, run_name='__main__')
+        self.assertIn('tags=ghcr.io/alreadyontv/alreadyon:nightly ghcr.io/alreadyontv/alreadyon:latest ghcr.io/alreadyontv/alreadyon:stable',
+                      output.getvalue())
+        self.assertEqual(marker.call_args.args[1], SHA)
+
+    def test_test_promotion_accepts_only_validated_reissue_marker_without_rc_apks(self):
+        from types import SimpleNamespace
+        release = SimpleNamespace(check_stable_reissue=unittest.mock.Mock())
+        with patch('image_registry.has_stable_reissue', return_value=True):
+            promote.verify_test_candidate('owner/repo', '26.11.08', SHA, release)
+        release.check_stable_reissue.assert_called_once_with(
+            'owner/repo', SHA, '26.11.08', allow_marked=True)
+
+    def test_test_promotion_without_marker_still_requires_matching_candidate(self):
+        from types import SimpleNamespace
+        release = SimpleNamespace(
+            ALPHA=re.compile(r'alpha'), RC=re.compile(r'rc'), NIGHTLY=re.compile(r'nightly'),
+            releases=lambda repo: [], release_source=lambda entry: SHA,
+        )
+        with patch('image_registry.has_stable_reissue', return_value=False):
+            with self.assertRaisesRegex(ValueError, 'No published nightly or draft RC'):
+                promote.verify_test_candidate('owner/repo', '26.11.08', SHA, release)
 
     def test_only_full_commit_ids_become_tags(self):
         for value in ['', 'abc123', SHA.upper(), SHA + 'x', 'latest', SHA[:-1] + ';']:
@@ -119,6 +164,34 @@ class RetentionPolicy(unittest.TestCase):
         with patch.object(image_registry, 'api', return_value=[[record]]):
             self.assertEqual(image_registry.release_source('Owner/Repo', SHA), 'ghcr.io/owner/repo@' + digest)
             self.assertEqual(image_registry.release_source('other/repo', SHA), 'ghcr.io/other/repo:sha-' + SHA)
+
+    def test_stable_reissue_requires_latest_success_from_repository_actions(self):
+        import image_registry
+        statuses = [
+            {'context': image_registry.STABLE_REISSUE_CONTEXT, 'state': 'success',
+             'target_url': 'https://github.com/owner/repo/actions/runs/123',
+             'created_at': '2026-11-08T10:00:00Z'},
+            {'context': image_registry.STABLE_REISSUE_CONTEXT, 'state': 'failure',
+             'target_url': 'https://github.com/owner/repo/actions/runs/124',
+             'created_at': '2026-11-08T11:00:00Z'},
+        ]
+        with patch.object(image_registry, 'api', return_value=[statuses]):
+            self.assertFalse(image_registry.has_stable_reissue('owner/repo', SHA))
+        statuses[1].update(state='success', target_url='https://example.com/run/124')
+        with patch.object(image_registry, 'api', return_value=[statuses]):
+            self.assertFalse(image_registry.has_stable_reissue('owner/repo', SHA))
+        statuses[1].update(target_url='https://github.com/owner/repo/actions/runs/124')
+        with patch.object(image_registry, 'api', return_value=[statuses]):
+            self.assertTrue(image_registry.has_stable_reissue('owner/repo', SHA))
+
+    def test_stable_reissue_marker_requires_exact_commit_and_run(self):
+        import image_registry
+        with patch.object(image_registry, 'api') as api:
+            with self.assertRaisesRegex(ValueError, 'exact commit'):
+                image_registry.record_stable_reissue('owner/repo', 'short', 'https://github.com/owner/repo/actions/runs/1')
+            with self.assertRaisesRegex(ValueError, 'Actions run'):
+                image_registry.record_stable_reissue('owner/repo', SHA, 'https://example.com/run/1')
+            api.assert_not_called()
 
     def test_cleanup_dry_run_and_failed_manifest_never_delete(self):
         import image_registry

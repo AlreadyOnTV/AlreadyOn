@@ -20,10 +20,13 @@ class PromotionOutputs(unittest.TestCase):
                  "${{ inputs.publication == 'rc-candidate' && 'rc-candidate' || 'nightly' }}")
         steps = parent['jobs']['publish']['steps']
         channel = next(step for step in steps if step.get('name') == "Publish nightly and overwrite today's date tag")
-        self.assertEqual(channel['if'], "inputs.publication != 'rc-candidate'")
+        self.assertEqual(channel['if'], "inputs.publication == 'nightly'")
         record = next(step for step in steps if step.get('name') == 'Record validated RC image without changing channels')
-        self.assertEqual(record['if'], "inputs.publication == 'rc-candidate'")
+        self.assertEqual(record['if'], "contains(fromJSON('[\"rc-candidate\",\"stable-reissue\"]'), inputs.publication)")
         self.assertNotIn('publish-image.py', record['run'])
+        reissue = next(step for step in steps if step.get('name') == 'Mark fully validated Stable reissue candidate')
+        self.assertEqual(reissue['if'], "inputs.publication == 'stable-reissue'")
+        self.assertEqual(parent['jobs']['android']['if'], "inputs.publication != 'stable-reissue'")
         for check in ('codeql', 'quality', 'tests', 'android_checks'):
             self.assertIn(check, parent['jobs']['publish']['needs'])
         self.assertIn('publish', parent['jobs']['android']['needs'])
