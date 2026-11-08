@@ -52,8 +52,7 @@ private fun capacity(sample: JSONObject, used: String, total: String) = "${bytes
 /** Native read-only monitoring; polling and in-flight requests end when the screen leaves STARTED. */
 @Composable
 internal fun DashboardScreen(state: PhoneState, model: PhoneModel, modifier: Modifier = Modifier) {
-    val updates: AppUpdateModel = androidx.lifecycle.viewmodel.compose.viewModel()
-    val appVersion by updates.currentRelease.collectAsState()
+    val appVersion = BuildConfig.VERSION_NAME
     var details by remember { mutableStateOf<JSONObject?>(null) }
     var activity by remember { mutableStateOf<JSONObject?>(null) }
     var metrics by remember { mutableStateOf<JSONObject?>(null) }

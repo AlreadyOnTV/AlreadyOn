@@ -18,12 +18,12 @@ class UpdateDialogTest {
     @get:Rule val compose = createAndroidComposeRule<MainActivity>()
     @Test fun updateDialogShowsVersionsAndBothActions() {
         var accepted = false; var cancelled = false
-        compose.runOnUiThread { compose.activity.setContent { PhoneTheme { UpdateDialog(AppUpdateState(AppUpdate("26.10.11-alpha1", "26.10.11-alpha1", 24,
+        compose.runOnUiThread { compose.activity.setContent { PhoneTheme { UpdateDialog(AppUpdateState(AppUpdate("26.10.11-nightly", "26.10.11-nightly", 24,
             if (BuildConfig.IS_TV) "tv" else "phone", "", "", 1)),
             { accepted = true }, { cancelled = true }, {}, {}) } } }
         compose.onNodeWithText("Update Available").assertIsDisplayed()
         compose.onNodeWithText("Current version: ${BuildConfig.VERSION_NAME}").assertIsDisplayed()
-        compose.onNodeWithText("Available version: 26.10.11-alpha1").assertIsDisplayed()
+        compose.onNodeWithText("Available version: 26.10.11-nightly").assertIsDisplayed()
         if (BuildConfig.IS_TV) compose.waitUntil(timeoutMillis = 5_000) {
             compose.onNodeWithText("Update").fetchSemanticsNode().config[SemanticsProperties.Focused]
         }
@@ -41,7 +41,7 @@ class UpdateDialogTest {
     @Test fun deniedInstallPermissionOffersSettingsAndCancel() {
         var opened = false; var cancelled = false
         compose.runOnUiThread { compose.activity.setContent { PhoneTheme {
-            UpdateDialog(AppUpdateState(AppUpdate("test", "test-24", 24, "phone", "", "", 1), phase = UpdatePhase.PERMISSION),
+            UpdateDialog(AppUpdateState(AppUpdate("26.11.08-nightly", "26.11.08-nightly", 24, "phone", "", "", 1), phase = UpdatePhase.PERMISSION),
                 {}, { cancelled = true }, { opened = true }, {})
         } } }
         compose.onNodeWithText("Open Settings").assertIsDisplayed().performClick()
@@ -52,7 +52,7 @@ class UpdateDialogTest {
     @Test fun downloadingShowsProgressAndCanBeCancelled() {
         var cancelled = false
         compose.runOnUiThread { compose.activity.setContent { PhoneTheme {
-            UpdateDialog(AppUpdateState(AppUpdate("test", "test-24", 24, "phone", "", "", 1), phase = UpdatePhase.DOWNLOADING, progress = .5f),
+            UpdateDialog(AppUpdateState(AppUpdate("26.11.08-nightly", "26.11.08-nightly", 24, "phone", "", "", 1), phase = UpdatePhase.DOWNLOADING, progress = .5f),
                 {}, { cancelled = true }, {}, {})
         } } }
         compose.onNodeWithText("Downloading… 50%").assertIsDisplayed()
@@ -61,18 +61,4 @@ class UpdateDialogTest {
     }
 
 
-    @Test fun promotionDialogShowsReleaseLabelsAndExplainsNoInstall() {
-        var accepted = false
-        compose.runOnUiThread { compose.activity.setContent { PhoneTheme {
-            UpdateDialog(AppUpdateState(AppUpdate("26.10.11-Stable", "26.10.11-alpha4", 24,
-                if (BuildConfig.IS_TV) "tv" else "phone", "", "", 1),
-                currentRelease = "26.10.11-RC1", promotion = true),
-                { accepted = true }, {}, {}, {})
-        } } }
-        compose.onNodeWithText("Current version: 26.10.11-rc1").assertIsDisplayed()
-        compose.onNodeWithText("Available version: 26.10.11-stable").assertIsDisplayed()
-        compose.onNodeWithText("This release uses your installed build. Update the app version shown to match this release?").assertIsDisplayed()
-        compose.onNodeWithText("Update").performClick()
-        compose.runOnIdle { assertTrue(accepted) }
-    }
 }

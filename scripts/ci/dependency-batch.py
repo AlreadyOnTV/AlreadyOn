@@ -81,15 +81,12 @@ def integrate(repo, plan):
     # force:false cannot overwrite a concurrent independent dev commit. GitHub
     # records original PRs as merged when their heads become reachable from dev.
     api(repo, 'git/refs/heads/dev', 'PATCH', {'sha': head, 'force': False})
-    # GITHUB_TOKEN ref writes do not trigger push workflows; dispatch explicitly.
-    api(repo, 'actions/workflows/rebuild.yml/dispatches', 'POST',
-        {'ref': 'dev', 'inputs': {'revision': head, 'publication': 'nightly'}})
     for item in plan['pulls']:
         original = api(repo, f"pulls/{int(item['number'])}")
         # Do not close a rebased/newer proposal not included in this tested batch.
         if eligible(original, repo) and original['head']['sha'] == item['sha']:
             api(repo, f"pulls/{int(item['number'])}", 'PATCH', {'state': 'closed'})
-    print(f'Integrated tested dependency batch {head}; full nightly validation dispatched')
+    print(f'Integrated tested dependency batch {head}; validate and release through a main PR')
 
 
 def main():

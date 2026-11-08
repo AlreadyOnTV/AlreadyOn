@@ -20,7 +20,6 @@ import kotlinx.coroutines.flow.update
 
 internal enum class UpdatePhase { AVAILABLE, DOWNLOADING, PERMISSION, INSTALLING, ERROR }
 internal data class AppUpdateState(val update: AppUpdate? = null, val phase: UpdatePhase = UpdatePhase.AVAILABLE,
-    val currentRelease: String = BuildConfig.VERSION_NAME, val promotion: Boolean = false,
     val progress: Float = 0f, val error: String? = null, val readyToInstall: Boolean = false)
 
 internal class AppUpdateModel(application: Application) : AndroidViewModel(application) {
@@ -33,9 +32,6 @@ internal class AppUpdateModel(application: Application) : AndroidViewModel(appli
     }
     private val mutable = MutableStateFlow(AppUpdateState())
     val state: StateFlow<AppUpdateState> = mutable
-    private val accepted = AcceptedRelease(application)
-    private val releaseLabel = MutableStateFlow(BuildConfig.VERSION_NAME)
-    val currentRelease: StateFlow<String> = releaseLabel
     private var work: Job? = null
     private var dismissed = false
     private var lastUpdateCheckElapsedMs = 0L
@@ -59,20 +55,16 @@ internal class AppUpdateModel(application: Application) : AndroidViewModel(appli
         work?.cancel()
         service.cancel()
         dismissed = false
-        mutable.value = AppUpdateState(currentRelease = releaseLabel.value)
+        mutable.value = AppUpdateState()
         val cycle = ReleaseCycle.fromStored(preferences.getString("release_cycle", null))
         work = viewModelScope.launch {
             // Debug/test packages never offer a production APK with a different identity or signing key.
             if (context.packageName != UPDATE_PACKAGE) return@launch
             try {
                 val info = context.packageManager.getPackageInfo(context.packageName, 0)
-                val hash = withContext(Dispatchers.IO) { installedApkHash(context) }
-                val label = accepted.current(hash)
-                releaseLabel.value = label
-                val update = service.check(info.versionName.orEmpty(), packageCode(info), BuildConfig.IS_TV, label, hash, cycle)
+                val update = service.check(packageCode(info), BuildConfig.IS_TV, cycle)
                 lastUpdateCheckSucceeded = true
-                if (!dismissed) mutable.value = AppUpdateState(update, currentRelease = label,
-                    promotion = update?.code == packageCode(info))
+                if (!dismissed) mutable.value = AppUpdateState(update)
             } catch (_: CancellationException) { throw CancellationException() }
             catch (_: Exception) { /* Offline/rate limits must not interrupt startup or playback. */ }
         }
@@ -99,12 +91,6 @@ internal class AppUpdateModel(application: Application) : AndroidViewModel(appli
         mutable.update { it.copy(phase = UpdatePhase.DOWNLOADING, error = null, progress = 0f) }
         work = viewModelScope.launch {
             try {
-                if (mutable.value.promotion) {
-                    withContext(Dispatchers.IO) { accepted.accept(update) }
-                    releaseLabel.value = update.release
-                    mutable.value = AppUpdateState(currentRelease = update.release)
-                    return@launch
-                }
                 service.download(update, store.apk) { progress -> mutable.update { it.copy(progress = progress) } }
                 withContext(Dispatchers.IO) { verifyUpdateApk(context, store.apk, update) }
                 if (context.packageManager.canRequestPackageInstalls()) install()

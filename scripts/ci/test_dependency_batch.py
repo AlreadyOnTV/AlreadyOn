@@ -45,7 +45,7 @@ class DependencyBatchTests(unittest.TestCase):
                     batch.integrate('owner/repo', self.plan())
                 self.assertTrue(all(len(call.args) < 3 for call in api.call_args_list))
 
-    def test_ref_rejection_prevents_dispatch_and_closure(self):
+    def test_ref_rejection_prevents_integration_and_closure(self):
         pr = {'object': {'sha': HEAD}}
         with patch.object(batch, 'api', side_effect=[pr, {'object': {'sha': BASE}},
                          subprocess.CalledProcessError(1, ['gh'])]) as api:
@@ -54,14 +54,14 @@ class DependencyBatchTests(unittest.TestCase):
             self.assertEqual(api.call_args_list[-1].args[3], {'sha': HEAD, 'force': False})
             self.assertEqual(api.call_count, 3)
 
-    def test_dispatch_uses_exact_tested_sha_and_rebased_proposal_stays_open(self):
+    def test_integration_uses_exact_tested_sha_and_rebased_proposal_stays_open(self):
         pr = {'object': {'sha': HEAD}}
         rebased = proposal()
         rebased['head']['sha'] = 'c' * 40
-        with patch.object(batch, 'api', side_effect=[pr, {'object': {'sha': BASE}}, {}, None, rebased]) as api:
+        with patch.object(batch, 'api', side_effect=[pr, {'object': {'sha': BASE}}, {}, rebased]) as api:
             batch.integrate('owner/repo', self.plan())
-            self.assertEqual(api.call_args_list[3].args[3]['inputs'], {'revision': HEAD, 'publication': 'nightly'})
-            self.assertEqual(api.call_count, 5)
+            self.assertEqual(api.call_count, 4)
+            self.assertIn('git/refs/heads/dev', api.call_args_list[2].args[1])
 
     def test_no_updates_does_not_create_branch_or_publish(self):
         with patch.object(batch, 'run', return_value='[[]]'), patch.object(batch, 'api') as api, \

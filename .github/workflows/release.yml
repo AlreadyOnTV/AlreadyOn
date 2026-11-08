@@ -1,22 +1,37 @@
-# A guarded test/main fast-forward retags an image that already passed the dev PR gate.
-name: Promote Tested Release Image
+# Verify the latest tested Nightly before retagging its image and building fresh Stable APKs.
+name: Publish Stable from latest Nightly
 on:
-  push:
-    branches: [test, main]
   workflow_dispatch:
 permissions:
   contents: read
-env:
-  TZ: America/New_York
+concurrency:
+  group: stable-publication
+  cancel-in-progress: false
 jobs:
-  promote:
-    if: ${{ contains(fromJSON('["test","main"]'), github.ref_name) }}
+  select:
+    if: github.ref_name == 'main'
     runs-on: ubuntu-26.04
-    timeout-minutes: 20
-    # A slower older promotion must not overwrite a newer channel tag.
-    concurrency:
-      group: application-images
-      cancel-in-progress: false
+    permissions:
+      contents: read
+      packages: read
+    outputs:
+      source_sha: ${{ steps.plan.outputs.source_sha }}
+      release_date: ${{ steps.plan.outputs.release_date }}
+      predecessor: ${{ steps.plan.outputs.predecessor }}
+    steps:
+      - uses: actions/checkout@v7
+        with:
+          ref: main
+          fetch-depth: 0
+          persist-credentials: false
+      - name: Select newest validated Nightly in main history
+        id: plan
+        env:
+          GH_TOKEN: ${{ github.token }}
+        run: python3 scripts/ci/android-release.py plan-latest-stable --sha "$(git rev-parse HEAD)" >> "$GITHUB_OUTPUT"
+  image:
+    needs: [select, android]
+    runs-on: ubuntu-26.04
     permissions:
       contents: read
       packages: write
@@ -25,38 +40,35 @@ jobs:
     steps:
       - uses: actions/checkout@v7
         with:
-          persist-credentials: false
+          ref: main
           fetch-depth: 0
-      - name: Verify the promotion and that its branch is still current
-        id: policy
-        env:
-          GH_TOKEN: ${{ github.token }}
-        run: python3 scripts/ci/branch-policy.py --delivery
-      - name: Select the promotion channel without changing the build date
-        id: tags
-        env:
-          GH_TOKEN: ${{ github.token }}
-          CI_SELECTED_SHA: ${{ steps.policy.outputs.selected }}
-        run: python3 scripts/ci/image-tags.py >> "$GITHUB_OUTPUT"
+          persist-credentials: false
       - uses: docker/login-action@v4
         with:
           registry: ghcr.io
           username: ${{ github.actor }}
           password: ${{ secrets.GITHUB_TOKEN }}
-      - name: Verify signed provenance and inventory for new release cycles
+      - name: Verify the selected image and add latest alias
         env:
           GH_TOKEN: ${{ github.token }}
-          SOURCE_IMAGE: ${{ steps.tags.outputs.source }}
-          CI_SELECTED_SHA: ${{ steps.policy.outputs.selected }}
-        run: python3 scripts/ci/verify-image.py --source "$SOURCE_IMAGE" --revision "$CI_SELECTED_SHA"
-      - name: Add the channel tags to the already tested image
-        env:
-          GH_TOKEN: ${{ github.token }}
-          CI_REVISION: ${{ github.sha }}
-          IMAGE_TAGS: ${{ steps.tags.outputs.tags }}
-          SOURCE_IMAGE: ${{ steps.tags.outputs.source }}
+          GITHUB_REPOSITORY: ${{ github.repository }}
+          SOURCE_SHA: ${{ needs.select.outputs.source_sha }}
         run: |
-          docker buildx imagetools inspect "$SOURCE_IMAGE" >/dev/null ||
-            { echo "::error::No tested image $SOURCE_IMAGE; only commits merged through the PR pipeline can be promoted."; exit 1; }
-          python3 scripts/ci/publish-image.py
-          echo "Published \`$IMAGE_TAGS\` from tested \`$SOURCE_IMAGE\`" >> "$GITHUB_STEP_SUMMARY"
+          SOURCE_IMAGE=$(PYTHONPATH=scripts/ci python3 -c 'import os; from image_registry import release_source; print(release_source(os.environ["GITHUB_REPOSITORY"], os.environ["SOURCE_SHA"]))')
+          python3 scripts/ci/verify-image.py --source "$SOURCE_IMAGE" --revision "$SOURCE_SHA"
+          IMAGE_TAGS=$(CI_SOURCE_BRANCH=main CI_PUBLICATION=latest CI_REVISION="$SOURCE_SHA" CI_SELECTED_SHA="$SOURCE_SHA" python3 scripts/ci/image-tags.py | sed -n 's/^tags=//p')
+          SOURCE_IMAGE="$SOURCE_IMAGE" CI_REVISION="$SOURCE_SHA" IMAGE_TAGS="$IMAGE_TAGS" python3 scripts/ci/publish-image.py
+  android:
+    needs: select
+    permissions:
+      contents: write
+      packages: read
+      pull-requests: read
+      issues: read
+    uses: ./.github/workflows/android-release.yml
+    with:
+      operation: stable
+      release_date: ${{ needs.select.outputs.release_date }}
+      source_sha: ${{ needs.select.outputs.source_sha }}
+      predecessor: ${{ needs.select.outputs.predecessor }}
+    secrets: inherit

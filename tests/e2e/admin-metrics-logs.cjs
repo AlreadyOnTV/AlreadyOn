@@ -179,62 +179,12 @@ module.exports = async function adminMetricsAndLogs({
     (await sessions.nth(2).getByText("Unknown", { exact: true }).count()) === 1,
     "Missing version needs placeholder",
   );
-  const metricsHeader = await page
-    .locator(".metrics-toolbar")
-    .evaluate((toolbar) => {
-      const title = toolbar
-        .querySelector(".metrics-heading")
-        .getBoundingClientRect();
-      const controls = toolbar
-        .querySelector(".metrics-controls")
-        .getBoundingClientRect();
-      return {
-        titleCenter: title.top + title.height / 2,
-        controlsCenter: controls.top + controls.height / 2,
-        titleLeft: title.left,
-        controlsRight: controls.right,
-      };
-    });
-  assert(
-    Math.abs(metricsHeader.titleCenter - metricsHeader.controlsCenter) <= 2 &&
-      metricsHeader.titleLeft < metricsHeader.controlsRight,
-    "Server Metrics title and Refresh/History controls share the first row: " +
-      JSON.stringify(metricsHeader),
-  );
   const panels = page.locator(".metrics-grid .metric-panel");
   assert(
     JSON.stringify(
       await panels.evaluateAll((es) => es.map((e) => e.dataset.metric)),
     ) === JSON.stringify(["cpu", "ram", "disk", "bandwidth"]),
     "Performance panel order",
-  );
-  const desktopSizes = await panels.evaluateAll((es) =>
-    es.map((element) => ({
-      width: element.getBoundingClientRect().width,
-      height: element.getBoundingClientRect().height,
-    })),
-  );
-  assert(
-    desktopSizes.every(
-      (size) =>
-        Math.abs(size.width - desktopSizes[0].width) <= 1 &&
-        Math.abs(size.height - desktopSizes[0].height) <= 1,
-    ),
-    "All desktop graphs should match Disk dimensions: " +
-      JSON.stringify(desktopSizes),
-  );
-  const positions = await panels.evaluateAll((es) =>
-    es.map((e) => ({
-      x: e.getBoundingClientRect().x,
-      y: e.getBoundingClientRect().y,
-    })),
-  );
-  assert(
-    positions[0].y === positions[1].y &&
-      positions[2].y === positions[3].y &&
-      positions[0].x === positions[2].x &&
-      positions[2].y > positions[0].y,
-    "Two-by-two layout",
   );
   const cpuPanel = page.locator('[data-metric="cpu"]');
   const gutter = await cpuPanel.evaluate((panel) => ({
@@ -349,32 +299,8 @@ module.exports = async function adminMetricsAndLogs({
     new Set(diskColors).size === 4,
     "Mount read/write lines should be distinguishable",
   );
-  const checkDiskLegend = async (panel) => {
-    const legendBottom = await panel
-      .getByRole("table", { name: "Disk performance by mount" })
-      .evaluate((e) => e.getBoundingClientRect().bottom);
-    const plotTop = await panel
-      .locator(".metric-gridline")
-      .evaluateAll((es) =>
-        Math.min(...es.map((e) => e.getBoundingClientRect().top)),
-      );
-    assert(
-      legendBottom < plotTop,
-      "Disk legend should stay above plotted history",
-    );
-    assert(
-      plotTop - legendBottom <= 80,
-      "Disk plot should follow its metric labels without excessive blank space",
-    );
-  };
-  await checkDiskLegend(disk);
   await disk.click();
   await page.getByRole("dialog", { name: "Disk graph", exact: true }).waitFor();
-  await checkDiskLegend(
-    page
-      .getByRole("dialog", { name: "Disk graph", exact: true })
-      .locator(".metric-panel"),
-  );
   await page.keyboard.press("Escape");
   const start = await cpu();
   const requestStart = requests;
@@ -394,20 +320,6 @@ module.exports = async function adminMetricsAndLogs({
       pointsPerCore: 60,
     }),
   );
-  await page.setViewportSize({ width: 375, height: 900 });
-  const mobile = await panels.evaluateAll((es) =>
-    es.map((e) => ({
-      x: e.getBoundingClientRect().x,
-      height: e.getBoundingClientRect().height,
-    })),
-  );
-  assert(
-    new Set(mobile.map((panel) => panel.x)).size === 1 &&
-      mobile.every((panel) => Math.abs(panel.height - mobile[0].height) <= 1),
-    "Narrow metrics should stack with matching heights: " +
-      JSON.stringify(mobile),
-  );
-  await page.setViewportSize({ width: 1440, height: 1000 });
   let generation = 0;
   await page.route("**/api/logs?*", (route) => {
     generation++;

@@ -18,7 +18,7 @@ class UpdateInstallationFixture {
             store.apk.outputStream().use { input.copyTo(it) }
         }
         val hash = java.security.MessageDigest.getInstance("SHA-256").digest(store.apk.readBytes()).joinToString("") { "%02x".format(it) }
-        val update = AppUpdate("26.10.11-RC2", "26.10.11-alpha5", 24, if (BuildConfig.IS_TV) "tv" else "phone", "", hash, store.apk.length())
+        val update = AppUpdate("26.10.11-stable", "26.10.11-alpha5", 24, if (BuildConfig.IS_TV) "tv" else "phone", "", hash, store.apk.length())
         verifyUpdateApk(context, store.apk, update)
         stageUpdate(context, update)
         Unit

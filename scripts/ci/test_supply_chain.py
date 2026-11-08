@@ -38,25 +38,29 @@ class SupplyChain(unittest.TestCase):
                 stage.stage('owner/repo', 'tested-image', '123', '1')
             inspect.assert_not_called()
 
-    def test_new_cycles_require_both_signatures_and_fail_on_missing_inventory(self):
+    def test_promoted_images_require_both_signatures_and_an_immutable_digest(self):
         verify = load('verify-image')
         source = 'ghcr.io/owner/repo@sha256:' + 'd' * 64
         run = Mock(side_effect=[None, subprocess.CalledProcessError(1, 'gh')])
-        with patch.object(verify.subprocess, 'check_output', return_value='26.10.18\n'):
-            with self.assertRaises(subprocess.CalledProcessError):
-                verify.verify('owner/repo', source, 'a' * 40, run)
+        with self.assertRaises(subprocess.CalledProcessError):
+            verify.verify('owner/repo', source, 'a' * 40, run)
         self.assertEqual(run.call_count, 2)
-        self.assertIn('--signer-workflow', run.call_args_list[0].args[0])
+        for call in run.call_args_list:
+            command = call.args[0]
+            source_digest = command.index('--source-digest')
+            self.assertEqual(command[source_digest + 1], 'a' * 40)
+            self.assertIn('--signer-workflow', command)
         self.assertIn('https://cyclonedx.org/bom', run.call_args_list[1].args[0])
-        with patch.object(verify.subprocess, 'check_output', return_value='26.10.11\n'):
-            run.reset_mock()
+        run.reset_mock()
+        with self.assertRaises(ValueError):
             verify.verify('owner/repo', 'legacy-sha-tag', 'a' * 40, run)
-            run.assert_not_called()
+        with self.assertRaises(ValueError):
+            verify.verify('owner/repo', source, 'not-a-commit-sha', run)
+        run.assert_not_called()
 
     def test_mutable_source_cannot_enter_new_attested_promotion(self):
         verify = load('verify-image')
-        with patch.object(verify.subprocess, 'check_output', return_value='26.10.18\n'):
-            with self.assertRaises(ValueError): verify.verify('owner/repo', 'ghcr.io/owner/repo:nightly', 'a' * 40)
+        with self.assertRaises(ValueError): verify.verify('owner/repo', 'ghcr.io/owner/repo:nightly', 'a' * 40)
 
     def test_manual_or_failed_review_does_not_hide_a_missed_schedule(self):
         health = load('maintenance-health').health

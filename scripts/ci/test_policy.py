@@ -4,7 +4,6 @@ import datetime
 import importlib.util
 import pathlib
 import os
-import re
 import subprocess
 import unittest
 from unittest.mock import patch
@@ -30,9 +29,6 @@ def load(name):
 tags_module = load('image-tags')
 tags = tags_module.image_tags
 docs = load('check-documentation').check_changes
-PROMOTE_SPEC = importlib.util.spec_from_file_location('promote', pathlib.Path(__file__).parents[1] / 'promote.py')
-promote = importlib.util.module_from_spec(PROMOTE_SPEC)
-PROMOTE_SPEC.loader.exec_module(promote)
 
 
 class PublicationPolicy(unittest.TestCase):
@@ -40,57 +36,18 @@ class PublicationPolicy(unittest.TestCase):
 
     def test_channels_and_lowercase(self):
         instant = datetime.datetime(2026, 10, 1, 12, tzinfo=datetime.timezone.utc)
-        for branch, channel in [('dev', 'nightly'), ('test', 'latest'), ('main', 'stable')]:
-            result = tags('AlreadyOnTV/AlreadyOn', branch, SHA, instant)
-            self.assertEqual(result[0], 'ghcr.io/alreadyontv/alreadyon:' + channel)
-            self.assertEqual(len(result), 2 if branch == 'dev' else 1)
-            if branch == 'dev':
-                self.assertEqual(result[1], 'ghcr.io/alreadyontv/alreadyon:26.10.01')
-        for branch in ['feature/a', 'fix/a', 'bugfix/a', 'release']:
-            with self.assertRaises(KeyError):
+        expected = ['ghcr.io/alreadyontv/alreadyon:nightly',
+                    'ghcr.io/alreadyontv/alreadyon:26.10.01',
+                    'ghcr.io/alreadyontv/alreadyon:26.10.01-nightly']
+        result = tags('AlreadyOnTV/AlreadyOn', 'main', SHA, instant)
+        self.assertEqual(result, expected)
+        self.assertEqual(tags('AlreadyOnTV/AlreadyOn', 'main', SHA, instant,
+                              publication='latest'), ['ghcr.io/alreadyontv/alreadyon:latest'])
+        with self.assertRaises(ValueError):
+            tags('AlreadyOnTV/AlreadyOn', 'dev', SHA, instant)
+        for branch in ['feature/a', 'fix/a', 'bugfix/a', 'release', 'dev', 'test']:
+            with self.assertRaises(ValueError):
                 tags('owner/repo', branch, SHA, instant)
-
-    def test_only_main_can_synchronize_all_image_channels(self):
-        result = tags('AlreadyOnTV/AlreadyOn', 'main', SHA,
-                      sync_channels=True)
-        self.assertEqual(result, ['ghcr.io/alreadyontv/alreadyon:nightly',
-                                  'ghcr.io/alreadyontv/alreadyon:latest',
-                                  'ghcr.io/alreadyontv/alreadyon:stable'])
-        with self.assertRaisesRegex(ValueError, 'only available on main'):
-            tags('AlreadyOnTV/AlreadyOn', 'test', SHA, sync_channels=True)
-
-    def test_main_cli_syncs_channels_only_for_marked_selected_source(self):
-        import image_registry
-        path = str(pathlib.Path(__file__).with_name('image-tags.py'))
-        environment = {'GITHUB_REPOSITORY': 'AlreadyOnTV/AlreadyOn',
-                       'GITHUB_REF_NAME': 'main', 'GITHUB_SHA': OTHER,
-                       'CI_SELECTED_SHA': SHA}
-        with patch.dict(os.environ, environment), \
-            patch.object(image_registry, 'has_stable_reissue', return_value=True) as marker, \
-            patch.object(image_registry, 'release_source', return_value='ghcr.io/alreadyontv/alreadyon@sha256:' + 'd' * 64), \
-                patch.object(sys, 'argv', [path]), redirect_stdout(io.StringIO()) as output:
-            runpy.run_path(path, run_name='__main__')
-        self.assertIn('tags=ghcr.io/alreadyontv/alreadyon:nightly ghcr.io/alreadyontv/alreadyon:latest ghcr.io/alreadyontv/alreadyon:stable',
-                      output.getvalue())
-        self.assertEqual(marker.call_args.args[1], SHA)
-
-    def test_test_promotion_accepts_only_validated_reissue_marker_without_rc_apks(self):
-        from types import SimpleNamespace
-        release = SimpleNamespace(check_stable_reissue=unittest.mock.Mock())
-        with patch('image_registry.has_stable_reissue', return_value=True):
-            promote.verify_test_candidate('owner/repo', '26.11.08', SHA, release)
-        release.check_stable_reissue.assert_called_once_with(
-            'owner/repo', SHA, '26.11.08', allow_marked=True)
-
-    def test_test_promotion_without_marker_still_requires_matching_candidate(self):
-        from types import SimpleNamespace
-        release = SimpleNamespace(
-            ALPHA=re.compile(r'alpha'), RC=re.compile(r'rc'), NIGHTLY=re.compile(r'nightly'),
-            releases=lambda repo: [], release_source=lambda entry: SHA,
-        )
-        with patch('image_registry.has_stable_reissue', return_value=False):
-            with self.assertRaisesRegex(ValueError, 'No published nightly or draft RC'):
-                promote.verify_test_candidate('owner/repo', '26.11.08', SHA, release)
 
     def test_only_full_commit_ids_become_tags(self):
         for value in ['', 'abc123', SHA.upper(), SHA + 'x', 'latest', SHA[:-1] + ';']:
@@ -101,20 +58,28 @@ class PublicationPolicy(unittest.TestCase):
 
     def test_source_is_the_selected_commit_not_the_destination(self):
         environment = dict(os.environ, GITHUB_REPOSITORY='Owner/Repo', GITHUB_REF_NAME='main',
-                           CI_SOURCE_BRANCH='dev', CI_SELECTED_SHA=SHA, CI_REVISION=OTHER, CI_PR_NUMBER='123')
+                   CI_SOURCE_BRANCH='main', CI_SELECTED_SHA=SHA, CI_REVISION=OTHER, CI_PR_NUMBER='123')
         output = subprocess.check_output(['python3', str(pathlib.Path(__file__).with_name('image-tags.py'))],
                                          env=environment, text=True).splitlines()
         self.assertTrue(output[0].startswith('tags=ghcr.io/owner/repo:nightly ghcr.io/owner/repo:'))
         self.assertEqual(output[1], 'source=ghcr.io/owner/repo:pr-123')
 
-    def test_full_e2e_is_required_for_dev_prs_not_test_main_pushes(self):
+    def test_main_pr_requires_full_e2e_codeql_and_dependency_review(self):
         root = pathlib.Path(__file__).resolve().parents[2]
         validation = (root / '.github/workflows/pull-request.yml').read_text()
+        codeql = (root / '.github/workflows/codeql.yml').read_text()
+        dependencies = (root / '.github/workflows/dependency-review.yml').read_text()
         test_action = (root / '.github/actions/test-source/action.yml').read_text()
-        self.assertIn('pull_request:\n    branches: [dev]', validation)
-        self.assertIn('pull-base: \'false\'', validation)
+        self.assertIn('pull_request:\n    branches: [main]', validation)
+        self.assertIn('pull_request:\n    branches: [main]', codeql)
+        self.assertIn('actions/dependency-review-action@v4', dependencies)
+        self.assertIn('name: Dependabot', dependencies)
+        self.assertIn('pull-base: "false"', validation)
         self.assertIn('make test-e2e', test_action)
-        self.assertNotIn('branches: [build, dev, test, main]', validation)
+        self.assertEqual(validation.count('  auto_merge:\n'), 1)
+        self.assertIn('needs: [quality, android, tests]', validation)
+        self.assertIn('gh pr merge "$PR_NUMBER" --merge --auto', validation)
+        self.assertNotIn('branches: [dev, test]', validation)
 
 
 class RetentionPolicy(unittest.TestCase):
@@ -127,8 +92,8 @@ class RetentionPolicy(unittest.TestCase):
     def keep(self, tags, open_pr=lambda _: False, active_run=lambda _: False):
         return self.module.retain(tags, self.today, open_pr, active_run)
 
-    def test_channels_never_expire(self):
-        for channel in ['nightly', 'latest', 'stable']:
+    def test_active_channels_never_expire(self):
+        for channel in ['nightly', 'latest']:
             self.assertIsNotNone(self.keep([channel, '20.01.01', 'sha-' + SHA]))
 
     def test_date_boundary_and_multiple_dates(self):
@@ -166,34 +131,6 @@ class RetentionPolicy(unittest.TestCase):
             self.assertEqual(image_registry.release_source('Owner/Repo', SHA), 'ghcr.io/owner/repo@' + digest)
             self.assertEqual(image_registry.release_source('other/repo', SHA), 'ghcr.io/other/repo:sha-' + SHA)
 
-    def test_stable_reissue_requires_latest_success_from_repository_actions(self):
-        import image_registry
-        statuses = [
-            {'context': image_registry.STABLE_REISSUE_CONTEXT, 'state': 'success',
-             'target_url': 'https://github.com/owner/repo/actions/runs/123',
-             'created_at': '2026-11-08T10:00:00Z'},
-            {'context': image_registry.STABLE_REISSUE_CONTEXT, 'state': 'failure',
-             'target_url': 'https://github.com/owner/repo/actions/runs/124',
-             'created_at': '2026-11-08T11:00:00Z'},
-        ]
-        with patch.object(image_registry, 'api', return_value=[statuses]):
-            self.assertFalse(image_registry.has_stable_reissue('owner/repo', SHA))
-        statuses[1].update(state='success', target_url='https://example.com/run/124')
-        with patch.object(image_registry, 'api', return_value=[statuses]):
-            self.assertFalse(image_registry.has_stable_reissue('owner/repo', SHA))
-        statuses[1].update(target_url='https://github.com/owner/repo/actions/runs/124')
-        with patch.object(image_registry, 'api', return_value=[statuses]):
-            self.assertTrue(image_registry.has_stable_reissue('owner/repo', SHA))
-
-    def test_stable_reissue_marker_requires_exact_commit_and_run(self):
-        import image_registry
-        with patch.object(image_registry, 'api') as api:
-            with self.assertRaisesRegex(ValueError, 'exact commit'):
-                image_registry.record_stable_reissue('owner/repo', 'short', 'https://github.com/owner/repo/actions/runs/1')
-            with self.assertRaisesRegex(ValueError, 'Actions run'):
-                image_registry.record_stable_reissue('owner/repo', SHA, 'https://example.com/run/1')
-            api.assert_not_called()
-
     def test_cleanup_dry_run_and_failed_manifest_never_delete(self):
         import image_registry
         versions = [{'id': 1, 'name': 'sha256:' + 'a' * 64,
@@ -230,20 +167,20 @@ class RetentionPolicy(unittest.TestCase):
                          ('2026-07-02T04:00:00+00:00', '26.07.02'),
                          ('2026-03-08T07:00:00+00:00', '26.03.08'),
                          ('2026-11-01T06:00:00+00:00', '26.11.01')]:
-            self.assertTrue(tags('owner/repo', 'dev', SHA, datetime.datetime.fromisoformat(utc))[1].endswith(day))
+            self.assertTrue(tags('owner/repo', 'main', SHA, datetime.datetime.fromisoformat(utc))[1].endswith(day))
 
-    def test_dev_date_tag_uses_explicit_pr_release_date(self):
+    def test_main_date_alias_uses_current_or_explicit_release_date(self):
         instant = datetime.datetime(2026, 10, 11, 12, tzinfo=datetime.timezone.utc)
-        result = tags('owner/repo', 'dev', SHA, instant, release_date='26.10.10')
+        result = tags('owner/repo', 'main', SHA, instant, release_date='26.10.10')
         self.assertEqual(result[1], 'ghcr.io/owner/repo:26.10.10')
         with self.assertRaisesRegex(ValueError, 'valid YY.MM.DD'):
-            tags('owner/repo', 'dev', SHA, instant, release_date='26.02.30')
+            tags('owner/repo', 'main', SHA, instant, release_date='26.02.30')
 
     def test_daily_tags_are_shared_and_replaceable(self):
         instant = datetime.datetime(2026, 10, 1, 12, tzinfo=datetime.timezone.utc)
-        self.assertEqual(tags('o/r', 'dev', SHA, instant), tags('o/r', 'dev', SHA, instant.replace(hour=13)))
-        self.assertEqual(tags('o/r', 'test', SHA, instant), ['ghcr.io/o/r:latest'])
-        self.assertEqual(tags('o/r', 'main', SHA, instant), ['ghcr.io/o/r:stable'])
+        self.assertEqual(tags('o/r', 'main', SHA, instant),
+                         tags('o/r', 'main', SHA, instant.replace(hour=13)))
+        self.assertEqual(tags('o/r', 'main', SHA, instant, publication='latest'), ['ghcr.io/o/r:latest'])
 
     def test_replace_only_selected_pr_and_keep_channel_images(self):
         import image_registry
@@ -289,7 +226,7 @@ class RetentionPolicy(unittest.TestCase):
                              ['tag', 'push', 'tag', 'push'])
             record.assert_called_once_with('owner/repo', SHA, digest)
 
-    def test_cleanup_has_no_event_trigger_and_dev_build_runs_on_merges(self):
+    def test_cleanup_has_no_event_trigger_and_nightly_build_runs_on_main_merges(self):
         root = pathlib.Path(__file__).resolve().parents[2]
         cleanup = (root / '.github/workflows/image-retention.yml').read_text()
         self.assertNotIn('pull_request_target:', cleanup)
@@ -298,43 +235,7 @@ class RetentionPolicy(unittest.TestCase):
         self.assertIn('workflow_dispatch:', build)
         self.assertNotIn('  schedule:', build)
         self.assertIn('  push:', build)
-        self.assertIn('branches: [dev]', build)
-
-
-class WorkBranchPolicy(unittest.TestCase):
-    """Assistant issue branches can contain code, docs, or both."""
-
-    def test_numbered_build_accepts_docs_and_code(self):
-        policy = load('branch-policy')
-        policy.validate_work_branch('feature/build-001', ['docs/PLAYBACK.md'])
-        policy.validate_work_branch('feature/build-001', ['server/main.go', 'docs/PLAYBACK.md'])
-        with self.assertRaises(ValueError):
-            policy.validate_work_branch('feature/ordinary', ['docs/PLAYBACK.md'])
-
-    def test_assistant_branches_accept_code_docs_and_mixed_changes(self):
-        policy = load('branch-policy')
-        for name in ['codex/session-cookie-isolation', 'copilot/channel-table-actions']:
-            policy.validate_work_branch(name, ['server/internal/profile/profile.go'])
-            policy.validate_work_branch(name, ['docs/PLAYBACK.md'])
-            policy.validate_work_branch(name, ['server/internal/profile/profile.go', 'docs/PLAYBACK.md'])
-
-    def test_human_branches_preserve_docs_only_separation(self):
-        policy = load('branch-policy')
-        with self.assertRaises(ValueError):
-            policy.validate_work_branch('feature/docs-update', ['docs/PLAYBACK.md'])
-        with self.assertRaises(ValueError):
-            policy.validate_work_branch('docs/code-update', ['server/main.go'])
-        policy.validate_work_branch('docs/update', ['docs/PLAYBACK.md'])
-
-    def test_work_branch_names_remain_restricted(self):
-        policy = load('branch-policy')
-        for name in ['codex/', 'codex/-invalid', 'copilot/', 'copilot/-invalid', 'copilot/bad name', 'main',
-                     'codex/one', 'codex/too-many-description-words', 'copilot/Upper-case',
-                     'dev', 'test', 'promotion/dev-example', 'other/example']:
-            with self.subTest(name=name), self.assertRaises(ValueError):
-                policy.validate_work_branch(name, ['server/main.go'])
-        for name in ['feature/example', 'bugfix/example', 'codex/two-words', 'copilot/fix-v2']:
-            policy.validate_work_branch(name, ['server/main.go'])
+        self.assertIn('branches: [main]', build)
 
 
 class DocumentationPolicy(unittest.TestCase):

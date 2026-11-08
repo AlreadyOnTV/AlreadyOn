@@ -1,67 +1,48 @@
-"""Run promotion shell paths with synthetic helpers; never publish a release."""
-import os
+"""Verify the main-only Nightly and Stable workflow contract."""
 from pathlib import Path
-import subprocess
-import tempfile
 import unittest
 import yaml
 
 ROOT = Path(__file__).resolve().parents[2]
-SHA = 'a' * 40
 
 
-class PromotionOutputs(unittest.TestCase):
-    def test_dev_only_publishes_nightly_after_full_validation(self):
-        workflow = yaml.safe_load((ROOT / '.github/workflows/android-release.yml').read_text())
-        self.assertEqual(workflow['jobs']['candidate']['if'],
-                         "contains(fromJSON('[\"nightly\",\"rc-candidate\"]'), inputs.operation) && github.ref == 'refs/heads/dev'")
-        parent = yaml.safe_load((ROOT / '.github/workflows/rebuild.yml').read_text())
-        self.assertEqual(parent['jobs']['android']['with']['operation'],
-                 "${{ inputs.publication == 'rc-candidate' && 'rc-candidate' || 'nightly' }}")
-        steps = parent['jobs']['publish']['steps']
-        channel = next(step for step in steps if step.get('name') == "Publish nightly and overwrite today's date tag")
-        self.assertEqual(channel['if'], "inputs.publication == 'nightly'")
-        record = next(step for step in steps if step.get('name') == 'Record validated RC image without changing channels')
-        self.assertEqual(record['if'], "contains(fromJSON('[\"rc-candidate\",\"stable-reissue\"]'), inputs.publication)")
-        self.assertNotIn('publish-image.py', record['run'])
-        reissue = next(step for step in steps if step.get('name') == 'Mark fully validated Stable reissue candidate')
-        self.assertEqual(reissue['if'], "inputs.publication == 'stable-reissue'")
-        self.assertEqual(parent['jobs']['android']['if'], "inputs.publication != 'stable-reissue'")
-        for check in ('codeql', 'quality', 'tests', 'android_checks'):
-            self.assertIn(check, parent['jobs']['publish']['needs'])
-        self.assertIn('publish', parent['jobs']['android']['needs'])
-        promotion = workflow['jobs']['promotion']['if']
-        self.assertIn("github.ref_name == 'main'", promotion)
-        self.assertNotIn("'[\"main\",\"dev\"]'", promotion)
+class ReleaseWorkflowContract(unittest.TestCase):
+    def test_main_merge_publishes_nightly_image_and_apks(self):
+        build = yaml.safe_load((ROOT / '.github/workflows/rebuild.yml').read_text())
+        self.assertEqual(build[True]['push']['branches'], ['main'])
+        self.assertEqual(build['jobs']['android']['with']['operation'], 'nightly')
+        self.assertEqual(build['jobs']['android']['needs'], ['select', 'candidate'])
+        candidate_steps = build['jobs']['candidate']['steps']
+        self.assertIn('Record exact validated image for APK provenance',
+                  [step.get('name') for step in candidate_steps])
+        self.assertEqual(build['jobs']['channels']['needs'], ['select', 'candidate', 'android'])
+        image_step = next(step for step in build['jobs']['channels']['steps']
+                  if step.get('name') == 'Publish Nightly and today\'s date aliases')
+        self.assertIn('CI_SOURCE_BRANCH=main', image_step['run'])
+        self.assertIn('CI_PUBLICATION=nightly', image_step['run'])
 
-    def test_push_and_dispatch_outputs_are_machine_readable(self):
-        workflow = yaml.safe_load((ROOT / '.github/workflows/android-release.yml').read_text())
-        for job, step_name in [('promotion', 'Select tested source and release date')]:
-            script = next(s['run'] for s in workflow['jobs'][job]['steps'] if s.get('name') == step_name)
-            for event in ('push', 'workflow_dispatch'):
-                for day in ('', '26.10.11'):
-                    with self.subTest(job=job, event=event, day=day), tempfile.TemporaryDirectory() as tmp:
-                        root = Path(tmp)
-                        helpers = root / 'scripts/ci'
-                        helpers.mkdir(parents=True)
-                        (helpers / 'branch-policy.py').write_text(
-                            "import os\nwith open(os.environ['GITHUB_OUTPUT'],'a') as f: f.write('selected=" + SHA + "\\n')\nprint('Branch and promotion policy passed')\n")
-                        (helpers / 'release_dates.py').write_text((ROOT / 'scripts/ci/release_dates.py').read_text())
-                        (helpers / 'release-context.py').write_text("print('26.10.11')\n")
-                        (helpers / 'android-release.py').write_text(
-                            "import sys\nassert sys.argv[1:] == ['promote-stable','--sha','" + SHA + "','--day','26.10.11']\nprint('Published synthetic promotion')\n")
-                        output = root / 'output'
-                        output.touch()
-                        env = dict(os.environ, GITHUB_EVENT_NAME=event, SOURCE_SHA=SHA, RELEASE_DATE=day,
-                                   GITHUB_OUTPUT=str(output), GITHUB_STEP_SUMMARY=str(root / 'summary'))
-                        result = subprocess.run(['bash', '-euo', 'pipefail', '-c', script], cwd=root, env=env,
-                                                text=True, capture_output=True, check=True)
-                        lines = output.read_text().splitlines()
-                        self.assertTrue(all('=' in line for line in lines), lines)
-                        self.assertIn('selected=' + SHA, lines)
-                        if event == 'push':
-                            self.assertIn('Branch and promotion policy passed', result.stdout)
-                        self.assertNotIn('Branch and promotion policy passed', output.read_text())
+    def test_stable_dispatch_reuses_latest_nightly_image_and_source(self):
+        stable = yaml.safe_load((ROOT / '.github/workflows/release.yml').read_text())
+        self.assertIn('workflow_dispatch', stable[True])
+        self.assertEqual(stable['jobs']['select']['if'], "github.ref_name == 'main'")
+        selector = stable['jobs']['select']['steps'][-1]['run']
+        self.assertIn('plan-latest-stable', selector)
+        image = stable['jobs']['image']['steps'][-1]['run']
+        self.assertIn('CI_PUBLICATION=latest', image)
+        android = stable['jobs']['android']
+        self.assertEqual(android['with']['operation'], 'stable')
+        self.assertEqual(android['with']['source_sha'], '${{ needs.select.outputs.source_sha }}')
+        self.assertEqual(android['with']['predecessor'], '${{ needs.select.outputs.predecessor }}')
+        self.assertEqual(android['needs'], 'select')
+        self.assertEqual(stable['jobs']['image']['needs'], ['select', 'android'])
+        self.assertIn('CI_SELECTED_SHA', image)
+
+    def test_android_workflow_has_only_nightly_and_stable_operations(self):
+        android = yaml.safe_load((ROOT / '.github/workflows/android-release.yml').read_text())
+        self.assertEqual(android['jobs']['candidate']['if'],
+                         "inputs.operation == 'nightly' && github.ref == 'refs/heads/main'")
+        self.assertEqual(android['jobs']['promotion']['if'],
+                         "inputs.operation == 'stable' && github.ref == 'refs/heads/main'")
 
 
 if __name__ == '__main__':

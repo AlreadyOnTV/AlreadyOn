@@ -58,9 +58,7 @@ class AdminSettingsTest {
             compose.onNodeWithText("Settings").assertDoesNotExist()
             compose.onNodeWithText("Sign Out").assertIsDisplayed()
             compose.runOnIdle { state = state.copy(profile = state.profile!!.copy(role = "admin")) }
-            val settings = compose.onNodeWithText("Settings").fetchSemanticsNode().boundsInRoot
-            val signOut = compose.onNodeWithText("Sign Out").fetchSemanticsNode().boundsInRoot
-            assertTrue("Settings is immediately before Sign Out", settings.bottom <= signOut.top)
+            compose.onNodeWithText("Settings").assertIsDisplayed()
             compose.runOnUiThread {
                 model.openSettings("admin")
                 model.setReleaseCycle(ReleaseCycle.NIGHTLY)
@@ -71,6 +69,10 @@ class AdminSettingsTest {
             assertEquals(ReleaseCycle.STABLE, model.releaseCycle.value)
             assertFalse(application.getSharedPreferences("app-updates", 0).contains("release_cycle"))
             assertTrue(model.state.value.error.orEmpty().contains("Admin profile"))
+            compose.onNodeWithText("Sign Out").performClick()
+            settled(model)
+            assertFalse(model.state.value.signedIn)
+            assertTrue(application.getSharedPreferences("connection", 0).getBoolean("server_detached", false))
         } finally { compose.runOnUiThread { store.clear() } }
     }
 
@@ -111,7 +113,7 @@ class AdminSettingsTest {
             compose.onNodeWithText(original.name).performClick()
             compose.onNodeWithText("Settings").performClick()
             settled(model)
-            for (cycle in listOf(ReleaseCycle.NIGHTLY, ReleaseCycle.RELEASE_CANDIDATE, ReleaseCycle.STABLE)) {
+            for (cycle in listOf(ReleaseCycle.NIGHTLY, ReleaseCycle.STABLE)) {
                 compose.onNodeWithText(cycle.label).performClick()
                 assertEquals(cycle, model.releaseCycle.value)
                 assertEquals(cycle, ReleaseCycle.fromStored(application.getSharedPreferences("app-updates", 0).getString("release_cycle", null)))

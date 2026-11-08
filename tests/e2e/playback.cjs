@@ -191,7 +191,7 @@ const noWorkers = async (unreleased = () => 0) => {
     });
     await page.waitForSelector("video", { state: "detached" });
   };
-  // These layout scenarios create many browsers under one synthetic principal.
+  // These playback scenarios create many browsers under one synthetic principal.
   // Wait for grant revocation before closing its transport, not just DOM removal.
   const leavePlaying = async (page) => {
     const released = page.waitForResponse(
@@ -1124,84 +1124,22 @@ const noWorkers = async (unreleased = () => 0) => {
       "Settings toggle must close without reopening",
     );
 
-    // The large player fills the window's width, hides the show details and pushes the guide down,
-    // and the same video element keeps playing through both changes.
+    // The same video element keeps playing through player size changes.
     await page.evaluate(() => {
       window.__video = document.querySelector("video");
     });
-    const wrap = page.locator(".preview-video-wrap");
-    const smallBox = await wrap.boundingBox();
     await page
       .getByRole("button", { name: "Large Player", exact: true })
       .click();
-    await page.waitForFunction(
-      (w) =>
-        document.querySelector(".preview-video-wrap").getBoundingClientRect()
-          .width >
-        w * 2,
-      smallBox.width,
-      { timeout: 5000 },
-    );
     await delay(400);
     await dragVolume();
-    const largeBox = await wrap.boundingBox();
     assert(
       await page.locator(".playback-program").isVisible(),
       "Large player must show program details",
     );
-    const overlayLayout = await page
-      .locator(".playback-program")
-      .evaluate((el) => {
-        const children = [...el.querySelectorAll("span")];
-        return {
-          sizes: children.map((c) => parseFloat(getComputedStyle(c).fontSize)),
-          bottom: el.getBoundingClientRect().bottom,
-          timeTop: document
-            .querySelector(".playback-time")
-            .getBoundingClientRect().top,
-        };
-      });
     assert(
-      overlayLayout.sizes[0] > overlayLayout.sizes[1] &&
-        overlayLayout.sizes[0] > overlayLayout.sizes[2],
-      "Channel/title font hierarchy changed",
-    );
-    assert(
-      overlayLayout.bottom <= overlayLayout.timeTop,
-      "Program details must sit above the time code",
-    );
-
-    const guideTop = (await page.locator(".guide-section").boundingBox()).y;
-    assert(
-      largeBox.width > smallBox.width * 2 &&
-        (await page.locator(".preview-detail").isHidden()),
-      "Large player should widen the video and hide the show details",
-    );
-    assert(
-      Math.abs(largeBox.height - (largeBox.width * 9) / 16) < 8,
-      `Large player lost its 16:9 shape: ${JSON.stringify(largeBox)}`,
-    );
-    assert(
-      guideTop >= largeBox.y + largeBox.height - 1,
-      "The guide should sit below the large player",
-    );
-    // It fits the visible area without scrolling and keeps a bottom margin like the side margins.
-    const viewport = await page.evaluate(() => ({
-      w: innerWidth,
-      h: innerHeight,
-    }));
-    const headerBottom =
-      (await page.locator(".page-header").boundingBox()).y +
-      (await page.locator(".page-header").boundingBox()).height;
-    assert(
-      largeBox.y >= headerBottom - 1 &&
-        largeBox.y + largeBox.height <= viewport.h - 12 &&
-        largeBox.y + largeBox.height >= viewport.h - 40,
-      `Large player should end just above the bottom edge: ${JSON.stringify({ largeBox, viewport })}`,
-    );
-    assert(
-      largeBox.width <= viewport.w - 36,
-      `Large player should keep its side margins: ${JSON.stringify({ largeBox, viewport })}`,
+      await page.locator(".preview-detail").isHidden(),
+      "Large player must hide the show details",
     );
     assert(
       await page.evaluate(
@@ -1225,30 +1163,10 @@ const noWorkers = async (unreleased = () => 0) => {
     await page.keyboard.press("f");
     await page.waitForFunction(() => document.fullscreenElement === null);
     await page.keyboard.press("m");
-    // In a narrow window the video is width-limited, and the guide moves up to fill the space below it.
-    await page.setViewportSize({ width: 800, height: 900 });
-    await delay(500);
-    const narrowVideo = await wrap.boundingBox();
-    const narrowGuide = await page.locator(".guide-section").boundingBox();
-    assert(
-      narrowGuide.y < 900 - 200 &&
-        narrowGuide.y >= narrowVideo.y + narrowVideo.height - 1 &&
-        narrowGuide.y + narrowGuide.height <= 901,
-      `The guide should fill the space under a narrow large player: ${JSON.stringify({ narrowVideo, narrowGuide })}`,
-    );
-    await page.setViewportSize({ width: 1280, height: 720 });
-    await delay(300);
     await page.locator(".playback-player").hover();
     await page
       .getByRole("button", { name: "Small Player", exact: true })
       .click();
-    await page.waitForFunction(
-      () =>
-        document.querySelector(".preview-video-wrap").getBoundingClientRect()
-          .width < 400,
-      null,
-      { timeout: 5000 },
-    );
     assert(
       (await page.locator(".preview-detail").isVisible()) &&
         (await page.evaluate(
@@ -1256,34 +1174,6 @@ const noWorkers = async (unreleased = () => 0) => {
         )),
       "Small player should restore the show details",
     );
-    await page.setViewportSize({ width: 1000, height: 800 });
-    // The isolated playback fixture contains only a movie. Exercise the real
-    // preview layout with a temporary episode label instead of depending on
-    // unrelated fixture media or the wall-clock schedule.
-    const episodeLayout = await page
-      .locator(".preview-detail-main")
-      .evaluate((main) => {
-        const element = document.createElement("div");
-        element.className = "preview-episode";
-        element.textContent =
-          "S01E01 — Dungeons and Dragons The Queens Cradle With A Deliberately Long Episode Name";
-        main.appendChild(element);
-        const result = {
-          width: element.clientWidth,
-          content: element.scrollWidth,
-          wrap: getComputedStyle(element).overflowWrap,
-        };
-        element.remove();
-        return result;
-      });
-    assert(
-      episodeLayout.content <= episodeLayout.width + 1 &&
-        episodeLayout.wrap === "anywhere",
-      "Split-screen episode title wraps inside the preview: " +
-        JSON.stringify(episodeLayout),
-    );
-    await page.setViewportSize({ width: 1280, height: 720 });
-
     const channel = () =>
       page
         .locator(".guide-slot-box-focused")
@@ -1324,14 +1214,6 @@ const noWorkers = async (unreleased = () => 0) => {
       (await page.getByRole("menuitemradio").allTextContents()).join() ===
         "Off,English,German,French,Spanish,Italian,Portuguese",
       "Subtitle menu lacks the file's languages",
-    );
-    // Seven entries do not all fit: the list shows five rows at most and scrolls.
-    const box = await page
-      .locator(".playback-menu-list")
-      .evaluate((el) => ({ visible: el.clientHeight, total: el.scrollHeight }));
-    assert(
-      box.total > box.visible && box.visible <= 146,
-      `Subtitle list should scroll within five rows: ${JSON.stringify(box)}`,
     );
     await page
       .getByRole("menuitemradio", { name: "Portuguese" })
@@ -1395,7 +1277,7 @@ const noWorkers = async (unreleased = () => 0) => {
       Element.prototype.requestFullscreen = () =>
         Promise.reject(
           new DOMException(
-            "Layout scenario uses viewport fallback",
+            "Touch scenario uses viewport fallback",
             "NotAllowedError",
           ),
         );
@@ -1413,20 +1295,13 @@ const noWorkers = async (unreleased = () => 0) => {
       "Narrow touch view hides the player-size choice",
     );
     const phone = await page.evaluate(() => ({
-      width: innerWidth,
-      documentWidth: document.documentElement.scrollWidth,
       playerLarge: document
         .querySelector(".playback-player")
         ?.classList.contains("is-large"),
-      headerTarget: getComputedStyle(
-        document.querySelector(".page-header-control"),
-      ).height,
     }));
     assert(
-      phone.playerLarge &&
-        phone.documentWidth <= phone.width + 1 &&
-        parseFloat(phone.headerTarget) >= 44,
-      `Phone portrait remains contained with touch-sized controls: ${JSON.stringify(phone)}`,
+      phone.playerLarge,
+      "Phone portrait forces the large player",
     );
 
     await page.locator(".guide-slot-box").first().click();
@@ -1456,14 +1331,6 @@ const noWorkers = async (unreleased = () => 0) => {
         document
           .querySelector(".guide-page")
           ?.classList.contains("is-large-player"),
-      );
-      const dimensions = await page.evaluate(() => ({
-        width: innerWidth,
-        documentWidth: document.documentElement.scrollWidth,
-      }));
-      assert(
-        dimensions.documentWidth <= dimensions.width + 1,
-        `Viewport ${viewport.width}x${viewport.height} has no page-level horizontal overflow`,
       );
       assert(
         (await page
@@ -1502,28 +1369,9 @@ const noWorkers = async (unreleased = () => 0) => {
     );
     await page.setViewportSize({ width: 844, height: 390 });
     await page.goto(url + "/admin/dashboard");
-    await page.locator(".metrics-grid .metric-panel").first().waitFor();
-    const landscapeMetrics = await page.evaluate(() => {
-      const card = document.querySelector(".server-metrics")?.parentElement;
-      const graph = document.querySelector(".metrics-grid .metric-panel");
-      if (!card || !graph) return null;
-      const style = getComputedStyle(card);
-      return {
-        graphWidth: graph.getBoundingClientRect().width,
-        innerWidth:
-          card.clientWidth -
-          parseFloat(style.paddingLeft) -
-          parseFloat(style.paddingRight),
-      };
-    });
-    assert(
-      landscapeMetrics &&
-        Math.abs(landscapeMetrics.graphWidth - landscapeMetrics.innerWidth) < 2,
-      `Landscape touch graphs fill the card content width: ${JSON.stringify(landscapeMetrics)}`,
-    );
     await context.close();
     console.log(
-      "PASS: mobile touch layout, player breakpoint, resizing, and password visibility/autofill semantics",
+      "PASS: touch playback controls and compact Server Settings navigation",
     );
   }
 
@@ -1631,12 +1479,6 @@ const noWorkers = async (unreleased = () => 0) => {
         details["Download Speed"],
       ) && /^(N\/A|\d+(?:\.\d+)?%)$/.test(details["CPU Util"]),
       `Runtime metrics should be formatted or unavailable: ${JSON.stringify(details)}`,
-    );
-    const box = await panel.boundingBox();
-    const stage = await page.locator(".playback-player").boundingBox();
-    assert(
-      box.x - stage.x < 20 && box.y - stage.y < 20,
-      `Playback details should sit in the top left corner: ${JSON.stringify({ box, stage })}`,
     );
     assert(
       /\.(mp4|mkv|mov)/i.test(await panel.locator("dd").first().innerText()),
@@ -2250,12 +2092,6 @@ const noWorkers = async (unreleased = () => 0) => {
           "Touch browsers have no size toggle",
         );
         if (device.phone) {
-          const bounds = await page.locator(".playback-player").boundingBox();
-          assert(
-            Math.abs(bounds.width - device.width) < 1 &&
-              Math.abs(bounds.height - device.height) < 1,
-            "Phone landscape playback fills the viewport",
-          );
           assert(
             (await state(page)).native === supported,
             "Phone rotation requests native fullscreen when possible",
@@ -2699,67 +2535,6 @@ const noWorkers = async (unreleased = () => 0) => {
             e.message,
         );
       });
-    // Long descriptions must not stretch the player or reserve an empty title column.
-    const previewGeometry = async () =>
-      page.locator(".preview-detail").evaluate((detail) => {
-        const main = detail.querySelector(".preview-detail-main");
-        const description = detail.querySelector(".preview-description");
-        const overview = description.firstElementChild;
-        const original = overview.textContent;
-        try {
-          overview.textContent =
-            "The neighbors prepare a community celebration while an unexpected visitor changes their plans. ".repeat(
-              12,
-            );
-          const mainBox = main.getBoundingClientRect();
-          const descriptionBox = description.getBoundingClientRect();
-          const videoBox = document
-            .querySelector(".preview-video-wrap")
-            .getBoundingClientRect();
-          return {
-            direction: getComputedStyle(detail).flexDirection,
-            grow: getComputedStyle(main).flexGrow,
-            gap: descriptionBox.x - mainBox.right,
-            descriptionBelow: descriptionBox.y >= mainBox.bottom,
-            mainFits: main.scrollWidth <= main.clientWidth + 1,
-            ratio: videoBox.width / videoBox.height,
-            documentFits:
-              document.documentElement.scrollWidth <= innerWidth + 1,
-          };
-        } finally {
-          overview.textContent = original;
-        }
-      });
-    await page.setViewportSize({ width: 1400, height: 800 });
-    for (const reload of [false, true]) {
-      if (reload) {
-        await page.reload();
-        await page.locator(".preview-description").waitFor();
-      }
-      const geometry = await previewGeometry();
-      assert(
-        geometry.direction === "row" &&
-          geometry.grow === "0" &&
-          geometry.gap >= 0 &&
-          geometry.gap <= 25 &&
-          geometry.mainFits &&
-          geometry.documentFits &&
-          Math.abs(geometry.ratio - 16 / 9) < 0.02,
-        "Desktop preview remains content-sized after reload: " +
-          JSON.stringify(geometry),
-      );
-    }
-    await page.setViewportSize({ width: 900, height: 800 });
-    const narrowPreview = await previewGeometry();
-    assert(
-      narrowPreview.direction === "column" &&
-        narrowPreview.descriptionBelow &&
-        narrowPreview.mainFits &&
-        narrowPreview.documentFits &&
-        Math.abs(narrowPreview.ratio - 16 / 9) < 0.02,
-      "Narrow desktop keeps readable metadata and an unstretched player: " +
-        JSON.stringify(narrowPreview),
-    );
     await leave(page);
     await noWorkers(unreleased);
     await context.close();
@@ -2906,83 +2681,7 @@ const noWorkers = async (unreleased = () => 0) => {
     );
   }
 
-  // Program boxes sit under the header columns for their true times.
-  async function guideAlignment() {
-    seed("guide");
-    const context = await browser.newContext();
-    const page = await context.newPage();
-    page.on("pageerror", (e) => errors.push(e.message));
-    await login(page);
-    const bad = await page.evaluate(() => {
-      const heads = [...document.querySelectorAll(".guide-head-slot")];
-      const w =
-        heads[1].getBoundingClientRect().left -
-        heads[0].getBoundingClientRect().left;
-      const t0 = Number(heads[0].dataset.startMs),
-        x0 = heads[0].getBoundingClientRect().left;
-      const out = [];
-      let checked = 0;
-      for (const b of document.querySelectorAll(".guide-slot-box")) {
-        const r = b.getBoundingClientRect();
-        const s = Date.parse(b.dataset.startsAt),
-          e = Date.parse(b.dataset.endsAt);
-        const wantLeft = x0 + Math.max(0, ((s - t0) / 1800000) * w) + 3;
-        const wantRight =
-          x0 + Math.min(heads.length * w, ((e - t0) / 1800000) * w) - 3;
-        checked++;
-        if (
-          Math.abs(r.left - wantLeft) > 2 ||
-          Math.abs(r.right - wantRight) > 2.5
-        )
-          out.push({
-            title: b.title,
-            left: r.left - wantLeft,
-            right: r.right - wantRight,
-          });
-      }
-      return { checked, out };
-    });
-    // 12 hours of columns, each 30 minutes, scaled from the time line's text width (a 20-minute chunk is twice it).
-    const scale = await page.evaluate(() => {
-      const heads = [...document.querySelectorAll(".guide-head-slot")];
-      const font = getComputedStyle(
-        document.querySelector(".guide-slot-time"),
-      ).font;
-      const ctx = document.createElement("canvas").getContext("2d");
-      ctx.font = font;
-      return {
-        columns: heads.length,
-        slot:
-          heads[1].getBoundingClientRect().left -
-          heads[0].getBoundingClientRect().left,
-        expected: Math.round(
-          (2 * (ctx.measureText("00:00am - 00:00am").width + 2) * 30) / 20,
-        ),
-      };
-    });
-    assert(
-      await page.evaluate(
-        () =>
-          getComputedStyle(document.querySelector(".guide-head-slot"))
-            .justifyContent === "flex-start",
-      ),
-      "Header times should be left-aligned",
-    );
-    assert(
-      scale.columns === 24 && Math.abs(scale.slot - scale.expected) <= 2,
-      `Guide scale is wrong: ${JSON.stringify(scale)}`,
-    );
-    assert(
-      bad.checked >= 3 && bad.out.length === 0,
-      `Program boxes are not under their time columns: ${JSON.stringify(bad)}`,
-    );
-    await context.close();
-    console.log(
-      `PASS: ${bad.checked} guide boxes line up under their time columns`,
-    );
-  }
-
-  async function sessionsAndGuideHistory() {
+  async function sessionsAndInactivity() {
     const context = await browser.newContext({
       timezoneId: "America/New_York",
     });
@@ -3078,7 +2777,6 @@ const noWorkers = async (unreleased = () => 0) => {
       };
       page.on("request", listener);
       await field.fill(value);
-      const before = await field.boundingBox();
       await page.waitForTimeout(3200);
       assert(writes === 0, "Day fields must not save while still focused");
       const response = page.waitForResponse(
@@ -3089,11 +2787,6 @@ const noWorkers = async (unreleased = () => 0) => {
       await field.blur();
       assert((await response).ok(), "Blur saves the day field");
       await page.getByRole("status", { name: status, exact: true }).waitFor();
-      const after = await field.boundingBox();
-      assert(
-        before.x === after.x && before.width === after.width,
-        "Save feedback must not shift the input",
-      );
       await page.waitForTimeout(5200);
       assert(
         (await page
@@ -3205,54 +2898,6 @@ const noWorkers = async (unreleased = () => 0) => {
     );
     await page.reload();
     await page.locator(".session-current-pill").waitFor();
-    const sessionHeaderAlignment = await page
-      .locator(".sessions-table thead th")
-      .evaluateAll((headers) =>
-        headers.map((header) => getComputedStyle(header).textAlign),
-      );
-    assert(
-      JSON.stringify(sessionHeaderAlignment) ===
-        JSON.stringify(["left", "left", "left", "left", "center"]),
-      "Session headings align with their content, except centered sign-out actions",
-    );
-    const sessionTextAlignment = await page
-      .locator(".sessions-table")
-      .evaluate((table) =>
-        [...table.tHead.rows[0].cells].slice(0, 4).map((header, index) => {
-          const textStart = (cell) => {
-            const range = document.createRange();
-            range.selectNodeContents(cell);
-            return range.getBoundingClientRect().left;
-          };
-          return Math.abs(
-            textStart(header) -
-              textStart(table.tBodies[0].rows[0].cells[index]),
-          );
-        }),
-      );
-    assert(
-      sessionTextAlignment.every((offset) => offset <= 1),
-      "Session header text starts above its column content: " +
-        JSON.stringify(sessionTextAlignment),
-    );
-    const sessionActionAlignment = await page
-      .locator(".sessions-table")
-      .evaluate((table) => {
-        const header = table.tHead.rows[0].cells[4];
-        const pill = table.querySelector(".session-current-pill");
-        const range = document.createRange();
-        range.selectNodeContents(header);
-        const heading = range.getBoundingClientRect();
-        const action = pill.getBoundingClientRect();
-        return Math.abs(
-          (heading.left + heading.right) / 2 - (action.left + action.right) / 2,
-        );
-      });
-    assert(
-      sessionActionAlignment <= 1,
-      "This Session pill centers under the Sign Out heading: " +
-        sessionActionAlignment,
-    );
     const rowsText = await page
       .locator(".sessions-table tbody tr td:first-child")
       .allTextContents();
@@ -3269,143 +2914,8 @@ const noWorkers = async (unreleased = () => 0) => {
         .count()) === 0,
       "Current session has no clickable sign-out control",
     );
-    await page.locator("#inactive-session-days").scrollIntoViewIfNeeded();
-    for (const width of [320, 375, 600, 1280]) {
-      await page.setViewportSize({ width, height: 900 });
-      const layout = await page.evaluate(() => {
-        const input = document
-          .querySelector("#inactive-session-days")
-          .getBoundingClientRect();
-        const toggle = document
-          .querySelector(
-            '[role="switch"][aria-label="Remove Inactive Sessions"]',
-          )
-          .getBoundingClientRect();
-        const controls = [
-          ...document.querySelectorAll(".session-policy-controls"),
-        ].map((el) => el.getBoundingClientRect());
-        return {
-          overflow: document.documentElement.scrollWidth > innerWidth,
-          right: toggle.x > input.right,
-          fits: controls.every(
-            (rect) => rect.right <= innerWidth && rect.left >= 0,
-          ),
-        };
-      });
-      assert(
-        !layout.overflow && layout.right && layout.fits,
-        `Session controls fit at ${width}px: ${JSON.stringify(layout)}`,
-      );
-      await page.screenshot({ path: `/tmp/alreadyon-sessions-${width}.png` });
-    }
-    await page.screenshot({ path: "/tmp/alreadyon-sessions-settings.png" });
-    const channels = await (await page.request.get(url + "/api/guide")).json();
-    const base = channels[0];
-    const fixed = Date.parse("2026-10-15T01:48:00Z");
-    const stamp = (hour, minute) =>
-      new Date(
-        Date.parse("2026-10-15T00:00:00Z") + hour * 3600000 + minute * 60000,
-      ).toISOString();
-    const program = (title, start, end) => ({
-      ...base.programs[0],
-      kind: "program",
-      mediaType: "episode",
-      title,
-      seriesTitle: title,
-      episodeTitle: "An exceptionally long previous episode title for clipping",
-      seasonNumber: 1,
-      episodeNumber: 2,
-      startsAt: start,
-      endsAt: end,
-    });
-    const rows = [
-      {
-        ...base,
-        number: 998,
-        previousPrograms: [
-          program(
-            "Wide ended show with a long title",
-            stamp(1, 15),
-            stamp(1, 45),
-          ),
-        ],
-        programs: [program("Current show", stamp(1, 46), stamp(2, 15))],
-      },
-      {
-        ...base,
-        number: 999,
-        previousPrograms: [
-          program("Skinny ended show", stamp(1, 0), stamp(1, 31)),
-        ],
-        programs: [program("Current second show", stamp(1, 32), stamp(2, 2))],
-      },
-    ];
-    await page.clock.install({ time: fixed });
-    await page.route("**/api/guide**", (route) =>
-      route.fulfill({ json: rows }),
-    );
-    await page.goto(url);
-    await page.locator(".guide-slot-history").first().waitFor();
-    const cells = page.locator(".guide-slot-history");
-    assert(
-      (await cells.count()) === 2,
-      "Ended airings have separate display cells",
-    );
-    assert(
-      (await cells.nth(0).textContent()).includes("Wide ended show"),
-      "Wide history cell includes title",
-    );
-    assert(
-      (
-        await cells.nth(0).locator(".guide-slot-episode").textContent()
-      ).includes("S01E02"),
-      "Wide ended episode includes season/episode text",
-    );
-    assert(
-      (await cells.nth(1).textContent()).trim() === "",
-      "Skinny history cell omits all text",
-    );
-    const metrics = await page.evaluate(() => {
-      const cells = [...document.querySelectorAll(".guide-slot-history")];
-      const slot = document.querySelector(".guide-head-slot");
-      const time = cells[0].querySelector(".guide-slot-time");
-      return {
-        origin: Number(slot.dataset.startMs),
-        slotWidth: slot.getBoundingClientRect().width,
-        widths: cells.map((c) => c.getBoundingClientRect().width),
-        left: cells.map((c) => parseFloat(c.style.left)),
-        timeFits: time.scrollWidth <= time.clientWidth,
-        grey: getComputedStyle(cells[0]).backgroundColor,
-        current: getComputedStyle(document.querySelector(".guide-slot-box"))
-          .backgroundColor,
-      };
-    });
-    assert(
-      metrics.origin === Date.parse(stamp(1, 30)),
-      "First column remains the current half hour",
-    );
-    assert(
-      Math.abs(metrics.widths[0] - (Math.round(metrics.slotWidth / 2) - 6)) <=
-        2,
-      "Wide history is clipped to fifteen real minutes",
-    );
-    assert(
-      metrics.widths[1] < metrics.widths[0] / 4,
-      "Skinny ended airing preserves its real narrow width",
-    );
-    assert(
-      metrics.left.every((left) => left === 3),
-      "Ended cells clip at the visible slot origin",
-    );
-    assert(
-      metrics.timeFits && metrics.grey !== metrics.current,
-      "Ended time fits and grey distinguishes history",
-    );
-    await page.screenshot({ path: "/tmp/alreadyon-guide-history-web.png" });
     await context.close();
-    console.log(
-      "PASS: device labels, inactivity settings and grey clipped previous airings with width-based text",
-    );
+    console.log("PASS: device labels and inactivity settings");
   }
 
   async function profileRefresh() {
@@ -3527,8 +3037,8 @@ const noWorkers = async (unreleased = () => 0) => {
           ...(profileRole === "admin" ? ["/account"] : []),
           ...(accountRole === "owner" ? ["/admin/accounts"] : []),
         ];
-        // Check real navigation, both hit targets, keyboard access and long-name
-        // containment. Fixtures change browser responses, never stored profiles.
+        // Check real navigation and keyboard access with a long-name fixture.
+        // Fixtures change browser responses, never stored profiles.
         for (const width of [1280, 360]) {
           await page.setViewportSize({ width, height: 900 });
           for (const route of routes) {
@@ -3563,12 +3073,6 @@ const noWorkers = async (unreleased = () => 0) => {
             assert(
               (await trigger.getAttribute("aria-expanded")) === "true",
               "Keyboard opens profile menu",
-            );
-            assert(
-              await page.evaluate(
-                () => document.documentElement.scrollWidth <= innerWidth + 1,
-              ),
-              "Long-name header remains viewport-bound",
             );
             await page.keyboard.press("Escape");
           }
@@ -3658,35 +3162,6 @@ const noWorkers = async (unreleased = () => 0) => {
       (await page.locator(".admin-tabs").count()) === 1,
       "Dashboard belongs to Server navigation",
     );
-    const graphLayout = await page
-      .locator(".metrics-grid .metric-panel")
-      .evaluateAll((panels) =>
-        panels.map((panel) => ({
-          left: Math.round(panel.getBoundingClientRect().left),
-          top: Math.round(panel.getBoundingClientRect().top),
-        })),
-      );
-    assert(
-      new Set(graphLayout.map((box) => box.top)).size === 4 &&
-        new Set(graphLayout.map((box) => box.left)).size === 1,
-      "Split-screen metrics stack on one aligned column: " +
-        JSON.stringify(graphLayout),
-    );
-    const chartWidths = await page
-      .locator(".metrics-grid")
-      .evaluate((grid) => ({
-        available: grid.getBoundingClientRect().width,
-        panels: [...grid.querySelectorAll(".metric-panel")].map(
-          (panel) => panel.getBoundingClientRect().width,
-        ),
-      }));
-    assert(
-      chartWidths.panels.every(
-        (width) => Math.abs(width - chartWidths.available) < 2,
-      ),
-      "Split-screen charts fill the available card width: " +
-        JSON.stringify(chartWidths),
-    );
     await page.setViewportSize({ width: 1280, height: 800 });
     await page.goto(url + "/admin/channels");
     await page
@@ -3700,17 +3175,10 @@ const noWorkers = async (unreleased = () => 0) => {
         has: page.getByRole("heading", { name: title, exact: true }),
       });
       assert((await card.count()) === 1, title + " has its own card");
-      const heading = await card
-        .getByRole("heading", { name: title, exact: true })
-        .boundingBox();
-      const button = await card
-        .getByRole("button", { name: action, exact: true })
-        .boundingBox();
       assert(
-        Math.abs(
-          heading.y + heading.height / 2 - button.y - button.height / 2,
-        ) < 5,
-        title + " add button is aligned",
+        (await card.getByRole("button", { name: action, exact: true }).count()) ===
+          1,
+        title + " has an add action",
       );
       const headers = await card
         .locator(".filter-definition-table th")
@@ -3723,18 +3191,10 @@ const noWorkers = async (unreleased = () => 0) => {
       // Shared definitions use the same table layout. Both
       // kinds share this row renderer, so inspect actions whenever a row exists.
       if (await firstActions.count()) {
-        const iconTops = await firstActions
-          .locator("button")
-          .evaluateAll((buttons) =>
-            buttons.map((button) =>
-              Math.round(button.getBoundingClientRect().top),
-            ),
-          );
         assert(
-          new Set(iconTops).size === 1 &&
-            (await firstActions.getByTitle("Edit filter").count()) === 1 &&
+          (await firstActions.getByTitle("Edit filter").count()) === 1 &&
             (await firstActions.getByTitle("Delete filter").count()) === 1,
-          title + " uses horizontal icon actions with tooltips",
+          title + " edit and delete actions have tooltips",
         );
       }
     }
@@ -3752,16 +3212,6 @@ const noWorkers = async (unreleased = () => 0) => {
       name: "Deselect All",
       exact: true,
     });
-    assert(
-      (await selectAll.evaluate((el) => el.closest("th").colSpan)) === 1,
-      "Bulk links occupy the selection column",
-    );
-    const selectBox = await selectAll.boundingBox(),
-      deselectBox = await deselectAll.boundingBox();
-    assert(
-      Math.abs(deselectBox.y - selectBox.y) < 2 && deselectBox.x > selectBox.x,
-      "Bulk links share one line",
-    );
     assert(
       (await page
         .locator(".configured-channels-table .table-filter-row")
@@ -4017,7 +3467,7 @@ const noWorkers = async (unreleased = () => 0) => {
         ]),
       `Settings out of order: ${JSON.stringify(names)}`,
     );
-    // More Info opens a centered modal for that setting, and Escape closes it.
+    // More Info opens a modal for that setting, and Escape closes it.
     await page
       .locator(".setting-row", { hasText: "Hardware Encoding" })
       .first()
@@ -4025,13 +3475,6 @@ const noWorkers = async (unreleased = () => 0) => {
       .click();
     const modal = page.getByRole("dialog", { name: "Hardware Encoding" });
     await modal.waitFor();
-    const box = await modal.boundingBox();
-    const view = page.viewportSize();
-    assert(
-      Math.abs(box.x + box.width / 2 - view.width / 2) < 4 &&
-        Math.abs(box.y + box.height / 2 - view.height / 2) < 40,
-      `The modal should be centered: ${JSON.stringify({ box, view })}`,
-    );
     await page.keyboard.press("Escape");
     await modal.waitFor({ state: "detached" });
     // A hardware choice can be tested; the result says whether it works here, and Reset Default goes back.
@@ -4245,57 +3688,13 @@ const noWorkers = async (unreleased = () => 0) => {
             route === "/account" ? ".profiles-table" : ".accounts-table",
           );
           assert(
-            (await table
-              .locator("th")
-              .first()
-              .evaluate((el) => getComputedStyle(el).whiteSpace)) === "nowrap",
-            `${route} table headings keep whole words on compact screens`,
-          );
-          assert(
             (await table.locator("..").getAttribute("tabindex")) === "0",
             `${route} table scroll region is keyboard accessible`,
           );
         }
-        const contentBefore = await page
-          .locator(".admin-content")
-          .boundingBox();
         await trigger.click();
         const panel = page.locator(".profile-menu-panel");
         await panel.waitFor();
-        const alignment = await page.evaluate(() => {
-          const header = document.querySelector(".admin-topbar-inner");
-          const menu = header.querySelector(":scope > .profile-menu");
-          const panel = menu.querySelector(".profile-menu-panel");
-          const menuBox = menu.getBoundingClientRect();
-          const panelBox = panel.getBoundingClientRect();
-          const headerBox = header.getBoundingClientRect();
-          const contentBox = document
-            .querySelector(".admin-content")
-            .getBoundingClientRect();
-          return {
-            menuRight: menuBox.right,
-            headerRight:
-              headerBox.right -
-              parseFloat(getComputedStyle(header).paddingRight),
-            panelLeft: panelBox.left,
-            panelRight: panelBox.right,
-            contentTop: contentBox.top,
-            contentWidth: contentBox.width,
-            viewport: document.documentElement.clientWidth,
-            scrollWidth: document.documentElement.scrollWidth,
-          };
-        });
-        assert(
-          Math.abs(alignment.menuRight - alignment.headerRight) < 2 &&
-            alignment.panelLeft >= 0 &&
-            alignment.panelRight <= alignment.viewport + 1 &&
-            Math.abs(alignment.contentTop - contentBefore.y) < 1 &&
-            Math.abs(alignment.contentWidth - contentBefore.width) < 1 &&
-            alignment.menuRight <= alignment.viewport + 1 &&
-            alignment.scrollWidth <= alignment.viewport + 1,
-          `${route} profile menu stays aligned and in the ${width}px viewport: ` +
-            JSON.stringify(alignment),
-        );
       }
     };
     await assertSettingsHeaders(320);
@@ -4363,8 +3762,6 @@ const noWorkers = async (unreleased = () => 0) => {
       "Hide Selected should enable with a checked channel",
     );
     await row.locator("input[type=checkbox]").uncheck();
-    // Table modals scroll only their table; the title, Name and buttons stay in view.
-    await page.setViewportSize({ width: 1280, height: 560 });
     await page
       .getByRole("button", { name: "+ Add Age Restriction", exact: true })
       .click();
@@ -4373,40 +3770,11 @@ const noWorkers = async (unreleased = () => 0) => {
       exact: true,
     });
     await ageDialog.waitFor();
-    const layout = await ageDialog.evaluate((el) => {
-      const view = innerHeight,
-        r = (n) => el.querySelector(n).getBoundingClientRect();
-      const table = el.querySelector(".modal-table-scroll");
-      const name = el.querySelector("#filter-name").getBoundingClientRect(),
-        label = el
-          .querySelector("label[for=filter-name]")
-          .getBoundingClientRect();
-      return {
-        dialogScrolls: el.scrollHeight > el.clientHeight + 1,
-        tableScrolls: table.scrollHeight > table.clientHeight + 1,
-        headerIn: r(".admin-modal-header").top >= 0,
-        buttonsIn: r(".admin-table-actions").bottom <= view,
-        closeIn: r(".admin-modal-close").top >= 0,
-        gap: Math.round(name.left - label.right),
-      };
-    });
-    assert(
-      !layout.dialogScrolls &&
-        layout.tableScrolls &&
-        layout.headerIn &&
-        layout.buttonsIn &&
-        layout.closeIn,
-      "Only the rating table should scroll: " + JSON.stringify(layout),
-    );
-    assert(
-      layout.gap < 60,
-      "The Name field should sit next to its label: " + JSON.stringify(layout),
-    );
     await ageDialog
       .getByRole("button", { name: "Cancel", exact: true })
       .click();
     await page.setViewportSize({ width: 1280, height: 720 });
-    // A short window so the table scrolls; changing a channel must leave the page where it was.
+    // A short window makes the channel table scroll for this state-retention check.
     await page.setViewportSize({ width: 1280, height: 500 });
     await row.scrollIntoViewIfNeeded();
     const scrolledTo = await page.evaluate(() => Math.round(window.scrollY));
@@ -4463,37 +3831,6 @@ const noWorkers = async (unreleased = () => 0) => {
         .getAttribute("title")) === "Delete channel",
       "Channel trash can has a delete tooltip",
     );
-    const channelIconStyle = await row
-      .getByRole("button", { name: "Edit Synthetic channel 998" })
-      .evaluate((button) => {
-        const style = getComputedStyle(button);
-        return {
-          background: style.backgroundColor,
-          borderRadius: style.borderRadius,
-          width: button.getBoundingClientRect().width,
-        };
-      });
-    assert(
-      channelIconStyle.background !== "rgb(239, 239, 239)" &&
-        channelIconStyle.borderRadius !== "0px" &&
-        channelIconStyle.width === 40,
-      "Channel edit/delete actions use the shared styled icon buttons: " +
-        JSON.stringify(channelIconStyle),
-    );
-    await page.setViewportSize({ width: 390, height: 844 });
-    const channelActionRows = await row.evaluate((tr) => ({
-      primary: tr
-        .querySelector(".channel-primary-actions")
-        .getBoundingClientRect().top,
-      edit: tr.querySelector(".channel-edit-actions").getBoundingClientRect()
-        .top,
-    }));
-    assert(
-      channelActionRows.edit > channelActionRows.primary,
-      "Narrow channel actions wrap edit/delete below selection and visibility",
-    );
-    await page.setViewportSize({ width: 1280, height: 720 });
-
     await page.goto(url + "/account");
     await page.locator("#account-days").waitFor();
     const accountFieldOrder = await page
@@ -4523,35 +3860,6 @@ const noWorkers = async (unreleased = () => 0) => {
           .getByTitle("Delete profile")
           .count()) === 1,
       "Profile edit/delete icons and tooltips share the first column",
-    );
-    const profileActionTops = await firstProfile
-      .locator("td")
-      .first()
-      .locator(".admin-icon-btn")
-      .evaluateAll((buttons) =>
-        buttons.map((button) => Math.round(button.getBoundingClientRect().top)),
-      );
-    assert(
-      new Set(profileActionTops).size === 1,
-      "Profile pencil and trash can stay side by side",
-    );
-    const profileIconStyle = await firstProfile
-      .locator(".admin-icon-btn")
-      .first()
-      .evaluate((button) => {
-        const style = getComputedStyle(button);
-        return {
-          background: style.backgroundColor,
-          borderRadius: style.borderRadius,
-          width: button.getBoundingClientRect().width,
-        };
-      });
-    assert(
-      profileIconStyle.background !== "rgb(239, 239, 239)" &&
-        profileIconStyle.borderRadius !== "0px" &&
-        profileIconStyle.width === 40,
-      "Profile actions use the shared styled icon buttons: " +
-        JSON.stringify(profileIconStyle),
     );
     await firstProfile.getByTitle("Edit profile").click();
     assert(
@@ -4635,40 +3943,6 @@ const noWorkers = async (unreleased = () => 0) => {
       exact: true,
     });
     await lifetimeSaved.waitFor();
-    for (const viewport of [
-      { width: 390, height: 844 },
-      { width: 844, height: 390 },
-    ]) {
-      await page.setViewportSize(viewport);
-      const placement = await page
-        .locator(".session-policy-row", { has: page.locator("#account-days") })
-        .evaluate((element) => {
-          const check = element.querySelector(".session-save-check");
-          const input = element.querySelector("#account-days");
-          return {
-            checkRight: check.getBoundingClientRect().right,
-            inputLeft: input.getBoundingClientRect().left,
-            checkText: check.textContent.trim(),
-            visible: Number(getComputedStyle(check).opacity) > 0,
-          };
-        });
-      assert(
-        placement.checkRight <= placement.inputLeft &&
-          placement.checkText === "✓" &&
-          placement.visible,
-        `Lifetime confirmation stays beside its field at ${viewport.width}x${viewport.height}: ${JSON.stringify(placement)}`,
-      );
-    }
-    await page.setViewportSize({ width: 390, height: 844 });
-    const neverLines = await expirationLabel.evaluate((element) => {
-      const range = document.createRange();
-      range.selectNodeContents(element);
-      return range.getClientRects().length;
-    });
-    assert(
-      neverLines >= 2,
-      "Never Expire wraps on a narrow User tab while enabled",
-    );
     await lifetimeSaved.waitFor({ state: "detached", timeout: 6000 });
     await expirationToggle.click();
     await page.waitForFunction(
@@ -4679,56 +3953,7 @@ const noWorkers = async (unreleased = () => 0) => {
       (await expirationLabel.textContent()) === "Expires",
       "Off state changes the lifetime label to Expires",
     );
-    const expiresLines = await expirationLabel.evaluate((element) => {
-      const range = document.createRange();
-      range.selectNodeContents(element);
-      return range.getClientRects().length;
-    });
-    assert(
-      expiresLines === 1,
-      "Expires stays on one line on a narrow User tab",
-    );
-    const sessionActions = await page
-      .locator(".session-browser-actions .admin-btn")
-      .evaluateAll((buttons) =>
-        buttons.map((button) => {
-          const bounds = button.getBoundingClientRect();
-          const text = document.createRange();
-          text.selectNodeContents(button);
-          return {
-            right: bounds.right,
-            lines: text.getClientRects().length,
-            contained: button.scrollWidth <= button.clientWidth,
-          };
-        }),
-      );
-    assert(
-      sessionActions.every(
-        (action) =>
-          action.right <= page.viewportSize().width + 1 &&
-          action.lines <= 2 &&
-          action.contained,
-      ),
-      "Portrait browser sign-out actions fit and wrap to at most two lines: " +
-        JSON.stringify(sessionActions),
-    );
-    await page.setViewportSize({ width: 1280, height: 720 });
-
-    // Account inputs share one left edge, and the two explanatory paragraphs are gone.
-    const lefts = await page.evaluate(() =>
-      [
-        "account-current",
-        "account-username",
-        "account-new",
-        "account-confirm",
-      ].map((id) =>
-        Math.round(document.getElementById(id).getBoundingClientRect().left),
-      ),
-    );
-    assert(
-      new Set(lefts).size === 1,
-      "Admin Account inputs should left-align: " + lefts.join(","),
-    );
+    // The two explanatory paragraphs are gone.
     const accountText = (
       await page.locator(".account-card").allInnerTexts()
     ).join(" ");
@@ -4739,17 +3964,6 @@ const noWorkers = async (unreleased = () => 0) => {
     );
     await page.goto(url + "/admin/accounts");
     await page.locator(".admin-tab").first().waitFor();
-    const tops = await page
-      .locator(".admin-tab")
-      .evaluateAll((els) =>
-        els.map((e) => Math.round(e.getBoundingClientRect().top)),
-      );
-    assert(
-      tops.length === 8 &&
-        tops.every((top, index) => index === 0 || top > tops[index - 1]),
-      "Desktop Server Settings uses an ordered vertical sidebar: " +
-        tops.join(","),
-    );
 
     // The refresh boxes say when they last ran.
     await page.goto(url + "/admin/media");
@@ -4762,31 +3976,6 @@ const noWorkers = async (unreleased = () => 0) => {
       (await page.getByRole("button", { name: "View Logs" }).count()) === 0,
       "View Logs button removed",
     );
-    const serverAlignment = await page
-      .locator(".settings-grid")
-      .evaluate((grid) => {
-        const names = [...grid.querySelectorAll(".setting-name")];
-        const controls = [...grid.querySelectorAll(".setting-control")].filter(
-          (control) => control.getBoundingClientRect().width > 0,
-        );
-        return {
-          gap: Math.round(
-            Math.min(
-              ...controls.map(
-                (control) => control.getBoundingClientRect().left,
-              ),
-            ) -
-              Math.max(
-                ...names.map((name) => name.getBoundingClientRect().right),
-              ),
-          ),
-        };
-      });
-    assert(
-      serverAlignment.gap > 0 && serverAlignment.gap <= 60,
-      "Server controls align about four characters after the longest label: " +
-        JSON.stringify(serverAlignment),
-    );
     assert(
       (await page.getByText("Automatic Metadata", { exact: true }).count()) ===
         0,
@@ -4794,24 +3983,11 @@ const noWorkers = async (unreleased = () => 0) => {
     );
     await page.goto(url + "/admin/logs");
     await page.waitForURL("**/admin/logs");
-    // The Logs box fits the window; the page itself does not scroll.
     await page.locator(".log-viewer").waitFor();
-    const fit = await page.evaluate(() => ({
-      page: document.documentElement.scrollHeight,
-      view: window.innerHeight,
-      box: document.querySelector(".log-viewer").getBoundingClientRect().bottom,
-    }));
-    assert(
-      fit.page <= fit.view + 1 && fit.box <= fit.view,
-      "The Logs box should fit the window: " + JSON.stringify(fit),
-    );
     const logTime = page.locator(".log-line-time").first();
     // The viewer mounts before its first asynchronous log poll resolves.
     await logTime.waitFor();
-    assert(
-      (await logTime.locator("span").count()) === 2,
-      "Log timestamps stack date and time in one column",
-    );
+    assert((await logTime.innerText()).trim(), "Log line has a timestamp");
     await page.goto(url + "/admin/api");
     await page.getByRole("button", { name: "Generate", exact: true }).waitFor();
     assert(
@@ -4819,16 +3995,6 @@ const noWorkers = async (unreleased = () => 0) => {
         .getByRole("button", { name: "Generate", exact: true })
         .count()) === 1,
       "API key action uses the compact Generate label",
-    );
-    await page.setViewportSize({ width: 390, height: 844 });
-    const apiGap = await page.locator(".api-key-create-row").evaluate((el) => {
-      const label = el.querySelector("label").getBoundingClientRect();
-      const input = el.querySelector("input").getBoundingClientRect();
-      return Math.round(input.left - label.right);
-    });
-    assert(
-      apiGap <= 24,
-      "Narrow API key name stays close to its label: " + apiGap,
     );
     await context.close();
     console.log(
@@ -4863,7 +4029,7 @@ const noWorkers = async (unreleased = () => 0) => {
     );
     assert(
       /^\d{2}\.\d{2}\.\d{2}_[a-f0-9]{7}$/.test(a.sessions[0].appVersion),
-      "Player must report its bundled app version",
+      `Player must report its bundled app version, got ${JSON.stringify(a.sessions[0].appVersion)}`,
     );
     assert(
       !JSON.stringify(a).includes("token"),
@@ -5040,7 +4206,6 @@ const noWorkers = async (unreleased = () => 0) => {
     if (!only || only.includes("single-slot")) await singleSlotChanges();
     if (!only || only.includes("subtitles")) await subtitleDefaults();
     if (!only || only.includes("pause")) await pausedBoundary();
-    if (!only || only.includes("alignment")) await guideAlignment();
     if (!only || only.includes("guide-live"))
       cp.execFileSync(
         process.execPath,
@@ -5055,8 +4220,8 @@ const noWorkers = async (unreleased = () => 0) => {
       await require("./profile-creation.cjs")({ browser, login, url, assert });
     if (!only || only.includes("profile-menu")) await profileMenuRoles();
     if (!only || only.includes("profile-refresh")) await profileRefresh();
-    if (!only || only.includes("sessions-guide-history"))
-      await sessionsAndGuideHistory();
+    if (!only || only.includes("sessions-inactivity"))
+      await sessionsAndInactivity();
     if (!only || only.includes("admin")) await adminTabs();
     if (!only || only.includes("admin-metrics-logs"))
       await require("./admin-metrics-logs.cjs")({

@@ -2,7 +2,7 @@
 name: Weekly Dependency Updates
 on:
   schedule:
-    - cron: '30 6 * * 1'
+    - cron: "30 6 * * 1"
       timezone: America/New_York
   workflow_dispatch:
 permissions:
@@ -52,7 +52,6 @@ jobs:
     permissions:
       contents: write
       pull-requests: write
-      actions: write
     steps:
       - uses: actions/checkout@v7
         with:

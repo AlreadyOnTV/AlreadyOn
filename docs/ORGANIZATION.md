@@ -4,14 +4,14 @@ AlreadyOn remains the application name. The GitHub organization is `AlreadyOnTV`
 
 Container instructions use `ghcr.io/alreadyontv/alreadyon`. Existing installations must update their image reference when pulling a new version. Repository redirects do not guarantee package-registry compatibility. The Go module and Android package/metadata identifiers deliberately retain their existing identities so internal imports and installed-app updates remain compatible. Use the permanent signing key for every Android release. Older apps restrict update URLs to the former owner and may need one manual signed APK update; install over the existing app without clearing data.
 
-The active checkout branch is `26.11.08`. Normal delivery follows the branch map:
+Only `dev` and `main` are long-lived branches. Normal delivery follows this map:
 
 | Branch | Docker channel | Phone/TV APK release |
 | --- | --- | --- |
-| `dev` | `nightly` | `YY.MM.DD-nightly` |
-| `test` | `latest` | `YY.MM.DD-rc1` (then `rc2`, etc.) |
-| `main` | `stable` | `YY.MM.DD-stable` |
+| `dev` | no published channel | local/USB validation |
+| `main` merge | `nightly` and `YY.MM.DD` | `YY.MM.DD-nightly` |
+| Manual Stable publication from latest Nightly | `latest` (same digest) | `YY.MM.DD-stable` (fresh APKs) |
 
-Dev publication requires full quality, CodeQL, Go/browser/disposable-runtime, Android and security gates. Weekly dependency integration includes major versions, validates the combined commit, and advances only dev. The maintainer validates the nightly before requesting test/RC and main/Stable promotion. No schedule promotes those stages or deploys a build. Docker promotion reuses the tested digest; stage APKs build from the selected tested source with the permanent signing identity. Historical published tags retain their original casing.
+The PR to `main` requires CodeQL, dependency review, and full Go/browser/runtime e2e checks. Main publication builds and scans the image, signs provenance, and publishes Nightly APKs. Weekly dependency updates are validated before integration to `dev`. Stable publication reuses the latest Nightly image digest and freshly builds Stable APKs with the permanent signing identity. Published artifact bytes and tags are not overwritten.
 
 Cloudflare DNS points the apex to GitHub Pages A/AAAA addresses and `www` to `alreadyontv.github.io`, using DNS-only records. GitHub Pages owns website TLS. The Pages domain-verification TXT record must remain in place; no wildcard records are needed. See [website maintenance](WEBSITE.md) and [delivery](CI_CD.md).

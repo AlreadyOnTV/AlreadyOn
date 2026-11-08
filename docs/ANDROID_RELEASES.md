@@ -4,34 +4,29 @@
 
 ## Release lifecycle
 
-Use the active dated branch and [development setup](DEVELOPMENT.md). Test at <https://localhost:5173>; open its dev PR after approval.
+Develop on `dev`, test at <https://localhost:5173>, then open a PR to `main` after review.
 
-| Promotion | Artifact tag | Release title | Publication |
-| --- | --- | --- | --- |
-| Validated `dev` source | `YY.MM.DD-nightly` | `YY.MM.DD-nightly` | Signed APKs; image `nightly` |
-| Tested `dev` source into `test` | `YY.MM.DD-rcN` | `YY.MM.DD-rcN` | Image `latest`; freshly built RC APKs |
-| Current `test` into `main` | `YY.MM.DD-stable` | `YY.MM.DD-stable` | Image `stable`; freshly built Stable APKs |
+| Event | Artifact tag | Publication |
+| --- | --- | --- |
+| Validated merge to `main` | `YY.MM.DD-nightly` | Signed APKs; image `nightly` and date aliases |
+| Manual Stable publication from latest Nightly | `YY.MM.DD-stable` | Fresh signed APKs; image alias `latest` reuses the Nightly digest |
 
-Each new release builds and signs both APKs with its target-stage version name and a strictly higher version code. RC builds use the tested source; Stable defaults to the newest published RC's exact source commit, independently of the workflow commit. A manual `source_sha` override must identify validated source in the selected branch history. Docker promotions reuse the tested digest without rebuilding.
+Each release builds/signs both APKs with a strictly higher version code. Stable selects the newest published Nightly source in main history. Docker `latest` reuses that source's verified image digest; it does not rebuild the image. A same-date rerun replaces the release/tag only after all gates pass, and writes new source-bound APK manifests/checksums.
 
-After nightly acceptance, dispatch **Android Nightly, RC and Stable** on `test` (`promote-test`) or `main` (`stable`). Completed reruns verify published assets. `repair-stable` explicitly replaces historical copied-candidate Stable APKs with fresh Stable builds at the same source/tag; correctly versioned published APKs remain immutable. Stable locks the date.
+After the Nightly is accepted, run **Publish Stable from latest Nightly** on `main`. It verifies the Nightly source/digest, builds fresh higher-code Stable APKs with the permanent signing identity, then moves `latest` to the same image digest.
 
-Approved direct RC preparation uses **Build Date Release Image** on dev with `publication=rc-candidate` and exact revision/date. Full validation and image attestations precede a signed draft; nightly artifacts/channels remain unchanged. Promotion verifies the matching draft/image before advancing test, which builds higher-code RC APKs and publishes the draft. Draft predecessors resolve through authenticated paginated release listings; GitHub's release-by-tag endpoint cannot resolve unpublished drafts.
-
-To finalize an RC date without another RC APK, follow the gated [Stable reissue procedure](STABLE_REISSUE.md).
-
-Updated phone and TV builds use the Admin-selected Stable (default), Release Candidate or Nightly cycle, not an installed-label track lock. Existing APKs need a signed update to gain the setting or nightly recognition. See [update policy and existing-client limitations](ANDROID_UPDATES.md).
+Updated phone and TV builds use the Admin-selected Stable (default) or Nightly cycle, not an installed-label track lock. Stored legacy RC preferences fall back to Stable. Existing APKs need a signed update to gain the setting. See [update policy and existing-client limitations](ANDROID_UPDATES.md).
 
 ## Manual stage promotion
 
-After nightly acceptance, run `python3 scripts/promote.py test YY.MM.DD` to promote its tested source and image digest. The test branch publishes the first `YY.MM.DD-rc1` APKs; later candidates increment the suffix. After RC acceptance, `python3 scripts/promote.py main` selects the current test head. Both branches build fresh target-stage APKs with higher version codes. Weekly automation never moves test/main. Retire dated development branches only after delivery and explicit cleanup approval.
+Nightly publication is automatic after validated main merges. Stable remains a manual action; weekly automation never publishes Stable or deploys a build.
 
 ## Artifacts and gates
 
-The date tag advances after dev validation. [Generated changelogs](RELEASE_NOTES.md) compare predecessor tags; promotions preserve predecessor known issues.
+Dates are generated in `America/New_York`. [Generated changelogs](RELEASE_NOTES.md) compare predecessor tags and preserve known issues.
 
-Releases attach phone/tablet and TV APKs, `SHA256SUMS`, `android-release.json`, three inventory-only CycloneDX SBOMs and `sbom-manifest.json`. Inventories bind the image digest, signed APK hashes and source. Promotions retain signing identity and source provenance while rebuilding APK versions. Titles never rename artifacts. Older releases without inventories remain compatible.
+Releases attach phone/tablet and TV APKs, `SHA256SUMS`, `android-release.json`, three inventory-only CycloneDX SBOMs and `sbom-manifest.json`. Inventories bind image digest, signed APK hashes and source. Replacement builds retain signing identity and regenerate source provenance. Older releases without inventories remain compatible.
 
-Date PRs require quality, CodeQL, full Go/browser tests, packaged-runtime and security checks. [Promotion helpers](CI_CD.md) verify provenance and exact trees. Review [Stable readiness](STABLE_READINESS.md); preserve branch protection and live data.
+Main PRs require quality, CodeQL, full Go/browser tests, packaged-runtime and security checks. Review [Stable readiness](STABLE_READINESS.md); preserve branch protection and live data.
 
 See [signing](ANDROID_SIGNING.md), [TV](GOOGLE_TV.md) and [identity](ORGANIZATION.md). Existing application IDs/signing remain compatible; older updaters may require one manual signed installation preserving data.

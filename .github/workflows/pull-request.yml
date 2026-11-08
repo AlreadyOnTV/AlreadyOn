@@ -1,16 +1,14 @@
 # Date-release dev PRs run full source and browser e2e validation.
 name: Date Release PR Validation
 on:
-  push:
-    branches: [dev]
   pull_request:
-    branches: [dev]
+    branches: [main]
   workflow_dispatch:
   workflow_call:
     inputs:
       revision:
         type: string
-        default: ''
+        default: ""
 permissions:
   contents: read
 concurrency:
@@ -66,7 +64,7 @@ jobs:
         uses: ./.github/actions/test-source
         with:
           ci-base: alreadyon-validation:ci
-          pull-base: 'false'
+          pull-base: "false"
       - name: Build the exact PR runtime candidate
         run: |
           docker build --builder default \
@@ -84,3 +82,20 @@ jobs:
         with:
           image: alreadyon-ci:candidate
           ci-image: alreadyon-validation:ci
+  auto_merge:
+    if: github.event_name == 'pull_request'
+      && needs.quality.result == 'success'
+      && needs.android.result == 'success'
+      && needs.tests.result == 'success'
+    needs: [quality, android, tests]
+    runs-on: ubuntu-latest
+    permissions:
+      contents: write
+      pull-requests: write
+    steps:
+      - name: Enable merge after all required checks pass
+        env:
+          GH_TOKEN: ${{ github.token }}
+          PR_NUMBER: ${{ github.event.pull_request.number }}
+          HEAD_SHA: ${{ github.event.pull_request.head.sha }}
+        run: gh pr merge "$PR_NUMBER" --merge --auto --match-head-commit "$HEAD_SHA"

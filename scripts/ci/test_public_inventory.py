@@ -41,8 +41,10 @@ class PublicInventory(unittest.TestCase):
             manifest['subjects'][name] = {'name': subject, 'sha256': checksum}
         (directory / 'sbom-manifest.json').write_text(json.dumps(manifest))
         with patch.object(release, 'publish'), patch.object(release, 'releases', return_value=[]), \
+            patch.object(release, 'require_tested_image'), \
                 patch.object(release, 'candidate_changes', return_value='# New Features\n\n- Synthetic feature.'):
-            release.candidate('owner/repo', '26.10.11-RC2', SHA, 200000001, directory)
+            release.candidate('owner/repo', '26.10.11-nightly', SHA, 200000001, directory,
+                      nightly=True)
 
     def test_verified_inventory_matches_exact_apk_image_and_source(self):
         with tempfile.TemporaryDirectory() as tmp:
@@ -64,15 +66,15 @@ class PublicInventory(unittest.TestCase):
 
     def test_promotions_download_all_inventory_bytes_and_reject_partial_bundle(self):
         assets = [{'name': name} for name in (*release.ASSETS, *release.SBOM_ASSETS)]
-        with patch.object(release, 'releases', return_value=[{'tag_name': '26.10.11-RC2', 'assets': assets}]), \
+        with patch.object(release, 'releases', return_value=[{'tag_name': '26.10.11-nightly', 'assets': assets}]), \
                 patch.object(release, 'run') as command:
-            release.download('owner/repo', '26.10.11-RC2', Path('assets'))
+            release.download('owner/repo', '26.10.11-nightly', Path('assets'))
             self.assertEqual(command.call_count, 2)
             for name in release.SBOM_ASSETS:
                 self.assertIn(name, command.call_args.args)
-        with patch.object(release, 'releases', return_value=[{'tag_name': '26.10.11-RC2', 'assets': assets[:-1]}]), \
+        with patch.object(release, 'releases', return_value=[{'tag_name': '26.10.11-nightly', 'assets': assets[:-1]}]), \
                 patch.object(release, 'run'), self.assertRaisesRegex(ValueError, 'Incomplete remote'):
-            release.download('owner/repo', '26.10.11-RC2', Path('assets'))
+            release.download('owner/repo', '26.10.11-nightly', Path('assets'))
 
     def test_apk_inventory_uses_only_release_runtime_modules(self):
         with tempfile.TemporaryDirectory() as tmp:

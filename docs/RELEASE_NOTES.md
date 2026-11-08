@@ -2,7 +2,7 @@
 
 Release descriptions live in GitHub Releases; PRs and issues supply their content. Do not write `docs/release-notes/` fragments or a repository known-issue list. Implementation notes belong in issues/PRs; review captures stay outside Git.
 
-Titles are only `YY.MM.DD-nightly`, `YY.MM.DD-alphaN`, `YY.MM.DD-rcN` or `YY.MM.DD-stable`. Preserve tag casing, installed APK versions, exact signed artifacts and hidden provenance.
+Titles are only `YY.MM.DD-nightly` or `YY.MM.DD-stable`. Preserve installed APK versions, exact signed artifacts and hidden provenance. Historical alpha/RC releases remain unchanged.
 
 Every published description starts with `# Download Now`, linking that release’s phone/tablet and TV APKs, followed by `# New Features`, `# Bugfixes` and `# Known Issues`, in that order. Empty sections use “No new features in this release.”, “No bugfixes in this release.” and “No known issues are currently listed for this release.” Bugfixes and known issues link exact GitHub issue titles; a fix may append a brief explanation after the link.
 
@@ -21,4 +21,4 @@ Metadata reads paginate and API failures stop generation. Review the resulting d
 
 Publication follows maintainer-approved [delivery gates](CI_CD.md).
 
-RC/Stable promotion reads the tested candidate’s published description and preserves its known issues. Promotions rebuild signed APKs with the target-stage version and a higher version code; Docker images retain the tested digest. Same-source promotions add no new product changes. Description-only edits never regenerate APKs.
+Stable publication reads the selected Nightly description and preserves its known issues. It rebuilds signed APKs with the Stable version and a higher code while Docker `latest` reuses the Nightly digest. Description-only edits never regenerate APKs.

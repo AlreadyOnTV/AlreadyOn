@@ -4,13 +4,12 @@
 
 Registry tags identify approved image digests; they are separate from GitHub release tags:
 
-- `nightly`: the latest validated dev build. `YY.MM.DD-nightly` and its `YY.MM.DD` alias identify that date's immutable nightly.
-- `latest`: an approved test promotion.
-- `stable`: an approved main promotion.
+- `nightly`: the latest validated main build. `YY.MM.DD-nightly` and `YY.MM.DD` identify that build date.
+- `latest`: the image digest of the Nightly selected for Stable APK publication.
 
-Validated dev work publishes `nightly`, `YY.MM.DD-nightly` and `YY.MM.DD`; a different source cannot overwrite a published dated nightly. Test/main promotions merge the tested tree and retag the same recorded digest as `latest`/`stable`; they do not rebuild. See [release policy](ANDROID_RELEASES.md).
+Validated main merges publish `nightly`, `YY.MM.DD-nightly` and `YY.MM.DD`. A later validated main merge may replace the same-date aliases and APK release through the workflow, using higher APK version codes and updated provenance. Manual Stable publication retags the selected Nightly digest as `latest`; it does not rebuild the image. See [release policy](ANDROID_RELEASES.md).
 
-Promotion reuses the tested image; it does not rebuild source under a new tag. Record the source commit and immutable digest before publishing. Mutable tags alone are insufficient to identify a deployed artifact.
+Stable publication reuses the Nightly image; it does not rebuild source under `latest`. Record source commits and immutable digests before publishing. Mutable tags alone are insufficient to identify an artifact.
 
 Local base images are refreshed on demand when their build timestamp exceeds seven days or their recipe/parent no longer matches. See [delivery](CI_CD.md).
 

@@ -1,33 +1,24 @@
-# Dev publishes nightlies only after full release validation.
-name: Build Date Release Image
+# Main publishes the validated Nightly image and signed phone/TV APKs.
+name: Build Nightly Release
 on:
   push:
-    branches: [dev]
+    branches: [main]
   workflow_dispatch:
     inputs:
       revision:
-        description: Optional exact current dev commit; empty selects dev
+        description: Optional exact current main commit; empty selects main
         type: string
-        default: ''
-      publication:
-        description: Nightly delivery, RC preparation, or a full-gate Stable reissue candidate
-        type: choice
-        options: [nightly, rc-candidate, stable-reissue]
-        default: nightly
-      release_date:
-        description: Optional YY.MM.DD nightly date; defaults to today in America/New_York
-        type: string
-        required: false
+        default: ""
 permissions:
   contents: read
 env:
   TZ: America/New_York
 concurrency:
-  group: dev-release-build
+  group: main-nightly-build
   cancel-in-progress: false
 jobs:
   select:
-    if: github.ref_name == 'dev'
+    if: github.ref_name == 'main'
     runs-on: ubuntu-26.04
     outputs:
       existing: ${{ steps.source.outputs.existing }}
@@ -45,53 +36,17 @@ jobs:
         id: source
         env:
           GH_TOKEN: ${{ github.token }}
-          RELEASE_DATE: ${{ inputs.release_date }}
-          PUBLICATION: ${{ inputs.publication || 'nightly' }}
         run: |
           revision=$(git rev-parse HEAD)
           current=$(gh api "repos/$GITHUB_REPOSITORY/git/ref/heads/$GITHUB_REF_NAME" --jq .object.sha)
           test "$revision" = "$current"
-          test "$GITHUB_REF_NAME" = dev
-          release_date=$(date +%y.%m.%d)
-          if [ -n "$RELEASE_DATE" ]; then release_date="$RELEASE_DATE"; fi
+          test "$GITHUB_REF_NAME" = main
+          release_date=$(TZ=America/New_York date +%y.%m.%d)
+          python3 scripts/ci/android-release.py check-nightly --sha "$revision" --day "$release_date" >> "$GITHUB_OUTPUT"
           {
-            if [ "$PUBLICATION" = rc-candidate ]; then
-              test "$GITHUB_EVENT_NAME" = workflow_dispatch
-              python3 scripts/ci/release-context.py date --sha "$revision" --date "$release_date" >/dev/null
-              echo "existing=false"
-            elif [ "$PUBLICATION" = stable-reissue ]; then
-              test "$GITHUB_EVENT_NAME" = workflow_dispatch
-              python3 scripts/ci/release-context.py date --sha "$revision" --date "$release_date" >/dev/null
-              python3 scripts/ci/android-release.py check-stable-reissue --sha "$revision" --day "$release_date"
-              echo "existing=false"
-            else
-              python3 scripts/ci/android-release.py check-nightly --sha "$revision" --day "$release_date"
-            fi
             echo "revision=$revision"
             echo "release_date=$release_date"
           } >> "$GITHUB_OUTPUT"
-  quality:
-    needs: select
-    if: needs.select.outputs.existing != 'true'
-    uses: ./.github/workflows/quality.yml
-    with:
-      revision: ${{ needs.select.outputs.revision }}
-  # Nightlies and explicit releases require semantic analysis before publication.
-  codeql:
-    needs: select
-    if: needs.select.outputs.existing != 'true'
-    permissions:
-      contents: read
-      security-events: write
-    uses: ./.github/workflows/codeql.yml
-    with:
-      revision: ${{ needs.select.outputs.revision }}
-  android_checks:
-    needs: select
-    if: needs.select.outputs.existing != 'true'
-    uses: ./.github/workflows/android-checks.yml
-    with:
-      revision: ${{ needs.select.outputs.revision }}
   bases:
     needs: select
     if: needs.select.outputs.existing != 'true'
@@ -121,32 +76,15 @@ jobs:
         with:
           image: ghcr.io/alreadyontv/alreadyon-base
           revision: ${{ needs.select.outputs.revision }}
-  tests:
-    name: Go and full browser e2e tests
+  candidate:
+    name: Build, scan and attest the main Nightly image
     needs: [select, bases]
-    runs-on: ubuntu-26.04
-    timeout-minutes: 90
-    permissions:
-      contents: read
-      packages: read
-    steps:
-      - uses: actions/checkout@v7
-        with:
-          ref: ${{ needs.select.outputs.revision }}
-          persist-credentials: false
-      - uses: docker/login-action@v4
-        with:
-          registry: ghcr.io
-          username: ${{ github.actor }}
-          password: ${{ secrets.GITHUB_TOKEN }}
-      - uses: ./.github/actions/test-source
-        with:
-          ci-base: ${{ needs.bases.outputs.ci }}
-  publish:
-    name: Build, validate and publish fresh dev release
-    needs: [select, bases, quality, codeql, tests, android_checks]
+    if: needs.select.outputs.existing != 'true'
     runs-on: ubuntu-26.04
     timeout-minutes: 120
+    outputs:
+      source: ${{ steps.staged.outputs.source }}
+      digest: ${{ steps.staged.outputs.digest }}
     concurrency:
       group: application-images
       cancel-in-progress: false
@@ -222,26 +160,73 @@ jobs:
           path: ${{ runner.temp }}/image.cdx.json
           if-no-files-found: error
           retention-days: 90
-      - name: Publish nightly and overwrite today's date tag
-        if: inputs.publication == 'nightly'
+      - name: Record exact validated image for APK provenance
+        env:
+          GITHUB_REPOSITORY: ${{ github.repository }}
+          CI_REVISION: ${{ needs.select.outputs.revision }}
+          SOURCE_IMAGE: ${{ steps.staged.outputs.source }}
+        run: PYTHONPATH=scripts/ci python3 -c 'import os; from image_registry import record; record(os.environ["GITHUB_REPOSITORY"], os.environ["CI_REVISION"], os.environ["SOURCE_IMAGE"].rsplit("@", 1)[1])'
+  android:
+    name: Build and publish signed Nightly APKs
+    if: always() && needs.select.result == 'success' && (needs.candidate.result == 'success' || needs.candidate.result == 'skipped')
+    needs: [select, candidate]
+    permissions:
+      contents: write
+      packages: read
+      pull-requests: read
+      issues: read
+    uses: ./.github/workflows/android-release.yml
+    with:
+      operation: nightly
+      release_date: ${{ needs.select.outputs.release_date }}
+      source_sha: ${{ needs.select.outputs.revision }}
+    secrets: inherit
+  channels:
+    name: Publish verified Nightly image aliases
+    if: always() && needs.select.result == 'success' && needs.android.result == 'success' && (needs.candidate.result == 'success' || needs.candidate.result == 'skipped')
+    needs: [select, candidate, android]
+    runs-on: ubuntu-26.04
+    concurrency:
+      group: application-images
+      cancel-in-progress: false
+    permissions:
+      contents: read
+      packages: write
+      statuses: write
+      attestations: read
+    steps:
+      - uses: actions/checkout@v7
+        with:
+          ref: ${{ needs.select.outputs.revision }}
+          fetch-depth: 0
+          persist-credentials: false
+      - uses: docker/login-action@v4
+        with:
+          registry: ghcr.io
+          username: ${{ github.actor }}
+          password: ${{ secrets.GITHUB_TOKEN }}
+      - name: Verify the recorded image and both attestations
+        env:
+          GH_TOKEN: ${{ github.token }}
+          GITHUB_REPOSITORY: ${{ github.repository }}
+          SOURCE_SHA: ${{ needs.select.outputs.revision }}
+        run: |
+          SOURCE_IMAGE=$(PYTHONPATH=scripts/ci python3 -c 'import os; from image_registry import release_source; print(release_source(os.environ["GITHUB_REPOSITORY"], os.environ["SOURCE_SHA"]))')
+          python3 scripts/ci/verify-image.py --source "$SOURCE_IMAGE" --revision "$SOURCE_SHA"
+          gh attestation verify "oci://$SOURCE_IMAGE" --repo "$GITHUB_REPOSITORY" --signer-workflow "$GITHUB_REPOSITORY/.github/workflows/rebuild.yml" --source-digest "$SOURCE_SHA" --deny-self-hosted-runners
+          gh attestation verify "oci://$SOURCE_IMAGE" --repo "$GITHUB_REPOSITORY" --signer-workflow "$GITHUB_REPOSITORY/.github/workflows/rebuild.yml" --source-digest "$SOURCE_SHA" --deny-self-hosted-runners --predicate-type https://cyclonedx.org/bom
+          echo "SOURCE_IMAGE=$SOURCE_IMAGE" >> "$GITHUB_ENV"
+      - name: Publish Nightly and today's date aliases
         env:
           GH_TOKEN: ${{ github.token }}
           CI_REVISION: ${{ needs.select.outputs.revision }}
           CI_RELEASE_DATE: ${{ needs.select.outputs.release_date }}
+          GITHUB_REPOSITORY: ${{ github.repository }}
           CI_PUBLICATION: nightly
-          SOURCE_IMAGE: ${{ steps.staged.outputs.source }}
         run: |
-          IMAGE_TAGS=$(CI_SOURCE_BRANCH=dev python3 scripts/ci/image-tags.py | sed -n 's/^tags=//p')
+          IMAGE_TAGS=$(CI_SOURCE_BRANCH=main CI_PUBLICATION=nightly python3 scripts/ci/image-tags.py | sed -n 's/^tags=//p')
           export IMAGE_TAGS
           python3 scripts/ci/publish-image.py
-      - name: Record validated RC image without changing channels
-        if: contains(fromJSON('["rc-candidate","stable-reissue"]'), inputs.publication)
-        env:
-          GH_TOKEN: ${{ github.token }}
-          CI_REVISION: ${{ needs.select.outputs.revision }}
-          STAGED_IMAGE: ${{ steps.staged.outputs.source }}
-        run: |
-          PYTHONPATH=scripts/ci python3 -c 'import os; from image_registry import record; record(os.environ["GITHUB_REPOSITORY"], os.environ["CI_REVISION"], os.environ["STAGED_IMAGE"].rsplit("@", 1)[1])'
       - name: Create or advance the release date tag
         env:
           GH_TOKEN: ${{ github.token }}
@@ -252,28 +237,3 @@ jobs:
         env:
           GH_TOKEN: ${{ github.token }}
         run: python3 scripts/ci/clean-images.py --apply --only-untagged
-      - name: Mark fully validated Stable reissue candidate
-        if: inputs.publication == 'stable-reissue'
-        env:
-          GITHUB_REPOSITORY: ${{ github.repository }}
-          REVISION: ${{ needs.select.outputs.revision }}
-          RELEASE_DATE: ${{ needs.select.outputs.release_date }}
-          RUN_URL: ${{ github.server_url }}/${{ github.repository }}/actions/runs/${{ github.run_id }}
-        run: |
-          python3 scripts/ci/android-release.py check-stable-reissue --sha "$REVISION" --day "$RELEASE_DATE"
-          PYTHONPATH=scripts/ci python3 -c 'import os; from image_registry import record_stable_reissue; record_stable_reissue(os.environ["GITHUB_REPOSITORY"], os.environ["REVISION"], os.environ["RUN_URL"])'
-  android:
-    name: Build and publish signed Android release after full validation
-    if: inputs.publication != 'stable-reissue'
-    needs: [select, quality, tests, publish]
-    permissions:
-      contents: write
-      packages: read
-      pull-requests: read
-      issues: read
-    uses: ./.github/workflows/android-release.yml
-    with:
-      operation: ${{ inputs.publication == 'rc-candidate' && 'rc-candidate' || 'nightly' }}
-      release_date: ${{ needs.select.outputs.release_date }}
-      source_sha: ${{ needs.select.outputs.revision }}
-    secrets: inherit

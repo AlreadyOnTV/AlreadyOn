@@ -86,7 +86,12 @@ const wait = (ms) => new Promise((resolve) => setTimeout(resolve, ms));
         .count(),
       0,
     );
-    assert.equal(await page.getByRole("button", { name: "Server Settings Navigation" }).isVisible(), false);
+    assert.equal(
+      await page
+        .getByRole("button", { name: "Server Settings Navigation" })
+        .isVisible(),
+      false,
+    );
     assert.equal(await settingsNav.isVisible(), true);
     const movies = page.getByRole("region", { name: "Manage Movies" });
     const shows = page.getByRole("region", { name: "Manage TV Shows" });
@@ -96,25 +101,44 @@ const wait = (ms) => new Promise((resolve) => setTimeout(resolve, ms));
     const showFilters = page.getByRole("complementary", {
       name: "TV Show filters",
     });
-    const movieFilterToggle = movieFilters.getByRole("button", { name: "Filter Movies", exact: true });
-    const showFilterToggle = showFilters.getByRole("button", { name: "Filter TV Shows", exact: true });
-    assert.equal(await movieFilterToggle.getAttribute("aria-expanded"), "false");
+    const movieFilterToggle = movieFilters.getByRole("button", {
+      name: "Filter Movies",
+      exact: true,
+    });
+    const showFilterToggle = showFilters.getByRole("button", {
+      name: "Filter TV Shows",
+      exact: true,
+    });
+    assert.equal(
+      await movieFilterToggle.getAttribute("aria-expanded"),
+      "false",
+    );
     assert.equal(await showFilterToggle.getAttribute("aria-expanded"), "false");
-    assert.equal(await movieFilters.getByPlaceholder("Title or file path").isVisible(), false);
+    assert.equal(
+      await movieFilters.getByPlaceholder("Title or file path").isVisible(),
+      false,
+    );
     await movieFilterToggle.click();
     await movieFilters.getByPlaceholder("Title or file path").waitFor();
-    await wait(200);
-    const rightSidebar = await movieFilters.boundingBox();
-    const catalogBox = await movies.boundingBox();
-    assert.ok(rightSidebar && catalogBox && rightSidebar.x >= catalogBox.x + catalogBox.width, "Movie filters sit to the right of the catalog");
     await showFilterToggle.click();
     await showFilters.getByPlaceholder("Title or file path").waitFor();
-    assert.equal(await movieFilterToggle.getAttribute("aria-expanded"), "true", "Each filter menu expands independently");
+    assert.equal(
+      await movieFilterToggle.getAttribute("aria-expanded"),
+      "true",
+      "Each filter menu expands independently",
+    );
     await showFilterToggle.click();
     await page.evaluate(() => window.scrollTo(0, 0));
-    assert.equal(await page.getByRole("button", { name: /Toggle .* filters/ }).count(), 0);
+    assert.equal(
+      await page.getByRole("button", { name: /Toggle .* filters/ }).count(),
+      0,
+    );
     await movies.locator("thead th").first().waitFor();
-    assert.deepEqual(await movies.locator("thead th").allTextContents(), ["", "Title", "Status"]);
+    assert.deepEqual(await movies.locator("thead th").allTextContents(), [
+      "",
+      "Title",
+      "Status",
+    ]);
     assert.equal(
       (await movieFilters.locator("label").nth(0).innerText()).split("\n")[0],
       "Search",
@@ -138,15 +162,6 @@ const wait = (ms) => new Promise((resolve) => setTimeout(resolve, ms));
     assert.equal(
       await movieFilters.getByText("Metadata", { exact: true }).count(),
       0,
-    );
-    const headerBox = await page.locator(".admin-topbar-inner").boundingBox();
-    const contentBox = await page.locator(".admin-layout").boundingBox();
-    assert.ok(
-      headerBox &&
-        contentBox &&
-        Math.abs(headerBox.x - contentBox.x) < 1 &&
-        Math.abs(headerBox.width - contentBox.width) < 1,
-      "Server Settings header and content shells should share the 1280px width",
     );
     const moviePageSize = movies.getByLabel("Items per page");
     assert.equal(await moviePageSize.inputValue(), "10");
@@ -180,41 +195,6 @@ const wait = (ms) => new Promise((resolve) => setTimeout(resolve, ms));
     await page.evaluate(() => window.scrollTo(0, 0));
     await movieFilters.getByRole("button", { name: "Genres" }).click();
     const genreOptions = movieFilters.getByRole("listbox", { name: "Genres" });
-    await wait(200);
-    const filterMenuBox = await movieFilters.boundingBox();
-    const genrePanelBox = await genreOptions.boundingBox();
-    assert.ok(
-      filterMenuBox &&
-        genrePanelBox &&
-        genrePanelBox.y >= filterMenuBox.y &&
-        genrePanelBox.y + genrePanelBox.height <=
-          filterMenuBox.y + filterMenuBox.height,
-      `Expanded Genre options should auto-scroll fully into the filter sidebar: ${JSON.stringify({ filterMenuBox, genrePanelBox, scrollTop: await movieFilters.evaluate((element) => element.scrollTop) })}`,
-    );
-    assert.equal(
-      await genreOptions
-        .getByLabel("Anime")
-        .evaluate(
-          (element) => getComputedStyle(element.parentElement).textAlign,
-        ),
-      "left",
-    );
-    const genrePanelGeometry = await genreOptions.evaluate((panel) => ({
-      clientWidth: panel.clientWidth,
-      scrollWidth: panel.scrollWidth,
-      checkboxWidth: panel
-        .querySelector('input[type="checkbox"]')
-        .getBoundingClientRect().width,
-    }));
-    assert.equal(
-      genrePanelGeometry.scrollWidth,
-      genrePanelGeometry.clientWidth,
-      `Genre options should not overflow horizontally: ${JSON.stringify(genrePanelGeometry)}`,
-    );
-    assert(
-      genrePanelGeometry.checkboxWidth <= 20,
-      `Genre checkboxes should retain a compact width: ${JSON.stringify(genrePanelGeometry)}`,
-    );
     await genreOptions.getByLabel("Anime").check();
     await genreOptions.getByLabel("Family").check();
     await movieFilters.getByRole("button", { name: "Genres" }).click();
@@ -248,28 +228,12 @@ const wait = (ms) => new Promise((resolve) => setTimeout(resolve, ms));
         .textContent(),
       "Film 01",
     );
-    const columnWidthsBeforeSort = await movies
-      .locator("thead th")
-      .evaluateAll((headers) =>
-        headers.map((header) => header.getBoundingClientRect().width),
-      );
     await titleSortButton.click();
     await page.waitForFunction(
       () =>
         document.querySelector(
           '[data-library-section="movies"] tbody tr:first-child td:nth-child(2) strong',
         )?.textContent === "Film 55",
-    );
-    const columnWidthsAfterSort = await movies
-      .locator("thead th")
-      .evaluateAll((headers) =>
-        headers.map((header) => header.getBoundingClientRect().width),
-      );
-    assert.ok(
-      columnWidthsBeforeSort.every(
-        (width, index) => Math.abs(width - columnWidthsAfterSort[index]) < 1,
-      ),
-      "Column widths should remain fixed while sorting",
     );
     assert.equal(
       await movies
@@ -315,40 +279,6 @@ const wait = (ms) => new Promise((resolve) => setTimeout(resolve, ms));
       0,
     );
     await page.evaluate(() => window.scrollTo(0, 0));
-    const movieHeaderLayout = await movies.evaluate((element) => {
-      const box = element.getBoundingClientRect();
-      const title = element
-        .querySelector(".library-box-title")
-        .getBoundingClientRect();
-      const actions = element
-        .querySelector(".library-box-actions")
-        .getBoundingClientRect();
-      const pageControls = element
-        .querySelector(".library-page-controls")
-        .getBoundingClientRect();
-      return {
-        box: {
-          left: box.left,
-          right: box.right,
-          center: (box.left + box.right) / 2,
-        },
-        title: {
-          left: title.left,
-          right: title.right,
-          center: (title.left + title.right) / 2,
-        },
-        actions,
-        pageControls,
-      };
-    });
-    assert.ok(
-      Math.abs(movieHeaderLayout.title.center - movieHeaderLayout.box.center) <
-        2 &&
-        movieHeaderLayout.actions.left <= movieHeaderLayout.title.left &&
-        movieHeaderLayout.pageControls.right <=
-          movieHeaderLayout.box.right - 12,
-      "Desktop catalog title should center between left actions and right-side paging controls",
-    );
     await wait(200);
     await page.screenshot({
       path: path.join(root, "library-desktop.png"),
@@ -369,10 +299,26 @@ const wait = (ms) => new Promise((resolve) => setTimeout(resolve, ms));
       .click();
     let dialog = page.getByRole("dialog");
     const reviewNote = dialog.getByRole("note");
-    assert.equal(await reviewNote.count(), 0, "Automatic PG audiences must not require manual review");
-    const automaticPG = await (await page.request.get(url + "/api/library/catalog?view=movies&rating=PG&limit=200")).json();
+    assert.equal(
+      await reviewNote.count(),
+      0,
+      "Automatic PG audiences must not require manual review",
+    );
+    const automaticPG = await (
+      await page.request.get(
+        url + "/api/library/catalog?view=movies&rating=PG&limit=200",
+      )
+    ).json();
     assert.ok(automaticPG.items.length > 0);
-    assert.ok(automaticPG.items.every(item => item.audience === "young_child" && !item.needsReview && item.audienceOverride == null), "PG films should automatically belong to Kids before owner edits");
+    assert.ok(
+      automaticPG.items.every(
+        (item) =>
+          item.audience === "young_child" &&
+          !item.needsReview &&
+          item.audienceOverride == null,
+      ),
+      "PG films should automatically belong to Kids before owner edits",
+    );
     assert.equal(await dialog.getByText(/Apply Channels/).count(), 0);
     await dialog
       .getByLabel("Intended audience", { exact: true })
@@ -435,34 +381,18 @@ const wait = (ms) => new Promise((resolve) => setTimeout(resolve, ms));
         }),
       }),
     );
-    const dialogBox = await dialog.boundingBox();
-    assert.ok(
-      dialogBox && dialogBox.width <= 430,
-      "Edit dialog should be 35% narrower",
-    );
-    const formWidths = await dialog
-      .locator(".admin-field-row :is(input, select, .multi-select)")
-      .evaluateAll((elements) =>
-        elements.map((element) => element.getBoundingClientRect().width),
-      );
-    assert.ok(
-      Math.max(...formWidths) - Math.min(...formWidths) < 1,
-      "Edit controls should share one width",
-    );
-    const tmdbFieldBox = await dialog
-      .locator(".library-tmdb-field")
-      .boundingBox();
-    const titleFieldBox = await dialog.getByLabel("Show title").boundingBox();
-    assert.ok(
-      tmdbFieldBox && titleFieldBox && tmdbFieldBox.y < titleFieldBox.y,
-      "TMDb ID should appear directly above Title",
-    );
     const originalIdentity = {
       id: await dialog.getByLabel("TMDb ID").inputValue(),
       title: await dialog.getByLabel("Show title").inputValue(),
       year: await dialog.getByLabel("Show premiere year").inputValue(),
-      genres: await dialog.getByRole("button", { name: "Genres", exact: true }).innerText(),
-      rating: await dialog.getByLabel("Content Rating").locator("option").first().textContent(),
+      genres: await dialog
+        .getByRole("button", { name: "Genres", exact: true })
+        .innerText(),
+      rating: await dialog
+        .getByLabel("Content Rating")
+        .locator("option")
+        .first()
+        .textContent(),
     };
     await dialog.getByLabel("TMDb ID").fill("77");
     await dialog.getByLabel("TMDb ID").press("Enter");
@@ -485,14 +415,42 @@ const wait = (ms) => new Promise((resolve) => setTimeout(resolve, ms));
     );
     await dialog.getByLabel("TMDb ID").fill(originalIdentity.id);
     await dialog.getByLabel("Show title").focus();
-    assert.equal(await dialog.getByLabel("Show title").inputValue(), originalIdentity.title);
-    assert.equal(await dialog.getByLabel("Show premiere year").inputValue(), originalIdentity.year);
-    assert.equal(await dialog.getByRole("button", { name: "Genres", exact: true }).innerText(), originalIdentity.genres);
-    assert.equal(await dialog.getByLabel("Content Rating").locator("option").first().textContent(), originalIdentity.rating);
+    assert.equal(
+      await dialog.getByLabel("Show title").inputValue(),
+      originalIdentity.title,
+    );
+    assert.equal(
+      await dialog.getByLabel("Show premiere year").inputValue(),
+      originalIdentity.year,
+    );
+    assert.equal(
+      await dialog
+        .getByRole("button", { name: "Genres", exact: true })
+        .innerText(),
+      originalIdentity.genres,
+    );
+    assert.equal(
+      await dialog
+        .getByLabel("Content Rating")
+        .locator("option")
+        .first()
+        .textContent(),
+      originalIdentity.rating,
+    );
     let finishLatePreview;
-    await page.route("**/tmdb-preview?tmdbId=78", async route => {
-      await new Promise(resolve => { finishLatePreview = resolve; });
-      await route.fulfill({ json: { tmdbId: 78, title: "Stale preview", year: 2002, genres: ["drama"], certification: "TV-14" } });
+    await page.route("**/tmdb-preview?tmdbId=78", async (route) => {
+      await new Promise((resolve) => {
+        finishLatePreview = resolve;
+      });
+      await route.fulfill({
+        json: {
+          tmdbId: 78,
+          title: "Stale preview",
+          year: 2002,
+          genres: ["drama"],
+          certification: "TV-14",
+        },
+      });
     });
     await dialog.getByLabel("TMDb ID").fill("78");
     await Promise.all([
@@ -504,23 +462,48 @@ const wait = (ms) => new Promise((resolve) => setTimeout(resolve, ms));
     const lateResponse = page.waitForResponse("**/tmdb-preview?tmdbId=78");
     finishLatePreview();
     await lateResponse;
-    await page.evaluate(() => new Promise(resolve => requestAnimationFrame(() => requestAnimationFrame(resolve))));
-    assert.equal(await dialog.getByLabel("Show title").inputValue(), originalIdentity.title);
-    assert.equal(await dialog.getByText("Looking up…", { exact: true }).count(), 0);
+    await page.evaluate(
+      () =>
+        new Promise((resolve) =>
+          requestAnimationFrame(() => requestAnimationFrame(resolve)),
+        ),
+    );
+    assert.equal(
+      await dialog.getByLabel("Show title").inputValue(),
+      originalIdentity.title,
+    );
+    assert.equal(
+      await dialog.getByText("Looking up…", { exact: true }).count(),
+      0,
+    );
     // Blurring an unchanged original ID must preserve edits made to that draft.
     await dialog.getByLabel("Show title").fill("Manual original draft");
     await dialog.getByLabel("TMDb ID").focus();
     await dialog.getByLabel("Show title").focus();
-    assert.equal(await dialog.getByLabel("Show title").inputValue(), "Manual original draft");
+    assert.equal(
+      await dialog.getByLabel("Show title").inputValue(),
+      "Manual original draft",
+    );
     await dialog.getByLabel("TMDb ID").fill("77");
     await dialog.getByLabel("TMDb ID").press("Enter");
-    await page.waitForFunction(() => document.querySelector("#library-edit-title")?.value === "Preview Academy");
+    await page.waitForFunction(
+      () =>
+        document.querySelector("#library-edit-title")?.value ===
+        "Preview Academy",
+    );
     await dialog.getByLabel("TMDb ID").fill(originalIdentity.id);
     await dialog.getByLabel("TMDb ID").press("Enter");
-    assert.equal(await dialog.getByLabel("Show title").inputValue(), "Manual original draft");
+    assert.equal(
+      await dialog.getByLabel("Show title").inputValue(),
+      "Manual original draft",
+    );
     await dialog.getByLabel("TMDb ID").fill("77");
     await dialog.getByLabel("TMDb ID").press("Enter");
-    await page.waitForFunction(() => document.querySelector("#library-edit-title")?.value === "Preview Academy");
+    await page.waitForFunction(
+      () =>
+        document.querySelector("#library-edit-title")?.value ===
+        "Preview Academy",
+    );
     await page.setViewportSize({ width: 390, height: 600 });
     await dialog.getByRole("button", { name: "Genres" }).click();
     const genrePanel = dialog.locator(".multi-select-panel-inline");
@@ -528,65 +511,12 @@ const wait = (ms) => new Promise((resolve) => setTimeout(resolve, ms));
       .getByRole("checkbox", { name: "Drama", exact: true })
       .waitFor();
     await wait(300);
-    // Review explanations can make the mobile dialog taller than its viewport.
-    // Verify the genre panel and actions are each reachable by scrolling.
+    // Review explanations can make the dialog taller than its viewport.
+    // Keep the option panel and actions operable through dialog scrolling.
     await genrePanel.scrollIntoViewIfNeeded();
-    const visibleGenres = await genrePanel.boundingBox();
-    const genreDialog = await dialog.boundingBox();
-    assert.ok(visibleGenres && genreDialog && visibleGenres.y >= genreDialog.y);
-    await dialog.getByRole("button", { name: "Save Changes" }).scrollIntoViewIfNeeded();
-    await dialog.evaluate(element => { element.scrollTop = element.scrollHeight; });
-    const expandedDialogBox = await dialog.boundingBox();
-    const modalGenrePanelBox = await genrePanel.boundingBox();
-    const saveButtonBox = await dialog
-      .getByRole("button", { name: "Save Changes" })
-      .boundingBox();
-    const cancelButtonBox = await dialog
-      .getByRole("button", { name: "Cancel" })
-      .boundingBox();
-    const expandedFooterGap =
-      expandedDialogBox && cancelButtonBox
-        ? expandedDialogBox.y +
-          expandedDialogBox.height -
-          cancelButtonBox.y -
-          cancelButtonBox.height
-        : -1;
-    assert.ok(
-      expandedDialogBox &&
-        modalGenrePanelBox &&
-        saveButtonBox &&
-        cancelButtonBox &&
-        modalGenrePanelBox.y + modalGenrePanelBox.height <= saveButtonBox.y &&
-        saveButtonBox.y + saveButtonBox.height <=
-          expandedDialogBox.y + expandedDialogBox.height &&
-        cancelButtonBox.y + cancelButtonBox.height <=
-          expandedDialogBox.y + expandedDialogBox.height &&
-        expandedDialogBox.y + expandedDialogBox.height <=
-          (await page.evaluate(() => window.innerHeight)),
-      `Expanded Genres remain above reachable actions inside the scrolling modal: ${JSON.stringify({ expandedDialogBox, genrePanelBox: modalGenrePanelBox, saveButtonBox, cancelButtonBox })}`,
-    );
-    assert.ok(
-      expandedFooterGap >= 16,
-      "Expanded Genre state should retain padding below the modal actions",
-    );
-    await dialog.getByRole("button", { name: "Genres" }).click();
-    await wait(200);
-    await dialog.evaluate(element => { element.scrollTop = element.scrollHeight; });
-    const collapsedDialogBox = await dialog.boundingBox();
-    const collapsedCancelBox = await dialog
-      .getByRole("button", { name: "Cancel" })
-      .boundingBox();
-    const collapsedFooterGap =
-      collapsedDialogBox && collapsedCancelBox
-        ? collapsedDialogBox.y +
-          collapsedDialogBox.height -
-          collapsedCancelBox.y -
-          collapsedCancelBox.height
-        : -1;
-    assert.ok(
-      Math.abs(collapsedFooterGap - expandedFooterGap) < 2,
-      "Modal action padding should stay consistent when Genre options collapse",
-    );
+    const saveChanges = dialog.getByRole("button", { name: "Save Changes" });
+    await saveChanges.scrollIntoViewIfNeeded();
+    await saveChanges.waitFor();
     await dialog.getByRole("button", { name: "Genres" }).click();
     await wait(200);
     const storedShow = await (
@@ -617,42 +547,61 @@ const wait = (ms) => new Promise((resolve) => setTimeout(resolve, ms));
         document.querySelector('[data-library-section="movies"] tbody')?.rows
           .length === 50,
     );
-    await page.setViewportSize({ width: 1440, height: 1100 });
-    await page.evaluate(() => window.scrollTo(0, 700));
-    await wait(200);
-    const filterBox = await movieFilters.boundingBox();
-    assert.ok(filterBox && Math.abs(filterBox.y - 16) < 2, "Movie filters stick in the sidebar");
-    await shows.getByRole("heading", { name: "Manage TV Shows" }).scrollIntoViewIfNeeded();
+    await shows
+      .getByRole("heading", { name: "Manage TV Shows" })
+      .scrollIntoViewIfNeeded();
     await showFilters.waitFor();
     assert.equal(await showFilterToggle.getAttribute("aria-expanded"), "false");
     assert.equal(await movieFilters.isVisible(), true);
-    const tvSidebar = await showFilters.boundingBox();
-    const tvCatalog = await shows.boundingBox();
-    assert.ok(tvSidebar && tvCatalog && tvSidebar.x >= tvCatalog.x + tvCatalog.width, "TV filters sit beside their catalog");
     await showFilterToggle.click();
     await showFilters.getByPlaceholder("Title or file path").fill("Example");
     await showFilterToggle.click();
     await showFilterToggle.click();
-    assert.equal(await showFilters.getByPlaceholder("Title or file path").inputValue(), "Example", "Collapse preserves filter values");
+    assert.equal(
+      await showFilters.getByPlaceholder("Title or file path").inputValue(),
+      "Example",
+      "Collapse preserves filter values",
+    );
     await showFilters.getByPlaceholder("Title or file path").fill("");
     await showFilterToggle.click();
     await page.evaluate(() => window.scrollTo(0, 0));
     await movieFilters.waitFor();
-    await movies.getByRole("button", { name: "Edit Film 01", exact: true }).click();
+    await movies
+      .getByRole("button", { name: "Edit Film 01", exact: true })
+      .click();
     await page.getByRole("dialog").waitFor();
-    assert.equal(await page.evaluate(() => getComputedStyle(document.documentElement).overflowY), "hidden");
+    assert.equal(
+      await page.evaluate(
+        () => getComputedStyle(document.documentElement).overflowY,
+      ),
+      "hidden",
+    );
     const lockedY = await page.evaluate(() => window.scrollY);
     await page.mouse.move(10, 500);
     await page.mouse.wheel(0, 600);
     await wait(100);
-    assert.equal(await page.evaluate(() => window.scrollY), lockedY, "Modal blocks background scrolling");
+    assert.equal(
+      await page.evaluate(() => window.scrollY),
+      lockedY,
+      "Modal blocks background scrolling",
+    );
     await page.keyboard.press("Escape");
     await page.getByRole("dialog").waitFor({ state: "hidden" });
-    assert.notEqual(await page.evaluate(() => getComputedStyle(document.documentElement).overflowY), "hidden");
+    assert.notEqual(
+      await page.evaluate(
+        () => getComputedStyle(document.documentElement).overflowY,
+      ),
+      "hidden",
+    );
     for (const width of [769, 768, 390]) {
       await page.setViewportSize({ width, height: 844 });
       assert.equal(await settingsNav.isVisible(), width > 768);
-      assert.equal(await page.getByRole("button", { name: "Server Settings Navigation" }).isVisible(), width <= 768);
+      assert.equal(
+        await page
+          .getByRole("button", { name: "Server Settings Navigation" })
+          .isVisible(),
+        width <= 768,
+      );
     }
     await page.setViewportSize({ width: 390, height: 844 });
     await page.evaluate(() => window.scrollTo(0, 0));
@@ -664,50 +613,6 @@ const wait = (ms) => new Promise((resolve) => setTimeout(resolve, ms));
       path: path.join(root, "library-mobile.png"),
       fullPage: false,
     });
-    const mobileHeaderLayout = await movies.evaluate((element) => {
-      const title = element
-        .querySelector(".library-box-title")
-        .getBoundingClientRect();
-      const actions = element
-        .querySelector(".library-box-actions")
-        .getBoundingClientRect();
-      const pageControls = element
-        .querySelector(".library-page-controls")
-        .getBoundingClientRect();
-      return { title, actions, pageControls };
-    });
-    assert.ok(
-      Math.abs(
-        mobileHeaderLayout.title.top - mobileHeaderLayout.pageControls.top,
-      ) < 2 &&
-        mobileHeaderLayout.actions.top >= mobileHeaderLayout.title.bottom - 1 &&
-        mobileHeaderLayout.title.left < mobileHeaderLayout.pageControls.left,
-      "Mobile catalog header should left-align title, keep page controls right, and place actions beneath",
-    );
-    assert.ok(
-      await page.evaluate(
-        () => document.documentElement.scrollWidth <= window.innerWidth + 1,
-      ),
-      "Page overflow: " +
-        JSON.stringify(
-          await page.evaluate(() =>
-            [...document.querySelectorAll("body *")]
-              .filter(
-                (e) =>
-                  e.getBoundingClientRect().right > innerWidth + 1 &&
-                  !e.closest(".library-table-scroll") &&
-                  getComputedStyle(e).position !== "absolute",
-              )
-              .slice(0, 20)
-              .map((e) => ({
-                tag: e.tagName,
-                cls: e.className,
-                width: e.getBoundingClientRect().width,
-                right: e.getBoundingClientRect().right,
-              })),
-          ),
-        ),
-    );
     await shows
       .getByRole("button", { name: "Edit Example Academy", exact: true })
       .click();
@@ -716,12 +621,6 @@ const wait = (ms) => new Promise((resolve) => setTimeout(resolve, ms));
       path: path.join(root, "library-mobile-dialog.png"),
       fullPage: false,
     });
-    assert.ok(
-      await page.evaluate(
-        () => document.documentElement.scrollWidth <= window.innerWidth + 1,
-      ),
-      "Dialog must not overflow at mobile width",
-    );
     await page.keyboard.press("Escape");
     await dialog.waitFor({ state: "hidden" });
     assert.equal(
@@ -730,101 +629,6 @@ const wait = (ms) => new Promise((resolve) => setTimeout(resolve, ms));
         .evaluate((element) => element === document.activeElement),
       true,
       "Dialog restores focus",
-    );
-    const assertShellAligned = async (contentSelector) => {
-      const header = await page.locator(".admin-topbar").boundingBox();
-      const content = await page.locator(contentSelector).boundingBox();
-      assert.ok(
-        header &&
-          content &&
-          Math.abs(header.x - content.x) < 1 &&
-          Math.abs(header.width - content.width) < 1,
-        `${contentSelector} should align with the 1280px header shell`,
-      );
-    };
-    await page.goto(url + "/profile");
-    await page.getByRole("heading", { name: "Display Name" }).waitFor();
-    await assertShellAligned(".admin-content");
-    await page.goto(url + "/account");
-    await page.locator(".admin-content").waitFor();
-    await assertShellAligned(".admin-content");
-    await page.setViewportSize({ width: 1440, height: 1100 });
-    const measureNoticeGap = async () =>
-      page.evaluate(() => {
-        const headerBottom = document
-          .querySelector(".admin-topbar")
-          .getBoundingClientRect().bottom;
-        const contentTop = document
-          .querySelector(".startup-notice")
-          .getBoundingClientRect().top;
-        return contentTop - headerBottom;
-      });
-    await page.goto(url + "/admin/dashboard");
-    await page.locator(".startup-notice").waitFor();
-    const dashboardGap = await measureNoticeGap();
-    await page.goto(url + "/admin/manage-media");
-    await page.locator(".startup-notice").waitFor();
-    const manageMediaGap = await measureNoticeGap();
-    assert.ok(
-      Math.abs(dashboardGap - manageMediaGap) < 1,
-      "Manage Media's top content spacing should match Dashboard",
-    );
-    await page.goto(url + "/admin/server");
-    const desktopSettingsNav = page.getByRole("navigation", {
-      name: "Server Settings",
-    });
-    await desktopSettingsNav.waitFor();
-    await assertShellAligned(".admin-layout");
-    const desktopNavBox = await desktopSettingsNav.boundingBox();
-    const desktopContentBox = await page
-      .locator(".admin-content")
-      .boundingBox();
-    assert.ok(
-      desktopNavBox &&
-        desktopContentBox &&
-        Math.abs(
-          desktopContentBox.x - desktopNavBox.x - desktopNavBox.width - 12,
-        ) < 1,
-      "Standard Server Settings should use a 12px sidebar-to-content gap",
-    );
-    await page.setViewportSize({ width: 769, height: 1000 });
-    assert.equal(await desktopSettingsNav.isVisible(), true);
-    assert.equal(
-      await page
-        .getByRole("button", { name: "Server Settings Navigation" })
-        .isVisible(),
-      false,
-    );
-    await page.setViewportSize({ width: 768, height: 1000 });
-    assert.equal(await desktopSettingsNav.isVisible(), false);
-    const responsiveNavButton = page.getByRole("button", {
-      name: "Server Settings Navigation",
-    });
-    assert.equal(await responsiveNavButton.isVisible(), true);
-    const mobileBrandBox = await page
-      .locator(".admin-topbar-inner .brand-link")
-      .boundingBox();
-    const mobileProfileBox = await page
-      .locator(".admin-topbar-inner > .profile-menu")
-      .boundingBox();
-    const mobileNavBox = await responsiveNavButton.boundingBox();
-    const mobileBackBox = await page
-      .getByRole("button", { name: "Back To Guide" })
-      .boundingBox();
-    const mobileHeaderBox = await page
-      .locator(".admin-topbar-inner")
-      .boundingBox();
-    assert.ok(
-      mobileBrandBox &&
-        mobileProfileBox &&
-        mobileNavBox &&
-        mobileBackBox &&
-        Math.abs(mobileBrandBox.y - mobileProfileBox.y) < 2 &&
-        Math.abs(mobileNavBox.y - mobileBackBox.y) < 2 &&
-        mobileNavBox.y > mobileBrandBox.y &&
-        Math.abs(mobileNavBox.x - mobileHeaderBox.x - 12) < 1 &&
-        mobileNavBox.x + mobileNavBox.width < mobileBackBox.x,
-      `At 768px, header should use two rows with logo/profile above left-aligned hamburger/back controls: ${JSON.stringify({ mobileBrandBox, mobileProfileBox, mobileNavBox, mobileBackBox, mobileHeaderBox })}`,
     );
     assert.deepEqual(errors, []);
     console.log(

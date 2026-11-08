@@ -41,55 +41,53 @@ class UpdateClientTest {
 
     @Test fun paginatedReleasesChooseVersionCodeAndCorrectTarget() = runBlocking {
         val pageOne = JSONArray()
-        repeat(29) { pageOne.put(entry("26.10.10-alpha1", 23, draft = true)) }
-        pageOne.put(entry("26.10.12-alpha1", 24))
-        val pageTwo = JSONArray().put(entry("26.10.11-alpha1", 25))
+        repeat(29) { pageOne.put(entry("26.10.10-nightly", 23, draft = true)) }
+        pageOne.put(entry("26.10.12-nightly", 24))
+        val pageTwo = JSONArray().put(entry("26.10.11-nightly", 25))
         val checker = service { url -> when {
             url.contains("page=1") -> pageOne.toString()
             url.contains("page=2") -> pageTwo.toString()
-            url.contains("26.10.12") -> manifest(24, "26.10.12-alpha1").toString()
-            else -> manifest(25, "26.10.11-alpha1").toString()
+            url.contains("26.10.12") -> manifest(24, "26.10.12-nightly").toString()
+            else -> manifest(25, "26.10.11-nightly").toString()
         } }
-        val tv = checker.check("26.10.10-alpha1", 23, true, cycle = ReleaseCycle.NIGHTLY)!!
+        val tv = checker.check(23, true, cycle = ReleaseCycle.NIGHTLY)!!
         assertEquals(25L, tv.code); assertTrue(tv.url.endsWith("alreadyon-tv.apk"))
-        val phone = checker.check("26.10.10-alpha1", 23, false, cycle = ReleaseCycle.NIGHTLY)!!
+        val phone = checker.check(23, false, cycle = ReleaseCycle.NIGHTLY)!!
         assertTrue(phone.url.endsWith("alreadyon-android.apk"))
-        assertNull(checker.check("26.10.10-Stable", 23, true))
-        assertEquals(25L, checker.check("26.10.10-Stable", 23, true, cycle = ReleaseCycle.NIGHTLY)!!.code)
-        assertNull(checker.check("26.10.11-alpha1", 25, true, cycle = ReleaseCycle.NIGHTLY))
+        assertNull(checker.check(23, true))
+        assertEquals(25L, checker.check(23, true, cycle = ReleaseCycle.NIGHTLY)!!.code)
+        assertNull(checker.check(25, true, cycle = ReleaseCycle.NIGHTLY))
     }
     @Test fun selectedCycleControlsPhoneAndTvRegardlessOfStableCounterparts() = runBlocking {
         val checker = service { url -> when {
             url.contains("api.github.com") -> JSONArray().put(entry("26.10.10-Stable", 23, preview = false))
-                .put(entry("26.10.11-Stable", 24, preview = false)).put(entry("26.10.12-rc1", 25))
+                .put(entry("26.10.11-Stable", 24, preview = false)).put(entry("26.10.12-rc1", 27))
                 .put(entry("26.10.13-nightly", 26)).toString()
-            url.contains("26.10.10") -> manifest(23, "26.10.10-alpha1").toString()
-            url.contains("26.10.12") -> manifest(25, "26.10.12-rc1").toString()
+            url.contains("26.10.10") -> manifest(23, "26.10.10-nightly").toString()
+            url.contains("26.10.12") -> manifest(27, "26.10.12-rc1").toString()
             url.contains("26.10.13") -> manifest(26, "26.10.13-nightly").toString()
-            else -> manifest(24, "26.10.11-alpha1").toString()
+            else -> manifest(24, "26.10.11-Stable").toString()
         } }
         for (tv in listOf(false, true)) {
-            for (installed in listOf("26.10.10-alpha1", "26.10.10-Stable", "26.10.10-nightly")) {
-                assertEquals(24L, checker.check(installed, 23, tv)!!.code)
-                assertEquals(25L, checker.check(installed, 23, tv, cycle = ReleaseCycle.RELEASE_CANDIDATE)!!.code)
-                val update = checker.check(installed, 23, tv, cycle = ReleaseCycle.NIGHTLY)!!
-                assertEquals(26L, update.code)
-                assertEquals("26.10.13-nightly", update.release)
-                assertNull(checker.check(installed, 27, tv, cycle = ReleaseCycle.NIGHTLY))
-            }
+            assertEquals(24L, checker.check(23, tv)!!.code)
+            assertEquals(24L, checker.check(23, tv, cycle = ReleaseCycle.STABLE)!!.code)
+            val update = checker.check(23, tv, cycle = ReleaseCycle.NIGHTLY)!!
+            assertEquals(26L, update.code)
+            assertEquals("26.10.13-nightly", update.release)
+            assertNull(checker.check(27, tv, cycle = ReleaseCycle.NIGHTLY))
         }
     }
     @Test fun missingTargetMetadataIsSkipped() = runBlocking {
-        val checker = service { url -> if (url.contains("api.github.com")) JSONArray().put(entry("26.10.11-alpha1", 25)).toString()
-            else manifest(25, "26.10.11-alpha1").apply { remove("artifacts") }.toString() }
-        assertNull(checker.check("26.10.10-alpha1", 23, true, cycle = ReleaseCycle.NIGHTLY))
+        val checker = service { url -> if (url.contains("api.github.com")) JSONArray().put(entry("26.10.11-nightly", 25)).toString()
+            else manifest(25, "26.10.11-nightly").apply { remove("artifacts") }.toString() }
+        assertNull(checker.check(23, true, cycle = ReleaseCycle.NIGHTLY))
     }
     @Test fun corruptAndTruncatedDownloadsAreRemoved() = runBlocking {
         val checker = service { String(bytes) }
         val folder = File(context.cacheDir, "synthetic-update-test").apply { mkdirs() }
         val file = File(folder, "update.apk")
-        val update = AppUpdate("26.10.11-alpha1", "26.10.11-alpha1", 24, "tv",
-            "https://github.com/$UPDATE_REPOSITORY/releases/download/26.10.11-alpha1/alreadyon-tv.apk", hash(bytes), bytes.size.toLong())
+        val update = AppUpdate("26.10.11-nightly", "26.10.11-alpha1", 24, "tv",
+            "https://github.com/$UPDATE_REPOSITORY/releases/download/26.10.11-nightly/alreadyon-tv.apk", hash(bytes), bytes.size.toLong())
         try {
             checker.download(update, file) { }
             assertArrayEquals(bytes, file.readBytes())
@@ -103,8 +101,8 @@ class UpdateClientTest {
         val store = UpdateInstallStore(context)
         try {
             InstrumentationRegistry.getInstrumentation().context.assets.open(if (BuildConfig.IS_TV) "update-tv-test.apk" else "update-phone-test.apk").use { input -> store.apk.outputStream().use { input.copyTo(it) } }
-            val update = AppUpdate("test", "26.10.11-alpha5", 24, if (BuildConfig.IS_TV) "tv" else "phone",
-                "https://github.com/$UPDATE_REPOSITORY/releases/download/test/a.apk", "0".repeat(64), store.apk.length())
+            val update = AppUpdate("26.10.11-nightly", "26.10.11-alpha5", 24, if (BuildConfig.IS_TV) "tv" else "phone",
+                "https://github.com/$UPDATE_REPOSITORY/releases/download/26.10.11-nightly/alreadyon-tv.apk", "0".repeat(64), store.apk.length())
             verifyUpdateApk(context, store.apk, update)
             for (bad in listOf(update.copy(target = if (BuildConfig.IS_TV) "phone" else "tv"), update.copy(code = 23), update.copy(version = "wrong"))) {
                 try { verifyUpdateApk(context, store.apk, bad); fail("Incorrect APK metadata accepted") } catch (_: IllegalStateException) { }
@@ -117,7 +115,7 @@ class UpdateClientTest {
         unrelated.edit().putString("server", "https://synthetic.invalid").commit()
         try {
             InstrumentationRegistry.getInstrumentation().context.assets.open(if (BuildConfig.IS_TV) "update-tv-test.apk" else "update-phone-test.apk").use { input -> store.apk.outputStream().use { input.copyTo(it) } }
-            val update = AppUpdate("test", "26.10.11-alpha5", 24, if (BuildConfig.IS_TV) "tv" else "phone", "", "", store.apk.length())
+            val update = AppUpdate("26.10.11-nightly", "26.10.11-alpha5", 24, if (BuildConfig.IS_TV) "tv" else "phone", "", "", store.apk.length())
             val id = stageUpdate(context, update)
             assertEquals(id, store.session()!!.sessionId)
             assertFalse(store.completeIfInstalled())
@@ -129,42 +127,17 @@ class UpdateClientTest {
         } finally { store.clear(); unrelated.edit().clear().commit() }
     }
 
-    @Test fun identicalPromotionsSelectLatestStageAndStopAfterAcceptance() = runBlocking {
+    @Test fun nightlyTrackCanReceiveFreshStableApkAndThenStopsChecking() = runBlocking {
         val checker = service { url -> when {
-            url.contains("api.github.com") -> JSONArray().put(entry("26.10.11-alpha4", 24))
-                .put(entry("26.10.11-RC9", 24)).put(entry("26.10.11-RC10", 24)).toString()
-            else -> manifest(24, "26.10.11-alpha4").toString()
+            url.contains("api.github.com") -> JSONArray().put(entry("26.10.11-nightly", 24))
+                .put(entry("26.10.11-Stable", 25, preview = false)).toString()
+            url.contains("26.10.11-nightly") -> manifest(24, "26.10.11-nightly").toString()
+            else -> manifest(25, "26.10.11-Stable").toString()
         } }
         for (tv in listOf(false, true)) {
-            val update = checker.check("26.10.11-alpha4", 24, tv, installedHash = hash(bytes), cycle = ReleaseCycle.RELEASE_CANDIDATE)!!
-            assertEquals("26.10.11-RC10", update.release)
-            assertNull(checker.check("26.10.11-alpha4", 24, tv, update.release, hash(bytes), ReleaseCycle.RELEASE_CANDIDATE))
-            assertNull(checker.check("26.10.11-alpha4", 24, tv, installedHash = "0".repeat(64), cycle = ReleaseCycle.RELEASE_CANDIDATE))
+            val update = checker.check(24, tv, cycle = ReleaseCycle.NIGHTLY)!!
+            assertEquals("26.10.11-Stable", update.release)
+            assertNull(checker.check(25, tv, cycle = ReleaseCycle.NIGHTLY))
         }
-        val stable = service { url -> if (url.contains("api.github.com"))
-            JSONArray().put(entry("26.10.11-Stable", 24, preview = false)).toString()
-            else manifest(24, "26.10.11-alpha4").toString() }
-        assertEquals("26.10.11-Stable", stable.check("26.10.11-alpha4", 24, false,
-            "26.10.11-RC10", hash(bytes))!!.release)
-    }
-    @Test fun acceptedReleaseSurvivesInstallerCleanupAndRejectsDifferentApks() {
-        val prefs = context.getSharedPreferences("accepted-release", 0)
-        val accepted = AcceptedRelease(context)
-        val embedded = context.packageManager.getPackageInfo(context.packageName, 0).versionName.orEmpty()
-        val hash = installedApkHash(context)
-        val update = AppUpdate("26.10.11-RC1", embedded, installedVersionCode(context),
-            if (BuildConfig.IS_TV) "tv" else "phone", "", hash, 1)
-        try {
-            assertEquals(embedded, accepted.current(hash))
-            accepted.accept(update)
-            UpdateInstallStore(context).clear()
-            assertEquals("26.10.11-RC1", AcceptedRelease(context).current(hash))
-            accepted.accept(update.copy(release = "26.10.11-Stable"))
-            assertEquals("26.10.11-Stable", AcceptedRelease(context).current(hash))
-            assertEquals(embedded, AcceptedRelease(context).current("different APK"))
-            try { accepted.accept(update.copy(hash = "0".repeat(64))); fail("Different APK accepted") }
-            catch (_: IllegalStateException) { }
-            assertEquals("26.10.11-Stable", prefs.getString("release", null))
-        } finally { prefs.edit().clear().commit() }
     }
 }
