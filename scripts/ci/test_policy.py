@@ -67,6 +67,7 @@ class PublicationPolicy(unittest.TestCase):
                        'CI_SELECTED_SHA': SHA}
         with patch.dict(os.environ, environment), \
             patch.object(image_registry, 'has_stable_reissue', return_value=True) as marker, \
+            patch.object(image_registry, 'release_source', return_value='ghcr.io/alreadyontv/alreadyon@sha256:' + 'd' * 64), \
                 patch.object(sys, 'argv', [path]), redirect_stdout(io.StringIO()) as output:
             runpy.run_path(path, run_name='__main__')
         self.assertIn('tags=ghcr.io/alreadyontv/alreadyon:nightly ghcr.io/alreadyontv/alreadyon:latest ghcr.io/alreadyontv/alreadyon:stable',
