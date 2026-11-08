@@ -57,7 +57,7 @@ internal class GitHubUpdates(private val client: OkHttpClient = updateHttpClient
             val entries = JSONArray(json("https://api.github.com/repos/$UPDATE_REPOSITORY/releases?per_page=30&page=$page"))
             for (index in 0 until entries.length()) {
                 val entry = entries.getJSONObject(index)
-                if (acceptsUpdateRelease(version, entry.optString("tag_name"), entry.optBoolean("draft"), entry.optBoolean("prerelease"), cycle)) releases.add(entry)
+                if (acceptsUpdateRelease(entry.optString("tag_name"), entry.optBoolean("draft"), entry.optBoolean("prerelease"), cycle)) releases.add(entry)
             }
             if (entries.length() < 30) break
         }

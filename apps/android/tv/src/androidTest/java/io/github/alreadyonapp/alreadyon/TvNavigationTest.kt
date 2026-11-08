@@ -108,7 +108,7 @@ class TvNavigationTest {
             assertFalse("Server fingerprint confirmation is skipped", exists("Confirm Server"))
             compose.onNode(hasSetTextAction() and hasText("Username")).performTextInput("tv-fixture")
             compose.onNode(hasSetTextAction() and hasText("Username")).performImeAction()
-            val pinField = hasSetTextAction() and hasText("TV PIN")
+            val pinField = hasSetTextAction() and hasText("TV Pairing Pin")
             compose.onNode(pinField).assertIsFocused()
             // Synthetic account PIN set by the isolated test fixture, never a live account.
             compose.onNode(pinField).performTextInput("123456")

@@ -18,10 +18,10 @@ class UpdatePolicyTest {
         for (stage in listOf("nightly", "Stable", "alpha1", "beta2", "RC1")) {
             val prerelease = stage != "Stable"
             assertEquals(stage, stage.lowercase() == "stable" || stage.lowercase() == "nightly",
-                acceptsUpdateRelease("26.10.10-RC1", "26.10.11-$stage", false, prerelease, ReleaseCycle.NIGHTLY))
+                acceptsUpdateRelease("26.10.11-$stage", false, prerelease, ReleaseCycle.NIGHTLY))
             assertEquals(stage, stage.lowercase() == "stable",
-                acceptsUpdateRelease("26.10.10-nightly", "26.10.11-$stage", false, prerelease, ReleaseCycle.STABLE))
-            assertFalse(acceptsUpdateRelease("26.10.10-nightly", "26.10.11-$stage", true, prerelease, ReleaseCycle.NIGHTLY))
+                acceptsUpdateRelease("26.10.11-$stage", false, prerelease, ReleaseCycle.STABLE))
+            assertFalse(acceptsUpdateRelease("26.10.11-$stage", true, prerelease, ReleaseCycle.NIGHTLY))
         }
     }
     @Test fun stableIsDefaultAndInvalidPreferencesFailClosed() {
@@ -29,19 +29,19 @@ class UpdatePolicyTest {
         assertEquals(ReleaseCycle.STABLE, ReleaseCycle.fromStored("unknown"))
         for (cycle in ReleaseCycle.entries) assertEquals(cycle, ReleaseCycle.fromStored(cycle.name))
         assertEquals(ReleaseCycle.STABLE, ReleaseCycle.fromStored("RELEASE_CANDIDATE"))
-        assertFalse(acceptsUpdateRelease("26.10.10-nightly", "26.10.11-nightly", false, true))
-        assertFalse(acceptsUpdateRelease("26.10.10-Stable", "26.10.11-Stable", false, true))
-        assertTrue(acceptsUpdateRelease("26.10.10-nightly", "26.10.11-stable", false, false))
+        assertFalse(acceptsUpdateRelease("26.10.11-nightly", false, true))
+        assertFalse(acceptsUpdateRelease("26.10.11-Stable", false, true))
+        assertTrue(acceptsUpdateRelease("26.10.11-stable", false, false))
     }
     @Test fun nightliesAcceptNightlyAndStableButRejectLegacyStages() {
-        assertTrue(acceptsUpdateRelease("26.10.10-nightly", "26.10.11-nightly", false, true, ReleaseCycle.NIGHTLY))
-        assertTrue(acceptsUpdateRelease("26.10.10-nightly", "26.10.11-stable", false, false, ReleaseCycle.NIGHTLY))
+        assertTrue(acceptsUpdateRelease("26.10.11-nightly", false, true, ReleaseCycle.NIGHTLY))
+        assertTrue(acceptsUpdateRelease("26.10.11-stable", false, false, ReleaseCycle.NIGHTLY))
         for (stage in listOf("alpha2", "beta1", "rc1"))
-            assertFalse(acceptsUpdateRelease("26.10.10-nightly", "26.10.11-$stage", false, true, ReleaseCycle.NIGHTLY))
+            assertFalse(acceptsUpdateRelease("26.10.11-$stage", false, true, ReleaseCycle.NIGHTLY))
         assertTrue(validUpdateAsset(update.url.replace("alpha1", "nightly")))
     }
     @Test fun historicalDatePrefixesRemainAcceptedForSupportedStages() {
-        assertTrue(acceptsUpdateRelease("2026-10-18-nightly", "26.10.18-nightly", false, true, ReleaseCycle.NIGHTLY))
+        assertTrue(acceptsUpdateRelease("26.10.18-nightly", false, true, ReleaseCycle.NIGHTLY))
         assertTrue(verifiedUpdateMetadata(update.copy(version = "2026-10-11-nightly"), 23, "tv"))
         assertTrue(validUpdateAsset(update.url.replace("/26.10.11-nightly/", "/2026-10-11-nightly/")))
     }

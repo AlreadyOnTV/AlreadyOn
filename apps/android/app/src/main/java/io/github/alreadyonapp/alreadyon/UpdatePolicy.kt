@@ -24,7 +24,7 @@ internal fun updateCheckDue(nowElapsedMs: Long, lastCheckElapsedMs: Long, lastCh
     return lastCheckElapsedMs <= 0 || nowElapsedMs - lastCheckElapsedMs >= interval
 }
 
-internal fun acceptsUpdateRelease(installed: String, tag: String, draft: Boolean, prerelease: Boolean,
+internal fun acceptsUpdateRelease(tag: String, draft: Boolean, prerelease: Boolean,
     cycle: ReleaseCycle = ReleaseCycle.STABLE): Boolean {
     if (draft) return false
     val stage = Regex("(?:\\d{2}\\.\\d{2}\\.\\d{2}|(?:20)?\\d{2}-\\d{2}-\\d{2})-(nightly|stable)", RegexOption.IGNORE_CASE)
