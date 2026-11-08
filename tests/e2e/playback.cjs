@@ -4893,13 +4893,15 @@ const noWorkers = async (unreleased = () => 0) => {
       "Activity metadata follows the identity and playback row order",
     );
     assert(
-      (await sessionCard.locator(".activity-formats h3").allTextContents()).join("|") ===
-        "Source Audio/Video|Output Audio/Video",
+      (
+        await sessionCard.locator(".activity-formats h3").allTextContents()
+      ).join("|") === "Source Audio/Video|Output Audio/Video",
       "Activity presents paired source and output formats",
     );
     await dashboard.waitForFunction(() =>
       /^\d{2}:\d{2}\/\d{2}:\d{2}$/.test(
-        document.querySelector(".activity-details-secondary dd")?.textContent ?? "",
+        document.querySelector(".activity-details-secondary dd")?.textContent ??
+          "",
       ),
     );
     assert(
