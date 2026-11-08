@@ -2,19 +2,19 @@
 
 [![AlreadyOn](../web/public/branding/header-doc.svg)](../README.md)
 
-Maintainers control releases; keep credentials private. [Release notes](RELEASE_NOTES.md) define date/stage-only titles, Download Now and three product sections and predecessor-tag comparisons. Titles preserve artifact tags.
+Maintainers control releases; keep credentials private. [Release notes](RELEASE_NOTES.md) define date/stage-only titles, Download Now, product sections and predecessor comparisons.
 
 ## Development and releases
 
 `release-date.txt` pins the active cycle to `26.11.08`. Reuse until Stable on main, then begin another.
 
-Use the primary checkout, `26.11.08`, and HTTPS preview on port 5173. Dev PRs run full quality, source/browser/runtime, Android and security gates. Dev publishes Docker `nightly` and signed phone/TV `YY.MM.DD-nightly` APKs after validation. Weekly dependency batches include major upgrades and integrate only their tested combined commit; see [maintenance](DEPENDENCY_MAINTENANCE.md). Published dated nightlies are immutable.
+Use the primary checkout, `26.11.08`, and HTTPS preview on port 5173. Dev PRs require full quality, source/browser/runtime, Android and security gates. Validated merges publish Docker `nightly` and signed nightly APKs. Weekly dependency batches integrate only their tested commit; see [maintenance](DEPENDENCY_MAINTENANCE.md). Dated nightlies are immutable.
 
-After the maintainer validates a nightly, promote its exact source to `test` for Docker `latest` and `YY.MM.DD-rc1` APKs, then `main` for Docker `stable` and `YY.MM.DD-stable` APKs. Further RCs increment their suffix; completed releases are never overwritten. These promotions remain manual.
+After nightly acceptance, promote its source to `test` for Docker `latest` and RC APKs, then `main` for Docker `stable` and Stable APKs. RC numbers increment; published releases are not overwritten. Promotions are manual.
 
 For approved direct RC delivery, dispatch **Build Date Release Image** on merged dev with `publication=rc-candidate` and exact revision/date. Full gates produce an attested image and draft RC without changing nightly artifacts/channels. Promote that commit using `scripts/promote.py test COMMIT`.
 
-Local checks: `make lint`, documentation and syntax checks.
+For final same-date promotion without another RC APK, use the gated [Stable reissue workflow](STABLE_REISSUE.md). It requires a published RC and no existing Stable release/tag; it never replaces existing releases or artifact bytes.
 
 ## Approved release validation
 

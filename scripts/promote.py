@@ -89,6 +89,26 @@ def ensure_rc(repo, day, selected):
         release.verify_assets(assets, source)
 
 
+def verify_test_candidate(repo, day, selected, release):
+    """Verify either ordinary candidate APKs or the marked final reissue source."""
+    from image_registry import has_stable_reissue
+    if has_stable_reissue(repo, selected):
+        release.check_stable_reissue(repo, selected, day, allow_marked=True)
+        return
+    candidate = next((entry for entry in release.releases(repo)
+                      if (match := (release.ALPHA.fullmatch(entry['tag_name'])
+                                    or release.RC.fullmatch(entry['tag_name'])
+                                    or release.NIGHTLY.fullmatch(entry['tag_name'])))
+                      and match[1] == day and release.release_source(entry) == selected
+                      and (not entry['draft'] or release.RC.fullmatch(entry['tag_name']))), None)
+    if candidate is None:
+        raise ValueError('No published nightly or draft RC APKs match the selected dev source')
+    with tempfile.TemporaryDirectory(prefix='alreadyon-promotion-') as temp:
+        assets = Path(temp)
+        release.download(repo, candidate['tag_name'], assets)
+        release.verify_assets(assets, selected)
+
+
 def main():
     """Advance test/main only by fast-forward to artifacts already validated on dev."""
     parser = argparse.ArgumentParser(description=__doc__)
@@ -120,18 +140,7 @@ def main():
         date_tag = run('git', 'rev-parse', f'refs/tags/{day}^{{commit}}')
         if date_tag != selected:
             raise ValueError(f'Date tag {day} does not point to the selected dev commit')
-        candidate = next((entry for entry in release.releases(repo)
-                          if (match := (release.ALPHA.fullmatch(entry['tag_name'])
-                                        or release.RC.fullmatch(entry['tag_name'])
-                                        or release.NIGHTLY.fullmatch(entry['tag_name'])))
-                          and match[1] == day and release.release_source(entry) == selected
-                          and (not entry['draft'] or release.RC.fullmatch(entry['tag_name']))), None)
-        if candidate is None:
-            raise ValueError('No published nightly or draft RC APKs match the selected dev source')
-        with tempfile.TemporaryDirectory(prefix='alreadyon-promotion-') as temp:
-            assets = Path(temp)
-            release.download(repo, candidate['tag_name'], assets)
-            release.verify_assets(assets, selected)
+        verify_test_candidate(repo, day, selected, release)
     else:
         ensure_rc(repo, day, selected)
     original_branch = run('git', 'branch', '--show-current')

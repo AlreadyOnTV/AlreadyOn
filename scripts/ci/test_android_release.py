@@ -272,6 +272,45 @@ class AndroidReleaseTests(unittest.TestCase):
             self.assertEqual(release.promote_stable("owner/repo", "26.10.09", sha), entry["tag_name"])
             publish.assert_not_called()
 
+    def test_stable_reissue_preflight_requires_same_date_rc_and_absent_stable(self):
+        rc = {"tag_name": "26.11.08-rc2", "draft": False, "prerelease": True}
+        with patch.object(release, "releases", return_value=[rc]), \
+                patch.object(release, "remote_tag_exists", return_value=False), \
+            patch.object(release, "release_source", return_value="a" * 40), \
+                patch("image_registry.has_stable_reissue", return_value=False), \
+                patch.object(release.subprocess, "run", return_value=subprocess.CompletedProcess([], 0)), \
+                patch("builtins.print") as output:
+            release.check_stable_reissue("owner/repo", "a" * 40, "26.11.08")
+            output.assert_called_once_with("Stable reissue source is based on validated 26.11.08-rc2")
+        with patch.object(release, "releases", return_value=[rc, {"tag_name": "26.11.08-stable", "draft": False}]), \
+                patch.object(release, "remote_tag_exists", return_value=False), \
+                patch("image_registry.has_stable_reissue", return_value=False):
+            with self.assertRaisesRegex(ValueError, "release and tag to be absent"):
+                release.check_stable_reissue("owner/repo", "a" * 40, "26.11.08")
+
+    def test_rc_planning_skips_apk_only_for_validated_stable_reissue(self):
+        with patch.object(release, "releases", return_value=[]), \
+                patch("image_registry.has_stable_reissue", return_value=True), \
+                patch("builtins.print") as output:
+            release.promotion_plan("owner/repo", "26.11.08", "a" * 40, "rc")
+            output.assert_any_call("existing=true")
+            output.assert_any_call("stable_reissue=true")
+
+    def test_stable_reissue_builds_from_marked_main_commit(self):
+        sha = "a" * 40
+        entry = {"tag_name": "26.11.08-rc2", "draft": False, "prerelease": True,
+                 "body": f"Source commit: `{sha}`\nAndroid versionCode: `200000000`"}
+        with patch.object(release, "releases", return_value=[entry]), \
+                patch("image_registry.has_stable_reissue", return_value=True), \
+                patch.object(release, "api", return_value={"sha": sha}), \
+                patch.object(release, "download"), \
+                patch.object(release, "verify_assets", return_value={"version_code": 200000000, "version_name": "26.11.08-rc2"}), \
+                patch.object(release, "require_tested_image"), \
+                patch.object(release.subprocess, "run", return_value=subprocess.CompletedProcess([], 0)), \
+                patch("builtins.print") as output:
+            release.promotion_plan("owner/repo", "26.11.08", "b" * 40, "stable")
+            output.assert_any_call("source_sha=" + "b" * 40)
+
     def test_branch_sync_rejects_a_stable_from_another_source(self):
         entry = {"tag_name": "26.10.09-Stable", "draft": False, "body": "Source commit: `" + "b" * 40 + "`"}
         with patch.object(release, "releases", return_value=[entry]), patch.object(release, "publish") as publish:
@@ -299,6 +338,7 @@ class AndroidReleaseTests(unittest.TestCase):
         with ExitStack() as stack:
             stack.enter_context(patch.object(release, "releases", return_value=entries))
             stack.enter_context(patch.object(release, "published_stable", return_value=None))
+            stack.enter_context(patch("image_registry.has_stable_reissue", return_value=False))
             stack.enter_context(patch.object(release, "api", return_value={"sha": sha}))
             stack.enter_context(patch.object(release, "download"))
             stack.enter_context(patch.object(release, "verify_assets", return_value={"version_code": 200000000, "version_name": embedded}))

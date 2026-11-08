@@ -294,6 +294,34 @@ def check_nightly(repo, sha, day):
     return existing
 
 
+def check_stable_reissue(repo, sha, day, *, allow_marked=False):
+    """Allow a final same-date build only after its Stable tag/release is absent."""
+    day = release_day(day)
+    if not re.fullmatch(r"[0-9a-f]{40}", sha):
+        raise ValueError("Stable reissue source must be an exact commit")
+    entries = releases(repo)
+    stable_entries = [entry for entry in entries
+                      if (parsed := stage_tag(entry["tag_name"]))
+                      and parsed == (day, "stable", 0)]
+    if stable_entries or remote_tag_exists(repo, f"{day}-stable") or remote_tag_exists(repo, f"{day}-Stable"):
+        raise ValueError("Stable reissue requires the same-date Stable release and tag to be absent")
+    from image_registry import has_stable_reissue
+    marked = has_stable_reissue(repo, sha)
+    if marked and not allow_marked:
+        raise ValueError("This commit already has a validated Stable reissue candidate")
+    if allow_marked and not marked:
+        raise ValueError("Stable reissue candidate has not passed its full validation workflow")
+    rcs = [entry for entry in entries if not entry["draft"] and entry.get("prerelease")
+           and (parsed := stage_tag(entry["tag_name"])) and parsed[:2] == (day, "rc")]
+    for entry in rcs:
+        source = release_source(entry)
+        if source and re.fullmatch(r"[0-9a-f]{40}", source) and subprocess.run(
+                ["git", "merge-base", "--is-ancestor", source, sha], check=False).returncode == 0:
+            print(f"Stable reissue source is based on validated {entry['tag_name']}")
+            return
+    raise ValueError("Stable reissue requires a published same-date RC in source history")
+
+
 def plan_nightly(repo, sha, day):
     """Allocate signed nightly APKs, preserving published assets on reruns."""
     entry = check_nightly(repo, sha, day)
@@ -474,7 +502,16 @@ def promotion_plan(repo, day, selected_sha, stage, *, repair=False, source_overr
     """Select immutable tested source independently from the workflow revision."""
     day = release_day(day)
     entries = releases(repo)
+    if stage == "rc":
+        from image_registry import has_stable_reissue
+        if has_stable_reissue(repo, selected_sha):
+            print("existing=true")
+            print("stable_reissue=true")
+            return
     if stage == "stable":
+        from image_registry import has_stable_reissue
+        if has_stable_reissue(repo, selected_sha):
+            source_override = selected_sha
         rcs = [entry for entry in entries if not entry["draft"]
                and (parsed := stage_tag(entry["tag_name"])) and parsed[0] == day and parsed[1] == "rc"]
         if not rcs:
@@ -579,7 +616,7 @@ def promote_selected_stable(repo, day, sha):
 
 def main():
     parser = argparse.ArgumentParser(description=__doc__)
-    parser.add_argument("operation", choices=("check-nightly", "plan-nightly", "nightly", "plan", "plan-rc", "plan-stable", "candidate", "direct-stable", "promote", "promote-test", "promote-stable", "cleanup-legacy", "plan-promotion", "publish-promotion"))
+    parser.add_argument("operation", choices=("check-nightly", "check-stable-reissue", "plan-nightly", "nightly", "plan", "plan-rc", "plan-stable", "candidate", "direct-stable", "promote", "promote-test", "promote-stable", "cleanup-legacy", "plan-promotion", "publish-promotion"))
     parser.add_argument("--repo", default=os.environ.get("GITHUB_REPOSITORY"), required=False)
     parser.add_argument("--sha")
     parser.add_argument("--day")
@@ -614,6 +651,10 @@ def main():
             print(f"existing={'true' if entry and not entry['draft'] else 'false'}")
         else:
             plan_nightly(args.repo, args.sha, args.day)
+    elif args.operation == "check-stable-reissue":
+        if not all((args.sha, args.day)):
+            parser.error("check-stable-reissue requires --sha and --day")
+        check_stable_reissue(args.repo, args.sha, args.day)
     elif args.operation in {"plan", "plan-rc"}:
         if not args.sha:
             parser.error("plan requires --sha")

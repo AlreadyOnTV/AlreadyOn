@@ -75,6 +75,7 @@ class NightlyReleaseTests(unittest.TestCase):
         entry = {'tag_name': '26.10.26-nightly', 'draft': False, 'body': f'Source commit: `{SHA}`'}
         with patch.object(release, 'releases', return_value=[entry]), \
                 patch.object(release, 'published_stable', return_value=None), \
+            patch('image_registry.has_stable_reissue', return_value=False), \
                 patch.object(release, 'api', return_value={'sha': SHA}), \
                 patch.object(release, 'download'), patch.object(release, 'verify_assets', return_value={'version_code': 100}), \
                 patch.object(release, 'require_tested_image'), patch.object(release, 'next_version_code', return_value=101), \

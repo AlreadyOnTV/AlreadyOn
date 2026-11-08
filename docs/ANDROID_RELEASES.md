@@ -18,6 +18,8 @@ After nightly acceptance, dispatch **Android Nightly, RC and Stable** on `test` 
 
 Approved direct RC preparation uses **Build Date Release Image** on dev with `publication=rc-candidate` and exact revision/date. Full validation and image attestations precede a signed draft; nightly artifacts/channels remain unchanged. Promotion verifies the matching draft/image before advancing test, which builds higher-code RC APKs and publishes the draft. Draft predecessors resolve through authenticated paginated release listings; GitHub's release-by-tag endpoint cannot resolve unpublished drafts.
 
+To finalize an RC date without another RC APK, follow the gated [Stable reissue procedure](STABLE_REISSUE.md).
+
 Updated phone and TV builds use the Admin-selected Stable (default), Release Candidate or Nightly cycle, not an installed-label track lock. Existing APKs need a signed update to gain the setting or nightly recognition. See [update policy and existing-client limitations](ANDROID_UPDATES.md).
 
 ## Manual stage promotion

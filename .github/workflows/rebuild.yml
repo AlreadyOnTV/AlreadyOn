@@ -10,9 +10,9 @@ on:
         type: string
         default: ''
       publication:
-        description: Nightly delivery or validated draft RC preparation before test promotion
+        description: Nightly delivery, RC preparation, or a full-gate Stable reissue candidate
         type: choice
-        options: [nightly, rc-candidate]
+        options: [nightly, rc-candidate, stable-reissue]
         default: nightly
       release_date:
         description: Optional YY.MM.DD nightly date; defaults to today in America/New_York
@@ -58,6 +58,11 @@ jobs:
             if [ "$PUBLICATION" = rc-candidate ]; then
               test "$GITHUB_EVENT_NAME" = workflow_dispatch
               python3 scripts/ci/release-context.py date --sha "$revision" --date "$release_date" >/dev/null
+              echo "existing=false"
+            elif [ "$PUBLICATION" = stable-reissue ]; then
+              test "$GITHUB_EVENT_NAME" = workflow_dispatch
+              python3 scripts/ci/release-context.py date --sha "$revision" --date "$release_date" >/dev/null
+              python3 scripts/ci/android-release.py check-stable-reissue --sha "$revision" --day "$release_date"
               echo "existing=false"
             else
               python3 scripts/ci/android-release.py check-nightly --sha "$revision" --day "$release_date"
@@ -218,7 +223,7 @@ jobs:
           if-no-files-found: error
           retention-days: 90
       - name: Publish nightly and overwrite today's date tag
-        if: inputs.publication != 'rc-candidate'
+        if: inputs.publication == 'nightly'
         env:
           GH_TOKEN: ${{ github.token }}
           CI_REVISION: ${{ needs.select.outputs.revision }}
@@ -230,7 +235,7 @@ jobs:
           export IMAGE_TAGS
           python3 scripts/ci/publish-image.py
       - name: Record validated RC image without changing channels
-        if: inputs.publication == 'rc-candidate'
+        if: contains(fromJSON('["rc-candidate","stable-reissue"]'), inputs.publication)
         env:
           GH_TOKEN: ${{ github.token }}
           CI_REVISION: ${{ needs.select.outputs.revision }}
@@ -247,8 +252,19 @@ jobs:
         env:
           GH_TOKEN: ${{ github.token }}
         run: python3 scripts/ci/clean-images.py --apply --only-untagged
+      - name: Mark fully validated Stable reissue candidate
+        if: inputs.publication == 'stable-reissue'
+        env:
+          GITHUB_REPOSITORY: ${{ github.repository }}
+          REVISION: ${{ needs.select.outputs.revision }}
+          RELEASE_DATE: ${{ needs.select.outputs.release_date }}
+          RUN_URL: ${{ github.server_url }}/${{ github.repository }}/actions/runs/${{ github.run_id }}
+        run: |
+          python3 scripts/ci/android-release.py check-stable-reissue --sha "$REVISION" --day "$RELEASE_DATE"
+          PYTHONPATH=scripts/ci python3 -c 'import os; from image_registry import record_stable_reissue; record_stable_reissue(os.environ["GITHUB_REPOSITORY"], os.environ["REVISION"], os.environ["RUN_URL"])'
   android:
     name: Build and publish signed Android release after full validation
+    if: inputs.publication != 'stable-reissue'
     needs: [select, quality, tests, publish]
     permissions:
       contents: write
