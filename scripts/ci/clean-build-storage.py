@@ -39,6 +39,7 @@ def active_runs(repository, own_run):
 def main():
     parser = argparse.ArgumentParser(description=__doc__)
     parser.add_argument('--apply', action='store_true')
+    parser.add_argument('--caches-only', action='store_true', help='Leave shared base images to their 30-day policy')
     args = parser.parse_args()
     repository = os.environ['GITHUB_REPOSITORY'].lower()
     own_run = os.environ.get('GITHUB_RUN_ID', '')
@@ -60,6 +61,20 @@ def main():
         if closed[number]:
             cache_deletions.append((cache['id'], number))
             print(f"DELETE cache {cache['id']} PR #{number}: {cache['size_in_bytes']} bytes")
+
+    if args.caches_only:
+        if not args.apply:
+            print('Dry run: no caches deleted')
+            return
+        for cache_id, number in cache_deletions:
+            if active_runs(repository, own_run):
+                print('STOP cleanup: another Actions run started')
+                return
+            if api(f'repos/{repository}/pulls/{number}')['state'] != 'closed':
+                raise RuntimeError('PR reopened during cleanup; refusing deletion')
+            subprocess.run(['gh', 'api', '-X', 'DELETE',
+                            f'repos/{repository}/actions/caches/{cache_id}'], check=True)
+        return
 
     owner, name = repository.split('/')
     kind = api(f'users/{owner}')['type']

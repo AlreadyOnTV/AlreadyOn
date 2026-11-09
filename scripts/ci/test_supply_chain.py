@@ -1,5 +1,4 @@
 """Exercise failed signing, staged uploads, tampered inventories and missed schedules offline."""
-from datetime import datetime, timedelta, timezone
 import importlib.util
 from pathlib import Path
 import subprocess
@@ -38,34 +37,30 @@ class SupplyChain(unittest.TestCase):
                 stage.stage('owner/repo', 'tested-image', '123', '1')
             inspect.assert_not_called()
 
-    def test_new_cycles_require_both_signatures_and_fail_on_missing_inventory(self):
+    def test_promoted_images_require_both_signatures_and_an_immutable_digest(self):
         verify = load('verify-image')
         source = 'ghcr.io/owner/repo@sha256:' + 'd' * 64
         run = Mock(side_effect=[None, subprocess.CalledProcessError(1, 'gh')])
-        with patch.object(verify.subprocess, 'check_output', return_value='26.10.18\n'):
-            with self.assertRaises(subprocess.CalledProcessError):
-                verify.verify('owner/repo', source, 'a' * 40, run)
+        with self.assertRaises(subprocess.CalledProcessError):
+            verify.verify('owner/repo', source, 'a' * 40, run)
         self.assertEqual(run.call_count, 2)
-        self.assertIn('--signer-workflow', run.call_args_list[0].args[0])
+        for call in run.call_args_list:
+            command = call.args[0]
+            source_digest = command.index('--source-digest')
+            self.assertEqual(command[source_digest + 1], 'a' * 40)
+            self.assertIn('--signer-workflow', command)
         self.assertIn('https://cyclonedx.org/bom', run.call_args_list[1].args[0])
-        with patch.object(verify.subprocess, 'check_output', return_value='26.10.11\n'):
-            run.reset_mock()
+        run.reset_mock()
+        with self.assertRaises(ValueError):
             verify.verify('owner/repo', 'legacy-sha-tag', 'a' * 40, run)
-            run.assert_not_called()
+        with self.assertRaises(ValueError):
+            verify.verify('owner/repo', source, 'not-a-commit-sha', run)
+        run.assert_not_called()
 
     def test_mutable_source_cannot_enter_new_attested_promotion(self):
         verify = load('verify-image')
-        with patch.object(verify.subprocess, 'check_output', return_value='26.10.18\n'):
-            with self.assertRaises(ValueError): verify.verify('owner/repo', 'ghcr.io/owner/repo:nightly', 'a' * 40)
+        with self.assertRaises(ValueError): verify.verify('owner/repo', 'ghcr.io/owner/repo:nightly', 'a' * 40)
 
-    def test_manual_or_failed_review_does_not_hide_a_missed_schedule(self):
-        health = load('maintenance-health').health
-        now = datetime(2026, 10, 13, tzinfo=timezone.utc)
-        def run(age, event='schedule', conclusion='success'):
-            return {'event': event, 'conclusion': conclusion, 'updated_at': (now - timedelta(days=age)).isoformat()}
-        self.assertTrue(health([run(7)], now))
-        for runs in [[], [run(9), run(0, 'workflow_dispatch')], [run(0, conclusion='failure')], [run(-1)]]:
-            with self.assertRaises(ValueError): health(runs, now)
 
     def test_channel_digest_mismatch_never_records_success(self):
         import image_registry
@@ -104,12 +99,14 @@ class SupplyChain(unittest.TestCase):
 
     def test_channel_mutation_is_after_attestation_verification(self):
         root = Path(__file__).resolve().parents[2]
-        workflow = (root / '.github/workflows/rebuild.yml').read_text()
+        workflow = (root / '.github/workflows/build_publish.yml').read_text()
         self.assertLess(workflow.index('stage-image.py'), workflow.index('actions/attest@v4'))
         self.assertLess(workflow.index('Verify both signed statements'), workflow.index('publish-image.py'))
         self.assertNotIn('push-to-registry: true', workflow) # GitHub retains signatures independently of OCI cleanup.
-        promotion = (root / '.github/workflows/release.yml').read_text()
+        promotion = (root / '.github/workflows/build_publish.yml').read_text().split('  stable_image:', 1)[1]
         self.assertLess(promotion.index('verify-image.py'), promotion.index('publish-image.py'))
-        maintenance = (root / '.github/workflows/dependency-maintenance.yml').read_text()
-        self.assertNotIn('packages: write', maintenance)
+        maintenance = (root / '.github/workflows/weekly_cleanup.yml').read_text()
+        review = maintenance.split('  select-nightly:', 1)[1].split('  security-scan:', 1)[0]
+        self.assertIn('packages: read', review)
+        self.assertNotIn('packages: write', review)
         self.assertNotIn('publish-image.py', maintenance)

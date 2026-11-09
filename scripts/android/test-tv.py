@@ -9,6 +9,7 @@ import socket
 import sqlite3
 import ssl
 import subprocess
+import sys
 import tempfile
 import time
 import urllib.request
@@ -49,6 +50,12 @@ def main():
             f"-X github.com/alreadyonapp/alreadyon/server/internal/config.dataDir={data} "
             f"-X github.com/alreadyonapp/alreadyon/server/internal/config.webDir={ROOT / 'web/dist'}",
             "./cmd/server", cwd=ROOT / "server")
+        tls_tool = root / "alreadyon-tls"
+        tls_tool.symlink_to(binary)
+        run(str(tls_tool), "trust", capture=True)
+        with sqlite3.connect(data / "alreadyon.db") as db:
+            db.execute("UPDATE folder_settings SET tv_paths=?,movie_paths='[]',commercial_paths='[]' WHERE id=1",
+                       (json.dumps([str(media)]),))
         with socket.socket() as sock:
             # Permit stale fixture TIME_WAIT sockets; an active listener still fails this bind.
             # Never replace a live service to make a synthetic test pass.
@@ -82,27 +89,59 @@ def main():
                         {"Content-Type": "application/json"}, method=method)
                     with opener.open(request) as response:
                         return response.read()
+                def wait_for_idle(path, label, timeout=660):
+                    end = time.monotonic() + timeout
+                    while time.monotonic() < end:
+                        if process.poll() is not None:
+                            raise RuntimeError("Disposable server stopped during " + label)
+                        try:
+                            with opener.open(base + path, timeout=5) as response:
+                                status = json.loads(response.read())
+                            if status.get("state") == "idle":
+                                return
+                        except OSError:
+                            pass
+                        time.sleep(0.5)
+                    raise RuntimeError("Timed out waiting for " + label)
+                def wait_for_library_scan(timeout=660):
+                    end = time.monotonic() + timeout
+                    while time.monotonic() < end:
+                        if process.poll() is not None:
+                            raise RuntimeError("Disposable server stopped during library scan")
+                        try:
+                            with opener.open(base + "/api/server/activity", timeout=5) as response:
+                                processes = json.loads(response.read()).get("processes", [])
+                            if not any(task.get("name", "").startswith(("Library", "Metadata", "Channel"))
+                                       for task in processes):
+                                return
+                        except OSError:
+                            pass
+                        time.sleep(0.5)
+                    raise RuntimeError("Timed out waiting for startup library scan")
                 api("/api/auth/setup", {"username": "tv-fixture", "password": "synthetic-tv-fixture-pass", "serverName": "AlreadyOn TV fixture"})
                 api("/api/auth/tv-pin", {"pin": "123456"}, "PUT")
-                video = media / "program.mp4"
-                run("ffmpeg", "-hide_banner", "-loglevel", "error", "-f", "lavfi", "-i",
-                    "testsrc2=size=320x180:rate=24", "-f", "lavfi", "-i", "sine=frequency=440:sample_rate=48000",
-                    "-t", "600", "-c:v", "libx264", "-preset", "ultrafast", "-pix_fmt", "yuv420p",
-                    "-c:a", "aac", "-movflags", "+faststart", str(video))
-                with sqlite3.connect(data / "alreadyon.db") as db:
-                    now = int(time.time())
-                    db.execute("UPDATE folder_settings SET tv_paths=?,movie_paths='[]',commercial_paths='[]' WHERE id=1", (json.dumps([str(media)]),))
-                    db.execute("UPDATE channels SET hidden=1,visibility='hide'")
-                    db.execute("INSERT INTO media_files(id,root_kind,path,size_bytes,modified_unix,first_seen_unix,last_seen_unix,duration_seconds,status) VALUES(999,'media',?,?,?,0,0,600,'ok')", (str(video), video.stat().st_size, now))
-                    db.execute("INSERT INTO identified_items(id,media_file_id,media_type,title,is_manual_correction) VALUES(999,999,'movie','Synthetic TV Program',1)")
-                    for number in (110, 111):
-                        channel = db.execute("SELECT id FROM channels WHERE number=?", (number,)).fetchone()[0]
-                        db.execute("UPDATE channels SET hidden=0,visibility='show',name=? WHERE id=?", (f"TV fixture {number}", channel))
-                        db.execute("DELETE FROM schedule_entries WHERE channel_id=?", (channel,))
-                        # Repeat the ten-minute synthetic clip so interactive checks stay playable.
-                        for period in range(12):
-                            start = now - 10 + period * 600
-                            db.execute("INSERT INTO schedule_entries(channel_id,media_file_id,kind,source_offset_seconds,duration_seconds,starts_at_unix,ends_at_unix) VALUES(?,999,'program',0,600,?,?)", (channel, start, start + 600))
+                if args.test_class == "TvNavigationTest":
+                    wait_for_idle("/api/settings/transcoding/threads", "thread benchmark")
+                    wait_for_idle("/api/settings/transcoding/capacity", "capacity benchmark")
+                    wait_for_library_scan()
+                    video = media / "program.mp4"
+                    run("ffmpeg", "-hide_banner", "-loglevel", "error", "-f", "lavfi", "-i",
+                        "testsrc2=size=320x180:rate=24", "-f", "lavfi", "-i", "sine=frequency=440:sample_rate=48000",
+                        "-t", "600", "-c:v", "libx264", "-preset", "ultrafast", "-pix_fmt", "yuv420p",
+                        "-c:a", "aac", "-movflags", "+faststart", str(video))
+                    with sqlite3.connect(data / "alreadyon.db") as db:
+                        now = int(time.time())
+                        db.execute("UPDATE channels SET hidden=1,visibility='hide'")
+                        db.execute("INSERT INTO media_files(id,root_kind,path,size_bytes,modified_unix,first_seen_unix,last_seen_unix,duration_seconds,status) VALUES(999,'media',?,?,?,0,0,600,'ok')", (str(video), video.stat().st_size, now))
+                        db.execute("INSERT INTO identified_items(id,media_file_id,media_type,title,is_manual_correction) VALUES(999,999,'movie','Synthetic TV Program',1)")
+                        for number in (110, 111):
+                            channel = db.execute("SELECT id FROM channels WHERE number=?", (number,)).fetchone()[0]
+                            db.execute("UPDATE channels SET hidden=0,visibility='show',name=? WHERE id=?", (f"TV fixture {number}", channel))
+                            db.execute("DELETE FROM schedule_entries WHERE channel_id=?", (channel,))
+                            # Repeat the ten-minute synthetic clip so interactive checks stay playable.
+                            for period in range(12):
+                                start = now - 10 + period * 600
+                                db.execute("INSERT INTO schedule_entries(channel_id,media_file_id,kind,source_offset_seconds,duration_seconds,starts_at_unix,ends_at_unix) VALUES(?,999,'program',0,600,?,?)", (channel, start, start + 600))
                 for apk in ("debug/tv-debug.apk", "androidTest/debug/tv-debug-androidTest.apk"):
                     run(adb, "-s", args.serial, "install", "-r", str(ROOT / "apps/android/tv/build/outputs/apk" / apk))
                 if args.interactive:
@@ -116,13 +155,18 @@ def main():
                     print(f"Fixture WebUI: {base}; password only for WebUI: synthetic-tv-fixture-pass", flush=True)
                     input("Press Enter to stop the disposable fixture: ")
                     return
-                for entry_mode in args.entry_mode or ("discovery", "manual"):
+                entry_modes = args.entry_mode or ("discovery", "manual")
+                if args.test_class != "TvNavigationTest":
+                    entry_modes = ("discovery",)
+                for entry_mode in entry_modes:
                     run(adb, "-s", args.serial, "shell", "pm", "clear", "io.github.alreadyonapp.alreadyon.tv.debug")
                     result = run(adb, "-s", args.serial, "shell", "am", "instrument", "-w", "-e", "serverPort", str(port),
                         "-e", "entryMode", entry_mode, "-e", "pairingOnly", str(args.pairing_only).lower(), "-e", "class", "io.github.alreadyonapp.alreadyon." + args.test_class,
                         "io.github.alreadyonapp.alreadyon.tv.debug.test/androidx.test.runner.AndroidJUnitRunner", capture=True)
                     print(result)
                     if "OK (1 test)" not in result:
+                        log_tail = (root / "server.log").read_text(errors="replace").splitlines()[-80:]
+                        print("Disposable server log tail:\n" + "\n".join(log_tail), file=sys.stderr)
                         if args.screenshots:
                             args.screenshots.mkdir(parents=True, exist_ok=True)
                             run(adb, "-s", args.serial, "pull", "/sdcard/Android/data/io.github.alreadyonapp.alreadyon.tv.debug/files/tv-last-state.png", str(args.screenshots / f"tv-failed-{entry_mode}.png"))

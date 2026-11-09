@@ -13,7 +13,17 @@ const apiOrigin = `https://127.0.0.1:${process.env.PREVIEW_API_PORT || 19900}`;
 // Embed it in the assets so an older open tab keeps reporting its own version.
 function clientVersion() {
   try {
-    const cycle = readFileSync(new URL('../release-date.txt', import.meta.url), 'utf8').trim();
+    const dateParts = Object.fromEntries(
+      new Intl.DateTimeFormat('en-US', {
+        timeZone: 'America/New_York',
+        year: '2-digit',
+        month: '2-digit',
+        day: '2-digit',
+      })
+        .formatToParts(new Date())
+        .map(({ type, value }) => [type, value]),
+    );
+    const cycle = `${dateParts.year}.${dateParts.month}.${dateParts.day}`;
     let revision: string;
     try {
       revision = readFileSync(new URL('../../web-build-revision', import.meta.url), 'utf8').trim();

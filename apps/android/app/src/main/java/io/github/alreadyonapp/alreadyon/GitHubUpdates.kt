@@ -50,15 +50,14 @@ internal class GitHubUpdates(private val client: OkHttpClient = updateHttpClient
         }
     }
 
-    suspend fun check(version: String, code: Long, tv: Boolean, release: String = version, installedHash: String? = null,
-        cycle: ReleaseCycle = ReleaseCycle.STABLE): AppUpdate? {
+    suspend fun check(code: Long, tv: Boolean, cycle: ReleaseCycle = ReleaseCycle.STABLE): AppUpdate? {
         val releases = mutableListOf<JSONObject>()
         // Bound startup work while including prereleases and multiple pages of published history.
         for (page in 1..10) {
             val entries = JSONArray(json("https://api.github.com/repos/$UPDATE_REPOSITORY/releases?per_page=30&page=$page"))
             for (index in 0 until entries.length()) {
                 val entry = entries.getJSONObject(index)
-                if (acceptsUpdateRelease(version, entry.optString("tag_name"), entry.optBoolean("draft"), entry.optBoolean("prerelease"), cycle)) releases.add(entry)
+                if (acceptsUpdateRelease(entry.optString("tag_name"), entry.optBoolean("draft"), entry.optBoolean("prerelease"), cycle)) releases.add(entry)
             }
             if (entries.length() < 30) break
         }
@@ -82,10 +81,7 @@ internal class GitHubUpdates(private val client: OkHttpClient = updateHttpClient
             val update = AppUpdate(entry.getString("tag_name"), metadata.getString("version_name"),
                 metadata.getLong("version_code"), target, apk.getString("browser_download_url"),
                 artifact.getString("sha256"), apk.getLong("size"))
-            if ((update.code != code || update.version == version) &&
-                eligibleUpdate(update, code, target, release, installedHash) &&
-                (newest == null || update.code > newest.code ||
-                    (update.code == newest.code && newerRelease(update.release, newest.release)))) newest = update
+            if (update.code > code && (newest == null || update.code > newest.code)) newest = update
         }
         return newest
     }

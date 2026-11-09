@@ -1,0 +1,167 @@
+# Pull requests build and test the same unpublished candidate used for releases.
+name: Pull Request Validation
+on:
+  pull_request:
+    branches: [dev, main]
+    types: [opened, synchronize, reopened, ready_for_review]
+permissions:
+  contents: read
+concurrency:
+  group: validation-${{ github.event.pull_request.number }}
+  cancel-in-progress: true
+jobs:
+  build_candidate:
+    name: Build unpublished release candidate
+    runs-on: ubuntu-26.04
+    timeout-minutes: 120
+    permissions:
+      contents: read
+    steps:
+      - uses: actions/checkout@v7
+        with:
+          ref: ${{ github.sha }}
+          persist-credentials: false
+      - uses: ./.github/actions/build-validation
+        with:
+          revision: ${{ github.sha }}
+  quality:
+    runs-on: ubuntu-26.04
+    timeout-minutes: 20
+    permissions:
+      contents: read
+    steps:
+      - uses: actions/checkout@v7
+        with:
+          fetch-depth: 0
+          persist-credentials: false
+      - uses: actions/setup-go@v7
+        with:
+          go-version-file: server/go.mod
+          cache-dependency-path: server/go.sum
+      - name: Read shared Node version
+        id: node
+        run: echo "version=$(sed -n 's/^ARG NODE_VERSION=//p' deploy/Dockerfile)" >> "$GITHUB_OUTPUT"
+      - uses: actions/setup-node@v7
+        with:
+          node-version: ${{ steps.node.outputs.version }}
+          cache: npm
+          cache-dependency-path: web/package-lock.json
+      - run: npm ci --prefix web
+      - name: Formatting, static analysis and type checking
+        run: |
+          make lint
+          cd web && npx tsc -b --pretty false
+      - name: Documentation and source comments
+        env:
+          CI_BASE: ${{ github.event.pull_request.base.sha }}
+        run: python3 scripts/ci/check-documentation.py
+      - name: Validate script and workflow syntax
+        run: |
+          python3 scripts/ci/check-syntax.py
+          go install github.com/rhysd/actionlint/cmd/actionlint@v1.7.12
+          actionlint
+      - name: Test CI policy helpers
+        run: python3 -m unittest discover -s scripts/ci -p 'test_*.py'
+  android:
+    runs-on: ubuntu-24.04
+    timeout-minutes: 40
+    permissions:
+      contents: read
+    steps:
+      - uses: actions/checkout@v7
+        with:
+          persist-credentials: false
+      - uses: actions/setup-java@v6
+        with:
+          distribution: temurin
+          java-version: "17"
+      - uses: android-actions/setup-android@v4
+        with:
+          packages: "platform-tools platforms;android-37.0 build-tools;36.0.0"
+      - name: Phone and TV unit tests and release lint
+        run: apps/android/gradlew -p apps/android --no-daemon :app:testDebugUnitTest :tv:testDebugUnitTest :app:lintRelease :tv:lintRelease
+  tests:
+    name: E2E Test Suite
+    needs: [build_candidate]
+    runs-on: ubuntu-26.04
+    timeout-minutes: 90
+    steps:
+      - uses: actions/checkout@v7
+        with:
+          persist-credentials: false
+      - uses: actions/setup-go@v7
+        with:
+          go-version-file: server/go.mod
+          cache-dependency-path: server/go.sum
+      - uses: actions/download-artifact@v5
+        with:
+          name: runtime-candidate-${{ github.run_id }}-${{ github.run_attempt }}
+          path: ${{ runner.temp }}/candidate
+      - name: Load the exact candidate and CI test images
+        run: |
+          docker load --input "$RUNNER_TEMP/candidate/runtime.tar"
+          docker load --input "$RUNNER_TEMP/candidate/ci.tar"
+      - name: Go regressions and full browser e2e tests
+        uses: ./.github/actions/test-source
+        with:
+          ci-base: alreadyon-validation:ci
+          pull-base: "false"
+      - name: Validate packaged runtime with disposable fixtures
+        run: python3 tests/integration/container.py
+        env:
+          CONTAINER_IMAGE: alreadyon-ci:candidate
+  dependency_review:
+    name: Dependabot
+    runs-on: ubuntu-latest
+    permissions:
+      contents: read
+      pull-requests: read
+    steps:
+      - uses: actions/dependency-review-action@v4
+        with:
+          fail-on-severity: moderate
+  auto_merge:
+    if: github.event_name == 'pull_request'
+      && needs.build_candidate.result == 'success'
+      && needs.quality.result == 'success'
+      && needs.android.result == 'success'
+      && needs.tests.result == 'success'
+      && needs.dependency_review.result == 'success'
+    needs: [build_candidate, quality, android, tests, dependency_review]
+    runs-on: ubuntu-latest
+    timeout-minutes: 100
+    permissions:
+      checks: read
+      contents: write
+      pull-requests: write
+    steps:
+      - name: Wait for CodeQL analyses
+        env:
+          GH_TOKEN: ${{ github.token }}
+          PR_NUMBER: ${{ github.event.pull_request.number }}
+          REPOSITORY: ${{ github.repository }}
+        run: |
+          deadline=$((SECONDS + 5400))
+          while true; do
+            checks=$(gh pr checks "$PR_NUMBER" --repo "$REPOSITORY" --json name,workflow,state,event 2>/dev/null || printf '[]')
+            codeql=$(jq -c '[.[] | select(.event == "pull_request" and .workflow == "CodeQL" and (.name | startswith("analyze (")))]' <<< "$checks")
+            if jq -e 'any(.[]; .state == "FAILURE" or .state == "ERROR" or .state == "CANCELLED")' <<< "$codeql" >/dev/null; then
+              echo "::error::CodeQL failed; leaving the PR open."
+              exit 1
+            fi
+            if jq -e 'length == 2 and all(.[]; .state == "SUCCESS")' <<< "$codeql" >/dev/null; then
+              break
+            fi
+            if (( SECONDS >= deadline )); then
+              echo "::error::Timed out waiting for CodeQL; leaving the PR open."
+              exit 1
+            fi
+            sleep 10
+          done
+      - name: Enable merge after all PR gates pass
+        env:
+          GH_TOKEN: ${{ github.token }}
+          PR_NUMBER: ${{ github.event.pull_request.number }}
+          REPOSITORY: ${{ github.repository }}
+          HEAD_SHA: ${{ github.event.pull_request.head.sha }}
+        run: gh pr merge "$PR_NUMBER" --repo "$REPOSITORY" --merge --auto --match-head-commit "$HEAD_SHA"

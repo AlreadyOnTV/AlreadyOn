@@ -10,9 +10,9 @@ Install web dependencies with `cd web && npm ci`, then return to the repository 
 
 Use `make preview-status` and `make preview-stop` to inspect or stop this checkout's services. The default backend port is 15900. Existing preview port overrides are supported by `scripts/preview.sh`; coordinate ports when running multiple instances.
 
-## Single-checkout release work
+## Development and release work
 
-Use the primary repository checkout; do not create parallel worktrees. The active maintainer cycle uses local branch `26.11.08`, based on `dev`; push only when authorized. Test locally at <https://localhost:5173>. When ready for approved validation, open a PR from `26.11.08` to `dev`. After merging validated work, dev publishes a nightly; RC/Stable await maintainer acceptance. Retain the dated branch until its work is delivered; see [cycle instructions](ORGANIZATION.md). Follow [release-note conventions](RELEASE_NOTES.md) for titles, changes and known issues.
+Use the primary checkout and the long-lived `dev` and `main` branches only. Commit active development directly to `dev`; validate with the HTTPS preview at <https://localhost:5173>, disposable Docker tests, and USB-connected phone/TV builds as needed. When ready, open a PR from `dev` to `main`. CodeQL, dependency review, Android and full e2e/runtime validation must pass before auto-merge. Maintainers manually publish Nightly from `dev` or `main`; a `dev` Nightly becomes eligible for Stable after its source reaches `main`. Run **Build and Publish** with `operation: stable` on `main` to add Docker `latest` and build fresh Stable APKs. Follow [release-note conventions](RELEASE_NOTES.md).
 
 Trust this instance's local certificate only on your development machine. Do not weaken remote TLS validation. Local data lives under ignored `server/data/`; keep it across restarts.
 
@@ -24,6 +24,6 @@ Store machine-specific notes in ignored `.private/`. Do not commit home paths, h
 
 ## Validate
 
-Run `make lint` and relevant Go tests. Use isolated [browser tests](../tests/e2e/README.md) and [runtime tests](../tests/integration/README.md) when requested. [Delivery](CI_CD.md) describes release checks. Never point destructive tests at your preview or a live server.
+Run `make lint` and relevant Go tests. Use isolated [browser tests](../tests/e2e/README.md) and [runtime tests](../tests/integration/README.md). [Delivery](CI_CD.md) describes release checks. Never point destructive tests at your preview or a live server.
 
 Use the [documentation index](README.md) for subsystem contracts, platform guidance and release procedures.

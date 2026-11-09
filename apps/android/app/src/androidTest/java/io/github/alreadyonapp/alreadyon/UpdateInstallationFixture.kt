@@ -3,6 +3,7 @@ package io.github.alreadyonapp.alreadyon
 import androidx.test.ext.junit.runners.AndroidJUnit4
 import androidx.test.platform.app.InstrumentationRegistry
 import kotlinx.coroutines.runBlocking
+import org.junit.Assume.assumeTrue
 import org.junit.Test
 import org.junit.runner.RunWith
 
@@ -12,13 +13,17 @@ class UpdateInstallationFixture {
     @Test fun stageSyntheticUpdate() = runBlocking {
         val instrumentation = InstrumentationRegistry.getInstrumentation()
         val context = instrumentation.targetContext
+        val asset = if (BuildConfig.IS_TV) "update-tv-test.apk" else "update-phone-test.apk"
+        assumeTrue("Run scripts/android/test-updates.py to supply signed APK assets",
+            instrumentation.context.assets.list("").orEmpty().contains(asset))
         val store = UpdateInstallStore(context)
         context.getSharedPreferences("synthetic-update-settings", 0).edit().putString("server", "https://synthetic.invalid").commit()
-        instrumentation.context.assets.open(if (BuildConfig.IS_TV) "update-tv-test.apk" else "update-phone-test.apk").use { input ->
+        context.getSharedPreferences("app-updates", 0).edit().putString("release_cycle", "NIGHTLY").commit()
+        instrumentation.context.assets.open(asset).use { input ->
             store.apk.outputStream().use { input.copyTo(it) }
         }
         val hash = java.security.MessageDigest.getInstance("SHA-256").digest(store.apk.readBytes()).joinToString("") { "%02x".format(it) }
-        val update = AppUpdate("26.10.11-RC2", "26.10.11-alpha5", 24, if (BuildConfig.IS_TV) "tv" else "phone", "", hash, store.apk.length())
+        val update = AppUpdate("26.10.11-stable", "26.10.11-stable", 24, if (BuildConfig.IS_TV) "tv" else "phone", "", hash, store.apk.length())
         verifyUpdateApk(context, store.apk, update)
         stageUpdate(context, update)
         Unit

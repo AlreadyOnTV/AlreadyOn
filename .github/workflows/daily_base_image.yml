@@ -1,11 +1,14 @@
-# Explicit refresh builds both shared bases with current upstream packages.
-name: Refresh Base Images
+# Daily refresh builds both shared bases with current upstream packages.
+name: Daily Build Base Image
 on:
-  # Maintainers explicitly approve registry refreshes.
+  schedule:
+    - cron: "43 6 * * *"
+      timezone: America/New_York
   workflow_dispatch:
 permissions:
   contents: read
   packages: write
+  actions: read
 concurrency:
   group: base-images
   cancel-in-progress: false
@@ -14,10 +17,10 @@ jobs:
     runs-on: ubuntu-26.04
     timeout-minutes: 90
     steps:
-      # Build the explicitly selected workflow branch and its current recipe.
+      # Use trusted main for both the schedule and manual refresh.
       - uses: actions/checkout@v7
         with:
-          ref: ${{ github.ref }}
+          ref: main
           persist-credentials: false
       - name: Make room for the two base images
         run: |
@@ -35,4 +38,8 @@ jobs:
         with:
           image: ghcr.io/alreadyontv/alreadyon-base
           revision: ${{ steps.base.outputs.revision }}
-          refresh: 'true'
+          refresh: "true"
+      - name: Remove base images older than 30 days
+        env:
+          GH_TOKEN: ${{ github.token }}
+        run: python3 scripts/ci/clean-base-images.py --apply

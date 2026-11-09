@@ -2,19 +2,17 @@
 
 [![AlreadyOn](../web/public/branding/header-doc.svg)](../README.md)
 
-Maintainers control releases; keep credentials private. [Release notes](RELEASE_NOTES.md) define date/stage-only titles, Download Now and three product sections and predecessor-tag comparisons. Titles preserve artifact tags.
+Maintainers control releases; keep credentials private. Current release titles are `YY.MM.DD-nightly` and `YY.MM.DD-stable`. [Release notes](RELEASE_NOTES.md) define their contents.
 
 ## Development and releases
 
-`release-date.txt` pins the active cycle to `26.11.08`. Reuse until Stable on main, then begin another.
+The release date is generated in `America/New_York` when Nightly publication is dispatched.
 
-Use the primary checkout, `26.11.08`, and HTTPS preview on port 5173. Dev PRs run full quality, source/browser/runtime, Android and security gates. Dev publishes Docker `nightly` and signed phone/TV `YY.MM.DD-nightly` APKs after validation. Weekly dependency batches include major upgrades and integrate only their tested combined commit; see [maintenance](DEPENDENCY_MAINTENANCE.md). Published dated nightlies are immutable.
+Work on `dev`, validate locally with the HTTPS preview, disposable Docker tests and USB-connected phone/TV builds, then open a PR to `main`. PRs to `dev` or `main` run CodeQL, dependency review, Android checks and full e2e/runtime validation. Auto-merge waits for all PR checks. Dependabot opens grouped weekly PRs to `dev`; see [maintenance](DEPENDENCY_MAINTENANCE.md).
 
-After the maintainer validates a nightly, promote its exact source to `test` for Docker `latest` and `YY.MM.DD-rc1` APKs, then `main` for Docker `stable` and `YY.MM.DD-stable` APKs. Further RCs increment their suffix; completed releases are never overwritten. These promotions remain manual.
+Maintainers manually dispatch Nightly publication from the exact current `dev` or `main` tip. The workflow builds and validates the image, then publishes `nightly` plus current-date aliases and signed `YY.MM.DD-nightly` phone/TV APKs. A same-date rerun may replace that date's release assets only after all gates pass and with higher APK version codes; the source date tag advances to the selected SHA.
 
-For approved direct RC delivery, dispatch **Build Date Release Image** on merged dev with `publication=rc-candidate` and exact revision/date. Full gates produce an attested image and draft RC without changing nightly artifacts/channels. Promote that commit using `scripts/promote.py test COMMIT`.
-
-Local checks: `make lint`, documentation and syntax checks.
+After Nightly acceptance, dispatch **Build and Publish** with `operation: stable` on `main`. It verifies the Nightly's source and signed image digest, retags that image as `latest` without rebuilding it, and builds fresh Stable APKs from the same commit.
 
 ## Approved release validation
 
@@ -28,20 +26,20 @@ Local checks: `make lint`, documentation and syntax checks.
 
 Resolve failures. Record the commit, image ID/digest and actual results. Live checks are non-destructive; synthetic suites use isolated data.
 
-Before image builds, `scripts/local-bases.py` checks base recipes, parent and age; stale/missing bases rebuild. `make refresh-local-bases` forces refresh.
+Daily Base Image refreshes shared bases; `make refresh-local-bases` forces a local refresh.
 
 ## Delivery
 
 On approval, deploy the exact tested image and verify revision, health, service count, mounts and relevant playback. `scripts/deploy-production.sh <ssh-host> [compose-directory]` transfers it with the updater paused, using the host's configured Compose image tag without changing its configuration. Digest-pinned references require maintainer review. Preserve live data.
 
-After nightly approval run `python3 scripts/promote.py test YY.MM.DD`; after RC approval run `python3 scripts/promote.py main`. These create fast-forward or exact-tree merge commits only, require image/APK provenance, and reuse image digests without e2e reruns; Android publication builds fresh signed APKs from the tested source. Resolve conflicts on dev; preserve branch protection.
+Preserve the exact tested source and image digest through publication. Main intentionally has no branch protection; the PR auto-merge workflow waits for quality, Android, E2E/runtime, CodeQL and dependency-review checks. Do not rebuild or replace previously signed APKs or published release tags outside the validated same-date workflow.
 
-Dev builds follow validated PR merges; guarded test/main merges promote existing images. See [retention](IMAGE_RETENTION.md).
+Dev changes reach users only after the reviewed main PR merges. See [retention](IMAGE_RETENTION.md).
 
 ## Public automation
 
-PR validation scans the exact patched candidate with read-only credentials; publication credentials are unavailable. Critical/High findings block publication; secret matches require private review. Scanner failures block the gate. Runtime/CI images are scanned. New cycles require [signed image evidence](ARTIFACT_PROVENANCE.md); [weekly dependency updates](DEPENDENCY_MAINTENANCE.md) publish only validated nightlies.
+PR validation scans the exact unpublished candidate with read-only credentials; publication credentials are unavailable. Security Scan covers the final runtime image and Android release-runtime dependencies, not CI/build/test tools. Critical/High findings block publication; secret matches require private review. New cycles require [signed image evidence](ARTIFACT_PROVENANCE.md); [weekly Dependabot PRs](DEPENDENCY_MAINTENANCE.md) use the same validation gates.
 
-CodeQL analyzes Go/TypeScript on dev/test/main; Pages uses its independent organization-site workflow. Android automation builds nightly on dev, RC on test and fresh Stable APKs from the latest RC source on main; see [Android policy](ANDROID_RELEASES.md).
+CodeQL analyzes Go/TypeScript only on PRs to `dev` or `main`; Pages uses its independent redirect workflow. Nightly and Stable APKs are published by Build and Publish; see [Android policy](ANDROID_RELEASES.md).
 
-New images use `ghcr.io/alreadyontv/alreadyon`. Go module and Android package identities stay compatible. No automatic deployment or RC/Stable promotion is scheduled. **Refresh Base Images** rebuilds shared bases; CI bases pin their runtime digest. Promotions reuse digests.
+New images use `ghcr.io/alreadyontv/alreadyon`. Go module and Android package identities stay compatible. Stable publication is manual and reuses the tested Nightly digest. **Daily Build Base Image** refreshes shared bases and removes stale base versions after 30 days; CI bases pin their runtime digest.

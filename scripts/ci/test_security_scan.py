@@ -4,6 +4,8 @@ from pathlib import Path
 import unittest
 import json
 import tempfile
+import subprocess
+import sys
 from datetime import date
 
 spec = importlib.util.spec_from_file_location('security_scan', Path(__file__).parents[1] / 'security/scan.py')
@@ -12,6 +14,16 @@ spec.loader.exec_module(scan)
 
 
 class SecurityScanTest(unittest.TestCase):
+    def test_packaged_only_requires_android_release_runtime_locks(self):
+        script = Path(__file__).parents[1] / 'security/scan.py'
+        with tempfile.TemporaryDirectory() as output:
+            result = subprocess.run([
+                sys.executable, str(script), '--image-archive', 'candidate.tar',
+                '--packaged-only', '--output', output,
+            ], capture_output=True, text=True)
+        self.assertEqual(result.returncode, 2)
+        self.assertIn('requires image and Android release-runtime inputs', result.stderr)
+
     def test_mutable_or_malformed_image_is_rejected(self):
         for image in ['example/image:nightly', 'example/image@sha256:123', '--password=secret',
                       'https://user:secret@example/image@sha256:' + 'a' * 64]:

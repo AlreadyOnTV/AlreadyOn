@@ -41,6 +41,7 @@ import androidx.compose.ui.Modifier
 import androidx.compose.ui.Alignment
 import androidx.compose.ui.graphics.Color
 import androidx.compose.ui.platform.LocalSoftwareKeyboardController
+import androidx.compose.ui.platform.LocalFocusManager
 import androidx.compose.ui.focus.onFocusChanged
 import androidx.compose.ui.focus.FocusRequester
 import androidx.compose.ui.focus.focusRequester
@@ -217,6 +218,7 @@ class MainActivity : ComponentActivity() {
 internal fun ProfileMenu(state: PhoneState, model: PhoneModel, modifier: Modifier = Modifier, openSignal: Int = 0, onExitApp: (() -> Unit)? = null, onMenuBack: (() -> Unit)? = null, onMenuNavigation: () -> Unit = {}, onMenuDismiss: () -> Unit = {}) {
     var open by remember { mutableStateOf(false) }
     var consumedSignal by remember { mutableIntStateOf(openSignal) }
+    val focusManager = LocalFocusManager.current
     val switchFocus = remember { FocusRequester() }
     var menuBackDown by remember { mutableStateOf(false) }
     LaunchedEffect(openSignal) {
@@ -247,7 +249,11 @@ internal fun ProfileMenu(state: PhoneState, model: PhoneModel, modifier: Modifie
             DropdownMenuItem(text = { Text("Switch Profile") }, modifier = Modifier.focusRequester(switchFocus).tvFocusOutline(), onClick = { open = false; model.changeProfile() })
             DropdownMenuItem(text = { Text("Profile") }, modifier = Modifier.tvFocusOutline(), onClick = { open = false; model.openSettings("profile") })
             if (state.profile?.role == "admin") DropdownMenuItem(text = { Text("Settings") }, modifier = Modifier.tvFocusOutline(), onClick = { open = false; model.openSettings("admin") })
-            DropdownMenuItem(text = { Text("Sign Out") }, modifier = Modifier.tvFocusOutline(), onClick = { open = false; model.logout() })
+            DropdownMenuItem(text = { Text("Sign Out") }, modifier = Modifier.tvFocusOutline(), onClick = {
+                open = false
+                if (BuildConfig.IS_TV) focusManager.clearFocus(force = true)
+                model.logout()
+            })
             if (BuildConfig.IS_TV && onExitApp != null) DropdownMenuItem(
                 text = { Text("Exit App") }, modifier = Modifier.tvFocusOutline(),
                 onClick = { open = false; onExitApp() })
@@ -294,6 +300,7 @@ private fun AccountPasswordField(label: String, value: String, changed: (String)
 internal fun ProfileScreen(state: PhoneState, model: PhoneModel, modifier: Modifier = Modifier) {
     var selected by remember { mutableStateOf<ViewerProfile?>(null) }
     var pin by remember { mutableStateOf("") }
+    val focusManager = LocalFocusManager.current
     val firstProfile = remember { FocusRequester() }
     var focusedInitialProfile by remember { mutableStateOf(false) }
     var profilesLoaded by remember { mutableStateOf(false) }
@@ -317,7 +324,13 @@ internal fun ProfileScreen(state: PhoneState, model: PhoneModel, modifier: Modif
         verticalArrangement = Arrangement.spacedBy(24.dp, if (BuildConfig.IS_TV) Alignment.CenterVertically else Alignment.Top)) {
         if (BuildConfig.IS_TV) item { Text("Select Profile", style = MaterialTheme.typography.headlineMedium) }
         items(state.profiles, key = { it.id }) { profile ->
-            Button(onClick = { if (profile.hasPin) { selected = profile; pin = "" } else model.selectProfile(profile, "") },
+            Button(onClick = {
+                if (profile.hasPin) { selected = profile; pin = "" }
+                else {
+                    if (BuildConfig.IS_TV) focusManager.clearFocus(force = true)
+                    model.selectProfile(profile, "")
+                }
+            },
                 enabled = profilesLoaded && !state.busy, modifier = Modifier.fillMaxWidth(if (BuildConfig.IS_TV) 0.5f else 1f).heightIn(min = 48.dp)
                     .then(if (BuildConfig.IS_TV && profile.id == state.profiles.firstOrNull()?.id) Modifier.focusRequester(firstProfile) else Modifier)
                     .tvFocusOutline(), shape = RoundedCornerShape(4.dp)) {
@@ -329,7 +342,10 @@ internal fun ProfileScreen(state: PhoneState, model: PhoneModel, modifier: Modif
         }
         item {
             Row(horizontalArrangement = Arrangement.Center) {
-                TextButton(onClick = model::logout, enabled = !state.busy) { Text("Sign Out", style = linkStyle) }
+                TextButton(onClick = {
+                    if (BuildConfig.IS_TV) focusManager.clearFocus(force = true)
+                    model.logout()
+                }, enabled = !state.busy) { Text("Sign Out", style = linkStyle) }
             }
         }
     }
@@ -337,7 +353,10 @@ internal fun ProfileScreen(state: PhoneState, model: PhoneModel, modifier: Modif
         AlertDialog(onDismissRequest = { selected = null; pin = "" }, title = { Text("PIN for ${profile.name}") },
             text = { OutlinedTextField(pin, { pin = it }, label = { Text("Profile PIN") }, singleLine = true,
                 visualTransformation = PasswordVisualTransformation(), keyboardOptions = KeyboardOptions(keyboardType = KeyboardType.NumberPassword)) },
-            confirmButton = { TextButton(onClick = { model.selectProfile(profile, pin); pin = ""; selected = null }, enabled = !state.busy && pin.isNotEmpty()) { Text("Continue") } },
+            confirmButton = { TextButton(onClick = {
+                if (BuildConfig.IS_TV) focusManager.clearFocus(force = true)
+                model.selectProfile(profile, pin); pin = ""; selected = null
+            }, enabled = !state.busy && pin.isNotEmpty()) { Text("Continue") } },
             dismissButton = { TextButton(onClick = { pin = ""; selected = null }) { Text("Cancel") } })
     }
 }

@@ -7,7 +7,6 @@
 !api/**
 !deploy/
 !deploy/**
-!release-date.txt
 !.dockerignore
 .git
 .github

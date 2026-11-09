@@ -93,6 +93,8 @@ def main():
     ci_image = parser.add_mutually_exclusive_group()
     ci_image.add_argument('--ci-image', type=validate_image)
     ci_image.add_argument('--ci-image-archive', type=Path)
+    parser.add_argument('--android-runtime-locks', type=Path,
+                        help='Directory containing only releaseRuntimeClasspath Gradle lockfiles')
     parser.add_argument('--output', type=Path, required=True)
     parser.add_argument('--trivy', default='trivy')
     parser.add_argument('--policy', choices=('release', 'report-only'), default='release')
@@ -101,9 +103,13 @@ def main():
     parser.add_argument('--registry-user', help='Read registry password from stdin for a remote image scan')
     parser.add_argument('--source-only', action='store_true', help='Scan source only; record image coverage as absent')
     parser.add_argument('--image-only', action='store_true', help='Scan image only; record source/Android coverage as absent')
+    parser.add_argument('--packaged-only', action='store_true',
+                        help='Scan the final image and Android release-runtime dependency locks, excluding build/test tools')
     args = parser.parse_args()
-    if args.policy == 'release' and (args.source_only or args.image_only):
-        parser.error('Release gating requires source and image coverage; use report-only for partial scans')
+    if args.packaged_only and (args.source_only or args.image_only or not args.android_runtime_locks):
+        parser.error('Packaged-only scanning requires image and Android release-runtime inputs')
+    if args.policy == 'release' and (args.source_only or (args.image_only and not args.packaged_only)):
+        parser.error('Release gating requires package coverage; use packaged-only for shipped components')
     if args.source_only and args.image_only:
         parser.error('Choose at most one partial scan mode')
     # Scanner and Gradle logs may contain sensitive matches: never stream them to CI.
@@ -145,7 +151,7 @@ def main():
     with tempfile.TemporaryDirectory(prefix='alreadyon-security-') as temporary:
         staging = Path(temporary) / "source"
         staging.mkdir()
-        if not args.image_only:
+        if not args.image_only and not args.packaged_only:
             # Only tracked files enter the source scan. No live DB, ignored notes or credentials.
             paths = subprocess.check_output(['git', 'ls-files', '-z'], cwd=ROOT).split(b'\0')
             tree = hashlib.sha256()
@@ -194,6 +200,20 @@ def main():
             run([*base, 'image', '--scanners', 'vuln,secret', '--list-all-pkgs', '--ignorefile', '', '--format', 'json',
                  '--output', str(output / 'image.json'), *image_args], 'image', registry_input=bool(args.registry_user))
             manifest['coverage'].append('exact image: OS packages, detected bundled libraries/binaries, secrets')
+        if args.android_runtime_locks:
+            lockfiles = sorted(args.android_runtime_locks.glob('*-gradle.lockfile'))
+            if {path.name for path in lockfiles} != {'app-gradle.lockfile', 'tv-gradle.lockfile'}:
+                parser.error('Expected phone and TV release-runtime Gradle lockfiles only')
+            android_staging = Path(temporary) / 'android-runtime'
+            for path in lockfiles:
+                module = 'app' if path.name.startswith('app-') else 'tv'
+                target = android_staging / module / 'gradle.lockfile'
+                target.parent.mkdir(parents=True, exist_ok=True)
+                target.write_bytes(path.read_bytes())
+            run([*base, 'fs', '--scanners', 'vuln,secret', '--ignorefile', '', '--format', 'json',
+                 '--output', str(output / 'android-runtime.json'), str(android_staging)],
+                'android-runtime')
+            manifest['coverage'].append('phone/TV APKs: exact releaseRuntimeClasspath package locks; excludes build and test dependencies')
         if args.ci_image or args.ci_image_archive:
             ci_args = ['--input', str(args.ci_image_archive.resolve())] if args.ci_image_archive else ['--image-src', 'remote', args.ci_image]
             if args.registry_user:
@@ -205,7 +225,7 @@ def main():
             run([*base, 'image', '--scanners', 'vuln,secret', '--list-all-pkgs', '--ignorefile', '', '--format', 'json',
                  '--output', str(output / 'ci-image.json'), *ci_args], 'ci-image', registry_input=bool(args.registry_user))
             manifest['coverage'].append('exact CI image: OS packages, compiler and npm tooling, secrets')
-        for kind in ('source', 'image', 'ci-image'):
+        for kind in ('source', 'image', 'ci-image', 'android-runtime'):
             path = output / (kind + '.json')
             if not path.exists():
                 continue
@@ -214,6 +234,8 @@ def main():
             if kind in {'image', 'ci-image'} and (not report.get('Metadata', {}).get('ImageID') or
                     not any(result.get('Packages') for result in report.get('Results', []))):
                 raise RuntimeError('Image scan is missing required artifact/package inventory')
+            if kind == 'android-runtime' and not any(result.get('Packages') for result in report.get('Results', [])):
+                raise RuntimeError('Android runtime scan found no Gradle release packages')
             if kind == 'source':
                 detected = {result.get('Type') for result in report.get('Results', [])}
                 if not {'gradle', 'gomod', 'npm'} <= detected:

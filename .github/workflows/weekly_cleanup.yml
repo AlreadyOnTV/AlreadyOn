@@ -1,8 +1,8 @@
-# Daily cleanup uses trusted dev code; PR closure itself triggers nothing.
-name: Daily Clean Images and Cache
+# Weekly cleanup scans the published runtime and applies artifact retention.
+name: Weekly Cleanup
 on:
   schedule:
-    - cron: '43 7 * * *'
+    - cron: "43 7 * * 1"
       timezone: America/New_York
   workflow_dispatch:
     inputs:
@@ -12,31 +12,55 @@ on:
         default: false
 permissions:
   contents: read
-  packages: write
+  packages: read
   pull-requests: read
-  actions: write
+  actions: read
 concurrency:
   group: application-images
   cancel-in-progress: false
 jobs:
-  maintenance-health:
-    # Independent daily read-only watchdog; failure is visible even if cleanup succeeds.
+  select-nightly:
     permissions:
       contents: read
-      actions: read
+      packages: read
     runs-on: ubuntu-26.04
+    outputs:
+      image: ${{ steps.nightly.outputs.image }}
+      revision: ${{ steps.nightly.outputs.revision }}
     steps:
       - uses: actions/checkout@v7
         with:
-          ref: dev
+          ref: main
           persist-credentials: false
-      - name: Detect a missed or failing weekly review
-        env:
-          GH_TOKEN: ${{ github.token }}
+      - uses: docker/login-action@v4
+        with:
+          registry: ghcr.io
+          username: ${{ github.actor }}
+          password: ${{ secrets.GITHUB_TOKEN }}
+      - name: Resolve the exact Nightly digest and source revision
+        id: nightly
         run: |
-          python3 scripts/ci/maintenance-health.py
-          python3 scripts/ci/maintenance-health.py --workflow dependency-updates.yml
+          docker pull ghcr.io/alreadyontv/alreadyon:nightly
+          source=$(docker inspect ghcr.io/alreadyontv/alreadyon:nightly --format '{{index .RepoDigests 0}}')
+          revision=$(docker image inspect ghcr.io/alreadyon/alreadyon:nightly --format '{{index .Config.Labels "org.opencontainers.image.revision"}}')
+          [[ "$source" =~ @sha256:[0-9a-f]{64}$ ]]
+          [[ "$revision" =~ ^[0-9a-f]{40}$ ]]
+          echo "image=$source" >> "$GITHUB_OUTPUT"
+          echo "revision=$revision" >> "$GITHUB_OUTPUT"
+  security-scan:
+    needs: select-nightly
+    permissions:
+      contents: read
+    uses: ./.github/workflows/security_scan.yml
+    with:
+      image: ${{ needs.select-nightly.outputs.image }}
+      source_revision: ${{ needs.select-nightly.outputs.revision }}
   cleanup:
+    permissions:
+      contents: write
+      packages: write
+      pull-requests: read
+      actions: write
     concurrency:
       group: base-images
       cancel-in-progress: false
@@ -45,7 +69,7 @@ jobs:
     steps:
       - uses: actions/checkout@v7
         with:
-          ref: dev
+          ref: main
           persist-credentials: false
       - uses: docker/login-action@v4
         with:
@@ -60,11 +84,12 @@ jobs:
           args=()
           if [ "$APPLY" = true ]; then args+=(--apply); fi
           python3 scripts/ci/clean-images.py "${args[@]}"
+          python3 scripts/ci/clean-releases.py "${args[@]}"
       - name: Clean closed-PR caches and superseded bases
         env:
           GH_TOKEN: ${{ github.token }}
           APPLY: ${{ github.event_name != 'workflow_dispatch' || inputs.apply }}
         run: |
-          args=()
+          args=(--caches-only)
           if [ "$APPLY" = true ]; then args+=(--apply); fi
           python3 scripts/ci/clean-build-storage.py "${args[@]}"

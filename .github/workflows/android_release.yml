@@ -1,11 +1,10 @@
-name: Android Nightly, RC and Stable
+# Reusable signing and APK publication jobs called by Build and Publish.
+name: Android Release Packaging
 on:
-  push:
-    branches: [test, main]
   workflow_call:
     inputs:
       operation:
-        description: Build signed APKs from validated source without rebuilding the image
+        description: Publish Nightly from dev/main or fresh Stable APKs from a validated Nightly
         type: string
         required: true
       release_date:
@@ -16,31 +15,19 @@ on:
         description: Exact validated source commit
         type: string
         required: true
-  workflow_dispatch:
-    inputs:
-      operation:
-        description: Build fresh APKs for the selected release stage
-        type: choice
-        options: [nightly, promote-test, stable, repair-stable]
-        default: promote-test
-        required: true
-      release_date:
-        description: Optional YY.MM.DD release date; otherwise derive from source/tag
-        type: string
-        required: false
-      source_sha:
-        description: Optional tested source override; Stable defaults to the latest published RC source
+      predecessor:
+        description: Exact Nightly release used as the Stable predecessor
         type: string
         required: false
 permissions:
   contents: read
-# All candidate publication and stable promotion share one writer.
+  # Nightly and Stable APK publication share one writer.
 concurrency:
   group: android-releases
   cancel-in-progress: false
 jobs:
   candidate:
-    if: contains(fromJSON('["nightly","rc-candidate"]'), inputs.operation) && github.ref == 'refs/heads/dev'
+    if: inputs.operation == 'nightly' && (github.ref == 'refs/heads/dev' || github.ref == 'refs/heads/main')
     runs-on: ubuntu-24.04
     timeout-minutes: 30
     permissions:
@@ -59,7 +46,7 @@ jobs:
           fetch-depth: 0
           persist-credentials: false
       # Candidate checkout must match the exact source validated by the parent pipeline.
-      - name: Require current source and active cycle for dated candidates
+      - name: Require exact current main source
         env:
           GH_TOKEN: ${{ github.token }}
           SOURCE_SHA: ${{ inputs.source_sha || github.sha }}
@@ -68,10 +55,6 @@ jobs:
           test "$SOURCE_SHA" = "$(git rev-parse HEAD)"
           current=$(gh api "repos/$GITHUB_REPOSITORY/git/ref/heads/$GITHUB_REF_NAME" --jq .object.sha)
           test "$SOURCE_SHA" = "$current"
-          if [ "$GITHUB_REF_NAME" != dev ]; then
-            test "$GITHUB_REF_NAME" = "$(cat release-date.txt)"
-            test "$RELEASE_DATE" = "$GITHUB_REF_NAME"
-          fi
       - name: Validate release policy
         run: python3 -m unittest discover -s scripts/ci -p test_android_release.py
       - name: Allocate candidate version or verify completed rerun
@@ -84,10 +67,8 @@ jobs:
         run: |
           day=$(python3 scripts/ci/release-context.py date --sha "$SOURCE_SHA" --date "$RELEASE_DATE")
           echo "release_date=$day" >> "$GITHUB_OUTPUT"
-          operation=plan-nightly
-          if [ "$OPERATION" = rc-candidate ]; then operation=plan-rc; fi
           PYTHONPATH=scripts/ci python3 -c 'import os; import importlib; importlib.import_module("android-release").require_tested_image(os.environ["GITHUB_REPOSITORY"], os.environ["SOURCE_SHA"])'
-          python3 scripts/ci/android-release.py "$operation" --sha "$SOURCE_SHA" --day "$day" >> "$GITHUB_OUTPUT"
+          python3 scripts/ci/android-release.py plan-nightly --sha "$SOURCE_SHA" --day "$day" >> "$GITHUB_OUTPUT"
       - name: Require permanent maintainer signing credentials
         if: steps.version.outputs.existing != 'true'
         env:
@@ -106,11 +87,11 @@ jobs:
         if: steps.version.outputs.existing != 'true'
         with:
           distribution: temurin
-          java-version: '17'
+          java-version: "17"
       - uses: android-actions/setup-android@v4
         if: steps.version.outputs.existing != 'true'
         with:
-          packages: 'platform-tools platforms;android-37.0 build-tools;36.0.0'
+          packages: "platform-tools platforms;android-37.0 build-tools;36.0.0"
       - name: Build release APK with allocated version
         if: steps.version.outputs.existing != 'true'
         env:
@@ -163,11 +144,8 @@ jobs:
           SOURCE_SHA: ${{ inputs.source_sha || github.sha }}
           VERSION_NAME: ${{ steps.version.outputs.tag }}
           VERSION_CODE: ${{ steps.version.outputs.version_code }}
-          OPERATION: ${{ inputs.operation }}
         run: |
-          operation=nightly
-          if [ "$OPERATION" = rc-candidate ]; then operation=candidate; fi
-          python3 scripts/ci/android-release.py "$operation" --sha "$SOURCE_SHA" \
+          python3 scripts/ci/android-release.py nightly --sha "$SOURCE_SHA" \
             --tag "$VERSION_NAME" --version-code "$VERSION_CODE" --directory "$RUNNER_TEMP/android-assets" --require-inventory
       - name: Summarize Android publication
         env:
@@ -176,7 +154,7 @@ jobs:
           REPOSITORY: ${{ github.repository }}
         run: echo "Android $RELEASE_STAGE [$CANDIDATE_TAG](https://github.com/$REPOSITORY/releases/tag/$CANDIDATE_TAG)" >> "$GITHUB_STEP_SUMMARY"
   promotion:
-    if: (github.event_name == 'push' && contains(fromJSON('["test","main"]'), github.ref_name)) || (github.event_name == 'workflow_dispatch' && ((github.ref_name == 'test' && inputs.operation == 'promote-test') || (github.ref_name == 'main' && contains(fromJSON('["stable","repair-stable"]'), inputs.operation))))
+    if: inputs.operation == 'stable' && github.ref == 'refs/heads/main'
     runs-on: ubuntu-24.04
     timeout-minutes: 30
     permissions:
@@ -189,39 +167,20 @@ jobs:
           persist-credentials: false
       - name: Select tested source and release date
         id: source
-        env:
-          GH_TOKEN: ${{ github.token }}
-          SOURCE_SHA: ${{ github.sha }}
-          RELEASE_DATE: ${{ inputs.release_date }}
         run: |
-          if [ "$GITHUB_EVENT_NAME" = push ]; then
-            python3 scripts/ci/branch-policy.py --delivery
-            SOURCE_SHA=$(sed -n 's/^selected=//p' "$GITHUB_OUTPUT" | tail -1)
-          fi
-          echo "selected=$SOURCE_SHA" >> "$GITHUB_OUTPUT"
-          if [ -n "$RELEASE_DATE" ]; then
-            # Promotion/repair may legitimately target an already Stable date.
-            day=$(PYTHONPATH=scripts/ci python3 -c 'import os; from release_dates import release_day; print(release_day(os.environ["RELEASE_DATE"]))')
-          else
-            day=$(python3 scripts/ci/release-context.py date-for-source --sha "$SOURCE_SHA")
-          fi
-          echo "release_date=$day" >> "$GITHUB_OUTPUT"
-      - name: Allocate fresh promotion APKs from tested source
+          test "${{ inputs.source_sha }}" = "$(git rev-parse '${{ inputs.source_sha }}^{commit}')"
+          echo "selected=${{ inputs.source_sha }}" >> "$GITHUB_OUTPUT"
+          echo "release_date=${{ inputs.release_date }}" >> "$GITHUB_OUTPUT"
+      - name: Allocate fresh Stable APKs from selected Nightly
         id: plan
         env:
           GH_TOKEN: ${{ github.token }}
           SOURCE_SHA: ${{ steps.source.outputs.selected }}
           RELEASE_DATE: ${{ steps.source.outputs.release_date }}
-          SOURCE_OVERRIDE: ${{ inputs.source_sha }}
-          OPERATION: ${{ inputs.operation }}
+          PREDECESSOR_TAG: ${{ inputs.predecessor }}
         run: |
-          stage=stable
-          if [ "$GITHUB_REF_NAME" = test ]; then stage=rc; fi
-          arguments=()
-          if [ "$OPERATION" = repair-stable ]; then arguments+=(--repair); fi
-          if [ -n "$SOURCE_OVERRIDE" ]; then arguments+=(--source-override "$SOURCE_OVERRIDE"); fi
-          python3 scripts/ci/android-release.py plan-promotion --sha "$SOURCE_SHA" \
-            --day "$RELEASE_DATE" --stage "$stage" "${arguments[@]}" >> "$GITHUB_OUTPUT"
+          python3 scripts/ci/android-release.py plan-stable --sha "$SOURCE_SHA" \
+            --day "$RELEASE_DATE" --predecessor "$PREDECESSOR_TAG" >> "$GITHUB_OUTPUT"
       - uses: actions/checkout@v7
         if: steps.plan.outputs.existing != 'true'
         with:
@@ -251,11 +210,11 @@ jobs:
         if: steps.plan.outputs.existing != 'true'
         with:
           distribution: temurin
-          java-version: '17'
+          java-version: "17"
       - uses: android-actions/setup-android@v4
         if: steps.plan.outputs.existing != 'true'
         with:
-          packages: 'platform-tools platforms;android-37.0 build-tools;36.0.0'
+          packages: "platform-tools platforms;android-37.0 build-tools;36.0.0"
       - name: Build release APK with allocated version
         if: steps.plan.outputs.existing != 'true'
         env:
@@ -323,7 +282,7 @@ jobs:
             --image "$image" --revision "$SOURCE_SHA" \
             --phone "$RUNNER_TEMP/android-assets/alreadyon-android.apk" \
             --tv "$RUNNER_TEMP/android-assets/alreadyon-tv.apk" --output "$RUNNER_TEMP/android-assets"
-      - name: Publish fresh signed promotion APKs
+      - name: Publish fresh signed Stable APKs
         if: steps.plan.outputs.existing != 'true'
         env:
           GH_TOKEN: ${{ github.token }}
@@ -331,11 +290,8 @@ jobs:
           VERSION_NAME: ${{ steps.plan.outputs.tag }}
           VERSION_CODE: ${{ steps.plan.outputs.version_code }}
           PREDECESSOR: ${{ steps.plan.outputs.predecessor }}
-          OPERATION: ${{ inputs.operation }}
         run: |
-          arguments=()
-          if [ "$OPERATION" = repair-stable ]; then arguments+=(--repair); fi
-          python3 scripts/ci/android-release.py publish-promotion --sha "$SOURCE_SHA" \
+          python3 scripts/ci/android-release.py publish-stable --sha "$SOURCE_SHA" \
             --tag "$VERSION_NAME" --version-code "$VERSION_CODE" --predecessor "$PREDECESSOR" \
-            --directory "$RUNNER_TEMP/android-assets" --require-inventory "${arguments[@]}"
+            --directory "$RUNNER_TEMP/android-assets" --require-inventory
           echo "Published fresh phone/TV APKs for $VERSION_NAME from $SOURCE_SHA" >> "$GITHUB_STEP_SUMMARY"

@@ -35,12 +35,6 @@ internal class UpdateInstallStore(private val context: Context) {
     fun completeIfInstalled(): Boolean {
         val expected = preferences.getLong("code", 0)
         if (expected <= 0 || installedVersionCode(context) < expected) return false
-        // Persist the release only after replacement is confirmed against the actual APK.
-        val release = preferences.getString("release", null)
-        val hash = preferences.getString("hash", null)
-        if (release != null && hash != null && installedVersionCode(context) == expected) {
-            runCatching { AcceptedRelease(context).accept(AppUpdate(release, "", expected, "", "", hash, 0)) }
-        }
         clear()
         return true
     }
@@ -89,8 +83,9 @@ internal suspend fun stageUpdate(context: Context, update: AppUpdate): Int {
         }
         currentCoroutineContext().ensureActive()
         // Persist before commit: self-replacement terminates this process and its coroutines.
-        check(store.preferences.edit().putInt("session", id).putLong("code", update.code)
-            .putString("release", update.release).putString("hash", update.hash).commit()) { "Could not save installation state." }
+        check(store.preferences.edit().putInt("session", id).putLong("code", update.code).commit()) {
+            "Could not save installation state."
+        }
         return id
     } catch (error: Throwable) {
         installer.abandonSession(id)
