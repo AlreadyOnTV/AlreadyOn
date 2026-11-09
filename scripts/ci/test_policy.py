@@ -92,7 +92,9 @@ class PublicationPolicy(unittest.TestCase):
         self.assertIn('analyze (', validation)
         self.assertNotIn('workflow == "Dependabot Dependency Review"', validation)
         self.assertIn('length == 2 and all(.[]; .state == "SUCCESS")', validation)
-        self.assertIn('gh pr merge "$PR_NUMBER" --merge --auto', validation)
+        self.assertIn('gh pr checks "$PR_NUMBER" --repo "$REPOSITORY"', validation)
+        self.assertIn('gh pr merge "$PR_NUMBER" --repo "$REPOSITORY"', validation)
+        self.assertIn('gh pr merge "$PR_NUMBER" --repo "$REPOSITORY" --merge --auto', validation)
         self.assertIn('on:\n  push:\n    branches: [main]', build)
 
     def test_pr_candidate_build_is_reusable_and_cannot_publish(self):

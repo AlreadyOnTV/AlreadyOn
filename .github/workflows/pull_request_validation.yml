@@ -139,10 +139,11 @@ jobs:
         env:
           GH_TOKEN: ${{ github.token }}
           PR_NUMBER: ${{ github.event.pull_request.number }}
+          REPOSITORY: ${{ github.repository }}
         run: |
           deadline=$((SECONDS + 5400))
           while true; do
-            checks=$(gh pr checks "$PR_NUMBER" --json name,workflow,state,event 2>/dev/null || printf '[]')
+            checks=$(gh pr checks "$PR_NUMBER" --repo "$REPOSITORY" --json name,workflow,state,event 2>/dev/null || printf '[]')
             codeql=$(jq -c '[.[] | select(.event == "pull_request" and .workflow == "CodeQL" and (.name | startswith("analyze (")))]' <<< "$checks")
             if jq -e 'any(.[]; .state == "FAILURE" or .state == "ERROR" or .state == "CANCELLED")' <<< "$codeql" >/dev/null; then
               echo "::error::CodeQL failed; leaving the PR open."
@@ -161,5 +162,6 @@ jobs:
         env:
           GH_TOKEN: ${{ github.token }}
           PR_NUMBER: ${{ github.event.pull_request.number }}
+          REPOSITORY: ${{ github.repository }}
           HEAD_SHA: ${{ github.event.pull_request.head.sha }}
-        run: gh pr merge "$PR_NUMBER" --merge --auto --match-head-commit "$HEAD_SHA"
+        run: gh pr merge "$PR_NUMBER" --repo "$REPOSITORY" --merge --auto --match-head-commit "$HEAD_SHA"
