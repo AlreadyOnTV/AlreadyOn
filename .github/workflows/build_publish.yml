@@ -287,7 +287,7 @@ jobs:
       group: application-images
       cancel-in-progress: false
     permissions:
-      contents: read
+      contents: write
       packages: write
       statuses: write
       attestations: read
