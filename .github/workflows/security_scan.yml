@@ -55,7 +55,7 @@ jobs:
       - name: Generate release-runtime package locks
         if: inputs.artifact_name == ''
         run: |
-          apps/android/gradlew -p apps/android --no-daemon -I scripts/security/android-inventory.gradle \
+          apps/android/gradlew -p apps/android --no-daemon -I "$GITHUB_WORKSPACE/scripts/security/android-inventory.gradle" \
             -PsecurityInventoryDirectory="$RUNNER_TEMP/candidate/android-runtime" securityInventory
       - name: Install reviewed scanner
         run: python3 scripts/security/install-trivy.py "$RUNNER_TEMP/security-tools"
