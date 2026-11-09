@@ -1,4 +1,5 @@
-name: Android Nightly and Stable
+# Reusable signing and APK publication jobs called by Build and Publish.
+name: Android Release Packaging
 on:
   workflow_call:
     inputs:

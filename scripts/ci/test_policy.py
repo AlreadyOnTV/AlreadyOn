@@ -66,24 +66,26 @@ class PublicationPolicy(unittest.TestCase):
 
     def test_dev_and_main_prs_require_full_e2e_codeql_and_dependency_review(self):
         root = pathlib.Path(__file__).resolve().parents[2]
-        validation = (root / '.github/workflows/pull-request.yml').read_text()
+        validation = (root / '.github/workflows/pull_request_validation.yml').read_text()
         codeql = (root / '.github/workflows/codeql.yml').read_text()
+        build = (root / '.github/workflows/build_publish.yml').read_text()
         test_action = (root / '.github/actions/test-source/action.yml').read_text()
         self.assertIn('pull_request:\n    branches: [dev, main]', validation)
         self.assertIn('pull_request:\n    branches: [dev, main]', codeql)
-        self.assertIn('push:\n    branches: [main]', codeql)
-        self.assertNotIn('push:\n    branches: [dev, main]', codeql)
+        self.assertNotIn('  push:', codeql)
         self.assertNotIn('  schedule:', codeql)
         self.assertNotIn('  workflow_dispatch:', codeql)
         self.assertNotIn('  workflow_call:', codeql)
         self.assertIn('actions/dependency-review-action@v4', validation)
         self.assertIn('name: Dependabot', validation)
-        self.assertIn('pull-base: "false"', validation)
+        self.assertIn('operation: validate', validation)
+        self.assertIn('uses: ./.github/workflows/build_publish.yml', validation)
+        self.assertIn('runtime-candidate-', validation)
         self.assertNotIn('  workflow_dispatch:', validation)
         self.assertNotIn('  workflow_call:', validation)
         self.assertIn('make test-e2e', test_action)
         self.assertEqual(validation.count('  auto_merge:\n'), 1)
-        self.assertIn('needs: [quality, android, tests, dependency_review]', validation)
+        self.assertIn('needs: [build_candidate, quality, android, tests, dependency_review]', validation)
         self.assertIn('name: E2E Test Suite', validation)
         self.assertIn('workflow == "CodeQL"', validation)
         self.assertIn('.event == "pull_request"', validation)
@@ -91,7 +93,32 @@ class PublicationPolicy(unittest.TestCase):
         self.assertNotIn('workflow == "Dependabot Dependency Review"', validation)
         self.assertIn('length == 2 and all(.[]; .state == "SUCCESS")', validation)
         self.assertIn('gh pr merge "$PR_NUMBER" --merge --auto', validation)
-        self.assertNotIn('branches: [dev, test]', validation)
+        self.assertIn('on:\n  push:\n    branches: [main]', build)
+
+    def test_pr_candidate_build_is_reusable_and_cannot_publish(self):
+        root = pathlib.Path(__file__).resolve().parents[2]
+        validation = (root / '.github/workflows/pull_request_validation.yml').read_text()
+        build = (root / '.github/workflows/build_publish.yml').read_text()
+        self.assertIn('uses: ./.github/workflows/build_publish.yml', validation)
+        self.assertIn('operation: validate', validation)
+        self.assertIn("if: inputs.operation == 'validate'", build)
+        self.assertIn('runtime-candidate-${{ github.run_id }}-${{ github.run_attempt }}', build)
+        self.assertIn('docker save alreadyon-ci:candidate', build)
+        self.assertIn('workflow_dispatch', build)
+        self.assertIn("github.event_name == 'push'", build)
+
+    def test_final_workflow_inventory_and_daily_base_retention(self):
+        root = pathlib.Path(__file__).resolve().parents[2]
+        workflow_dir = root / '.github/workflows'
+        self.assertEqual({path.name for path in workflow_dir.glob('*.yml')}, {
+            'android_release.yml', 'build_publish.yml', 'codeql.yml',
+            'daily_base_image.yml', 'publish_github_pages.yml',
+            'pull_request_validation.yml', 'security_scan.yml', 'weekly_cleanup.yml',
+        })
+        daily = (workflow_dir / 'daily_base_image.yml').read_text()
+        self.assertIn('cron: "43 6 * * *"', daily)
+        self.assertIn('clean-base-images.py --apply', daily)
+        self.assertIn('refresh: "true"', daily)
 
 
 class RetentionPolicy(unittest.TestCase):
@@ -116,8 +143,11 @@ class RetentionPolicy(unittest.TestCase):
 
     def test_recent_expired_images_are_reserved_after_age_window(self):
         versions = [
-            {'name': f'digest-{index}', 'metadata': {'container': {'tags': [
-                (self.today - datetime.timedelta(days=days)).strftime('%y.%m.%d')]}}}
+            {'name': f'digest-{index}',
+             'created_at': (datetime.datetime.combine(
+                 self.today - datetime.timedelta(days=days), datetime.time(),
+                 datetime.timezone.utc).isoformat()),
+             'metadata': {'container': {'tags': []}}}
             for index, days in enumerate([91, 92, 93, 94, 95, 96])
         ]
         recent = self.module.recent_expired_versions(versions, self.today)
@@ -144,6 +174,8 @@ class RetentionPolicy(unittest.TestCase):
         items = [entry(1, 200, 'nightly'), entry(2, 220, 'stable'),
                  entry(3, 10, 'alpha')]
         items.extend(entry(index + 4, 91 + index, 'rc') for index in range(6))
+        items.extend(entry(index + 30, 300 + index, 'nightly') for index in range(6))
+        items.extend(entry(index + 40, 320 + index, 'stable') for index in range(6))
         items.extend([entry(20, 300, 'rc', draft=True),
                       entry(21, 400, 'rc', tag='unrecognized')])
         plan = releases.retention_plan(items, self.today)
@@ -152,8 +184,20 @@ class RetentionPolicy(unittest.TestCase):
         self.assertIn('within retention window', plan[3])
         self.assertTrue(all(plan[index + 4] is not None for index in range(5)))
         self.assertIsNone(plan[9])
+        self.assertTrue(all(plan[index + 30] is not None for index in range(5)))
+        self.assertIsNone(plan[35])
+        self.assertTrue(all(plan[index + 40] is not None for index in range(5)))
+        self.assertIsNone(plan[45])
         self.assertIn('draft', plan[20])
         self.assertIn('unrecognized', plan[21])
+        source_tags = [
+            (self.today - datetime.timedelta(days=days)).strftime('%y.%m.%d')
+            for days in [20, 91, 92, 93, 94, 95, 96]
+        ]
+        source_plan = releases.source_tag_plan(source_tags, self.today)
+        self.assertIn('within retention window', source_plan[source_tags[0]])
+        self.assertTrue(all(source_plan[tag] is not None for tag in source_tags[1:6]))
+        self.assertIsNone(source_plan[source_tags[6]])
 
     def test_release_cleanup_dry_run_never_deletes(self):
         path = str(pathlib.Path(__file__).with_name('clean-releases.py'))
@@ -162,8 +206,11 @@ class RetentionPolicy(unittest.TestCase):
              'prerelease': True, 'published_at': f'2025-01-{index:02d}T12:00:00Z'}
             for index in range(1, 7)
         ]
+        def gh_api(command, **_):
+            return json.dumps([] if 'matching-refs/tags/' in command[-1] else [entries])
+
         with patch.dict(os.environ, GITHUB_REPOSITORY='owner/repo'), \
-                patch('subprocess.check_output', return_value=json.dumps([entries])), \
+            patch('subprocess.check_output', side_effect=gh_api), \
                 patch('subprocess.run') as delete, \
                 patch.object(sys, 'argv', [path]), redirect_stdout(io.StringIO()):
             runpy.run_path(path, run_name='__main__')
@@ -182,8 +229,11 @@ class RetentionPolicy(unittest.TestCase):
             'prerelease': True, 'published_at': f'2025-01-{index:02d}T12:00:00Z',
         } for index in range(1, 7))
         ref = subprocess.CompletedProcess([], 0, '{}', '')
+        def gh_api(command, **_):
+            return json.dumps([] if 'matching-refs/tags/' in command[-1] else [entries])
+
         with patch.dict(os.environ, GITHUB_REPOSITORY='owner/repo'), \
-                patch('subprocess.check_output', side_effect=[json.dumps([entries]), json.dumps([entries])]), \
+            patch('subprocess.check_output', side_effect=gh_api), \
                 patch('subprocess.run', side_effect=[ref, None, None]) as delete, \
                 patch.object(sys, 'argv', [path, '--apply']), redirect_stdout(io.StringIO()):
             runpy.run_path(path, run_name='__main__')
@@ -258,6 +308,28 @@ class RetentionPolicy(unittest.TestCase):
                          ('2026-11-01T06:00:00+00:00', '26.11.01')]:
             self.assertTrue(tags('owner/repo', 'main', SHA, datetime.datetime.fromisoformat(utc))[1].endswith(day))
 
+
+class BaseRetentionPolicy(unittest.TestCase):
+    def setUp(self):
+        self.module = load('clean-base-images')
+        self.cutoff = datetime.datetime(2026, 9, 5, tzinfo=datetime.timezone.utc)
+
+    def test_only_old_recognized_nonchannel_base_images_are_deletable(self):
+        def version(tags, created, digest):
+            return {'name': digest, 'created_at': created,
+                    'metadata': {'container': {'tags': tags}}}
+
+        old = version([], '2026-09-04T00:00:00Z', 'old')
+        recent = version([], '2026-09-06T00:00:00Z', 'recent')
+        current = version(['base-runtime'], '2026-08-01T00:00:00Z', 'current')
+        unknown = version(['manual-tag'], '2026-08-01T00:00:00Z', 'unknown')
+        protected = {'current'}
+        self.assertTrue(self.module.deletable(old, self.cutoff, protected))
+        self.assertFalse(self.module.deletable(recent, self.cutoff, protected))
+        self.assertFalse(self.module.deletable(current, self.cutoff, protected))
+        self.assertFalse(self.module.deletable(unknown, self.cutoff, protected))
+
+
     def test_main_date_alias_uses_current_or_explicit_release_date(self):
         instant = datetime.datetime(2026, 10, 11, 12, tzinfo=datetime.timezone.utc)
         result = tags('owner/repo', 'main', SHA, instant, release_date='26.10.10')
@@ -317,14 +389,14 @@ class RetentionPolicy(unittest.TestCase):
 
     def test_weekly_cleanup_and_manual_nightly_publication(self):
         root = pathlib.Path(__file__).resolve().parents[2]
-        cleanup = (root / '.github/workflows/image-retention.yml').read_text()
+        cleanup = (root / '.github/workflows/weekly_cleanup.yml').read_text()
         self.assertNotIn('pull_request_target:', cleanup)
         self.assertNotIn('workflow_run:', cleanup)
         self.assertIn('cron: "43 7 * * 1"', cleanup)
-        build = (root / '.github/workflows/rebuild.yml').read_text()
+        build = (root / '.github/workflows/build_publish.yml').read_text()
         self.assertIn('workflow_dispatch:', build)
         self.assertNotIn('  schedule:', build)
-        self.assertNotIn('\n  push:', build)
+        self.assertIn('workflow_call:', build)
         self.assertIn('dev|main', build)
 
 

@@ -1,6 +1,8 @@
 # Maintainers manually publish a validated Nightly from dev or main.
-name: Build and Publish Release
+name: Build and Publish
 on:
+  push:
+    branches: [main]
   workflow_dispatch:
     inputs:
       operation:
@@ -8,8 +10,14 @@ on:
         type: choice
         options: [nightly, stable]
         default: nightly
-      revision:
-        description: Optional exact current selected branch tip for Nightly
+  workflow_call:
+    inputs:
+      operation:
+        description: Build and validate an unpublished PR candidate
+        type: string
+        default: validate
+      source_revision:
+        description: Exact source revision selected by the PR caller
         type: string
         default: ""
 permissions:
@@ -21,7 +29,7 @@ concurrency:
   cancel-in-progress: false
 jobs:
   select:
-    if: inputs.operation == 'nightly'
+    if: github.event_name == 'push' || (github.event_name == 'workflow_dispatch' && inputs.operation == 'nightly')
     runs-on: ubuntu-26.04
     outputs:
       existing: ${{ steps.source.outputs.existing }}
@@ -33,7 +41,7 @@ jobs:
     steps:
       - uses: actions/checkout@v7
         with:
-          ref: ${{ inputs.revision || github.ref_name }}
+          ref: ${{ github.ref_name }}
           persist-credentials: false
       - name: Select the exact source commit for every validation job
         id: source
@@ -53,8 +61,88 @@ jobs:
             echo "revision=$revision"
             echo "release_date=$release_date"
           } >> "$GITHUB_OUTPUT"
+  validate:
+    if: inputs.operation == 'validate'
+    runs-on: ubuntu-26.04
+    timeout-minutes: 120
+    permissions:
+      contents: read
+    steps:
+      - uses: actions/checkout@v7
+        with:
+          ref: ${{ inputs.source_revision || github.sha }}
+          persist-credentials: false
+      - name: Read shared Ubuntu version
+        id: ubuntu
+        run: echo "version=$(sed -n 's/^ARG UBUNTU_VERSION=//p' deploy/Dockerfile)" >> "$GITHUB_OUTPUT"
+      - uses: docker/setup-buildx-action@v4
+      - name: Build local runtime base for candidate
+        uses: docker/build-push-action@v7
+        with:
+          context: .
+          file: deploy/base.Dockerfile
+          target: runtime-base
+          load: true
+          tags: alreadyon-validation:runtime
+          build-args: |
+            UBUNTU_VERSION=${{ steps.ubuntu.outputs.version }}
+            FFMPEG_BUILD_JOBS=2
+      - name: Build local CI base for tests
+        uses: docker/build-push-action@v7
+        with:
+          context: .
+          file: deploy/ci-base.Dockerfile
+          target: ci-base
+          load: true
+          tags: alreadyon-validation:ci
+          build-args: RUNTIME_BASE=alreadyon-validation:runtime
+      - name: Build exact production runtime candidate
+        run: |
+          docker build --builder default \
+            --file deploy/Dockerfile --target runtime \
+            --build-arg CI_BASE=alreadyon-validation:ci \
+            --build-arg RUNTIME_BASE=alreadyon-validation:runtime \
+            --build-arg VCS_REF="$(git rev-parse HEAD)" \
+            --build-arg BUILD_TIMESTAMP="$GITHUB_RUN_ID-$GITHUB_RUN_ATTEMPT" \
+            --tag alreadyon-ci:candidate .
+      - uses: actions/setup-java@v6
+        with:
+          distribution: temurin
+          java-version: "17"
+      - uses: android-actions/setup-android@v4
+        with:
+          packages: "platform-tools platforms;android-37.0 build-tools;36.0.0"
+      - name: Build minified unsigned phone and TV release APKs
+        run: apps/android/gradlew -p apps/android --no-daemon :app:assembleRelease :tv:assembleRelease
+      - name: Export release-runtime dependency locks
+        run: |
+          apps/android/gradlew -p apps/android --no-daemon -I scripts/security/android-inventory.gradle \
+            -PsecurityInventoryDirectory="$RUNNER_TEMP/android-runtime" securityInventory
+      - name: Package exact candidate and release artifacts
+        run: |
+          mkdir -p "$RUNNER_TEMP/candidate/android-runtime"
+          docker save alreadyon-ci:candidate -o "$RUNNER_TEMP/candidate/runtime.tar"
+          docker save alreadyon-validation:ci -o "$RUNNER_TEMP/candidate/ci.tar"
+          cp apps/android/app/build/outputs/apk/release/app-release-unsigned.apk "$RUNNER_TEMP/candidate/alreadyon-android.apk"
+          cp apps/android/tv/build/outputs/apk/release/tv-release-unsigned.apk "$RUNNER_TEMP/candidate/alreadyon-tv.apk"
+          cp "$RUNNER_TEMP"/android-runtime/* "$RUNNER_TEMP/candidate/android-runtime/"
+      - uses: actions/upload-artifact@v7
+        with:
+          name: runtime-candidate-${{ github.run_id }}-${{ github.run_attempt }}
+          path: ${{ runner.temp }}/candidate
+          if-no-files-found: error
+          retention-days: 1
+  validate_security:
+    needs: validate
+    if: needs.validate.result == 'success'
+    permissions:
+      contents: read
+    uses: ./.github/workflows/security_scan.yml
+    with:
+      artifact_name: runtime-candidate-${{ github.run_id }}-${{ github.run_attempt }}
+      source_revision: ${{ inputs.source_revision || github.sha }}
   stable_select:
-    if: inputs.operation == 'stable'
+    if: github.event_name == 'workflow_dispatch' && inputs.operation == 'stable'
     runs-on: ubuntu-26.04
     permissions:
       contents: read
@@ -78,7 +166,7 @@ jobs:
         run: python3 scripts/ci/android-release.py plan-latest-stable --sha "$(git rev-parse HEAD)" >> "$GITHUB_OUTPUT"
   bases:
     needs: select
-    if: needs.select.outputs.existing != 'true'
+    if: (github.event_name == 'push' || (github.event_name == 'workflow_dispatch' && inputs.operation == 'nightly')) && needs.select.outputs.existing != 'true'
     runs-on: ubuntu-26.04
     timeout-minutes: 90
     concurrency:
@@ -108,7 +196,7 @@ jobs:
   candidate:
     name: Build, scan and attest the Nightly image
     needs: [select, bases]
-    if: needs.select.outputs.existing != 'true'
+    if: (github.event_name == 'push' || (github.event_name == 'workflow_dispatch' && inputs.operation == 'nightly')) && needs.select.outputs.existing != 'true'
     runs-on: ubuntu-26.04
     timeout-minutes: 120
     outputs:
@@ -142,10 +230,19 @@ jobs:
           revision: ${{ needs.select.outputs.revision }}
           ci-base: ${{ needs.bases.outputs.ci }}
           runtime-base: ${{ needs.bases.outputs.runtime }}
-      - uses: ./.github/actions/security-scan
+      - uses: actions/setup-java@v6
         with:
-          image: alreadyon-ci:candidate
-          ci-image: ${{ needs.bases.outputs.ci }}
+          distribution: temurin
+          java-version: "17"
+      - uses: android-actions/setup-android@v4
+        with:
+          packages: "platform-tools platforms;android-37.0 build-tools;36.0.0"
+      - name: Build minified unsigned phone and TV release APKs
+        run: apps/android/gradlew -p apps/android --no-daemon :app:assembleRelease :tv:assembleRelease
+      - name: Export release-runtime dependency locks
+        run: |
+          apps/android/gradlew -p apps/android --no-daemon -I scripts/security/android-inventory.gradle \
+            -PsecurityInventoryDirectory="$RUNNER_TEMP/android-runtime" securityInventory
       - name: Refuse publication from an outdated source branch tip
         env:
           GH_TOKEN: ${{ github.token }}
@@ -163,6 +260,10 @@ jobs:
           STAGED_IMAGE: ${{ steps.staged.outputs.source }}
           CI_REVISION: ${{ needs.select.outputs.revision }}
         run: |
+          python3 scripts/security/install-trivy.py "$RUNNER_TEMP/security-tools"
+          mkdir -p "$RUNNER_TEMP/security-report"
+          "$RUNNER_TEMP/security-tools/trivy" --quiet image --image-src remote --scanners license \
+            --list-all-pkgs --format json --output "$RUNNER_TEMP/security-report/image.json" "$STAGED_IMAGE"
           python3 scripts/security/image-inventory.py --report "$RUNNER_TEMP/security-report/image.json" \
             --image "$STAGED_IMAGE" --revision "$CI_REVISION" --output "$RUNNER_TEMP/image.cdx.json"
       - name: Sign build provenance for the exact tested digest
@@ -181,30 +282,63 @@ jobs:
           GH_TOKEN: ${{ github.token }}
           STAGED_IMAGE: ${{ steps.staged.outputs.source }}
         run: |
-          gh attestation verify "oci://$STAGED_IMAGE" --repo "$GITHUB_REPOSITORY" --signer-workflow "$GITHUB_REPOSITORY/.github/workflows/rebuild.yml" --source-digest "${{ needs.select.outputs.revision }}" --deny-self-hosted-runners
-          gh attestation verify "oci://$STAGED_IMAGE" --repo "$GITHUB_REPOSITORY" --signer-workflow "$GITHUB_REPOSITORY/.github/workflows/rebuild.yml" --source-digest "${{ needs.select.outputs.revision }}" --deny-self-hosted-runners --predicate-type https://cyclonedx.org/bom
+          gh attestation verify "oci://$STAGED_IMAGE" --repo "$GITHUB_REPOSITORY" --signer-workflow "$GITHUB_REPOSITORY/.github/workflows/build_publish.yml" --source-digest "${{ needs.select.outputs.revision }}" --deny-self-hosted-runners
+          gh attestation verify "oci://$STAGED_IMAGE" --repo "$GITHUB_REPOSITORY" --signer-workflow "$GITHUB_REPOSITORY/.github/workflows/build_publish.yml" --source-digest "${{ needs.select.outputs.revision }}" --deny-self-hosted-runners --predicate-type https://cyclonedx.org/bom
       - uses: actions/upload-artifact@v7
         with:
           name: image-inventory-${{ github.run_id }}-${{ github.run_attempt }}
           path: ${{ runner.temp }}/image.cdx.json
           if-no-files-found: error
           retention-days: 90
-      - name: Record exact validated image for APK provenance
+      - name: Package exact image and APK runtime dependencies for scanning
+        run: |
+          mkdir -p "$RUNNER_TEMP/candidate/android-runtime"
+          docker save alreadyon-ci:candidate -o "$RUNNER_TEMP/candidate/runtime.tar"
+          cp "$RUNNER_TEMP"/android-runtime/* "$RUNNER_TEMP/candidate/android-runtime/"
+      - uses: actions/upload-artifact@v7
+        with:
+          name: runtime-candidate-${{ github.run_id }}-${{ github.run_attempt }}
+          path: ${{ runner.temp }}/candidate
+          if-no-files-found: error
+          retention-days: 1
+  security_scan:
+    needs: [select, candidate]
+    if: needs.select.outputs.existing != 'true' && needs.candidate.result == 'success'
+    permissions:
+      contents: read
+    uses: ./.github/workflows/security_scan.yml
+    with:
+      artifact_name: runtime-candidate-${{ github.run_id }}-${{ github.run_attempt }}
+      source_revision: ${{ needs.select.outputs.revision }}
+  record_validated_image:
+    needs: [select, candidate, security_scan]
+    if: needs.select.outputs.existing != 'true' && needs.candidate.result == 'success' && needs.security_scan.result == 'success'
+    runs-on: ubuntu-latest
+    permissions:
+      contents: read
+      statuses: write
+    steps:
+      - uses: actions/checkout@v7
+        with:
+          ref: ${{ needs.select.outputs.revision }}
+          persist-credentials: false
+      - name: Record the scanned image as validated for this exact source
         env:
+          GH_TOKEN: ${{ github.token }}
           GITHUB_REPOSITORY: ${{ github.repository }}
           CI_REVISION: ${{ needs.select.outputs.revision }}
-          SOURCE_IMAGE: ${{ steps.staged.outputs.source }}
+          SOURCE_IMAGE: ${{ needs.candidate.outputs.source }}
         run: PYTHONPATH=scripts/ci python3 -c 'import os; from image_registry import record; record(os.environ["GITHUB_REPOSITORY"], os.environ["CI_REVISION"], os.environ["SOURCE_IMAGE"].rsplit("@", 1)[1])'
   android:
     name: Build and publish signed Nightly APKs
-    if: always() && needs.select.result == 'success' && (needs.candidate.result == 'success' || needs.candidate.result == 'skipped')
-    needs: [select, candidate]
+    if: always() && needs.select.result == 'success' && ((needs.candidate.result == 'success' && needs.security_scan.result == 'success' && needs.record_validated_image.result == 'success') || (needs.candidate.result == 'skipped' && needs.security_scan.result == 'skipped' && needs.record_validated_image.result == 'skipped'))
+    needs: [select, candidate, security_scan, record_validated_image]
     permissions:
       contents: write
       packages: read
       pull-requests: read
       issues: read
-    uses: ./.github/workflows/android-release.yml
+    uses: ./.github/workflows/android_release.yml
     with:
       operation: nightly
       release_date: ${{ needs.select.outputs.release_date }}
@@ -212,8 +346,8 @@ jobs:
     secrets: inherit
   channels:
     name: Publish verified Nightly image aliases
-    if: always() && needs.select.result == 'success' && needs.android.result == 'success' && (needs.candidate.result == 'success' || needs.candidate.result == 'skipped')
-    needs: [select, candidate, android]
+    if: always() && needs.select.result == 'success' && needs.android.result == 'success' && ((needs.candidate.result == 'success' && needs.security_scan.result == 'success' && needs.record_validated_image.result == 'success') || (needs.candidate.result == 'skipped' && needs.security_scan.result == 'skipped' && needs.record_validated_image.result == 'skipped'))
+    needs: [select, candidate, security_scan, record_validated_image, android]
     runs-on: ubuntu-26.04
     concurrency:
       group: application-images
@@ -242,8 +376,8 @@ jobs:
         run: |
           SOURCE_IMAGE=$(PYTHONPATH=scripts/ci python3 -c 'import os; from image_registry import release_source; print(release_source(os.environ["GITHUB_REPOSITORY"], os.environ["SOURCE_SHA"]))')
           python3 scripts/ci/verify-image.py --source "$SOURCE_IMAGE" --revision "$SOURCE_SHA"
-          gh attestation verify "oci://$SOURCE_IMAGE" --repo "$GITHUB_REPOSITORY" --signer-workflow "$GITHUB_REPOSITORY/.github/workflows/rebuild.yml" --source-digest "$SOURCE_SHA" --deny-self-hosted-runners
-          gh attestation verify "oci://$SOURCE_IMAGE" --repo "$GITHUB_REPOSITORY" --signer-workflow "$GITHUB_REPOSITORY/.github/workflows/rebuild.yml" --source-digest "$SOURCE_SHA" --deny-self-hosted-runners --predicate-type https://cyclonedx.org/bom
+          gh attestation verify "oci://$SOURCE_IMAGE" --repo "$GITHUB_REPOSITORY" --signer-workflow "$GITHUB_REPOSITORY/.github/workflows/build_publish.yml" --source-digest "$SOURCE_SHA" --deny-self-hosted-runners
+          gh attestation verify "oci://$SOURCE_IMAGE" --repo "$GITHUB_REPOSITORY" --signer-workflow "$GITHUB_REPOSITORY/.github/workflows/build_publish.yml" --source-digest "$SOURCE_SHA" --deny-self-hosted-runners --predicate-type https://cyclonedx.org/bom
           echo "SOURCE_IMAGE=$SOURCE_IMAGE" >> "$GITHUB_ENV"
       - name: Publish Nightly and today's date aliases
         env:
@@ -268,13 +402,13 @@ jobs:
         run: python3 scripts/ci/clean-images.py --apply --only-untagged
   stable_android:
     needs: stable_select
-    if: needs.stable_select.result == 'success'
+    if: github.event_name == 'workflow_dispatch' && inputs.operation == 'stable' && needs.stable_select.result == 'success'
     permissions:
       contents: write
       packages: read
       pull-requests: read
       issues: read
-    uses: ./.github/workflows/android-release.yml
+    uses: ./.github/workflows/android_release.yml
     with:
       operation: stable
       release_date: ${{ needs.stable_select.outputs.release_date }}
@@ -284,7 +418,7 @@ jobs:
   stable_image:
     name: Promote the selected Nightly image to latest
     needs: [stable_select, stable_android]
-    if: needs.stable_select.result == 'success' && needs.stable_android.result == 'success'
+    if: github.event_name == 'workflow_dispatch' && inputs.operation == 'stable' && needs.stable_select.result == 'success' && needs.stable_android.result == 'success'
     runs-on: ubuntu-26.04
     concurrency:
       group: application-images

@@ -12,7 +12,7 @@ Use `make preview-status` and `make preview-stop` to inspect or stop this checko
 
 ## Development and release work
 
-Use the primary checkout and the long-lived `dev` and `main` branches only. Commit active development directly to `dev`; validate with the HTTPS preview at <https://localhost:5173>, disposable Docker tests, and USB-connected phone/TV builds as needed. When ready, open a PR from `dev` to `main`. CodeQL, dependency review, Android and full e2e/runtime validation must pass before auto-merge. Maintainers manually publish Nightly from `dev` or `main`; a `dev` Nightly becomes eligible for Stable after its source reaches `main`. Run **Build and Publish Release** with `operation: stable` on `main` to add Docker `latest` and build fresh Stable APKs. Follow [release-note conventions](RELEASE_NOTES.md).
+Use the primary checkout and the long-lived `dev` and `main` branches only. Commit active development directly to `dev`; validate with the HTTPS preview at <https://localhost:5173>, disposable Docker tests, and USB-connected phone/TV builds as needed. When ready, open a PR from `dev` to `main`. CodeQL, dependency review, Android and full e2e/runtime validation must pass before auto-merge. Maintainers manually publish Nightly from `dev` or `main`; a `dev` Nightly becomes eligible for Stable after its source reaches `main`. Run **Build and Publish** with `operation: stable` on `main` to add Docker `latest` and build fresh Stable APKs. Follow [release-note conventions](RELEASE_NOTES.md).
 
 Trust this instance's local certificate only on your development machine. Do not weaken remote TLS validation. Local data lives under ignored `server/data/`; keep it across restarts.
 

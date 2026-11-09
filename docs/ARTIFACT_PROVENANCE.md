@@ -1,6 +1,6 @@
 # Signed artifact evidence
 
-Manual Nightly publication uploads the validated image under a temporary run tag, resolves its immutable digest, and signs build provenance and an inventory-only CycloneDX SBOM using GitHub OIDC. The inventory is reconstructed from allowlisted package fields in the exact candidate scan; raw findings, credentials and filesystem paths are not published. Coverage is detected runtime OS/application packages, not proof that every statically bundled dependency is identified.
+Build and Publish uploads the validated image under a temporary run tag, resolves its immutable digest, and signs build provenance and an inventory-only CycloneDX SBOM using GitHub OIDC. Security Scan covers the final runtime image and phone/TV release-runtime dependencies; build/test toolsets are excluded. Raw findings, credentials and filesystem paths are not published.
 
 Both signatures must verify for the repository, hosted runner and release builder before `nightly` or the date tag moves. Verification checks the exact source commit. A signing/verification failure leaves channel tags unchanged; its staged image remains eligible for cleanup after the run finishes. Image layers are never rebuilt to create attestations.
 
@@ -11,7 +11,7 @@ Verify by immutable digest with:
 ```sh
 gh attestation verify oci://ghcr.io/alreadyontv/alreadyon@sha256:DIGEST \
   --repo AlreadyOnTV/AlreadyOn \
-  --signer-workflow AlreadyOnTV/AlreadyOn/.github/workflows/rebuild.yml \
+  --signer-workflow AlreadyOnTV/AlreadyOn/.github/workflows/build_publish.yml \
   --deny-self-hosted-runners
 ```
 

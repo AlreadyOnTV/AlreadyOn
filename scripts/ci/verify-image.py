@@ -12,7 +12,7 @@ def verify(repository, source, revision, run=subprocess.run):
     if not re.fullmatch(r'[0-9a-f]{40}', revision):
         raise ValueError('Expected a full source commit SHA')
     command = ['gh', 'attestation', 'verify', 'oci://' + source, '--repo', repository,
-               '--signer-workflow', repository + '/.github/workflows/rebuild.yml',
+               '--signer-workflow', repository + '/.github/workflows/build_publish.yml',
                '--source-digest', revision, '--deny-self-hosted-runners']
     run(command, check=True)
     run([*command, '--predicate-type', 'https://cyclonedx.org/bom'], check=True)

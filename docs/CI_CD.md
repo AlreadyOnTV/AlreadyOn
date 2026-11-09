@@ -6,13 +6,13 @@ Maintainers control releases; keep credentials private. Current release titles a
 
 ## Development and releases
 
-The release date is generated in `America/New_York` when a Nightly is built from `main`.
+The release date is generated in `America/New_York` when Nightly publication is dispatched.
 
 Work on `dev`, validate locally with the HTTPS preview, disposable Docker tests and USB-connected phone/TV builds, then open a PR to `main`. PRs to `dev` or `main` run CodeQL, dependency review, Android checks and full e2e/runtime validation. Auto-merge waits for all PR checks. Dependabot opens grouped weekly PRs to `dev`; see [maintenance](DEPENDENCY_MAINTENANCE.md).
 
 Maintainers manually dispatch Nightly publication from the exact current `dev` or `main` tip. The workflow builds and validates the image, then publishes `nightly` plus current-date aliases and signed `YY.MM.DD-nightly` phone/TV APKs. A same-date rerun may replace that date's release assets only after all gates pass and with higher APK version codes; the source date tag advances to the selected SHA.
 
-After Nightly acceptance, dispatch **Build and Publish Release** with `operation: stable` on `main`. It verifies the Nightly's source and signed image digest, retags that image as `latest` without rebuilding it, and builds fresh Stable APKs from the same commit.
+After Nightly acceptance, dispatch **Build and Publish** with `operation: stable` on `main`. It verifies the Nightly's source and signed image digest, retags that image as `latest` without rebuilding it, and builds fresh Stable APKs from the same commit.
 
 ## Approved release validation
 
@@ -26,7 +26,7 @@ After Nightly acceptance, dispatch **Build and Publish Release** with `operation
 
 Resolve failures. Record the commit, image ID/digest and actual results. Live checks are non-destructive; synthetic suites use isolated data.
 
-Before image builds, `scripts/local-bases.py` checks base recipes, parent and age; stale/missing bases rebuild. `make refresh-local-bases` forces refresh.
+Daily Base Image refreshes shared bases; `make refresh-local-bases` forces a local refresh.
 
 ## Delivery
 
@@ -38,8 +38,8 @@ Dev changes reach users only after the reviewed main PR merges. See [retention](
 
 ## Public automation
 
-PR validation scans the exact patched candidate with read-only credentials; publication credentials are unavailable. Critical/High findings block publication; secret matches require private review. Scanner failures block the gate. Runtime/CI images are scanned. New cycles require [signed image evidence](ARTIFACT_PROVENANCE.md); [weekly dependency updates](DEPENDENCY_MAINTENANCE.md) publish only validated nightlies.
+PR validation scans the exact unpublished candidate with read-only credentials; publication credentials are unavailable. Security Scan covers the final runtime image and Android release-runtime dependencies, not CI/build/test tools. Critical/High findings block publication; secret matches require private review. New cycles require [signed image evidence](ARTIFACT_PROVENANCE.md); [weekly Dependabot PRs](DEPENDENCY_MAINTENANCE.md) use the same validation gates.
 
-CodeQL analyzes Go/TypeScript on PRs and main pushes; Pages uses its independent organization-site workflow. Android Nightly and Stable APKs are published manually; see [Android policy](ANDROID_RELEASES.md).
+CodeQL analyzes Go/TypeScript only on PRs to `dev` or `main`; Pages uses its independent redirect workflow. Nightly and Stable APKs are published by Build and Publish; see [Android policy](ANDROID_RELEASES.md).
 
-New images use `ghcr.io/alreadyontv/alreadyon`. Go module and Android package identities stay compatible. Stable publication is manual and reuses the tested Nightly digest. **Refresh Base Images** rebuilds shared bases; CI bases pin their runtime digest.
+New images use `ghcr.io/alreadyontv/alreadyon`. Go module and Android package identities stay compatible. Stable publication is manual and reuses the tested Nightly digest. **Daily Build Base Image** refreshes shared bases and removes stale base versions after 30 days; CI bases pin their runtime digest.

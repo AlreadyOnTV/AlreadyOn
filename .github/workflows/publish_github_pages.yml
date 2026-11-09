@@ -1,9 +1,15 @@
 # Website-only delivery stays independent of application release promotion.
-name: Publish legacy website redirects
+name: Publish GitHub Pages
 on:
   push:
     branches: [main]
-    paths: ['website/**', 'scripts/build-website-redirect.py', 'web/public/branding/**', '.github/workflows/pages.yml']
+    paths:
+      [
+        "website/**",
+        "scripts/build-website-redirect.py",
+        "web/public/branding/**",
+        ".github/workflows/publish_github_pages.yml",
+      ]
   workflow_dispatch:
 permissions:
   contents: read

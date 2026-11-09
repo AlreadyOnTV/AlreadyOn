@@ -13,6 +13,6 @@ Stable publication reuses the Nightly image; it does not rebuild source under `l
 
 Local base images are refreshed on demand when their build timestamp exceeds seven days or their recipe/parent no longer matches. See [delivery](CI_CD.md).
 
-Weekly cleanup preserves active Nightly/Stable release digests, all image versions and dated APK releases within 90 days, and the five newest expired dated releases total. Drafts and unfamiliar release tags are left untouched. PR images, closed caches and unreferenced intermediates can be removed according to the registry cleanup policy. Retention is not a database backup policy.
+Weekly Cleanup preserves active Nightly/Stable digests and all dated images/releases within 90 days. Beyond 90 days it keeps the five newest image versions total, the five newest APK releases per stage, and five source-date tags total. Drafts, unknown tags and channel-referenced manifests are preserved. Closed-PR caches are cleaned separately. Daily Build Base Image removes superseded base versions after 30 days while protecting active aliases and manifest descendants. Retention is not a database backup policy.
 
 Store private deployment records and registry credentials outside Git. New-cycle image provenance and SBOM signatures are stored independently in GitHub attestations; see [artifact evidence](ARTIFACT_PROVENANCE.md).

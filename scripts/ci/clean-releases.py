@@ -6,8 +6,10 @@ import importlib.util
 import json
 import os
 from pathlib import Path
+import re
 import subprocess
 from zoneinfo import ZoneInfo
+from release_dates import parse_day
 
 SPEC = importlib.util.spec_from_file_location('android_release', Path(__file__).with_name('android-release.py'))
 android_release = importlib.util.module_from_spec(SPEC)
@@ -15,6 +17,7 @@ SPEC.loader.exec_module(android_release)
 
 TZ = ZoneInfo('America/New_York')
 CHANNELS = {'nightly', 'stable'}
+SOURCE_DATE = re.compile(r'\d{2}\.\d{2}\.\d{2}')
 
 
 def publication_day(entry):
@@ -57,8 +60,12 @@ def retention_plan(entries, today, days=90, keep=5):
 
     cutoff = today - timedelta(days=days)
     expired = [item for item in recognized if item[3] < cutoff and item[0]['id'] not in protected]
-    recent_expired = {item[0]['id'] for item in
-                      sorted(expired, key=lambda item: (item[3], item[1]), reverse=True)[:keep]}
+    recent_expired = set()
+    for channel in {item[2] for item in expired}:
+        channel_releases = [item for item in expired if item[2] == channel]
+        recent_expired.update(item[0]['id'] for item in
+                              sorted(channel_releases,
+                                     key=lambda item: (item[3], item[1]), reverse=True)[:keep])
     for entry, _, _, published_day in recognized:
         release_id = entry['id']
         if release_id in protected:
@@ -70,6 +77,17 @@ def retention_plan(entries, today, days=90, keep=5):
         else:
             reasons[release_id] = None
     return reasons
+
+
+def source_tag_plan(tags, today, days=90, keep=5):
+    dated = [(tag, parse_day(tag)) for tag in tags if SOURCE_DATE.fullmatch(tag)]
+    cutoff = today - timedelta(days=days)
+    expired = sorted((item for item in dated if item[1] < cutoff), key=lambda item: item[1], reverse=True)
+    retained = {tag for tag, day in dated if day >= cutoff}
+    retained.update(tag for tag, _ in expired[:keep])
+    return {tag: ('within retention window' if day >= cutoff else
+                  f'one of the {keep} newest expired source tags' if tag in retained else None)
+            for tag, day in dated}
 
 
 def api(path, *args):
@@ -90,6 +108,11 @@ def delete_tag(repository, tag):
     if ref.returncode:
         raise subprocess.CalledProcessError(ref.returncode, ref.args, ref.stdout, ref.stderr)
     subprocess.run(['gh', 'api', '-X', 'DELETE', f'repos/{repository}/git/refs/tags/{tag}'], check=True)
+
+
+def source_tags(repository):
+    pages = api(f'repos/{repository}/git/matching-refs/tags/', '--paginate', '--slurp')
+    return [ref['ref'].removeprefix('refs/tags/') for page in pages for ref in page]
 
 
 def main():
@@ -121,6 +144,17 @@ def main():
             raise RuntimeError('Release retention changed during cleanup; refusing deletion')
         delete_tag(repository, tag)
         subprocess.run(['gh', 'api', '-X', 'DELETE', f'repos/{repository}/releases/{release_id}'], check=True)
+
+    tags = source_tags(repository)
+    tag_plan = source_tag_plan(tags, today)
+    for tag in tags:
+        reason = tag_plan.get(tag, 'unrecognized tag; preserved')
+        print(f"{'KEEP' if reason else 'DELETE'} source tag {tag}: {reason or 'older than 90 days and outside the five-tag reserve'}")
+    if args.apply:
+        for tag, reason in tag_plan.items():
+            if reason is None:
+                if source_tag_plan(source_tags(repository), today).get(tag) is None:
+                    delete_tag(repository, tag)
 
 
 if __name__ == '__main__':

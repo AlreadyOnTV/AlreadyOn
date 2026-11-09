@@ -1,0 +1,74 @@
+# Scan only components included in the shipped runtime image and APK dependencies.
+name: Security Scan
+on:
+  workflow_dispatch:
+    inputs:
+      image:
+        description: Immutable image digest to scan
+        required: true
+        type: string
+      source_revision:
+        description: Exact source commit for Android release dependency locks
+        required: true
+        type: string
+  workflow_call:
+    inputs:
+      artifact_name:
+        description: Candidate image and Android runtime dependency artifact when scanning a build run
+        required: false
+        type: string
+        default: ""
+      image:
+        description: Immutable image digest when scanning an already-published release
+        required: false
+        type: string
+        default: ""
+      source_revision:
+        description: Exact source revision used to build the candidate
+        required: true
+        type: string
+permissions:
+  contents: read
+jobs:
+  scan:
+    runs-on: ubuntu-26.04
+    timeout-minutes: 30
+    steps:
+      - uses: actions/checkout@v7
+        with:
+          ref: ${{ inputs.source_revision }}
+          persist-credentials: false
+      - uses: actions/download-artifact@v5
+        if: inputs.artifact_name != ''
+        with:
+          name: ${{ inputs.artifact_name }}
+          path: ${{ runner.temp }}/candidate
+      - uses: actions/setup-java@v6
+        if: inputs.artifact_name == ''
+        with:
+          distribution: temurin
+          java-version: "17"
+      - uses: android-actions/setup-android@v4
+        if: inputs.artifact_name == ''
+        with:
+          packages: "platform-tools platforms;android-37.0 build-tools;36.0.0"
+      - name: Generate release-runtime package locks
+        if: inputs.artifact_name == ''
+        run: |
+          apps/android/gradlew -p apps/android --no-daemon -I scripts/security/android-inventory.gradle \
+            -PsecurityInventoryDirectory="$RUNNER_TEMP/candidate/android-runtime" securityInventory
+      - name: Install reviewed scanner
+        run: python3 scripts/security/install-trivy.py "$RUNNER_TEMP/security-tools"
+      - name: Scan shipped image and Android runtime packages
+        env:
+          ARTIFACT_NAME: ${{ inputs.artifact_name }}
+          IMAGE: ${{ inputs.image }}
+        run: |
+          args=(--trivy "$RUNNER_TEMP/security-tools/trivy" --android-runtime-locks "$RUNNER_TEMP/candidate/android-runtime" --packaged-only --output "$RUNNER_TEMP/security-report")
+          if [ -n "$ARTIFACT_NAME" ]; then
+            args+=(--image-archive "$RUNNER_TEMP/candidate/runtime.tar")
+          else
+            args+=(--image "$IMAGE")
+          fi
+          python3 scripts/security/scan.py "${args[@]}"
+          cat "$RUNNER_TEMP/security-report/summary.json" >> "$GITHUB_STEP_SUMMARY"

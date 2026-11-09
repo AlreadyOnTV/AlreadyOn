@@ -99,14 +99,14 @@ class SupplyChain(unittest.TestCase):
 
     def test_channel_mutation_is_after_attestation_verification(self):
         root = Path(__file__).resolve().parents[2]
-        workflow = (root / '.github/workflows/rebuild.yml').read_text()
+        workflow = (root / '.github/workflows/build_publish.yml').read_text()
         self.assertLess(workflow.index('stage-image.py'), workflow.index('actions/attest@v4'))
         self.assertLess(workflow.index('Verify both signed statements'), workflow.index('publish-image.py'))
         self.assertNotIn('push-to-registry: true', workflow) # GitHub retains signatures independently of OCI cleanup.
-        promotion = (root / '.github/workflows/rebuild.yml').read_text().split('  stable_image:', 1)[1]
+        promotion = (root / '.github/workflows/build_publish.yml').read_text().split('  stable_image:', 1)[1]
         self.assertLess(promotion.index('verify-image.py'), promotion.index('publish-image.py'))
-        maintenance = (root / '.github/workflows/image-retention.yml').read_text()
-        review = maintenance.split('  dependency-review:', 1)[1].split('  cleanup:', 1)[0]
+        maintenance = (root / '.github/workflows/weekly_cleanup.yml').read_text()
+        review = maintenance.split('  select-nightly:', 1)[1].split('  security-scan:', 1)[0]
         self.assertIn('packages: read', review)
         self.assertNotIn('packages: write', review)
         self.assertNotIn('publish-image.py', maintenance)

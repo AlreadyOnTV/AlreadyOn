@@ -21,7 +21,7 @@ PR = re.compile(r'pr-(\d+)(?:-[0-9a-f]{40})?')
 REBUILD = re.compile(r'rebuild-(\d+)-\d+')
 
 
-def retain(tags, today, open_pr, active_run, recent_expired=False):
+def retain(tags, today, open_pr, active_run, recent_expired=False, created_at=None):
     """Return a protection reason, or None. Newest date alias defines expiry."""
     if CHANNELS.intersection(tags):
         return 'release channel'
@@ -31,6 +31,10 @@ def retain(tags, today, open_pr, active_run, recent_expired=False):
     dates += [parse_day(match[1]) for tag in tags if (match := NIGHTLY.fullmatch(tag))]
     if dates and max(dates) >= today - datetime.timedelta(days=90):
         return 'date within 90 days'
+    if created_at:
+        published = datetime.datetime.fromisoformat(created_at.replace('Z', '+00:00')).date()
+        if published >= today - datetime.timedelta(days=90):
+            return 'image version within 90 days'
     for tag in tags:
         match = PR.fullmatch(tag)
         if match and open_pr(int(match[1])):
@@ -48,16 +52,18 @@ def retain(tags, today, open_pr, active_run, recent_expired=False):
 
 
 def recent_expired_versions(versions, today, days=90, limit=5):
-    """Keep the newest dated image versions that are already beyond the age window."""
+    """Keep the newest image versions beyond 90 days, respecting newer date aliases."""
     dated = []
     for version in versions:
         tags = version['metadata']['container']['tags']
         dates = [parse_day(tag, historical=True) for tag in tags if DATE.fullmatch(tag)]
         dates += [parse_day(match[1]) for tag in tags if (match := NIGHTLY.fullmatch(tag))]
-        if dates:
-            day = max(dates)
-            if day < today - datetime.timedelta(days=days):
-                dated.append((day, version['name']))
+        created = version.get('created_at')
+        created_day = (datetime.datetime.fromisoformat(created.replace('Z', '+00:00')).date()
+                       if created else None)
+        dates.extend([created_day] if created_day else [])
+        if dates and max(dates) < today - datetime.timedelta(days=days):
+            dated.append((max(dates), version['name']))
     return {digest for _, digest in sorted(dated, reverse=True)[:limit]}
 
 
@@ -102,7 +108,8 @@ if __name__ == '__main__':
 
     recent_expired = recent_expired_versions(versions, today)
     reasons = {v['name']: retain(v['metadata']['container']['tags'], today, open_pr, active_run,
-                                 recent_expired=v['name'] in recent_expired)
+                                 recent_expired=v['name'] in recent_expired,
+                                 created_at=v.get('created_at'))
                for v in versions}
 
     def children(digest):
@@ -129,6 +136,7 @@ if __name__ == '__main__':
         # each version as an additional guard against tag movement outside Actions.
         for version_id in deletions:
             current = api(f'{endpoint}/{version_id}')
-            if current['name'] in protected or retain(current['metadata']['container']['tags'], today, open_pr, active_run):
+            if current['name'] in protected or retain(current['metadata']['container']['tags'], today, open_pr, active_run,
+                                                     created_at=current.get('created_at')):
                 raise RuntimeError('Retention changed during cleanup; refusing deletion')
             subprocess.run(['gh', 'api', '-X', 'DELETE', f'{endpoint}/{version_id}'], check=True)

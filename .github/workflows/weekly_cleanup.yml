@@ -1,5 +1,5 @@
-# Weekly maintenance combines dependency review and artifact retention.
-name: Weekly Maintenance
+# Weekly cleanup scans the published runtime and applies artifact retention.
+name: Weekly Cleanup
 on:
   schedule:
     - cron: "43 7 * * 1"
@@ -19,12 +19,14 @@ concurrency:
   group: application-images
   cancel-in-progress: false
 jobs:
-  dependency-review:
+  select-nightly:
     permissions:
       contents: read
       packages: read
     runs-on: ubuntu-26.04
-    timeout-minutes: 90
+    outputs:
+      image: ${{ steps.nightly.outputs.image }}
+      revision: ${{ steps.nightly.outputs.revision }}
     steps:
       - uses: actions/checkout@v7
         with:
@@ -35,37 +37,24 @@ jobs:
           registry: ghcr.io
           username: ${{ github.actor }}
           password: ${{ secrets.GITHUB_TOKEN }}
-      - name: Resolve published runtime and matching CI baseline
-        id: baseline
+      - name: Resolve the exact Nightly digest and source revision
+        id: nightly
         run: |
           docker pull ghcr.io/alreadyontv/alreadyon:nightly
           source=$(docker inspect ghcr.io/alreadyontv/alreadyon:nightly --format '{{index .RepoDigests 0}}')
-          docker tag "$source" alreadyon-maintenance:runtime
-          echo "runtime=alreadyon-maintenance:runtime" >> "$GITHUB_OUTPUT"
-          docker pull ghcr.io/alreadyontv/alreadyon-base:base-ci
-          ci=$(docker inspect ghcr.io/alreadyontv/alreadyon-base:base-ci --format '{{index .RepoDigests 0}}')
-          docker tag "$ci" alreadyon-maintenance:ci
-          echo "ci=alreadyon-maintenance:ci" >> "$GITHUB_OUTPUT"
-          {
-            echo '### Reviewed dependency baseline'
-            echo "Runtime: \`$source\`"
-            echo "CI: \`$ci\`"
-            git rev-parse HEAD
-            sha256sum server/go.sum web/package-lock.json deploy/npm-tooling/package-lock.json apps/android/app/build.gradle.kts apps/android/tv/build.gradle.kts apps/android/build.gradle.kts
-            docker run --rm --entrypoint sh "$source" -c 'cat /etc/os-release; ffmpeg -version; ffprobe -version'
-          } > "$RUNNER_TEMP/dependency-baseline.txt"
-          cat "$RUNNER_TEMP/dependency-baseline.txt" >> "$GITHUB_STEP_SUMMARY"
-      - uses: ./.github/actions/security-scan
-        with:
-          image: ${{ steps.baseline.outputs.runtime }}
-          ci-image: ${{ steps.baseline.outputs.ci }}
-      - uses: actions/upload-artifact@v7
-        if: ${{ !cancelled() && steps.baseline.outcome == 'success' }}
-        with:
-          name: dependency-baseline-${{ github.run_id }}
-          path: ${{ runner.temp }}/dependency-baseline.txt
-          retention-days: 90
-          if-no-files-found: error
+          revision=$(docker image inspect ghcr.io/alreadyon/alreadyon:nightly --format '{{index .Config.Labels "org.opencontainers.image.revision"}}')
+          [[ "$source" =~ @sha256:[0-9a-f]{64}$ ]]
+          [[ "$revision" =~ ^[0-9a-f]{40}$ ]]
+          echo "image=$source" >> "$GITHUB_OUTPUT"
+          echo "revision=$revision" >> "$GITHUB_OUTPUT"
+  security-scan:
+    needs: select-nightly
+    permissions:
+      contents: read
+    uses: ./.github/workflows/security_scan.yml
+    with:
+      image: ${{ needs.select-nightly.outputs.image }}
+      source_revision: ${{ needs.select-nightly.outputs.revision }}
   cleanup:
     permissions:
       contents: write
@@ -101,6 +90,6 @@ jobs:
           GH_TOKEN: ${{ github.token }}
           APPLY: ${{ github.event_name != 'workflow_dispatch' || inputs.apply }}
         run: |
-          args=()
+          args=(--caches-only)
           if [ "$APPLY" = true ]; then args+=(--apply); fi
           python3 scripts/ci/clean-build-storage.py "${args[@]}"

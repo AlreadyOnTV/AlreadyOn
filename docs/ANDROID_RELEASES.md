@@ -13,7 +13,7 @@ Develop on `dev`, test at <https://localhost:5173>, then open a PR to `main` aft
 
 Each release builds/signs both APKs with a strictly higher version code. Stable selects the newest published Nightly source in main history. Docker `latest` reuses that source's verified image digest; it does not rebuild the image. A same-date rerun replaces the release/tag only after all gates pass, and writes new source-bound APK manifests/checksums.
 
-Run Nightly publication manually from `dev` or `main` only after that source has passed PR validation. A Nightly published from `dev` becomes eligible for Stable after its exact source reaches `main`. After accepting a Nightly, run **Build and Publish Release** with `operation: stable` on `main`; it verifies the source/digest, builds fresh higher-code Stable APKs with the permanent signing identity, then moves `latest` to the same image digest.
+Run Nightly publication manually from `dev` or `main` only after that source has passed PR validation. A Nightly published from `dev` becomes eligible for Stable after its exact source reaches `main`. After accepting a Nightly, run **Build and Publish** with `operation: stable` on `main`; it verifies the source/digest, builds fresh higher-code Stable APKs with the permanent signing identity, then moves `latest` to the same image digest.
 
 Updated phone and TV builds use the Admin-selected Stable (default) or Nightly cycle, not an installed-label track lock. Stored legacy RC preferences fall back to Stable. Existing APKs need a signed update to gain the setting. See [update policy and existing-client limitations](ANDROID_UPDATES.md).
 
