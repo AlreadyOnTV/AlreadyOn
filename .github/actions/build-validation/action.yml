@@ -50,10 +50,10 @@ runs:
     - uses: actions/setup-java@v6
       with:
         distribution: temurin
-        java-version: '17'
+        java-version: "17"
     - uses: android-actions/setup-android@v4
       with:
-        packages: 'platform-tools platforms;android-37.0 build-tools;36.0.0'
+        packages: "platform-tools platforms;android-37.0 build-tools;36.0.0"
     - name: Build minified unsigned phone and TV release APKs
       shell: bash
       run: apps/android/gradlew -p apps/android --no-daemon :app:assembleRelease :tv:assembleRelease
