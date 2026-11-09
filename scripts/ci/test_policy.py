@@ -96,6 +96,8 @@ class PublicationPolicy(unittest.TestCase):
         self.assertIn('gh pr merge "$PR_NUMBER" --repo "$REPOSITORY"', validation)
         self.assertIn('gh pr merge "$PR_NUMBER" --repo "$REPOSITORY" --merge --match-head-commit', validation)
         self.assertIn('on:\n  push:\n    branches: [main]', build)
+        channels = build.split('  channels:\n', 1)[1].split('\n  stable_android:\n', 1)[0]
+        self.assertIn('permissions:\n      contents: write', channels)
 
     def test_pr_candidate_build_is_reusable_and_cannot_publish(self):
         root = pathlib.Path(__file__).resolve().parents[2]
