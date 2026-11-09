@@ -27,14 +27,13 @@ runs:
         cache-from: type=gha,scope=source-validation-runtime
         cache-to: type=gha,scope=source-validation-runtime,mode=max
     - name: Build local CI test base
-      uses: docker/build-push-action@v7
-      with:
-        context: .
-        file: deploy/ci-base.Dockerfile
-        target: ci-base
-        load: true
-        tags: alreadyon-validation:ci
-        build-args: RUNTIME_BASE=alreadyon-validation:runtime
+      shell: bash
+      run: |
+        docker build --builder default \
+          --file deploy/ci-base.Dockerfile \
+          --target ci-base \
+          --build-arg RUNTIME_BASE=alreadyon-validation:runtime \
+          --tag alreadyon-validation:ci .
     - name: Build exact production runtime candidate
       shell: bash
       env:
