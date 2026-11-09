@@ -147,6 +147,16 @@ class ReleaseNotesTests(unittest.TestCase):
             with self.assertRaises(ValueError):
                 candidate_changes('owner/repo', [entry], entry['tag_name'], 'a' * 40, 'another')
 
+    def test_validated_source_replacement_regenerates_candidate_notes(self):
+        entry = {'tag_name': '26.10.18-nightly',
+                 'body': release_body('owner/repo', '26.10.18-nightly', 'a' * 40, 23,
+                                      render_fragments([]), changelog_baseline='26.10.09-rc3')}
+        with patch('release_notes.generated_changes', return_value='replacement notes') as generate:
+            self.assertEqual(candidate_changes('owner/repo', [entry], entry['tag_name'], 'b' * 40,
+                                               '26.10.09-rc3', allow_source_replacement=True),
+                             'replacement notes')
+            generate.assert_called_once_with('owner/repo', 'b' * 40, '26.10.09-rc3')
+
     def test_new_candidate_needs_no_handwritten_draft(self):
         with patch('release_notes.generated_changes', return_value='generated') as generate:
             self.assertEqual(candidate_changes('owner/repo', [], 'tag', 'sha', 'baseline'), 'generated')

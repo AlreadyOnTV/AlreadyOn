@@ -145,12 +145,14 @@ def generated_changes(repo, sha, baseline_tag):
                              for section, lines in groups.items()])
 
 
-def candidate_changes(repo, entries, tag, sha, baseline_tag):
+def candidate_changes(repo, entries, tag, sha, baseline_tag, *, allow_source_replacement=False):
     """Freeze metadata at the built candidate so later issue edits cannot alter reruns."""
     entry = next((entry for entry in entries if entry['tag_name'] == tag), None)
     body = (entry or {}).get('body') or ''
     if START in body:
         if re.findall(r'Source commit: `([0-9a-f]{40})`', body) != [sha]:
+            if allow_source_replacement:
+                return generated_changes(repo, sha, baseline_tag)
             raise ValueError('Existing candidate notes belong to another source')
         baseline = re.findall(r'Changelog baseline: `([^`]+)`', body)
         if baseline != ([baseline_tag] if baseline_tag else []):
