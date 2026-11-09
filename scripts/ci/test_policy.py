@@ -2,6 +2,7 @@
 import tempfile
 import datetime
 import importlib.util
+import json
 import pathlib
 import os
 import subprocess
@@ -41,11 +42,10 @@ class PublicationPolicy(unittest.TestCase):
                     'ghcr.io/alreadyontv/alreadyon:26.10.01-nightly']
         result = tags('AlreadyOnTV/AlreadyOn', 'main', SHA, instant)
         self.assertEqual(result, expected)
+        self.assertEqual(tags('AlreadyOnTV/AlreadyOn', 'dev', SHA, instant), expected)
         self.assertEqual(tags('AlreadyOnTV/AlreadyOn', 'main', SHA, instant,
                               publication='latest'), ['ghcr.io/alreadyontv/alreadyon:latest'])
-        with self.assertRaises(ValueError):
-            tags('AlreadyOnTV/AlreadyOn', 'dev', SHA, instant)
-        for branch in ['feature/a', 'fix/a', 'bugfix/a', 'release', 'dev', 'test']:
+        for branch in ['feature/a', 'fix/a', 'bugfix/a', 'release', 'test']:
             with self.assertRaises(ValueError):
                 tags('owner/repo', branch, SHA, instant)
 
@@ -64,27 +64,32 @@ class PublicationPolicy(unittest.TestCase):
         self.assertTrue(output[0].startswith('tags=ghcr.io/owner/repo:nightly ghcr.io/owner/repo:'))
         self.assertEqual(output[1], 'source=ghcr.io/owner/repo:pr-123')
 
-    def test_main_pr_requires_full_e2e_codeql_and_dependency_review(self):
+    def test_dev_and_main_prs_require_full_e2e_codeql_and_dependency_review(self):
         root = pathlib.Path(__file__).resolve().parents[2]
         validation = (root / '.github/workflows/pull-request.yml').read_text()
         codeql = (root / '.github/workflows/codeql.yml').read_text()
-        dependencies = (root / '.github/workflows/dependency-review.yml').read_text()
         test_action = (root / '.github/actions/test-source/action.yml').read_text()
-        self.assertIn('pull_request:\n    branches: [main]', validation)
-        self.assertIn('pull_request:\n    branches: [main]', codeql)
-        self.assertIn('actions/dependency-review-action@v4', dependencies)
-        self.assertIn('name: Dependabot', dependencies)
+        self.assertIn('pull_request:\n    branches: [dev, main]', validation)
+        self.assertIn('pull_request:\n    branches: [dev, main]', codeql)
+        self.assertIn('push:\n    branches: [main]', codeql)
+        self.assertNotIn('push:\n    branches: [dev, main]', codeql)
+        self.assertNotIn('  schedule:', codeql)
+        self.assertNotIn('  workflow_dispatch:', codeql)
+        self.assertNotIn('  workflow_call:', codeql)
+        self.assertIn('actions/dependency-review-action@v4', validation)
+        self.assertIn('name: Dependabot', validation)
         self.assertIn('pull-base: "false"', validation)
+        self.assertNotIn('  workflow_dispatch:', validation)
+        self.assertNotIn('  workflow_call:', validation)
         self.assertIn('make test-e2e', test_action)
         self.assertEqual(validation.count('  auto_merge:\n'), 1)
-        self.assertIn('needs: [quality, android, tests]', validation)
+        self.assertIn('needs: [quality, android, tests, dependency_review]', validation)
+        self.assertIn('name: E2E Test Suite', validation)
         self.assertIn('workflow == "CodeQL"', validation)
         self.assertIn('.event == "pull_request"', validation)
         self.assertIn('analyze (', validation)
-        self.assertIn('workflow == "Dependabot Dependency Review"', validation)
-        self.assertIn('name == "Dependabot"', validation)
+        self.assertNotIn('workflow == "Dependabot Dependency Review"', validation)
         self.assertIn('length == 2 and all(.[]; .state == "SUCCESS")', validation)
-        self.assertIn('length == 1 and all(.[]; .state == "SUCCESS")', validation)
         self.assertIn('gh pr merge "$PR_NUMBER" --merge --auto', validation)
         self.assertNotIn('branches: [dev, test]', validation)
 
@@ -108,6 +113,83 @@ class RetentionPolicy(unittest.TestCase):
             day = (self.today - datetime.timedelta(days=days)).isoformat()
             self.assertEqual(self.keep([day]) is not None, protected)
         self.assertIsNotNone(self.keep(['20.01.01', '26.10.05']))
+
+    def test_recent_expired_images_are_reserved_after_age_window(self):
+        versions = [
+            {'name': f'digest-{index}', 'metadata': {'container': {'tags': [
+                (self.today - datetime.timedelta(days=days)).strftime('%y.%m.%d')]}}}
+            for index, days in enumerate([91, 92, 93, 94, 95, 96])
+        ]
+        recent = self.module.recent_expired_versions(versions, self.today)
+        self.assertEqual(recent, {f'digest-{index}' for index in range(5)})
+        self.assertIsNotNone(self.module.retain(['25.07.01'], self.today,
+                            lambda _: False, lambda _: False,
+                            recent_expired=True))
+
+    def test_release_retention_keeps_channels_recent_and_five_expired(self):
+        releases = load('clean-releases')
+
+        def entry(release_id, day, channel, *, draft=False, tag=None):
+            date = self.today - datetime.timedelta(days=day)
+            suffix = f'{channel}1' if channel in {'alpha', 'beta', 'rc'} else channel
+            return {
+                'id': release_id,
+                'tag_name': tag or f'{date:%y.%m.%d}-{suffix}',
+                'draft': draft,
+                'prerelease': channel != 'stable',
+                'published_at': datetime.datetime.combine(
+                    date, datetime.time(12), datetime.timezone.utc).isoformat(),
+            }
+
+        items = [entry(1, 200, 'nightly'), entry(2, 220, 'stable'),
+                 entry(3, 10, 'alpha')]
+        items.extend(entry(index + 4, 91 + index, 'rc') for index in range(6))
+        items.extend([entry(20, 300, 'rc', draft=True),
+                      entry(21, 400, 'rc', tag='unrecognized')])
+        plan = releases.retention_plan(items, self.today)
+        self.assertIn('latest nightly', plan[1])
+        self.assertIn('latest stable', plan[2])
+        self.assertIn('within retention window', plan[3])
+        self.assertTrue(all(plan[index + 4] is not None for index in range(5)))
+        self.assertIsNone(plan[9])
+        self.assertIn('draft', plan[20])
+        self.assertIn('unrecognized', plan[21])
+
+    def test_release_cleanup_dry_run_never_deletes(self):
+        path = str(pathlib.Path(__file__).with_name('clean-releases.py'))
+        entries = [
+            {'id': index, 'tag_name': f'25.01.{index:02d}-rc1', 'draft': False,
+             'prerelease': True, 'published_at': f'2025-01-{index:02d}T12:00:00Z'}
+            for index in range(1, 7)
+        ]
+        with patch.dict(os.environ, GITHUB_REPOSITORY='owner/repo'), \
+                patch('subprocess.check_output', return_value=json.dumps([entries])), \
+                patch('subprocess.run') as delete, \
+                patch.object(sys, 'argv', [path]), redirect_stdout(io.StringIO()):
+            runpy.run_path(path, run_name='__main__')
+        delete.assert_not_called()
+
+    def test_release_cleanup_apply_deletes_only_expired_release_and_tag(self):
+        path = str(pathlib.Path(__file__).with_name('clean-releases.py'))
+        entries = [
+            {'id': 1, 'tag_name': '24.01.01-nightly', 'draft': False,
+             'prerelease': True, 'published_at': '2024-01-01T12:00:00Z'},
+            {'id': 2, 'tag_name': '24.01.02-stable', 'draft': False,
+             'prerelease': False, 'published_at': '2024-01-02T12:00:00Z'},
+        ]
+        entries.extend({
+            'id': index + 3, 'tag_name': f'25.01.{index:02d}-rc1', 'draft': False,
+            'prerelease': True, 'published_at': f'2025-01-{index:02d}T12:00:00Z',
+        } for index in range(1, 7))
+        ref = subprocess.CompletedProcess([], 0, '{}', '')
+        with patch.dict(os.environ, GITHUB_REPOSITORY='owner/repo'), \
+                patch('subprocess.check_output', side_effect=[json.dumps([entries]), json.dumps([entries])]), \
+                patch('subprocess.run', side_effect=[ref, None, None]) as delete, \
+                patch.object(sys, 'argv', [path, '--apply']), redirect_stdout(io.StringIO()):
+            runpy.run_path(path, run_name='__main__')
+        self.assertIn('25.01.01-rc1', delete.call_args_list[1].args[0][-1])
+        self.assertIn('/git/refs/tags/25.01.01-rc1', delete.call_args_list[1].args[0][-1])
+        self.assertIn('/releases/4', delete.call_args_list[2].args[0][-1])
 
     def test_candidates_and_unknown_tags(self):
         tag = 'pr-123-' + SHA
@@ -233,16 +315,17 @@ class RetentionPolicy(unittest.TestCase):
                              ['tag', 'push', 'tag', 'push'])
             record.assert_called_once_with('owner/repo', SHA, digest)
 
-    def test_cleanup_has_no_event_trigger_and_nightly_build_runs_on_main_merges(self):
+    def test_weekly_cleanup_and_manual_nightly_publication(self):
         root = pathlib.Path(__file__).resolve().parents[2]
         cleanup = (root / '.github/workflows/image-retention.yml').read_text()
         self.assertNotIn('pull_request_target:', cleanup)
         self.assertNotIn('workflow_run:', cleanup)
+        self.assertIn('cron: "43 7 * * 1"', cleanup)
         build = (root / '.github/workflows/rebuild.yml').read_text()
         self.assertIn('workflow_dispatch:', build)
         self.assertNotIn('  schedule:', build)
-        self.assertIn('  push:', build)
-        self.assertIn('branches: [main]', build)
+        self.assertNotIn('\n  push:', build)
+        self.assertIn('dev|main', build)
 
 
 class DocumentationPolicy(unittest.TestCase):

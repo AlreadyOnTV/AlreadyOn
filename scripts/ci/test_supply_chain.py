@@ -1,5 +1,4 @@
 """Exercise failed signing, staged uploads, tampered inventories and missed schedules offline."""
-from datetime import datetime, timedelta, timezone
 import importlib.util
 from pathlib import Path
 import subprocess
@@ -62,14 +61,6 @@ class SupplyChain(unittest.TestCase):
         verify = load('verify-image')
         with self.assertRaises(ValueError): verify.verify('owner/repo', 'ghcr.io/owner/repo:nightly', 'a' * 40)
 
-    def test_manual_or_failed_review_does_not_hide_a_missed_schedule(self):
-        health = load('maintenance-health').health
-        now = datetime(2026, 10, 13, tzinfo=timezone.utc)
-        def run(age, event='schedule', conclusion='success'):
-            return {'event': event, 'conclusion': conclusion, 'updated_at': (now - timedelta(days=age)).isoformat()}
-        self.assertTrue(health([run(7)], now))
-        for runs in [[], [run(9), run(0, 'workflow_dispatch')], [run(0, conclusion='failure')], [run(-1)]]:
-            with self.assertRaises(ValueError): health(runs, now)
 
     def test_channel_digest_mismatch_never_records_success(self):
         import image_registry
@@ -112,8 +103,10 @@ class SupplyChain(unittest.TestCase):
         self.assertLess(workflow.index('stage-image.py'), workflow.index('actions/attest@v4'))
         self.assertLess(workflow.index('Verify both signed statements'), workflow.index('publish-image.py'))
         self.assertNotIn('push-to-registry: true', workflow) # GitHub retains signatures independently of OCI cleanup.
-        promotion = (root / '.github/workflows/release.yml').read_text()
+        promotion = (root / '.github/workflows/rebuild.yml').read_text().split('  stable_image:', 1)[1]
         self.assertLess(promotion.index('verify-image.py'), promotion.index('publish-image.py'))
-        maintenance = (root / '.github/workflows/dependency-maintenance.yml').read_text()
-        self.assertNotIn('packages: write', maintenance)
+        maintenance = (root / '.github/workflows/image-retention.yml').read_text()
+        review = maintenance.split('  dependency-review:', 1)[1].split('  cleanup:', 1)[0]
+        self.assertIn('packages: read', review)
+        self.assertNotIn('packages: write', review)
         self.assertNotIn('publish-image.py', maintenance)

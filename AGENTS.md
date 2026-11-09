@@ -23,7 +23,7 @@ If present, read ignored `.private/AGENTS.md` for checkout ownership, local cred
 
 ## Review and delivery
 
-Use the repository PR template. Main PRs require CodeQL, Dependabot dependency review and full e2e/runtime validation; successful PRs auto-merge. Keep releases traceable to source, digest and signed artifacts. Validated release workflows may replace current-date Nightly/Stable assets with higher APK version codes. Never rewrite refs or assets manually. Keep only `dev` and `main` after delivery.
+Use the repository PR template. PRs to `dev` and `main` require CodeQL, Dependabot dependency review, Android checks and full e2e/runtime validation; successful PRs auto-merge. Nightly and Stable publication are manual; Nightly may target `dev` or `main`, while Stable selects a validated Nightly reachable from `main`. Keep releases traceable to source, digest and signed artifacts. Validated release workflows may replace current-date Nightly/Stable assets with higher APK version codes. Never rewrite refs or assets manually. Keep only `dev` and `main` after delivery.
 
 ## Release descriptions
 

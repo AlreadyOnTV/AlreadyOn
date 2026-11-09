@@ -1,35 +1,25 @@
-# Date-release dev PRs run full source and browser e2e validation.
-name: Date Release PR Validation
+# PRs to dev and main run the same validation before integration.
+name: Pull Request Validation
 on:
   pull_request:
-    branches: [main]
-  workflow_dispatch:
-  workflow_call:
-    inputs:
-      revision:
-        type: string
-        default: ""
+    branches: [dev, main]
 permissions:
   contents: read
 concurrency:
-  group: validation-${{ inputs.revision || github.ref }}
+  group: validation-${{ github.event.pull_request.number }}
   cancel-in-progress: true
 jobs:
   quality:
     uses: ./.github/workflows/quality.yml
-    with:
-      revision: ${{ inputs.revision }}
   android:
     uses: ./.github/workflows/android-checks.yml
-    with:
-      revision: ${{ inputs.revision }}
   tests:
+    name: E2E Test Suite
     runs-on: ubuntu-26.04
     timeout-minutes: 90
     steps:
       - uses: actions/checkout@v7
         with:
-          ref: ${{ inputs.revision }}
           persist-credentials: false
       - uses: actions/setup-go@v7
         with:
@@ -82,12 +72,23 @@ jobs:
         with:
           image: alreadyon-ci:candidate
           ci-image: alreadyon-validation:ci
+  dependency_review:
+    name: Dependabot
+    runs-on: ubuntu-latest
+    permissions:
+      contents: read
+      pull-requests: read
+    steps:
+      - uses: actions/dependency-review-action@v4
+        with:
+          fail-on-severity: moderate
   auto_merge:
     if: github.event_name == 'pull_request'
       && needs.quality.result == 'success'
       && needs.android.result == 'success'
       && needs.tests.result == 'success'
-    needs: [quality, android, tests]
+      && needs.dependency_review.result == 'success'
+    needs: [quality, android, tests, dependency_review]
     runs-on: ubuntu-latest
     timeout-minutes: 100
     permissions:
@@ -104,14 +105,11 @@ jobs:
           while true; do
             checks=$(gh pr checks "$PR_NUMBER" --json name,workflow,state,event 2>/dev/null || printf '[]')
             codeql=$(jq -c '[.[] | select(.event == "pull_request" and .workflow == "CodeQL" and (.name | startswith("analyze (")))]' <<< "$checks")
-            dependency_review=$(jq -c '[.[] | select(.event == "pull_request" and .workflow == "Dependabot Dependency Review" and .name == "Dependabot")]' <<< "$checks")
-            if jq -e 'any(.[]; .state == "FAILURE" or .state == "ERROR" or .state == "CANCELLED")' <<< "$codeql" >/dev/null || \
-               jq -e 'any(.[]; .state == "FAILURE" or .state == "ERROR" or .state == "CANCELLED")' <<< "$dependency_review" >/dev/null; then
-              echo "::error::CodeQL or dependency review failed; leaving the PR open."
+            if jq -e 'any(.[]; .state == "FAILURE" or .state == "ERROR" or .state == "CANCELLED")' <<< "$codeql" >/dev/null; then
+              echo "::error::CodeQL failed; leaving the PR open."
               exit 1
             fi
-            if jq -e 'length == 2 and all(.[]; .state == "SUCCESS")' <<< "$codeql" >/dev/null && \
-               jq -e 'length == 1 and all(.[]; .state == "SUCCESS")' <<< "$dependency_review" >/dev/null; then
+            if jq -e 'length == 2 and all(.[]; .state == "SUCCESS")' <<< "$codeql" >/dev/null; then
               break
             fi
             if (( SECONDS >= deadline )); then
@@ -120,7 +118,7 @@ jobs:
             fi
             sleep 10
           done
-      - name: Enable merge after all three workflows pass
+      - name: Enable merge after all PR gates pass
         env:
           GH_TOKEN: ${{ github.token }}
           PR_NUMBER: ${{ github.event.pull_request.number }}

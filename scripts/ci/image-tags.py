@@ -1,5 +1,5 @@
 #!/usr/bin/env python3
-"""Map validated main sources to Nightly/date tags and explicit Stable publication to latest."""
+"""Map manually selected dev/main Nightly sources and Stable publication to release tags."""
 import datetime
 import os
 import re
@@ -23,10 +23,10 @@ def source_tag(repository, selected):
 
 
 def image_tags(repository, branch, revision, now=None, release_date=None, publication=None):
-    """Only main publishes Nightly/date aliases or the Stable workflow's latest alias."""
+    """Only dev/main publish Nightly/date aliases; Stable moves only the latest alias."""
     sha(revision)
-    if branch != 'main':
-        raise ValueError('Only main publishes release image tags')
+    if branch not in {'dev', 'main'}:
+        raise ValueError('Only dev or main publishes Nightly image tags')
     now = now or datetime.datetime.now(datetime.timezone.utc)
     day = release_date or now.astimezone(ZoneInfo('America/New_York')).strftime('%y.%m.%d')
     day = release_day(day)

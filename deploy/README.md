@@ -4,7 +4,7 @@
 
 Use [docker-compose.example.yml](docker-compose.example.yml) as a starting point. Review mounts, ports and identity before starting. Images are published at `ghcr.io/alreadyontv/alreadyon`.
 
-`stable` is the approved main release, `latest` the approved test release and `nightly` the development release. Pin a validated digest for reproducible deployments.
+`nightly` is the manually published development channel; `latest` points to the Nightly selected for Stable, and `stable` is a legacy alias. Pin a validated digest for reproducible deployments.
 
 ## Configure
 

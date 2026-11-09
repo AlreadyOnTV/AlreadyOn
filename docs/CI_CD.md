@@ -8,11 +8,11 @@ Maintainers control releases; keep credentials private. Current release titles a
 
 The release date is generated in `America/New_York` when a Nightly is built from `main`.
 
-Work on `dev`, validate locally with the HTTPS preview, disposable Docker tests and USB-connected phone/TV builds, then open a PR to `main`. PRs require CodeQL, Dependabot dependency review and full e2e/runtime validation. Enable auto-merge after all required checks pass. Weekly dependency updates integrate only their tested batch into `dev`; see [maintenance](DEPENDENCY_MAINTENANCE.md).
+Work on `dev`, validate locally with the HTTPS preview, disposable Docker tests and USB-connected phone/TV builds, then open a PR to `main`. PRs to `dev` or `main` run CodeQL, dependency review, Android checks and full e2e/runtime validation. Auto-merge waits for all PR checks. Dependabot opens grouped weekly PRs to `dev`; see [maintenance](DEPENDENCY_MAINTENANCE.md).
 
-Validated merges to `main` publish the image as `nightly` plus current-date aliases and build signed `YY.MM.DD-nightly` phone/TV APKs. A same-date rerun may replace that date's release assets only after all gates pass and with higher APK version codes; immutable source tags are not moved.
+Maintainers manually dispatch Nightly publication from the exact current `dev` or `main` tip. The workflow builds and validates the image, then publishes `nightly` plus current-date aliases and signed `YY.MM.DD-nightly` phone/TV APKs. A same-date rerun may replace that date's release assets only after all gates pass and with higher APK version codes; the source date tag advances to the selected SHA.
 
-After Nightly acceptance, dispatch **Publish Stable from latest Nightly** on `main`. It verifies the Nightly's source and signed image digest, retags that image as `latest` without rebuilding it, and builds fresh Stable APKs from the same commit.
+After Nightly acceptance, dispatch **Build and Publish Release** with `operation: stable` on `main`. It verifies the Nightly's source and signed image digest, retags that image as `latest` without rebuilding it, and builds fresh Stable APKs from the same commit.
 
 ## Approved release validation
 
@@ -32,7 +32,7 @@ Before image builds, `scripts/local-bases.py` checks base recipes, parent and ag
 
 On approval, deploy the exact tested image and verify revision, health, service count, mounts and relevant playback. `scripts/deploy-production.sh <ssh-host> [compose-directory]` transfers it with the updater paused, using the host's configured Compose image tag without changing its configuration. Digest-pinned references require maintainer review. Preserve live data.
 
-`main` is the only release branch. Preserve the exact tested source and image digest through publication. Do not rebuild or replace previously signed APKs or published release tags outside the validated same-date workflow.
+Preserve the exact tested source and image digest through publication. Main intentionally has no branch protection; the PR auto-merge workflow waits for quality, Android, E2E/runtime, CodeQL and dependency-review checks. Do not rebuild or replace previously signed APKs or published release tags outside the validated same-date workflow.
 
 Dev changes reach users only after the reviewed main PR merges. See [retention](IMAGE_RETENTION.md).
 
@@ -40,6 +40,6 @@ Dev changes reach users only after the reviewed main PR merges. See [retention](
 
 PR validation scans the exact patched candidate with read-only credentials; publication credentials are unavailable. Critical/High findings block publication; secret matches require private review. Scanner failures block the gate. Runtime/CI images are scanned. New cycles require [signed image evidence](ARTIFACT_PROVENANCE.md); [weekly dependency updates](DEPENDENCY_MAINTENANCE.md) publish only validated nightlies.
 
-CodeQL analyzes Go/TypeScript on dev/main; Pages uses its independent organization-site workflow. Android automation builds Nightly APKs from main merges and fresh Stable APKs from the latest validated Nightly; see [Android policy](ANDROID_RELEASES.md).
+CodeQL analyzes Go/TypeScript on PRs and main pushes; Pages uses its independent organization-site workflow. Android Nightly and Stable APKs are published manually; see [Android policy](ANDROID_RELEASES.md).
 
 New images use `ghcr.io/alreadyontv/alreadyon`. Go module and Android package identities stay compatible. Stable publication is manual and reuses the tested Nightly digest. **Refresh Base Images** rebuilds shared bases; CI bases pin their runtime digest.

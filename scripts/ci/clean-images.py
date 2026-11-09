@@ -21,10 +21,12 @@ PR = re.compile(r'pr-(\d+)(?:-[0-9a-f]{40})?')
 REBUILD = re.compile(r'rebuild-(\d+)-\d+')
 
 
-def retain(tags, today, open_pr, active_run):
+def retain(tags, today, open_pr, active_run, recent_expired=False):
     """Return a protection reason, or None. Newest date alias defines expiry."""
     if CHANNELS.intersection(tags):
         return 'release channel'
+    if recent_expired:
+        return 'one of the five newest expired releases'
     dates = [parse_day(tag, historical=True) for tag in tags if DATE.fullmatch(tag)]
     dates += [parse_day(match[1]) for tag in tags if (match := NIGHTLY.fullmatch(tag))]
     if dates and max(dates) >= today - datetime.timedelta(days=90):
@@ -43,6 +45,20 @@ def retain(tags, today, open_pr, active_run):
                 or re.fullmatch(r'sha-[0-9a-f]{40}', tag)):
             return 'unrecognized tag; review required'
     return None
+
+
+def recent_expired_versions(versions, today, days=90, limit=5):
+    """Keep the newest dated image versions that are already beyond the age window."""
+    dated = []
+    for version in versions:
+        tags = version['metadata']['container']['tags']
+        dates = [parse_day(tag, historical=True) for tag in tags if DATE.fullmatch(tag)]
+        dates += [parse_day(match[1]) for tag in tags if (match := NIGHTLY.fullmatch(tag))]
+        if dates:
+            day = max(dates)
+            if day < today - datetime.timedelta(days=days):
+                dated.append((day, version['name']))
+    return {digest for _, digest in sorted(dated, reverse=True)[:limit]}
 
 
 def descendants(roots, children):
@@ -83,7 +99,10 @@ if __name__ == '__main__':
         return run_cache[number]
 
     today = datetime.datetime.now(ZoneInfo('America/New_York')).date()
-    reasons = {v['name']: retain(v['metadata']['container']['tags'], today, open_pr, active_run)
+
+    recent_expired = recent_expired_versions(versions, today)
+    reasons = {v['name']: retain(v['metadata']['container']['tags'], today, open_pr, active_run,
+                                 recent_expired=v['name'] in recent_expired)
                for v in versions}
 
     def children(digest):

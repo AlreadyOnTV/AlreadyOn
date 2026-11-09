@@ -3,7 +3,7 @@ on:
   workflow_call:
     inputs:
       operation:
-        description: Publish Nightly on main or fresh Stable APKs from a validated Nightly
+        description: Publish Nightly from dev/main or fresh Stable APKs from a validated Nightly
         type: string
         required: true
       release_date:
@@ -26,7 +26,7 @@ concurrency:
   cancel-in-progress: false
 jobs:
   candidate:
-    if: inputs.operation == 'nightly' && github.ref == 'refs/heads/main'
+    if: inputs.operation == 'nightly' && (github.ref == 'refs/heads/dev' || github.ref == 'refs/heads/main')
     runs-on: ubuntu-24.04
     timeout-minutes: 30
     permissions:

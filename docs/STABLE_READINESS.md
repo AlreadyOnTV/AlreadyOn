@@ -1,6 +1,6 @@
 # Stable readiness checklist
 
-Merging a validated PR to `main` publishes Nightly. Manual Stable publication is a separate maintainer action that reuses the latest Nightly image and builds fresh Stable APKs.
+Nightly publication is a manual maintainer action from `dev` or `main`. Manual Stable publication on `main` reuses the latest validated Nightly image reachable from `main` and builds fresh Stable APKs.
 
 - [ ] Confirm main PR CodeQL, dependency review, full Go/browser/runtime tests, Android checks and vulnerability gates passed. Review Critical/High findings and approved exceptions.
 - [ ] Verify the Nightly image revision/digest, phone/TV APK checksums, package/target, version and permanent signing certificate. Verify signed image provenance and inventory. See [artifact evidence](ARTIFACT_PROVENANCE.md).

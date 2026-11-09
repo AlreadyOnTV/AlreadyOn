@@ -8,10 +8,10 @@ Only `dev` and `main` are long-lived branches. Normal delivery follows this map:
 
 | Branch | Docker channel | Phone/TV APK release |
 | --- | --- | --- |
-| `dev` | no published channel | local/USB validation |
-| `main` merge | `nightly` and `YY.MM.DD` | `YY.MM.DD-nightly` |
+| Manual Nightly dispatch on `dev` | `nightly` and `YY.MM.DD` | `YY.MM.DD-nightly` |
+| Manual Nightly dispatch on `main` | `nightly` and `YY.MM.DD` | `YY.MM.DD-nightly` |
 | Manual Stable publication from latest Nightly | `latest` (same digest) | `YY.MM.DD-stable` (fresh APKs) |
 
-The PR to `main` requires CodeQL, dependency review, and full Go/browser/runtime e2e checks. Main publication builds and scans the image, signs provenance, and publishes Nightly APKs. Weekly dependency updates are validated before integration to `dev`. Stable publication reuses the latest Nightly image digest and freshly builds Stable APKs with the permanent signing identity. Published artifact bytes and tags are not overwritten.
+PRs to `dev` and `main` require CodeQL, dependency review, Android checks and full Go/browser/runtime e2e checks. Maintainers manually publish Nightly from `dev` or `main`; publication builds and scans the image, signs provenance and publishes Nightly APKs. Weekly grouped Dependabot PRs target `dev` and pass the same PR gates before auto-merge. Stable publication reuses the latest Nightly image digest and freshly builds Stable APKs with the permanent signing identity. Validated same-date replacement uses higher APK version codes and updated provenance.
 
 Cloudflare DNS points the apex to GitHub Pages A/AAAA addresses and `www` to `alreadyontv.github.io`, using DNS-only records. GitHub Pages owns website TLS. The Pages domain-verification TXT record must remain in place; no wildcard records are needed. See [website maintenance](WEBSITE.md) and [delivery](CI_CD.md).
