@@ -93,7 +93,7 @@ jobs:
         with:
           go-version-file: server/go.mod
           cache-dependency-path: server/go.sum
-      - uses: actions/download-artifact@v5
+      - uses: actions/download-artifact@v8
         with:
           name: runtime-candidate-${{ github.run_id }}-${{ github.run_attempt }}
           path: ${{ runner.temp }}/candidate
@@ -117,7 +117,7 @@ jobs:
       contents: read
       pull-requests: read
     steps:
-      - uses: actions/dependency-review-action@v4
+      - uses: actions/dependency-review-action@v5
         with:
           fail-on-severity: moderate
   auto_merge:
@@ -164,4 +164,4 @@ jobs:
           PR_NUMBER: ${{ github.event.pull_request.number }}
           REPOSITORY: ${{ github.repository }}
           HEAD_SHA: ${{ github.event.pull_request.head.sha }}
-        run: gh pr merge "$PR_NUMBER" --repo "$REPOSITORY" --merge --auto --match-head-commit "$HEAD_SHA"
+        run: gh pr merge "$PR_NUMBER" --repo "$REPOSITORY" --merge --match-head-commit "$HEAD_SHA"
