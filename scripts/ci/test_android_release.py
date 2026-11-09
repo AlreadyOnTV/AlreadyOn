@@ -89,6 +89,24 @@ class AndroidReleaseTests(unittest.TestCase):
             output.assert_any_call("existing=false")
             output.assert_any_call("version_code=200000101")
 
+    def test_nightly_replacement_regenerates_notes_for_new_source(self):
+        tag = "26.11.09-nightly"
+        old = {"tag_name": tag, "draft": False, "prerelease": True,
+               "body": f"Source commit: `{OTHER}`\nAndroid versionCode: `200000100`"}
+        with tempfile.TemporaryDirectory() as temp:
+            directory = Path(temp)
+            self.assets(directory, tag=tag, sha=SHA, code=200000101)
+            with patch.object(release, "require_tested_image"), \
+                    patch.object(release, "releases", return_value=[old]), \
+                    patch.object(release, "changelog_baseline", return_value="26.11.08-nightly"), \
+                    patch.object(release, "candidate_changes", return_value="replacement notes") as notes, \
+                    patch.object(release, "release_body", return_value="replacement body"), \
+                    patch.object(release, "publish") as publish:
+                release.candidate("owner/repo", tag, SHA, 200000101, directory, nightly=True)
+            notes.assert_called_once_with("owner/repo", [old], tag, SHA, "26.11.08-nightly",
+                                          allow_source_replacement=True)
+            self.assertTrue(publish.call_args.kwargs["replace"])
+
     def test_latest_nightly_selects_newest_source_in_main_history(self):
         entries = [
             {"tag_name": "26.11.06-nightly", "draft": False, "prerelease": True,

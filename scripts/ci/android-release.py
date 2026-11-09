@@ -356,7 +356,8 @@ def candidate(repo, tag, sha, code, directory, *, direct_stable=False, predecess
     entries = releases(repo)
     baseline_tag = changelog_baseline(entries, tag)
     changes = (promotion_changes(predecessor.get("body") or "") if predecessor and release_source(predecessor) == sha
-               else candidate_changes(repo, entries, tag, sha, baseline_tag))
+               else candidate_changes(repo, entries, tag, sha, baseline_tag,
+                                      allow_source_replacement=nightly))
     notes = (release_body(repo, tag, sha, code, changes, candidate_tag=predecessor["tag_name"])
              if predecessor else release_body(repo, tag, sha, code, changes, changelog_baseline=baseline_tag))
     publish_now = bool(predecessor) or parsed[1] in {"nightly", "stable"}

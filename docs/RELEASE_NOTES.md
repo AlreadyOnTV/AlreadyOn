@@ -17,7 +17,7 @@ Maintain product metadata in GitHub:
 - Mark internal PRs with `documentation`, `dependencies`, `chore`, `ci` or `release:skip` to omit them. Unclassified PRs without product issue references do not become feature claims.
 - Known Issues uses currently open bugs, excluding bugs resolved by included PRs and issues marked duplicate, invalid, wontfix or release:skip. P0/critical, P1/high and P2/medium priority labels sort first; otherwise issue number determines order. Feature requests are excluded.
 
-Metadata reads paginate and API failures stop generation. Review the resulting descriptions during normal release acceptance; no handwritten draft or repository fragment is required. GitHub state is captured when the candidate is built. Built-candidate reruns reuse their description after checking source/predecessor provenance, so later issue edits do not rewrite that snapshot.
+Metadata reads paginate and API failures stop generation. Review the resulting descriptions during normal release acceptance; no handwritten draft or repository fragment is required. GitHub state is captured when the candidate is built. Exact-source reruns reuse their description after checking provenance, so later issue edits do not rewrite that snapshot. A validated same-date Nightly replacement with a new source SHA regenerates notes from that source and its baseline.
 
 Publication follows maintainer-approved [delivery gates](CI_CD.md).
 
