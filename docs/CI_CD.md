@@ -8,7 +8,7 @@ Maintainers control releases; keep credentials private. Current release titles a
 
 The release date is generated in `America/New_York` when Nightly publication is dispatched.
 
-Work on `dev`, validate locally with the HTTPS preview, disposable Docker tests and USB-connected phone/TV builds, then open a PR to `main`. PRs to `dev` or `main` run CodeQL, dependency review, Android checks and full e2e/runtime validation. Auto-merge waits for all PR checks. Dependabot opens grouped weekly PRs to `dev`; see [maintenance](DEPENDENCY_MAINTENANCE.md).
+Work on `dev`, validate locally with the HTTPS preview, disposable Docker tests and USB-connected phone/TV builds, then open a PR to `main`. PRs to `dev` or `main` run CodeQL, dependency review, Android checks and full e2e/runtime validation. The merge job waits for every gate before merging. Dependabot opens grouped weekly PRs to `dev`; see [maintenance](DEPENDENCY_MAINTENANCE.md).
 
 Maintainers manually dispatch Nightly publication from the exact current `dev` or `main` tip. The workflow builds and validates the image, then publishes `nightly` plus current-date aliases and signed `YY.MM.DD-nightly` phone/TV APKs. A same-date rerun may replace that date's release assets only after all gates pass and with higher APK version codes; the source date tag advances to the selected SHA.
 
@@ -32,7 +32,7 @@ Daily Base Image refreshes shared bases; `make refresh-local-bases` forces a loc
 
 On approval, deploy the exact tested image and verify revision, health, service count, mounts and relevant playback. `scripts/deploy-production.sh <ssh-host> [compose-directory]` transfers it with the updater paused, using the host's configured Compose image tag without changing its configuration. Digest-pinned references require maintainer review. Preserve live data.
 
-Preserve the exact tested source and image digest through publication. Main intentionally has no branch protection; the PR auto-merge workflow waits for quality, Android, E2E/runtime, CodeQL and dependency-review checks. Do not rebuild or replace previously signed APKs or published release tags outside the validated same-date workflow.
+Preserve the exact tested source and image digest through publication. Main intentionally has no branch protection, so the PR merge job performs a direct merge pinned to the checked head SHA after quality, Android, E2E/runtime, dependency-review and both CodeQL analyses succeed. A failed gate or changed head leaves the PR open. Do not rebuild or replace previously signed APKs or published release tags outside the validated same-date workflow.
 
 Dev changes reach users only after the reviewed main PR merges. See [retention](IMAGE_RETENTION.md).
 
