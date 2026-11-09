@@ -72,75 +72,9 @@ jobs:
         with:
           ref: ${{ inputs.source_revision || github.sha }}
           persist-credentials: false
-      - name: Read shared Ubuntu version
-        id: ubuntu
-        run: echo "version=$(sed -n 's/^ARG UBUNTU_VERSION=//p' deploy/Dockerfile)" >> "$GITHUB_OUTPUT"
-      - uses: docker/setup-buildx-action@v4
-      - name: Build local runtime base for candidate
-        uses: docker/build-push-action@v7
+      - uses: ./.github/actions/build-validation
         with:
-          context: .
-          file: deploy/base.Dockerfile
-          target: runtime-base
-          load: true
-          tags: alreadyon-validation:runtime
-          build-args: |
-            UBUNTU_VERSION=${{ steps.ubuntu.outputs.version }}
-            FFMPEG_BUILD_JOBS=2
-      - name: Build local CI base for tests
-        uses: docker/build-push-action@v7
-        with:
-          context: .
-          file: deploy/ci-base.Dockerfile
-          target: ci-base
-          load: true
-          tags: alreadyon-validation:ci
-          build-args: RUNTIME_BASE=alreadyon-validation:runtime
-      - name: Build exact production runtime candidate
-        run: |
-          docker build --builder default \
-            --file deploy/Dockerfile --target runtime \
-            --build-arg CI_BASE=alreadyon-validation:ci \
-            --build-arg RUNTIME_BASE=alreadyon-validation:runtime \
-            --build-arg VCS_REF="$(git rev-parse HEAD)" \
-            --build-arg BUILD_TIMESTAMP="$GITHUB_RUN_ID-$GITHUB_RUN_ATTEMPT" \
-            --tag alreadyon-ci:candidate .
-      - uses: actions/setup-java@v6
-        with:
-          distribution: temurin
-          java-version: "17"
-      - uses: android-actions/setup-android@v4
-        with:
-          packages: "platform-tools platforms;android-37.0 build-tools;36.0.0"
-      - name: Build minified unsigned phone and TV release APKs
-        run: apps/android/gradlew -p apps/android --no-daemon :app:assembleRelease :tv:assembleRelease
-      - name: Export release-runtime dependency locks
-        run: |
-          apps/android/gradlew -p apps/android --no-daemon -I scripts/security/android-inventory.gradle \
-            -PsecurityInventoryDirectory="$RUNNER_TEMP/android-runtime" securityInventory
-      - name: Package exact candidate and release artifacts
-        run: |
-          mkdir -p "$RUNNER_TEMP/candidate/android-runtime"
-          docker save alreadyon-ci:candidate -o "$RUNNER_TEMP/candidate/runtime.tar"
-          docker save alreadyon-validation:ci -o "$RUNNER_TEMP/candidate/ci.tar"
-          cp apps/android/app/build/outputs/apk/release/app-release-unsigned.apk "$RUNNER_TEMP/candidate/alreadyon-android.apk"
-          cp apps/android/tv/build/outputs/apk/release/tv-release-unsigned.apk "$RUNNER_TEMP/candidate/alreadyon-tv.apk"
-          cp "$RUNNER_TEMP"/android-runtime/* "$RUNNER_TEMP/candidate/android-runtime/"
-      - uses: actions/upload-artifact@v7
-        with:
-          name: runtime-candidate-${{ github.run_id }}-${{ github.run_attempt }}
-          path: ${{ runner.temp }}/candidate
-          if-no-files-found: error
-          retention-days: 1
-  validate_security:
-    needs: validate
-    if: needs.validate.result == 'success'
-    permissions:
-      contents: read
-    uses: ./.github/workflows/security_scan.yml
-    with:
-      artifact_name: runtime-candidate-${{ github.run_id }}-${{ github.run_attempt }}
-      source_revision: ${{ inputs.source_revision || github.sha }}
+          revision: ${{ inputs.source_revision || github.sha }}
   stable_select:
     if: github.event_name == 'workflow_dispatch' && inputs.operation == 'stable'
     runs-on: ubuntu-26.04

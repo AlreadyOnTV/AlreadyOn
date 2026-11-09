@@ -12,10 +12,18 @@ concurrency:
 jobs:
   build_candidate:
     name: Build unpublished release candidate
-    uses: ./.github/workflows/build_publish.yml
-    with:
-      operation: validate
-      source_revision: ${{ github.sha }}
+    runs-on: ubuntu-26.04
+    timeout-minutes: 120
+    permissions:
+      contents: read
+    steps:
+      - uses: actions/checkout@v7
+        with:
+          ref: ${{ github.sha }}
+          persist-credentials: false
+      - uses: ./.github/actions/build-validation
+        with:
+          revision: ${{ github.sha }}
   quality:
     runs-on: ubuntu-26.04
     timeout-minutes: 20
