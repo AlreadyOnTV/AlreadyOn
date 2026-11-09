@@ -78,6 +78,12 @@ class PublicationPolicy(unittest.TestCase):
         self.assertIn('make test-e2e', test_action)
         self.assertEqual(validation.count('  auto_merge:\n'), 1)
         self.assertIn('needs: [quality, android, tests]', validation)
+        self.assertIn('workflow == "CodeQL"', validation)
+        self.assertIn('analyze (', validation)
+        self.assertIn('workflow == "Dependabot Dependency Review"', validation)
+        self.assertIn('name == "Dependabot"', validation)
+        self.assertIn('length == 2 and all(.[]; .state == "SUCCESS")', validation)
+        self.assertIn('length == 1 and all(.[]; .state == "SUCCESS")', validation)
         self.assertIn('gh pr merge "$PR_NUMBER" --merge --auto', validation)
         self.assertNotIn('branches: [dev, test]', validation)
 

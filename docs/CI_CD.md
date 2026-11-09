@@ -10,7 +10,7 @@ The release date is generated in `America/New_York` when a Nightly is built from
 
 Work on `dev`, validate locally with the HTTPS preview, disposable Docker tests and USB-connected phone/TV builds, then open a PR to `main`. PRs require CodeQL, Dependabot dependency review and full e2e/runtime validation. Enable auto-merge after all required checks pass. Weekly dependency updates integrate only their tested batch into `dev`; see [maintenance](DEPENDENCY_MAINTENANCE.md).
 
-Validated merges to `main` publish the image as `nightly` plus current-date aliases and build signed `YY.MM.DD-nightly` phone/TV APKs. Date collisions fail closed; existing releases, APKs and source tags are not overwritten.
+Validated merges to `main` publish the image as `nightly` plus current-date aliases and build signed `YY.MM.DD-nightly` phone/TV APKs. A same-date rerun may replace that date's release assets only after all gates pass and with higher APK version codes; immutable source tags are not moved.
 
 After Nightly acceptance, dispatch **Publish Stable from latest Nightly** on `main`. It verifies the Nightly's source and signed image digest, retags that image as `latest` without rebuilding it, and builds fresh Stable APKs from the same commit.
 
@@ -32,7 +32,7 @@ Before image builds, `scripts/local-bases.py` checks base recipes, parent and ag
 
 On approval, deploy the exact tested image and verify revision, health, service count, mounts and relevant playback. `scripts/deploy-production.sh <ssh-host> [compose-directory]` transfers it with the updater paused, using the host's configured Compose image tag without changing its configuration. Digest-pinned references require maintainer review. Preserve live data.
 
-`main` is the only release branch. Preserve branch protection and the exact tested source/digest through publication. Do not rebuild or replace previously signed APKs or published release tags.
+`main` is the only release branch. Preserve the exact tested source and image digest through publication. Do not rebuild or replace previously signed APKs or published release tags outside the validated same-date workflow.
 
 Dev changes reach users only after the reviewed main PR merges. See [retention](IMAGE_RETENTION.md).
 

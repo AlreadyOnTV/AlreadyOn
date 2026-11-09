@@ -12,6 +12,7 @@ import okhttp3.ResponseBody.Companion.toResponseBody
 import org.json.JSONArray
 import org.json.JSONObject
 import org.junit.Assert.*
+import org.junit.Assume.assumeTrue
 import org.junit.Test
 import org.junit.runner.RunWith
 import java.io.File
@@ -22,6 +23,9 @@ import java.security.MessageDigest
 class UpdateClientTest {
     private val context = InstrumentationRegistry.getInstrumentation().targetContext
     private val bytes = "synthetic APK download".toByteArray()
+    private fun requireUpdateFixture() = assumeTrue("Run scripts/android/test-updates.py to supply signed APK assets",
+        InstrumentationRegistry.getInstrumentation().context.assets.list("").orEmpty().contains(
+            if (BuildConfig.IS_TV) "update-tv-test.apk" else "update-phone-test.apk"))
     private fun hash(value: ByteArray) = MessageDigest.getInstance("SHA-256").digest(value).joinToString("") { "%02x".format(it) }
     private fun entry(tag: String, code: Int, draft: Boolean = false, preview: Boolean = true): JSONObject {
         val root = "https://github.com/$UPDATE_REPOSITORY/releases/download/$tag/"
@@ -86,7 +90,7 @@ class UpdateClientTest {
         val checker = service { String(bytes) }
         val folder = File(context.cacheDir, "synthetic-update-test").apply { mkdirs() }
         val file = File(folder, "update.apk")
-        val update = AppUpdate("26.10.11-nightly", "26.10.11-alpha1", 24, "tv",
+        val update = AppUpdate("26.10.11-nightly", "26.10.11-nightly", 24, "tv",
             "https://github.com/$UPDATE_REPOSITORY/releases/download/26.10.11-nightly/alreadyon-tv.apk", hash(bytes), bytes.size.toLong())
         try {
             checker.download(update, file) { }
@@ -98,11 +102,12 @@ class UpdateClientTest {
         } finally { folder.deleteRecursively() }
     }
     @Test fun actualSignedApkChecksTargetVersionAndPackage() {
+        requireUpdateFixture()
         val store = UpdateInstallStore(context)
         try {
             InstrumentationRegistry.getInstrumentation().context.assets.open(if (BuildConfig.IS_TV) "update-tv-test.apk" else "update-phone-test.apk").use { input -> store.apk.outputStream().use { input.copyTo(it) } }
-            val update = AppUpdate("26.10.11-nightly", "26.10.11-alpha5", 24, if (BuildConfig.IS_TV) "tv" else "phone",
-                "https://github.com/$UPDATE_REPOSITORY/releases/download/26.10.11-nightly/alreadyon-tv.apk", "0".repeat(64), store.apk.length())
+            val update = AppUpdate("26.10.11-stable", "26.10.11-stable", 24, if (BuildConfig.IS_TV) "tv" else "phone",
+                "https://github.com/$UPDATE_REPOSITORY/releases/download/26.10.11-stable/alreadyon-tv.apk", "0".repeat(64), store.apk.length())
             verifyUpdateApk(context, store.apk, update)
             for (bad in listOf(update.copy(target = if (BuildConfig.IS_TV) "phone" else "tv"), update.copy(code = 23), update.copy(version = "wrong"))) {
                 try { verifyUpdateApk(context, store.apk, bad); fail("Incorrect APK metadata accepted") } catch (_: IllegalStateException) { }
@@ -110,12 +115,13 @@ class UpdateClientTest {
         } finally { store.clear() }
     }
     @Test fun stageAndCancelPreserveUnrelatedAppSettings() = runBlocking {
+        requireUpdateFixture()
         val store = UpdateInstallStore(context)
         val unrelated = context.getSharedPreferences("synthetic-update-settings", 0)
         unrelated.edit().putString("server", "https://synthetic.invalid").commit()
         try {
             InstrumentationRegistry.getInstrumentation().context.assets.open(if (BuildConfig.IS_TV) "update-tv-test.apk" else "update-phone-test.apk").use { input -> store.apk.outputStream().use { input.copyTo(it) } }
-            val update = AppUpdate("26.10.11-nightly", "26.10.11-alpha5", 24, if (BuildConfig.IS_TV) "tv" else "phone", "", "", store.apk.length())
+            val update = AppUpdate("26.10.11-stable", "26.10.11-stable", 24, if (BuildConfig.IS_TV) "tv" else "phone", "", "", store.apk.length())
             val id = stageUpdate(context, update)
             assertEquals(id, store.session()!!.sessionId)
             assertFalse(store.completeIfInstalled())

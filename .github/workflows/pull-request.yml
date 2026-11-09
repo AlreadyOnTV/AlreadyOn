@@ -89,11 +89,38 @@ jobs:
       && needs.tests.result == 'success'
     needs: [quality, android, tests]
     runs-on: ubuntu-latest
+    timeout-minutes: 100
     permissions:
+      checks: read
       contents: write
       pull-requests: write
     steps:
-      - name: Enable merge after all required checks pass
+      - name: Wait for CodeQL and dependency review
+        env:
+          GH_TOKEN: ${{ github.token }}
+          PR_NUMBER: ${{ github.event.pull_request.number }}
+        run: |
+          deadline=$((SECONDS + 5400))
+          while true; do
+            checks=$(gh pr checks "$PR_NUMBER" --json name,workflow,state 2>/dev/null || printf '[]')
+            codeql=$(jq -c '[.[] | select(.workflow == "CodeQL" and (.name | startswith("analyze (")))]' <<< "$checks")
+            dependency_review=$(jq -c '[.[] | select(.workflow == "Dependabot Dependency Review" and .name == "Dependabot")]' <<< "$checks")
+            if jq -e 'any(.[]; .state == "FAILURE" or .state == "ERROR" or .state == "CANCELLED")' <<< "$codeql" >/dev/null || \
+               jq -e 'any(.[]; .state == "FAILURE" or .state == "ERROR" or .state == "CANCELLED")' <<< "$dependency_review" >/dev/null; then
+              echo "::error::CodeQL or dependency review failed; leaving the PR open."
+              exit 1
+            fi
+            if jq -e 'length == 2 and all(.[]; .state == "SUCCESS")' <<< "$codeql" >/dev/null && \
+               jq -e 'length == 1 and all(.[]; .state == "SUCCESS")' <<< "$dependency_review" >/dev/null; then
+              break
+            fi
+            if (( SECONDS >= deadline )); then
+              echo "::error::Timed out waiting for CodeQL and dependency review; leaving the PR open."
+              exit 1
+            fi
+            sleep 10
+          done
+      - name: Enable merge after all three workflows pass
         env:
           GH_TOKEN: ${{ github.token }}
           PR_NUMBER: ${{ github.event.pull_request.number }}
