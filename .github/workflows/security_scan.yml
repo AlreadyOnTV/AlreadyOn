@@ -38,7 +38,7 @@ jobs:
         with:
           ref: ${{ inputs.source_revision }}
           persist-credentials: false
-      - uses: actions/download-artifact@v5
+      - uses: actions/download-artifact@v8
         if: inputs.artifact_name != ''
         with:
           name: ${{ inputs.artifact_name }}
