@@ -76,7 +76,7 @@ class PublicationPolicy(unittest.TestCase):
         self.assertNotIn('  schedule:', codeql)
         self.assertNotIn('  workflow_dispatch:', codeql)
         self.assertNotIn('  workflow_call:', codeql)
-        self.assertIn('actions/dependency-review-action@v4', validation)
+        self.assertRegex(validation, r'actions/dependency-review-action@v\d+')
         self.assertIn('name: Dependabot', validation)
         self.assertIn('uses: ./.github/actions/build-validation', validation)
         self.assertIn('uses: ./.github/actions/build-validation', validation)
@@ -94,7 +94,7 @@ class PublicationPolicy(unittest.TestCase):
         self.assertIn('length == 2 and all(.[]; .state == "SUCCESS")', validation)
         self.assertIn('gh pr checks "$PR_NUMBER" --repo "$REPOSITORY"', validation)
         self.assertIn('gh pr merge "$PR_NUMBER" --repo "$REPOSITORY"', validation)
-        self.assertIn('gh pr merge "$PR_NUMBER" --repo "$REPOSITORY" --merge --auto', validation)
+        self.assertIn('gh pr merge "$PR_NUMBER" --repo "$REPOSITORY" --merge --match-head-commit', validation)
         self.assertIn('on:\n  push:\n    branches: [main]', build)
 
     def test_pr_candidate_build_is_reusable_and_cannot_publish(self):

@@ -368,6 +368,10 @@ const wait = (ms) => new Promise((resolve) => setTimeout(resolve, ms));
       .getByRole("button", { name: "Edit Example Academy", exact: true })
       .click();
     dialog = page.getByRole("dialog");
+    await dialog
+      .getByRole("button", { name: "Genres", exact: true })
+      .getByText("Comedy", { exact: true })
+      .waitFor();
     await page.route("**/api/library/items/9056/tmdb-preview*", (route) =>
       route.fulfill({
         status: 200,

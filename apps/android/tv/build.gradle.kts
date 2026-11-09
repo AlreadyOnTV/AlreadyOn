@@ -52,7 +52,7 @@ kotlin { compilerOptions { jvmTarget.set(JvmTarget.JVM_17) } }
 
 dependencies {
     constraints {
-        implementation("com.google.guava:guava:33.7.2-android") {
+        implementation("com.google.guava:guava:33.8.0-android") {
             because("CVE-2026-102554 affects the older Guava requested by Media3")
         }
     }
@@ -61,7 +61,7 @@ dependencies {
     androidTestImplementation("androidx.test:rules:1.7.0")
     // Compose's transitive Espresso 3.5.0 uses input-manager APIs removed on API 37.
     androidTestImplementation("androidx.test.espresso:espresso-core:3.7.0")
-    androidTestImplementation("androidx.test.uiautomator:uiautomator:2.4.0")
+    androidTestImplementation("androidx.test.uiautomator:uiautomator:2.4.1")
     androidTestImplementation(platform("androidx.compose:compose-bom:2026.09.00"))
     androidTestImplementation("androidx.compose.ui:ui-test-junit4")
     implementation(platform("androidx.compose:compose-bom:2026.09.00"))
