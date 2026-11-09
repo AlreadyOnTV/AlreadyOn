@@ -102,9 +102,9 @@ jobs:
         run: |
           deadline=$((SECONDS + 5400))
           while true; do
-            checks=$(gh pr checks "$PR_NUMBER" --json name,workflow,state 2>/dev/null || printf '[]')
-            codeql=$(jq -c '[.[] | select(.workflow == "CodeQL" and (.name | startswith("analyze (")))]' <<< "$checks")
-            dependency_review=$(jq -c '[.[] | select(.workflow == "Dependabot Dependency Review" and .name == "Dependabot")]' <<< "$checks")
+            checks=$(gh pr checks "$PR_NUMBER" --json name,workflow,state,event 2>/dev/null || printf '[]')
+            codeql=$(jq -c '[.[] | select(.event == "pull_request" and .workflow == "CodeQL" and (.name | startswith("analyze (")))]' <<< "$checks")
+            dependency_review=$(jq -c '[.[] | select(.event == "pull_request" and .workflow == "Dependabot Dependency Review" and .name == "Dependabot")]' <<< "$checks")
             if jq -e 'any(.[]; .state == "FAILURE" or .state == "ERROR" or .state == "CANCELLED")' <<< "$codeql" >/dev/null || \
                jq -e 'any(.[]; .state == "FAILURE" or .state == "ERROR" or .state == "CANCELLED")' <<< "$dependency_review" >/dev/null; then
               echo "::error::CodeQL or dependency review failed; leaving the PR open."

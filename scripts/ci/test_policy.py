@@ -79,6 +79,7 @@ class PublicationPolicy(unittest.TestCase):
         self.assertEqual(validation.count('  auto_merge:\n'), 1)
         self.assertIn('needs: [quality, android, tests]', validation)
         self.assertIn('workflow == "CodeQL"', validation)
+        self.assertIn('.event == "pull_request"', validation)
         self.assertIn('analyze (', validation)
         self.assertIn('workflow == "Dependabot Dependency Review"', validation)
         self.assertIn('name == "Dependabot"', validation)
