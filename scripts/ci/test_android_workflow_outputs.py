@@ -7,6 +7,10 @@ ROOT = Path(__file__).resolve().parents[2]
 
 
 class ReleaseWorkflowContract(unittest.TestCase):
+    def test_gradle_wrapper_allows_slow_distribution_downloads(self):
+        wrapper = (ROOT / 'apps/android/gradle/wrapper/gradle-wrapper.properties').read_text()
+        self.assertIn('networkTimeout=120000', wrapper)
+
     def test_manual_nightly_dispatch_publishes_from_dev_or_main(self):
         build = yaml.safe_load((ROOT / '.github/workflows/build_publish.yml').read_text())
         self.assertIn('workflow_dispatch', build[True])
