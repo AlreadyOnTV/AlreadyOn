@@ -164,4 +164,4 @@ jobs:
           PR_NUMBER: ${{ github.event.pull_request.number }}
           REPOSITORY: ${{ github.repository }}
           HEAD_SHA: ${{ github.event.pull_request.head.sha }}
-        run: gh pr merge "$PR_NUMBER" --repo "$REPOSITORY" --merge --auto --match-head-commit "$HEAD_SHA"
+        run: gh pr merge "$PR_NUMBER" --repo "$REPOSITORY" --merge --match-head-commit "$HEAD_SHA"
