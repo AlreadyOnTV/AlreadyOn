@@ -387,7 +387,7 @@ def publish_stable(repo, tag, sha, code, directory, predecessor_tag):
 
 def main():
     parser = argparse.ArgumentParser(description=__doc__)
-    parser.add_argument("operation", choices=("check-nightly", "plan-nightly", "nightly", "plan-latest-stable", "publish-stable"))
+    parser.add_argument("operation", choices=("check-nightly", "plan-nightly", "nightly", "plan-stable", "plan-latest-stable", "publish-stable"))
     parser.add_argument("--repo", default=os.environ.get("GITHUB_REPOSITORY"), required=False)
     parser.add_argument("--sha")
     parser.add_argument("--day")
@@ -410,6 +410,10 @@ def main():
             print(f"existing={'true' if same_source else 'false'}")
         else:
             plan_nightly(args.repo, args.sha, args.day)
+    elif args.operation == "plan-stable":
+        if not args.sha or not args.day:
+            parser.error("Stable planning requires --sha and --day")
+        plan_stable(args.repo, args.sha, args.day, predecessor_tag=args.predecessor)
     elif args.operation == "plan-latest-stable":
         if not args.sha:
             parser.error("plan-latest-stable requires the current main SHA")
