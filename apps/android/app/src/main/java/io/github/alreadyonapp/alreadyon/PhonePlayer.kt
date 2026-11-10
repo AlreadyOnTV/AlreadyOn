@@ -97,8 +97,11 @@ private fun NativeVideo(playback: PhonePlayback, model: PhoneModel, modifier: Mo
                 override fun onRenderedFirstFrame() {
                     if (firstFrame) return
                     firstFrame = true
-                    if (BuildConfig.IS_TV) model.playbackStarted(playback.revision)
+                    if (isPlaying) model.playbackStarted(playback.revision)
                     if (android.util.Log.isLoggable(PLAYBACK_LOG_TAG, android.util.Log.DEBUG)) android.util.Log.d(PLAYBACK_LOG_TAG, "First frame revision=${playback.revision} playerMs=${SystemClock.elapsedRealtime()-preparedAt} tuneMs=${SystemClock.elapsedRealtime()-playback.requestedAt}")
+                }
+                override fun onIsPlayingChanged(isPlaying: Boolean) {
+                    if (firstFrame && isPlaying) model.playbackStarted(playback.revision)
                 }
                 private var aligned = false
                 private var bufferingAt: Long? = null
@@ -289,7 +292,13 @@ internal fun PhonePlayer(state: PhoneState, model: PhoneModel, modifier: Modifie
         state.playback?.let { playback ->
             NativeVideo(playback, model, Modifier.fillMaxSize(), state.paused,
                 if (state.muted) 0f else 1f, onPosition = { sourceTime = it }, onTap = { if (!tv || fullscreen) visible = !visible })
-        } ?: Text(state.error ?: "Preparing channel…", Modifier.align(Alignment.Center), color = Color.White)
+        } ?: state.error?.let { Text(it, Modifier.align(Alignment.Center), color = Color.White) }
+        if (!pictureInPicture && state.channel != null && !state.playbackReady && state.error == null) {
+            Text("Tuning…", Modifier.align(Alignment.TopCenter).fillMaxWidth()
+                .padding(if (fullscreen) WindowInsets.safeDrawing.asPaddingValues() else PaddingValues(0.dp))
+                .padding(12.dp).background(Color(0xff151515).copy(alpha = 0.91f), RoundedCornerShape(6.dp)).padding(10.dp),
+                color = Color.White, fontSize = 14.sp)
+        }
         if (!pictureInPicture) captionStatus?.let { message -> Text(message,
             Modifier.align(Alignment.TopEnd).padding(4.dp).background(Color.Black.copy(alpha = 0.75f)).padding(4.dp),
             color = Color.White, style = MaterialTheme.typography.bodySmall) }

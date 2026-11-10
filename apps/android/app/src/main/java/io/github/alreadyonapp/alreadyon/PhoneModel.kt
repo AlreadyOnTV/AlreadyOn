@@ -553,7 +553,7 @@ internal class PhoneModel(application: Application) : AndroidViewModel(applicati
                             streamOffsetSeconds = if (direct) 0.0 else tune.optDouble("streamOffsetSeconds"),
                             entryStartsAt = tune.getString("entryStartsAt"),
                             trustedCa = state.value.trustedCa, hlsOriginMs = tune.optString("hlsOrigin").takeIf { it.isNotBlank() }?.let { Instant.parse(it).toEpochMilli() })
-                        update { it.copy(playback = media, profile = it.profile?.copy(lastChannel = channel.id),
+                        update { it.copy(playback = media, playbackReady = false, profile = it.profile?.copy(lastChannel = channel.id),
                             subtitleIndex = selectedSubtitle(media, state.value.profile ?: profile),
                             subtitleFileId = media.mediaFileId) }
                         activityStarted = true
@@ -571,7 +571,7 @@ internal class PhoneModel(application: Application) : AndroidViewModel(applicati
                                 }
                             }
                         }
-                        update { it.copy(playback = null) }
+                        update { it.copy(playback = null, playbackReady = false) }
                     } finally {
                         // Best-effort remote release runs even when channel switching cancels preparation.
                         if (token != null) withContext(NonCancellable) {

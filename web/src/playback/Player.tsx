@@ -842,7 +842,7 @@ export function Player({
         now - attachedAt > MAX_START_WAIT_MS
       )
         startPlayback();
-      else setStatus("Buffering…");
+      else setStatus("Tuning…");
     };
     const ready = () => {
       if (stopped || moving) return;
