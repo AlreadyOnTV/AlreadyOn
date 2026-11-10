@@ -4,6 +4,8 @@
 
 Tuning selects the current persisted airing. Delivery uses direct play, remux or bounded transcoding according to browser support; GPU availability alone proves neither codec nor HDR compatibility.
 
+Web, phone and TV show "Tuning" until playback begins.
+
 WebUI capability checks use hls.js's selected media-source constructor, including Apple's `ManagedMediaSource`. Without MSE, native HLS remains available when supported.
 
 ## Touch browsers
