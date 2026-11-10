@@ -19,6 +19,52 @@ def image(identity, recipe, parent=''):
 
 class LocalBaseTests(unittest.TestCase):
     """A recipe match is insufficient when a refresh changed the runtime parent."""
+    def test_published_pair_is_pulled_and_reused_without_building(self):
+        published = {
+            'ghcr.io/alreadyontv/alreadyon-base:base-runtime': image('remote-runtime', 'runtime-key'),
+            'ghcr.io/alreadyontv/alreadyon-base:base-ci': image('remote-ci', 'ci-key', 'remote-runtime'),
+        }
+        for candidate in published.values():
+            candidate['Created'] = (datetime.now(timezone.utc) - timedelta(days=8)).isoformat()
+        available = {}
+        def execute(command, **kwargs):
+            if command[1] == 'pull':
+                candidate = published[command[2]]
+                available[command[2]] = candidate
+                available[candidate['Id']] = candidate
+            elif command[1] == 'tag':
+                available[command[3]] = available[command[2]]
+            else:
+                self.fail('Compatible published bases must not be rebuilt')
+            return subprocess.CompletedProcess(command, 0, '', '')
+        with patch.object(bases, 'inspect', side_effect=lambda engine, reference: available.get(reference)), \
+             patch.object(bases.keys, 'recipe_key', side_effect=lambda root, kind: kind + '-key'), \
+             patch.object(bases.subprocess, 'run', side_effect=execute) as run:
+            self.assertEqual(bases.ensure('podman'), {'runtime': 'remote-runtime', 'ci': 'remote-ci'})
+            self.assertEqual([call.args[0][1] for call in run.call_args_list], ['pull', 'tag', 'pull', 'tag'])
+
+    def test_registry_auth_failure_aborts_instead_of_building(self):
+        failure = subprocess.CompletedProcess([], 1, '', 'unauthorized')
+        with patch.object(bases, 'inspect', return_value=None), \
+             patch.object(bases.keys, 'recipe_key', return_value='key'), \
+             patch.object(bases.subprocess, 'run', return_value=failure) as run:
+            with self.assertRaisesRegex(RuntimeError, 'unauthorized'):
+                bases.ensure('podman')
+            self.assertEqual(run.call_count, 1)
+
+    def test_missing_published_manifest_permits_local_fallback(self):
+        for reason in ('manifest unknown', 'not found', 'name unknown'):
+            with self.subTest(reason=reason), \
+                 patch.object(bases.subprocess, 'run', return_value=subprocess.CompletedProcess([], 1, '', reason)):
+                self.assertIsNone(bases.pull('podman', 'published'))
+
+    def test_registry_transport_failure_does_not_permit_local_fallback(self):
+        for reason in ('connection timed out', 'TLS certificate verification failed', 'too many requests'):
+            with self.subTest(reason=reason), \
+                 patch.object(bases.subprocess, 'run', return_value=subprocess.CompletedProcess([], 1, '', reason)):
+                with self.assertRaisesRegex(RuntimeError, reason):
+                    bases.pull('podman', 'published')
+
     def test_age_boundary_and_native_creation_fallback(self):
         now = datetime(2026, 10, 9, tzinfo=timezone.utc)
         candidate = image('runtime', 'key')
@@ -44,6 +90,7 @@ class LocalBaseTests(unittest.TestCase):
         def lookup(engine, reference):
             return ci if reference.endswith('base-ci') else runtime
         with patch.object(bases, 'inspect', side_effect=lookup), \
+             patch.object(bases, 'pull', return_value=None), \
              patch.object(bases.keys, 'recipe_key', side_effect=lambda root, kind: kind + '-key'), \
              patch.object(bases.subprocess, 'run') as run:
             bases.ensure('podman')
@@ -62,6 +109,7 @@ class LocalBaseTests(unittest.TestCase):
         def lookup(engine, reference):
             return ci if reference.endswith('base-ci') else runtime
         with patch.object(bases, 'inspect', side_effect=lookup), \
+             patch.object(bases, 'pull', return_value=None), \
              patch.object(bases.keys, 'recipe_key', side_effect=lambda root, kind: kind + '-key'), \
              patch.object(bases.subprocess, 'run') as run:
             bases.ensure('podman')
@@ -89,16 +137,18 @@ class LocalBaseTests(unittest.TestCase):
         with patch.object(bases.subprocess, 'run', return_value=missing):
             self.assertIsNone(bases.inspect('podman', 'base'))
 
-    def test_matching_bases_do_not_build_or_pull(self):
+    def test_matching_local_fallback_does_not_build(self):
         runtime = image('runtime-id', 'runtime-key')
         ci = image('ci-id', 'ci-key', 'runtime-id')
         def lookup(engine, reference):
             return ci if reference.endswith('base-ci') else runtime
         with patch.object(bases, 'inspect', side_effect=lookup), \
+             patch.object(bases, 'pull', return_value=None) as pull, \
              patch.object(bases.keys, 'recipe_key', side_effect=lambda root, kind: kind + '-key'), \
              patch.object(bases.subprocess, 'run') as run:
             self.assertEqual(bases.ensure('podman'), {'runtime': 'runtime-id', 'ci': 'ci-id'})
             run.assert_not_called()
+            self.assertEqual(pull.call_count, 2)
 
     def test_forced_refresh_bypasses_cache_and_pins_ci_parent(self):
         runtime = image('runtime-id', 'runtime-key')

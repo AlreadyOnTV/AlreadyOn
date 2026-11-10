@@ -14,4 +14,4 @@ The worktree is not yet committed or pushed. The full Go suite and `make lint` p
 2. Run the complete required PR workflow on the final combined head. Do not skip checks; investigate any recurrence of the documented fullscreen guide timeout.
 3. Merge only after all required checks pass. Verify the dev-triggered publication produces `26.10.25-alpha2`; do not dispatch a duplicate candidate.
 4. Verify source/tag provenance, image digest and attestations, signed phone/tablet and TV APKs, checksums, SBOMs, and the GitHub Release description. Use the required `Download Now`, `New Features`, `Bugfixes`, and `Known Issues` sections, with linked issue titles and explicit empty-section messages.
-5. Keep #83 open. Reopen #85/#88 if GitHub auto-closes them on dev and set them to **In Review**. Do not promote to `test` or `main`, deploy to Catbug, or change live data; those actions are outside this authorization.
+5. Keep #83 open. Reopen #85/#88 if GitHub auto-closes them on dev and set them to **In Review**. Do not promote to `test` or `main`, deploy to the deployment host, or change live data; those actions are outside this authorization.

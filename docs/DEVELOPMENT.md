@@ -4,6 +4,8 @@
 
 Install the versions documented in [toolchain](TOOLCHAIN.md), Git, FFmpeg and FFprobe. Use rootless Podman or Docker for production-image validation. `make doctor` checks prerequisites; inspect its output before installing or changing host packages.
 
+Local Podman builds pull the published GHCR runtime/CI bases, verify recipe and parent compatibility, and pin immutable image IDs before compiling the checkout. Missing or incompatible bases use compatible local caches or local builds; authentication/network failures stop the build. Published bases follow CI recipe policy; local fallbacks expire after seven days. `make refresh-local-bases` explicitly rebuilds both bases. Nothing is published automatically.
+
 ## Native preview
 
 Install web dependencies with `cd web && npm ci`, then return to the repository root and run `make preview`. Open <https://localhost:5173>. Backend changes require restarting the preview; Vite reloads browser changes.
