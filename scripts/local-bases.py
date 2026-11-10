@@ -1,5 +1,5 @@
 #!/usr/bin/env python3
-"""Maintain recipe-matched local bases without publishing or touching live data."""
+"""Resolve published recipe-matched bases before local rebuilding; never publish."""
 import argparse
 from datetime import datetime, timedelta, timezone
 import fcntl
@@ -62,6 +62,20 @@ def matches(engine, image, recipe, runtime=''):
     return True
 
 
+def pull(engine, reference):
+    """Resolve the moving published tag; only a missing manifest permits fallback."""
+    result = subprocess.run([engine, 'pull', reference], text=True, capture_output=True)
+    if result.returncode:
+        if any(reason in result.stderr.lower() for reason in
+               ('manifest unknown', 'not found', 'name unknown')):
+            return None
+        raise RuntimeError(f'Cannot safely resolve {reference}: {result.stderr.strip()}')
+    image = inspect(engine, reference)
+    if not image:
+        raise RuntimeError(f'{reference} was pulled but cannot be inspected')
+    return image
+
+
 def ensure(engine, refresh=False):
     """Serialize base refreshes and return IDs so application consumers cannot drift."""
     refs = {}
@@ -73,14 +87,16 @@ def ensure(engine, refresh=False):
         runtime = refs.get('runtime', '')
         current = inspect(engine, tag)
         force = refresh or (kind == 'ci' and refreshed_runtime)
-        if not force and not matches(engine, current, recipe, runtime):
+        published = False
+        if not force:
             cached = f'ghcr.io/alreadyontv/alreadyon-base:base-{kind}'
-            imported = inspect(engine, cached)
-            if matches(engine, imported, recipe, runtime) and not expired(imported, now):
+            imported = pull(engine, cached)
+            if matches(engine, imported, recipe, runtime):
                 subprocess.run([engine, 'tag', imported['Id'], tag], check=True,
                                stdout=sys.stderr)
                 current = imported
-        force = force or expired(current, now)
+                published = True
+        force = force or (not published and expired(current, now))
         if force or not matches(engine, current, recipe, runtime):
             file = 'deploy/base.Dockerfile' if kind == 'runtime' else 'deploy/ci-base.Dockerfile'
             target = 'runtime-base' if kind == 'runtime' else 'ci-base'
@@ -113,7 +129,7 @@ def ensure(engine, refresh=False):
 
 
 def main():
-    """Check age before builds; allow a separate explicit upstream refresh."""
+    """Prefer published bases; allow a separate explicit upstream refresh."""
     parser = argparse.ArgumentParser(description=__doc__)
     parser.add_argument('--engine', default='podman', choices=['podman'])
     parser.add_argument('--refresh', action='store_true')
