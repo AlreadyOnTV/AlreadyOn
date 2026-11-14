@@ -5,6 +5,7 @@ import (
 	"database/sql"
 	"encoding/json"
 	"fmt"
+	"github.com/alreadyonapp/alreadyon/server/internal/storage"
 	"path/filepath"
 	"slices"
 	"strings"
@@ -39,7 +40,7 @@ type FilterOption struct {
 }
 type FilterCatalog map[string][]FilterOption
 
-func ListOptions(ctx context.Context, db *sql.DB) (FilterCatalog, error) {
+func ListOptions(ctx context.Context, db storage.Querier) (FilterCatalog, error) {
 	rows, err := db.QueryContext(ctx, `SELECT kind,id,definition,default_position FROM channel_filter_options ORDER BY kind,position,id`)
 	if err != nil {
 		return nil, err
@@ -87,7 +88,7 @@ func validateOption(kind string, o FilterOption) error {
 	}
 	return nil
 }
-func SaveOption(ctx context.Context, db *sql.DB, kind string, o FilterOption) error {
+func SaveOption(ctx context.Context, db storage.Querier, kind string, o FilterOption) error {
 	if err := validateOption(kind, o); err != nil {
 		return err
 	}
@@ -99,7 +100,7 @@ func SaveOption(ctx context.Context, db *sql.DB, kind string, o FilterOption) er
 	_, err = db.ExecContext(ctx, `INSERT INTO channel_filter_options(kind,id,definition,position,default_position) VALUES(?,?,?,(SELECT COALESCE(MAX(position),-1)+1 FROM channel_filter_options WHERE kind=?),(SELECT COALESCE(MAX(default_position),-1)+1 FROM channel_filter_options WHERE kind=?)) ON CONFLICT(kind,id) DO UPDATE SET definition=excluded.definition`, kind, o.ID, string(raw), kind, kind)
 	return err
 }
-func DeleteOption(ctx context.Context, db *sql.DB, kind, id string) error {
+func DeleteOption(ctx context.Context, db storage.Querier, kind, id string) error {
 	if kind != "age" && kind != "era" {
 		return ErrInvalidFilterOptions
 	}
@@ -186,7 +187,7 @@ func ResolveFilter(f Filter, catalog FilterCatalog) (Filter, error) {
 	}
 	return f, nil
 }
-func Resolve(ctx context.Context, db *sql.DB, f Filter) (Filter, error) {
+func Resolve(ctx context.Context, db storage.Querier, f Filter) (Filter, error) {
 	catalog, err := ListOptions(ctx, db)
 	if err != nil {
 		return f, err

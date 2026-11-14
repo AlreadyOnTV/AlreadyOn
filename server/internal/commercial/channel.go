@@ -6,6 +6,7 @@ import (
 	"encoding/json"
 	"errors"
 	"fmt"
+	"github.com/alreadyonapp/alreadyon/server/internal/storage"
 	"path/filepath"
 
 	"github.com/alreadyonapp/alreadyon/server/internal/library"
@@ -34,7 +35,7 @@ var ErrInvalidChannelFolder = errors.New("commercial: select folders from the co
 
 // GetChannelPolicy resolves saved choices against the current global settings.
 // If any selected folder was removed, the complete selection falls back to all.
-func GetChannelPolicy(ctx context.Context, db *sql.DB, id int64) (ChannelPolicy, error) {
+func GetChannelPolicy(ctx context.Context, db storage.Querier, id int64) (ChannelPolicy, error) {
 	global, err := GetSettings(ctx, db)
 	if err != nil {
 		return ChannelPolicy{}, err
@@ -91,7 +92,7 @@ func GetChannelPolicy(ctx context.Context, db *sql.DB, id int64) (ChannelPolicy,
 
 // SaveChannelSettings replaces the override, rejecting unknown folders before
 // writing. Paths are the stable references used by the global folder settings.
-func SaveChannelSettings(ctx context.Context, db *sql.DB, id int64, s ChannelSettings) error {
+func SaveChannelSettings(ctx context.Context, db storage.Querier, id int64, s ChannelSettings) error {
 	folders, err := library.GetFolderSettings(ctx, db)
 	if err != nil {
 		return err

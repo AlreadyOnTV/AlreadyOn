@@ -32,7 +32,7 @@ Daily Base Image refreshes shared bases; `make refresh-local-bases` forces a loc
 
 On approval, deploy the tested image and verify revision, health, service count, mounts and playback. `scripts/deploy-production.sh <ssh-host> [compose-directory]` transfers it with updates paused, using the host's configured Compose tag. Digest-pinned references require maintainer review; preserve live data.
 
-Preserve the exact tested source and image digest through publication. Main intentionally has no branch protection, so the PR merge job performs a direct merge pinned to the checked head SHA after quality, Android, E2E/runtime, dependency-review and both CodeQL analyses succeed. A failed gate or changed head leaves the PR open. Do not rebuild or replace previously signed APKs or published release tags outside the validated same-date workflow.
+Preserve the exact tested source and image digest through publication. Main intentionally has no branch protection, so the PR merge job performs a squash merge pinned to the checked head SHA after quality, Android, E2E/runtime, dependency-review and both CodeQL analyses succeed. A failed gate or changed head leaves the PR open. Do not rebuild or replace previously signed APKs or published release tags outside the validated same-date workflow.
 
 Grant the Nightly channel job `contents: write` for its source-date tag.
 

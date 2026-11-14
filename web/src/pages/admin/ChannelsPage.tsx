@@ -1,3 +1,4 @@
+import { LIBRARY_APPLIED_EVENT } from "../../api/libraryUpdateEvents";
 import { getFilterOptions, type FilterOption } from '../../api/client';
 import ConfigureFilters from './ConfigureFilters';
 // Real backend (GET/POST/PUT/DELETE /api/channels — see server/internal/channel
@@ -83,7 +84,10 @@ export default function ChannelsPage() {
   // effect itself never needs to set it — only fetchChannels()'s own
   // async completion (in .finally, not synchronously here) does.
   useEffect(() => {
-    fetchChannels();
+    void fetchChannels();
+    const applied = () => { void fetchChannels(); };
+    window.addEventListener(LIBRARY_APPLIED_EVENT, applied);
+    return () => window.removeEventListener(LIBRARY_APPLIED_EVENT, applied);
   }, []);
 
   // The table stays on screen while it reloads, so the page keeps its scroll position.

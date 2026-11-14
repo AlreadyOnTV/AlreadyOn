@@ -119,7 +119,13 @@ func handlePutFolderSettings(db *sql.DB) http.HandlerFunc {
 			writeJSONError(w, http.StatusBadRequest, "invalid request body")
 			return
 		}
-		current, err := library.GetFolderSettings(r.Context(), db)
+		tx, err := db.BeginTx(r.Context(), nil)
+		if err != nil {
+			writeJSONError(w, 500, "could not save folders")
+			return
+		}
+		defer tx.Rollback()
+		current, err := library.GetFolderSettings(r.Context(), tx)
 		if err != nil {
 			writeJSONError(w, http.StatusInternalServerError, err.Error())
 			return
@@ -137,7 +143,7 @@ func handlePutFolderSettings(db *sql.DB) http.HandlerFunc {
 		if body.Exclusions.Set {
 			current.Exclusions = body.Exclusions.Value
 		}
-		saved, err := library.SaveFolderSettings(r.Context(), db, current)
+		saved, err := library.SaveFolderSettings(r.Context(), tx, current)
 		if err != nil {
 			if errors.Is(err, library.ErrInvalidFolderPath) || errors.Is(err, library.ErrInvalidPattern) || errors.Is(err, library.ErrTooManyEntries) {
 				writeJSONError(w, http.StatusBadRequest, err.Error())
@@ -147,8 +153,19 @@ func handlePutFolderSettings(db *sql.DB) http.HandlerFunc {
 			return
 		}
 		// Only a real change (including default <-> saved) triggers a rescan.
-		if !reflect.DeepEqual(before, saved) {
-			refresh.NotifyFoldersChanged()
+		changed := !reflect.DeepEqual(before, saved)
+		if changed {
+			if err := refresh.QueueFolderScan(r.Context(), tx); err != nil {
+				writeJSONError(w, 500, "could not queue folder scan")
+				return
+			}
+		}
+		if err := tx.Commit(); err != nil {
+			writeJSONError(w, 500, "could not save folders")
+			return
+		}
+		if changed {
+			refresh.NotifyUpdate(db, true)
 		}
 		response := toFolderSettingsResponse(saved.Effective())
 		if err := addFolderCounts(r.Context(), db, &response); err != nil {

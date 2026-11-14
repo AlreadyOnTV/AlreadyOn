@@ -324,3 +324,51 @@ func TestJobsBeyondTheTargetWait(t *testing.T) {
 		t.Fatalf("peak concurrency = %d, want 1 with a target of one", peak)
 	}
 }
+
+func TestSaveMeasurementDiscardsObsoleteCandidates(t *testing.T) {
+	for _, mutation := range []string{
+		`DELETE FROM media_files WHERE id=1`,
+		`UPDATE media_files SET size_bytes=20 WHERE id=1`,
+		`UPDATE media_files SET modified_unix=30 WHERE id=1`,
+		`UPDATE media_files SET path='/replacement.wav' WHERE id=1`,
+		`UPDATE media_files SET status='missing' WHERE id=1`,
+	} {
+		t.Run(mutation, func(t *testing.T) {
+			db, err := storage.Open(t.TempDir())
+			if err != nil {
+				t.Fatal(err)
+			}
+			defer db.Close()
+			if _, err = db.Exec(`INSERT INTO media_files(id,root_kind,path,size_bytes,modified_unix,first_seen_unix,last_seen_unix,status) VALUES(1,'media','/sample.wav',10,15,0,0,'ok')`); err != nil {
+				t.Fatal(err)
+			}
+			c := candidate{id: 1, size: 10, modified: 15, path: "/sample.wav"}
+			save := func(raw string) error {
+				return saveMeasurement(t.Context(), db.DB, c, 15000000000, 0, "ready", raw, "", 1)
+			}
+			if err = save(`{"original":true}`); err != nil {
+				t.Fatal(err)
+			}
+			if err = save(`{"original":true}`); err != nil {
+				t.Fatal(err)
+			}
+			var saved int
+			if err = db.QueryRow(`SELECT COUNT(*) FROM loudness_measurements WHERE measurement='{"original":true}'`).Scan(&saved); err != nil || saved != 1 {
+				t.Fatalf("matching cache not saved: count=%d err=%v", saved, err)
+			}
+			if _, err = db.Exec(mutation); err != nil {
+				t.Fatal(err)
+			}
+			if err = save(`{"obsolete":true}`); err != nil {
+				t.Fatalf("obsolete analysis should be silently discarded: %v", err)
+			}
+			var count int
+			if err = db.QueryRow(`SELECT COUNT(*) FROM loudness_measurements WHERE measurement='{"obsolete":true}'`).Scan(&count); err != nil || count != 0 {
+				t.Fatalf("obsolete cache stored: count=%d err=%v", count, err)
+			}
+			if err = db.QueryRow(`SELECT COUNT(*) FROM loudness_measurements lm LEFT JOIN media_files mf ON mf.id=lm.media_file_id WHERE mf.id IS NULL`).Scan(&count); err != nil || count != 0 {
+				t.Fatalf("orphan cache: count=%d err=%v", count, err)
+			}
+		})
+	}
+}

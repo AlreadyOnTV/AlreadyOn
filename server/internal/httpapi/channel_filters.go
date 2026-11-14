@@ -5,14 +5,12 @@ import (
 	"database/sql"
 	"encoding/json"
 	"errors"
+	"github.com/alreadyonapp/alreadyon/server/internal/storage"
 	"net/http"
-	"time"
 
 	"github.com/alreadyonapp/alreadyon/server/internal/channel"
 	"github.com/alreadyonapp/alreadyon/server/internal/lineup"
-	"github.com/alreadyonapp/alreadyon/server/internal/logging"
 	"github.com/alreadyonapp/alreadyon/server/internal/metadata"
-	"github.com/alreadyonapp/alreadyon/server/internal/schedule"
 )
 
 // channelFilterJSON is a custom channel's filter rule on the wire.
@@ -63,7 +61,7 @@ func (o *optionalFilter) UnmarshalJSON(b []byte) error {
 
 // validateFilterChange checks a requested filter change before anything is
 // written, so a bad filter can't leave the rest of an update half applied.
-func validateFilterChange(db *sql.DB, o optionalFilter) (*channel.Filter, error) {
+func validateFilterChange(ctx context.Context, db storage.Querier, o optionalFilter) (*channel.Filter, error) {
 	if !o.Set || o.Value == nil {
 		return nil, nil
 	}
@@ -71,47 +69,23 @@ func validateFilterChange(db *sql.DB, o optionalFilter) (*channel.Filter, error)
 	if err != nil {
 		return nil, err
 	}
-	f, err = channel.Resolve(context.Background(), db, f)
+	f, err = channel.Resolve(ctx, db, f)
 	if err != nil {
 		return nil, err
 	}
 	return &f, nil
 }
 
-// applyFilterChange saves or clears a channel's filter and, when one is
-// set, rebuilds its lineup and regenerates its schedule right away.
-func applyFilterChange(ctx context.Context, db *sql.DB, channelID int64, o optionalFilter, f *channel.Filter) error {
+// applyFilterChange saves only the desired rule; the shared worker derives its lineup.
+func applyFilterChange(ctx context.Context, db storage.Querier, channelID int64, o optionalFilter, f *channel.Filter) error {
 	if !o.Set {
 		return nil
 	}
 	if o.Value == nil {
 		return channel.ClearFilter(ctx, db, channelID)
 	}
-	if _, err := channel.SetFilter(ctx, db, channelID, *f); err != nil {
-		return err
-	}
-	if _, err := lineup.BuildFilteredChannel(ctx, db, channelID); err != nil {
-		return err
-	}
-	if err := schedule.Regenerate(ctx, db, channelID, time.Now()); err != nil {
-		return err
-	}
-	resyncDemoChannels(ctx, db)
-	return nil
-}
-
-// resyncDemoChannels adds or removes the fallback demo channels after an
-// action that can change which real channels the guide shows, so they
-// don't linger until the next refresh. Failures are logged, not returned:
-// the change the admin asked for has already been saved.
-func resyncDemoChannels(ctx context.Context, db *sql.DB) {
-	if _, err := lineup.SyncDemoChannels(ctx, db); err != nil {
-		logging.Warn("demo channels: %v", err)
-		return
-	}
-	if _, err := schedule.RegenerateAll(ctx, db, time.Now()); err != nil {
-		logging.Warn("demo channels: regenerate schedules: %v", err)
-	}
+	_, err := channel.SetFilter(ctx, db, channelID, *f)
+	return err
 }
 
 // channelResponseFor builds a channel's full response: item count and filter.

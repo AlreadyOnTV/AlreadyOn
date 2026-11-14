@@ -1,3 +1,4 @@
+import LibraryUpdateStatus from "./admin/LibraryUpdateStatus";
 import Brand from "../components/Brand";
 import ProfileMenu from "./ProfileMenu";
 import { useEffect, useRef, useState } from "react";
@@ -196,6 +197,7 @@ export default function AdminPage() {
         </aside>
         <div className="admin-content">
           <StartupNotice status={startupStatus} variant="banner" />
+          {["channels", "server", "library-paths"].includes(activeTab) && <LibraryUpdateStatus key={activeTab} />}
           {activeTab === "manage-media" ? (
             <ManageMediaPage />
           ) : ActiveTab ? (

@@ -21,11 +21,8 @@ type refreshScheduleResponse struct {
 	SchedulesRegenerated int  `json:"schedulesRegenerated"`
 }
 
-// handleRefreshSchedule serves POST /api/admin/refresh-schedule: the
-// Channels admin tab's "Refresh Schedule" button (also triggered
-// automatically after a commercial-settings save, and by the background
-// content-polling loop when new content is detected — see
-// internal/refresh.Run, which this just reports over HTTP).
+// handleRefreshSchedule is the explicit synchronous Refresh Schedule action.
+// Settings mutations instead queue durable work through the background worker.
 func handleRefreshSchedule(db *sql.DB) http.HandlerFunc {
 	return func(w http.ResponseWriter, r *http.Request) {
 		result, err := refresh.Run(r.Context(), db)

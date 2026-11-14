@@ -1,5 +1,6 @@
 // Minimal API client stub. Expand as the versioned HTTP API (see api/openapi.yaml)
 // grows; keep endpoint paths and response types in sync with the server.
+import { announceLibraryUpdate } from './libraryUpdateEvents';
 import { apiFetch as fetch } from './access';
 
 // The UI is always served by the same server as the API (in local dev, Vite
@@ -241,6 +242,7 @@ export async function createChannel(draft: ChannelDraft): Promise<Channel> {
   if (!res.ok) {
     throw new Error(await parseErrorMessage(res, 'failed to create channel'));
   }
+  announceLibraryUpdate();
   return res.json();
 }
 
@@ -253,6 +255,7 @@ export async function updateChannel(id: number, draft: ChannelDraft): Promise<Ch
   if (!res.ok) {
     throw new Error(await parseErrorMessage(res, 'failed to update channel'));
   }
+  announceLibraryUpdate();
   return res.json();
 }
 
@@ -263,6 +266,7 @@ export async function deleteChannel(id: number): Promise<void> {
   if (!res.ok) {
     throw new Error(await parseErrorMessage(res, 'failed to delete channel'));
   }
+  announceLibraryUpdate();
 }
 
 export async function setChannelVisibility(id: number, visibility: ChannelVisibility): Promise<Channel> {
@@ -274,6 +278,7 @@ export async function setChannelVisibility(id: number, visibility: ChannelVisibi
   if (!res.ok) {
     throw new Error(await parseErrorMessage(res, 'failed to update channel visibility'));
   }
+  announceLibraryUpdate();
   return res.json();
 }
 
@@ -286,6 +291,7 @@ export async function bulkSetChannelsVisibility(ids: number[], visibility: Chann
   if (!res.ok) {
     throw new Error(await parseErrorMessage(res, 'failed to update channel visibility'));
   }
+  announceLibraryUpdate();
   return res.json();
 }
 
@@ -362,6 +368,7 @@ export async function updateCommercialSettings(settings: CommercialSettings): Pr
   if (!res.ok) {
     throw new Error(await parseErrorMessage(res, 'failed to save commercial settings'));
   }
+  announceLibraryUpdate();
   return res.json();
 }
 
@@ -524,6 +531,7 @@ export async function updateMetadataSettings(update: MetadataSettingsUpdate): Pr
   if (!res.ok) {
     throw new Error(await parseErrorMessage(res, 'failed to save metadata provider settings'));
   }
+  announceLibraryUpdate();
   return res.json();
 }
 
@@ -608,6 +616,7 @@ async function apiRequest<T>(path: string, init: RequestInit | undefined, fallba
   if (!res.ok) {
     throw new Error(await parseErrorMessage(res, fallback));
   }
+  if (init?.method && init.method !== 'GET' && (/^\/api\/channels\/\d+\/commercials$/.test(path) || /^\/api\/channel-filter-options/.test(path))) announceLibraryUpdate();
   return res.status === 204 ? (undefined as T) : res.json();
 }
 
@@ -1037,3 +1046,25 @@ export async function getInactiveSessionPolicy(): Promise<InactiveSessionPolicy>
 export async function setInactiveSessionPolicy(policy: InactiveSessionPolicy): Promise<InactiveSessionPolicy> {
   return apiRequest('/api/auth/session-inactivity', jsonInit('PUT', policy), 'failed to save inactivity policy');
 }
+
+// Preferences are durable before acknowledgement; derived channels update separately.
+export interface LibraryUpdateStatus {
+  revision: number;
+  appliedRevision: number;
+  state: 'idle' | 'queued' | 'scanning' | 'updating' | 'failed';
+  processed: number;
+  total: number;
+  error: string;
+  needsScan: boolean;
+  needsMetadata: boolean;
+}
+export const getLibraryUpdates = (signal?: AbortSignal): Promise<LibraryUpdateStatus> =>
+  apiRequest('/api/settings/folders/updates', { signal, cache: 'no-store' }, 'Could not check library update progress');
+export const customizeLibraryPath = (choices: { kind: 'movies' | 'tv' | 'commercials'; path: string; movies: boolean; tv: boolean; custom: boolean }): Promise<LibraryUpdateStatus> =>
+  apiRequest('/api/settings/folders/customize', jsonInit('PUT', choices), 'Could not save path preferences');
+export const retryLibraryUpdates = (): Promise<LibraryUpdateStatus> =>
+  apiRequest('/api/settings/folders/updates/retry', { method: 'POST' }, 'Could not retry library updates');
+
+// Counts show the saved path checkboxes, including selections awaiting background application.
+export const getLibraryPathCounts = (kind: 'movies' | 'tv' | 'commercials', path: string, signal?: AbortSignal): Promise<{ movies: number; tv: number; custom: number }> =>
+  apiRequest('/api/settings/folders/customize?' + new URLSearchParams({ kind, path }), { signal, cache: 'no-store' }, 'Could not load channel counts');

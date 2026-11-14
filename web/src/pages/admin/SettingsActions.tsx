@@ -1,5 +1,5 @@
 // Shared Save Changes / Cancel bar for Admin settings tabs that hold a
-// page-level draft (Commercials, Media, Server) — Users and Channels
+// page-level draft (Server) — Library Paths autosaves; Users and Channels
 // already commit each row immediately via their own inline Save/Cancel,
 // so they don't use this. Save commits the draft (via onSave, which may
 // hit a real API) and then reloads the page so what's on screen is

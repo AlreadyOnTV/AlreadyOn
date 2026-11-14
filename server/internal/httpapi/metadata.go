@@ -67,25 +67,23 @@ func handlePutMetadataSettings(db *sql.DB) http.HandlerFunc {
 			return
 		}
 
-		current, err := metadata.GetSettings(r.Context(), db)
+		var next metadata.Settings
+		err := refresh.MutateSettings(r.Context(), db, func(tx *sql.Tx) (refresh.SettingsWork, error) {
+			current, err := metadata.GetSettings(r.Context(), tx)
+			if err != nil {
+				return refresh.SettingsWork{}, err
+			}
+			next = current
+			if body.TMDbAPIKey != nil {
+				next.TMDbAPIKey = *body.TMDbAPIKey
+			}
+			next.KeylessEnabled = true
+			err = metadata.SaveSettings(r.Context(), tx, next)
+			return refresh.SettingsWork{Changed: next != current, Rebuild: true, Metadata: true}, err
+		})
 		if err != nil {
-			writeJSONError(w, http.StatusInternalServerError, err.Error())
+			writeJSONError(w, 500, "could not save metadata settings")
 			return
-		}
-		next := current
-		if body.TMDbAPIKey != nil {
-			next.TMDbAPIKey = *body.TMDbAPIKey
-		}
-		next.KeylessEnabled = true // Legacy toggle values are accepted but cannot disable automatic enrichment.
-
-		if err := metadata.SaveSettings(r.Context(), db, next); err != nil {
-			writeJSONError(w, http.StatusInternalServerError, err.Error())
-			return
-		}
-		if next != current {
-			// The server's worker serializes this with scans/startup and uses
-			// the latest settings if several toggles arrive during enrichment.
-			refresh.NotifyMetadataChanged()
 		}
 		writeJSON(w, http.StatusOK, toMetadataSettingsResponse(next))
 	}

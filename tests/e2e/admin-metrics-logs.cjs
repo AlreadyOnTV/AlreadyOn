@@ -15,8 +15,9 @@ module.exports = async function adminMetricsAndLogs({
   const page = await context.newPage();
   const errors = [];
   page.on("pageerror", (e) => errors.push(e.message));
-  await login(page);
-  await page.goto(url + "/admin/users");
+  // Exercise management access with an empty guide, as folder updates can leave it.
+  await page.route("**/api/guide?*", (route) => route.fulfill({ json: [] }));
+  await login(page, "/admin/users", ".admin-card");
   await page.locator(".admin-card").first().waitFor();
   const cdp = await context.newCDPSession(page);
   await cdp.send("Performance.enable");

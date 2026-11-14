@@ -95,7 +95,8 @@ class PublicationPolicy(unittest.TestCase):
         self.assertIn('length == 2 and all(.[]; .state == "SUCCESS")', validation)
         self.assertIn('gh pr checks "$PR_NUMBER" --repo "$REPOSITORY"', validation)
         self.assertIn('gh pr merge "$PR_NUMBER" --repo "$REPOSITORY"', validation)
-        self.assertIn('gh pr merge "$PR_NUMBER" --repo "$REPOSITORY" --merge --match-head-commit', validation)
+        self.assertIn('gh pr merge "$PR_NUMBER" --repo "$REPOSITORY" --squash --match-head-commit', validation)
+        self.assertNotIn('--merge --match-head-commit', validation)
         self.assertIn('on:\n  push:\n    branches: [main]', build)
         channels = build.split('  channels:\n', 1)[1].split('\n  stable_android:\n', 1)[0]
         self.assertIn('permissions:\n      contents: write', channels)

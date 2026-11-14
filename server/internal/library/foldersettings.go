@@ -6,6 +6,7 @@ import (
 	"encoding/json"
 	"errors"
 	"fmt"
+	"github.com/alreadyonapp/alreadyon/server/internal/storage"
 	"path/filepath"
 	"strings"
 
@@ -144,7 +145,7 @@ var (
 
 // GetFolderSettings returns what the admin has saved (nil lists where
 // nothing is saved). The singleton row is seeded by migration 0022.
-func GetFolderSettings(ctx context.Context, db *sql.DB) (FolderSettings, error) {
+func GetFolderSettings(ctx context.Context, db storage.Querier) (FolderSettings, error) {
 	var tv, movie, commercial, exclusions sql.NullString
 	err := db.QueryRowContext(ctx, `
 		SELECT tv_paths, movie_paths, commercial_paths, exclusion_patterns
@@ -172,7 +173,7 @@ func GetFolderSettings(ctx context.Context, db *sql.DB) (FolderSettings, error) 
 // SaveFolderSettings validates and stores s, replacing all four lists;
 // nil lists are stored as NULL (back to the default). Callers wanting a
 // partial update should read, modify, then save.
-func SaveFolderSettings(ctx context.Context, db *sql.DB, s FolderSettings) (FolderSettings, error) {
+func SaveFolderSettings(ctx context.Context, db storage.Querier, s FolderSettings) (FolderSettings, error) {
 	var err error
 	if s.TV, err = cleanPaths(s.TV); err != nil {
 		return FolderSettings{}, err

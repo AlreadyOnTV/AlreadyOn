@@ -5,6 +5,7 @@ import (
 	"database/sql"
 	"errors"
 	"fmt"
+	"github.com/alreadyonapp/alreadyon/server/internal/workrevision"
 	"math"
 	"path/filepath"
 	"slices"
@@ -298,5 +299,33 @@ func replaceChannelItems(ctx context.Context, db *sql.DB, channelID int64, media
 			return fmt.Errorf("lineup: replace channel %d: %w", channelID, err)
 		}
 	}
+	if err := workrevision.Check(ctx, tx); err != nil {
+		return err
+	}
 	return tx.Commit()
+}
+
+// BuildFilteredChannels loads the catalog once for a coalesced background update.
+// Each channel commits independently, with a revision fence before publication.
+func BuildFilteredChannels(ctx context.Context, db *sql.DB, ids []int64) error {
+	filters, err := channel.ListFilters(ctx, db)
+	if err != nil {
+		return err
+	}
+	pool, err := loadPool(ctx, db, false)
+	if err != nil {
+		return err
+	}
+	for _, id := range ids {
+		if err := governor.Checkpoint(ctx); err != nil {
+			return err
+		}
+		if f, ok := filters[id]; ok {
+			if _, err := buildFiltered(ctx, db, id, f, pool); err != nil {
+				return err
+			}
+		}
+	}
+	_, _, err = channel.ApplyAutoVisibility(ctx, db)
+	return err
 }

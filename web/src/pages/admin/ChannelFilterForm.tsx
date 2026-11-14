@@ -88,7 +88,7 @@ export default function ChannelFilterForm({ filter, onChange }: { filter: Channe
           onChange={(titlePhrases) => set({ titlePhrases, titleContains: '' })}
         />
       </div>
-      <div className="admin-field-row">
+      <div className="admin-field-row channel-paths-row">
         <label>Included Media Paths</label>
         <div className="included-paths">
           {[...new Set([...paths, ...(filter.includedPaths ?? []), ...(filter.excludedPaths ?? [])])].sort().map((path) => {

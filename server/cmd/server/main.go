@@ -294,8 +294,6 @@ func run() (restart bool) {
 		go runScheduleMaintenance(ctx, db.DB)
 	}
 	go runContentPolling(ctx, db.DB)
-	go runFolderWatcher(ctx, db.DB)
-	go runMetadataWatcher(ctx, db.DB)
 
 	logging.StartHeartbeat(ctx, 15*time.Minute, 30*time.Second)
 
@@ -341,6 +339,14 @@ func run() (restart bool) {
 	// after the listener is up rather than delaying it (#107).
 	bootstrapDone := make(chan struct{})
 	go func() {
+		select {
+		case <-ctx.Done():
+			return
+		case <-bootstrapDone:
+		}
+		refresh.RunUpdateWorker(ctx, db.DB)
+	}()
+	go func() {
 		defer close(bootstrapDone)
 		if len(scanCfg.Roots) > 0 {
 			runBootstrap(ctx, db.DB)
@@ -376,10 +382,21 @@ func runBootstrap(ctx context.Context, db *sql.DB) {
 	start := time.Now()
 	logging.Info("startup: library pipeline starting (the web UI is already available)")
 	runKeyless := true
+	superseded := false
 
 	refresh.Exclusive(func() {
 		defer status.Default.End()
+		ctx, stopScan, scanErr := refresh.ScanContext(ctx, db)
+		if scanErr != nil {
+			status.Default.RecordError(scanErr)
+			return
+		}
+		defer stopScan()
+		defer func() { superseded = ctx.Err() != nil }()
 		if err := runStartupScan(ctx, db); err != nil {
+			if errors.Is(err, context.Canceled) {
+				return
+			}
 			status.Default.RecordError(err)
 		}
 		if ctx.Err() != nil {
@@ -444,7 +461,7 @@ func runBootstrap(ctx context.Context, db *sql.DB) {
 			logging.Info("regenerated %d channel schedule(s)", regenerated)
 		}
 	})
-	if ctx.Err() != nil {
+	if ctx.Err() != nil || superseded {
 		return
 	}
 	logging.Info("startup: library pipeline finished in %s", time.Since(start).Round(time.Millisecond))
@@ -491,63 +508,12 @@ func runContentPolling(ctx context.Context, db *sql.DB) {
 	}
 }
 
-// runFolderWatcher rescans the library whenever an admin saves different
-// content folders or exclusion patterns (see refresh.NotifyFoldersChanged),
-// so the guide follows the new settings without a restart. Rapid saves are
-// coalesced; a run already in progress is waited for, never overlapped.
-func runFolderWatcher(ctx context.Context, db *sql.DB) {
-	for {
-		select {
-		case <-ctx.Done():
-			return
-		case <-refresh.FoldersChanged():
-		}
-		// Let a burst of saves settle, then scan once.
-		select {
-		case <-ctx.Done():
-			return
-		case <-time.After(500 * time.Millisecond):
-		}
-		select {
-		case <-refresh.FoldersChanged():
-		default:
-		}
-
-		logging.Info("content folders changed: rescanning")
-		res, err := refresh.Rescan(ctx, db)
-		if ctx.Err() != nil {
-			return
-		}
-		if err != nil {
-			logging.Error("content folders changed: rescan: %v", err)
-			continue
-		}
-		logging.Info("content folders changed: rescan complete (added=%d channelsRefreshed=%d)", res.FilesAdded, res.ChannelsRefreshed)
-	}
-}
-
-// runMetadataWatcher rebuilds provider-mode channels after settings saves.
-// It shares the refresh lock and stops with the server; bursts are coalesced.
-func runMetadataWatcher(ctx context.Context, db *sql.DB) {
-	for {
-		select {
-		case <-ctx.Done():
-			return
-		case <-refresh.MetadataChanged():
-		}
-		if _, err := refresh.ApplyMetadataChange(ctx, db); err != nil && ctx.Err() == nil {
-			logging.Error("metadata settings changed: refresh: %v", err)
-		}
-	}
-}
-
 // runScheduleMaintenance periodically brings every channel's persisted
 // schedule (see schedule.RegenerateAll) back up to its full look-ahead
 // window and prunes anything past its trailing edge — the thing that
 // actually keeps the guide's "now" moving forward across a long-running
 // server, on top of the explicit triggers (Refresh Schedule button,
-// commercial-settings save, content polling) that already call this via
-// internal/refresh.Run. It runs at the top of every hour (config.ScheduleMaintenanceOffset),
+// content polling) and saved-setting background jobs. It runs at the top of every hour (config.ScheduleMaintenanceOffset),
 // independent of content polling. Returns once ctx is done.
 func runScheduleMaintenance(ctx context.Context, db *sql.DB) {
 	runHourlyAt(ctx, config.ScheduleMaintenanceOffset, func() {
@@ -629,8 +595,8 @@ func runStartupScan(parent context.Context, db *sql.DB) error {
 	logging.Info("library scan starting (%d root(s))", len(scanCfg.Roots))
 	result, err := scanner.Scan(parent)
 	if parent.Err() != nil {
-		logging.Info("library scan stopped: shutting down")
-		return nil
+		logging.Info("library scan stopped: superseded or shutting down")
+		return parent.Err()
 	}
 	if err != nil {
 		logging.Error("library scan: %v", err)

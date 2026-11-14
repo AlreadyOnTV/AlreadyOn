@@ -293,11 +293,9 @@ const noWorkers = async (unreleased = () => 0) => {
       "Saved profile preference must select Japanese",
     );
     await page.goto(url + "/admin/commercials");
+    const offsetSaved = page.waitForResponse((response) => response.url().endsWith('/api/settings/commercials') && response.request().method() === 'PUT' && response.request().postDataJSON().volumeOffsetDb === -6);
     await page.getByLabel("Commercial Volume Offset (dB)").fill("-6");
-    await Promise.all([
-      page.waitForEvent("load"),
-      page.getByRole("button", { name: "Save Changes" }).click(),
-    ]);
+    assert((await offsetSaved).ok(), "Commercial offset autosaved");
     await page.getByLabel("Commercial Volume Offset (dB)").waitFor();
     assert(
       (await page.getByLabel("Commercial Volume Offset (dB)").inputValue()) ===
@@ -3246,15 +3244,8 @@ const noWorkers = async (unreleased = () => 0) => {
     assert(initialSave.ok(), "Prepared an isolated folder for removal");
     await page.goto(url + "/admin/commercials");
     const breaks = page.locator(".commercial-settings");
-    await breaks
-      .getByRole("button", { name: "Save Changes", exact: true })
-      .waitFor();
-    assert(
-      (await breaks
-        .getByRole("button", { name: "Cancel", exact: true })
-        .count()) === 1,
-      "Break actions inside card",
-    );
+    await breaks.getByRole('heading', { name: 'Commercial Breaks', exact: true }).waitFor();
+    assert(await breaks.getByRole('button', { name: 'Save Changes', exact: true }).count() === 0 && await breaks.getByRole('button', { name: 'Cancel', exact: true }).count() === 0, 'Commercial breaks autosave without manual actions');
     assert(
       (await breaks.getByText(/Breaks never land/).count()) === 0,
       "Timing hint removed",
@@ -3282,8 +3273,11 @@ const noWorkers = async (unreleased = () => 0) => {
     const savedFolders = await (
       await page.request.get(url + "/api/settings/folders")
     ).json();
-    // Keep these mutations in the disposable fixture, preserving the break draft.
+    // Keep these mutations in the disposable fixture; folders and breaks save independently.
+    const originalCommercials = await (await page.request.get(url + '/api/settings/commercials')).json();
+    const offsetAutosaved = page.waitForResponse((response) => response.url().endsWith('/api/settings/commercials') && response.request().method() === 'PUT' && response.request().postDataJSON().volumeOffsetDb === -3);
     await page.getByLabel("Commercial Volume Offset (dB)").fill("-3");
+    assert((await offsetAutosaved).ok(), 'Commercial offset saved without a manual button');
     const folderSaved = page.waitForResponse(
       (r) =>
         r.url().endsWith("/api/settings/folders") &&
@@ -3297,7 +3291,7 @@ const noWorkers = async (unreleased = () => 0) => {
     assert(
       (await page.getByLabel("Commercial Volume Offset (dB)").inputValue()) ===
         "-3",
-      "Immediate folder save preserves break draft",
+      "Immediate folder save preserves commercial preferences",
     );
     const pathsAfter = await (
       await page.request.get(url + "/api/settings/folders")
@@ -3353,23 +3347,14 @@ const noWorkers = async (unreleased = () => 0) => {
     assert((await added).ok(), "Folder addition persisted immediately");
     // The row label now includes its scanned-item count; the fixture folder is empty.
     await folders.getByText(`${addedPath} (Found 0)`, { exact: true }).waitFor();
-    await breaks.getByRole("button", { name: "Cancel", exact: true }).click();
+    await page.reload();
     await folders.getByText(`${addedPath} (Found 0)`, { exact: true }).waitFor();
     assert(
-      (await page.getByLabel("Commercial Volume Offset (dB)").inputValue()) !==
+      (await page.getByLabel("Commercial Volume Offset (dB)").inputValue()) ===
         "-3",
-      "Cancel discards break draft while keeping saved folders",
+      "Autosaved breaks and folders survive reload",
     );
-    const folderRuns = () => {
-      const log = fs.readFileSync(path.join(root, "server.log"), "utf8");
-      return {
-        started: (log.match(/content folders changed: rescanning/g) ?? [])
-          .length,
-        finished: (log.match(/content folders changed: rescan complete/g) ?? [])
-          .length,
-      };
-    };
-    const beforeRestore = folderRuns();
+    assert((await page.request.put(url + '/api/settings/commercials', { data: originalCommercials })).ok(), 'Restore synthetic commercial settings');
     const restoredFolders = await page.request.put(
       url + "/api/settings/folders",
       {
@@ -3385,20 +3370,8 @@ const noWorkers = async (unreleased = () => 0) => {
       restoredFolders.ok(),
       "Restore the original synthetic folder settings",
     );
-    // A successful folder save queues a debounced rescan. Drain that exact
-    // restore before later scenarios reseed schedules; otherwise it can erase
-    // their guide after login has already started on a slower CI runner.
-    const rescanDeadline = Date.now() + 120000;
-    for (;;) {
-      const runs = folderRuns();
-      if (runs.started > beforeRestore.started && runs.finished >= runs.started)
-        break;
-      assert(
-        Date.now() < rescanDeadline,
-        "Restored folder rescan did not finish",
-      );
-      await delay(100);
-    }
+    // Superseded scans stop early, so wait for the durable latest revision rather than matching log counts.
+    await require('./wait-library-updates.cjs')(page.request, url);
     await page.goto(url + "/admin/server");
     await page.locator(".settings-grid").waitFor();
     assert(

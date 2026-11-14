@@ -8,6 +8,7 @@ import (
 	"database/sql"
 	"errors"
 	"fmt"
+	"github.com/alreadyonapp/alreadyon/server/internal/workrevision"
 	"io/fs"
 	"os"
 	"path/filepath"
@@ -123,7 +124,7 @@ func (s *Scanner) Scan(ctx context.Context) (ScanResult, error) {
 
 	missing, err := s.markUnvisitedAsMissing(ctx, result.visited)
 	if err != nil {
-		result.Errors = append(result.Errors, fmt.Errorf("mark missing files: %w", err))
+		return result, fmt.Errorf("mark missing files: %w", err)
 	}
 	result.FilesMissing = missing
 
@@ -154,7 +155,15 @@ func (s *Scanner) markUnvisitedAsMissing(ctx context.Context, visited map[int64]
 		}
 	}
 
-	res, err := s.DB.ExecContext(ctx, query, args...)
+	tx, err := s.DB.BeginTx(ctx, nil)
+	if err != nil {
+		return 0, err
+	}
+	defer tx.Rollback()
+	if err := workrevision.CheckScan(ctx, tx); err != nil {
+		return 0, err
+	}
+	res, err := tx.ExecContext(ctx, query, args...)
 	if err != nil {
 		return 0, err
 	}
@@ -162,7 +171,7 @@ func (s *Scanner) markUnvisitedAsMissing(ctx context.Context, visited map[int64]
 	if err != nil {
 		return 0, err
 	}
-	return int(rows), nil
+	return int(rows), tx.Commit()
 }
 
 func (s *Scanner) walkRoot(ctx context.Context, root config.ValidatedRoot, result *ScanResult) error {

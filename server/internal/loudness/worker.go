@@ -270,10 +270,17 @@ func process(ctx context.Context, db *sql.DB, c candidate, generation int64) {
 		state = "failed"
 	}
 	raw, _ := json.Marshal(measurement)
-	_, saveErr := db.ExecContext(ctx, `INSERT INTO loudness_measurements(media_file_id,size_bytes,modified_unix,modified_ns,stream_index,version,status,measurement,error,generation) VALUES(?,?,?,?,?,?,?,?,?,?) ON CONFLICT(media_file_id) DO UPDATE SET size_bytes=excluded.size_bytes,modified_unix=excluded.modified_unix,modified_ns=excluded.modified_ns,stream_index=excluded.stream_index,version=excluded.version,status=excluded.status,measurement=excluded.measurement,error=excluded.error,generation=excluded.generation,analyzed_at=unixepoch()`, c.id, c.size, c.modified, ns, track, Version, state, string(raw), message, generation)
+	saveErr := saveMeasurement(ctx, db, c, ns, track, state, string(raw), message, generation)
 	if saveErr != nil {
 		logging.Warn("loudness: could not store measurement for media %d: %v", c.id, saveErr)
 	}
+}
+
+// The scanner may remove or replace a candidate while FFmpeg is running. Check
+// its identity in the write itself so obsolete results cannot create or overwrite a cache entry.
+func saveMeasurement(ctx context.Context, db *sql.DB, c candidate, ns int64, track int, state, raw, message string, generation int64) error {
+	_, err := db.ExecContext(ctx, `INSERT INTO loudness_measurements(media_file_id,size_bytes,modified_unix,modified_ns,stream_index,version,status,measurement,error,generation) SELECT ?,?,?,?,?,?,?,?,?,? FROM media_files WHERE id=? AND path=? AND size_bytes=? AND modified_unix=? AND status='ok' ON CONFLICT(media_file_id) DO UPDATE SET size_bytes=excluded.size_bytes,modified_unix=excluded.modified_unix,modified_ns=excluded.modified_ns,stream_index=excluded.stream_index,version=excluded.version,status=excluded.status,measurement=excluded.measurement,error=excluded.error,generation=excluded.generation,analyzed_at=unixepoch()`, c.id, c.size, c.modified, ns, track, Version, state, raw, message, generation, c.id, c.path, c.size, c.modified)
+	return err
 }
 
 // Run measures files with as many workers as the shared governor allows,

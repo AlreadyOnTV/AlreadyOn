@@ -1,3 +1,4 @@
+import { announceLibraryUpdate } from '../../api/libraryUpdateEvents';
 // TV folders, movie folders and exclusion patterns are stored on the
 // server (GET/PUT /api/settings/folders); a list an admin hasn't customized
 // shows the server's built-in default. The polling interval is a separate
@@ -106,6 +107,7 @@ export default function MediaPage() {
     queue.current = queue.current.then(async () => {
       try {
         await save();
+        announceLibraryUpdate();
       } catch (err) {
         setSaveError(
           err instanceof Error ? err.message : "Failed to save the change",

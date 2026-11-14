@@ -134,26 +134,36 @@ def main():
     assert details['ffmpegVersion'] != 'Unavailable'
     assert all(ipaddress.ip_address(address).version == 4 for address in details['ipAddresses'])
     print('PASS: authenticated build identity, process uptime, time zone and installed FFmpeg version', flush=True)
-    # Settings saves regenerate schedules through the background governor. Wait
-    # before fixture mutations too: startup probes can otherwise stall a PUT
-    # beyond the HTTP client deadline, before the old playback-only wait.
+    # Calibration shares the background governor with media work. Wait before
+    # constructing the playback scenario so benchmark activity does not distort
+    # conversion admission and segment-decoding checks.
     wait_for(lambda: api('GET', '/api/settings/transcoding/threads').get('state') == 'idle', 'thread benchmark')
     # The optional HDR matrix deliberately remains part of the capacity run and
     # has a ten-minute server-side deadline. Two-CPU hosted runners can need
     # longer than the generic three-minute asynchronous-work allowance.
     wait_for(lambda: api('GET', '/api/settings/transcoding/capacity').get('state') == 'idle',
              'capacity benchmark', 660)
+    def updates_applied():
+        state = api('GET', '/api/settings/folders/updates')
+        assert state['state'] != 'failed', state.get('error', 'Background update failed')
+        return (state['state'] == 'idle' and not state['needsScan']
+                and not state.get('needsMetadata', False)
+                and state['appliedRevision'] == state['revision'])
+
     settings = api('GET', '/api/settings/commercials')
     settings['enabled'] = False
     api('PUT', '/api/settings/commercials', settings)
     api('PUT', '/api/settings/folders', {'tv': [], 'movies': ['/fixture'], 'commercials': [], 'exclusions': []})
     wait_for(lambda: api('GET', '/api/settings/folders')['movies']['paths'][0].get('count', 0) == 1,
              'synthetic movie scan')
+    wait_for(updates_applied, 'synthetic library update')
     channel = api('POST', '/api/channels', {'number': 9001, 'name': 'Synthetic Integration',
                   'filter': {'audienceTier': 'adult', 'genres': [], 'mediaType': 'movie',
                              'era': 'both', 'titleContains': 'Synthetic Fixture'}}, 201)
-    assert channel['itemCount'] == 1, 'Synthetic movie must be in the channel'
     channel_id = channel['id']
+    wait_for(updates_applied, 'synthetic channel schedule')
+    channel = api('GET', f'/api/channels/{channel_id}')
+    assert channel['itemCount'] == 1, 'Synthetic movie must be in the applied channel lineup'
     capabilities = {'hls': True, 'containers': ['mp4'], 'mbps': 25,
                     'video': [{'codec': 'h264', 'profile': 'High', 'level': 42, 'width': 1920,
                                'height': 1080, 'fps': 60, 'bitrate': 20000000, 'pixelFormat': 'yuv420p'}],

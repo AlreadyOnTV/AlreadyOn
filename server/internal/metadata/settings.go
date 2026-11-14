@@ -4,6 +4,7 @@ import (
 	"context"
 	"database/sql"
 	"fmt"
+	"github.com/alreadyonapp/alreadyon/server/internal/storage"
 )
 
 // Settings holds the admin-configured metadata provider options, set on
@@ -18,7 +19,7 @@ type Settings struct {
 // GetSettings returns the current settings. There's always exactly one
 // row (seeded by migration 0011), so a missing row is a schema bug, not
 // a valid "unconfigured" state.
-func GetSettings(ctx context.Context, db *sql.DB) (Settings, error) {
+func GetSettings(ctx context.Context, db storage.Querier) (Settings, error) {
 	var s Settings
 	var tmdbKey sql.NullString
 	err := db.QueryRowContext(ctx, `
@@ -34,7 +35,7 @@ func GetSettings(ctx context.Context, db *sql.DB) (Settings, error) {
 
 // SaveSettings persists s. An empty key is stored as SQL NULL (not ""),
 // matching GetSettings' "empty means unset" convention.
-func SaveSettings(ctx context.Context, db *sql.DB, s Settings) error {
+func SaveSettings(ctx context.Context, db storage.Querier, s Settings) error {
 	_, err := db.ExecContext(ctx, `
 		UPDATE metadata_settings SET tmdb_api_key = NULLIF(?, ''), keyless_enabled = ?,
 			updated_at_unix = unixepoch() WHERE id = 1`,

@@ -6,12 +6,9 @@ import (
 	"encoding/json"
 	"io"
 	"net/http"
-	"time"
 
 	"github.com/alreadyonapp/alreadyon/server/internal/channel"
-	"github.com/alreadyonapp/alreadyon/server/internal/lineup"
 	"github.com/alreadyonapp/alreadyon/server/internal/refresh"
-	"github.com/alreadyonapp/alreadyon/server/internal/schedule"
 )
 
 func handleFilterOptions(db *sql.DB) http.HandlerFunc {
@@ -40,24 +37,18 @@ func handleSaveFilterOption(db *sql.DB) http.HandlerFunc {
 			}
 		}
 		option.ID = r.PathValue("id")
-		var err error
-		refresh.Exclusive(func() {
+		err := refresh.MutateSettings(r.Context(), db, func(tx *sql.Tx) (refresh.SettingsWork, error) {
+			var err error
 			if r.Method == "DELETE" {
-				err = channel.DeleteOption(r.Context(), db, r.PathValue("kind"), option.ID)
+				err = channel.DeleteOption(r.Context(), tx, r.PathValue("kind"), option.ID)
 			} else {
-				err = channel.SaveOption(r.Context(), db, r.PathValue("kind"), option)
+				err = channel.SaveOption(r.Context(), tx, r.PathValue("kind"), option)
 			}
-			if err != nil {
-				return
-			}
-			if _, err = lineup.Refresh(r.Context(), db); err != nil {
-				return
-			}
-			_, err = schedule.RegenerateAll(r.Context(), db, time.Now())
+			return refresh.SettingsWork{Changed: true, Rebuild: true}, err
 		})
 		if err != nil {
 			if !writeFilterError(w, err) {
-				writeJSONError(w, 500, "filter saved but refresh failed; retry Refresh Schedule")
+				writeJSONError(w, 500, "could not save filter definition")
 			}
 			return
 		}
@@ -74,9 +65,7 @@ func handleMoveFilterOption(db *sql.DB) http.HandlerFunc {
 			return
 		}
 		var err error
-		refresh.Exclusive(func() {
-			err = channel.MoveOption(r.Context(), db, r.PathValue("kind"), r.PathValue("id"), body.Direction, body.Target)
-		})
+		err = channel.MoveOption(r.Context(), db, r.PathValue("kind"), r.PathValue("id"), body.Direction, body.Target)
 		if err != nil {
 			if !writeFilterError(w, err) {
 				writeJSONError(w, 500, "could not reorder filters")
@@ -90,7 +79,7 @@ func handleMoveFilterOption(db *sql.DB) http.HandlerFunc {
 func handleRestoreFilterOrder(db *sql.DB) http.HandlerFunc {
 	return func(w http.ResponseWriter, r *http.Request) {
 		var err error
-		refresh.Exclusive(func() { err = channel.RestoreOptionOrder(r.Context(), db, r.PathValue("kind")) })
+		err = channel.RestoreOptionOrder(r.Context(), db, r.PathValue("kind"))
 		if err != nil {
 			if !writeFilterError(w, err) {
 				writeJSONError(w, 500, "could not restore order")

@@ -2113,3 +2113,24 @@ button.admin-badge:disabled {
   margin: 16px 0;
   min-width: 0;
 }
+
+/* Match the heading to the first path instead of centering it over the whole list. */
+.channel-editor .channel-paths-row {
+  align-items: flex-start;
+}
+@media (min-width: 601px) {
+  .channel-editor .channel-paths-row > label {
+    padding-top: 6px;
+  }
+}
+
+/* Reserve the right column for saved channel counts, allowing long labels to wrap on phones. */
+.path-customize-options .path-customize-row {
+  display: grid;
+  grid-template-columns: auto minmax(0, 1fr) auto;
+  gap: 10px;
+}
+.path-customize-count {
+  text-align: right;
+  white-space: nowrap;
+}
