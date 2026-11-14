@@ -21,28 +21,27 @@ export default function LoudnessRow() {
   const [info, setInfo] = useState(false);
   const revision = useRef(0);
   useEffect(() => {
-    let cancelled = false;
-    let pending = false;
+    const poll = { cancelled: false, pending: false };
     const load = async () => {
-      if (pending) return;
-      pending = true;
+      if (poll.pending) return;
+      poll.pending = true;
       const current = revision.current;
       try {
         const next = await getLoudness();
-        if (!cancelled && current === revision.current) {
+        if (!poll.cancelled && current === revision.current) {
           setStatus(next);
           setError('');
         }
       } catch (e) {
-        if (!cancelled && current === revision.current) setError((e as Error).message);
+        if (!poll.cancelled && current === revision.current) setError((e as Error).message);
       } finally {
-        pending = false;
+        poll.pending = false;
       }
     };
     void load();
     const timer = window.setInterval(() => void load(), 3000);
     return () => {
-      cancelled = true;
+      poll.cancelled = true;
       window.clearInterval(timer);
     };
   }, []);

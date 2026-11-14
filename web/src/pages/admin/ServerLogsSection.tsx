@@ -53,18 +53,18 @@ export default function ServerLogsSection() {
   useEffect(() => {
     if (paused) return;
 
-    let cancelled = false;
+    const controller = new AbortController();
     const poll = () => {
       getLogs(levelsKey ? (levelsKey.split(",") as LogLevel[]) : [], limit)
         .then((data) => {
-          if (!cancelled) {
+          if (!controller.signal.aborted) {
             setEntries(data.entries);
             if (data.timeZone) setTimeZone(data.timeZone);
             setError(null);
           }
         })
         .catch((err: Error) => {
-          if (!cancelled) setError(err.message);
+          if (!controller.signal.aborted) setError(err.message);
         });
       // While idle this is how a later refresh gets noticed and sped up.
       if (!busy) recheck();
@@ -73,7 +73,7 @@ export default function ServerLogsSection() {
     poll();
     const id = window.setInterval(poll, busy ? BUSY_POLL_INTERVAL_MS : IDLE_POLL_INTERVAL_MS);
     return () => {
-      cancelled = true;
+      controller.abort();
       window.clearInterval(id);
     };
   }, [paused, limit, levelsKey, busy, recheck]);

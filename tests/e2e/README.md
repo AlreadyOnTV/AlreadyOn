@@ -2,11 +2,13 @@
 
 [![AlreadyOn](../../web/public/branding/header-doc.svg)](../../README.md)
 
-`make test-e2e` runs playback, channel filters, library catalog, profile autosave and settings feedback browser suites against an isolated synthetic server. The harness prepares generated fixtures and temporary application storage; it must not target a live preview or production installation.
+`make test-e2e` runs playback, channel filters, library catalog, profile autosave, library path customization and settings feedback browser suites against an isolated synthetic server. The harness prepares generated fixtures and temporary application storage; it must not target a live preview or production installation.
+
+Folder checks assert `path (Found N)` and immediate persistence independently of commercial break drafts.
 
 Player menu checks require a detected audio language when known and omit the suffix for untagged audio.
 
-The suite covers authentication, guide navigation, tuning and playback behavior across synthetic media scenarios. Fixtures and clocks should make failures reproducible. Preserve useful assertions when fixing timing problems; waiting for a real readiness signal is preferable to hiding a failure with arbitrary sleeps.
+The suite covers authentication, guide navigation, tuning and synthetic playback. Use reproducible fixtures/clocks and readiness signals instead of arbitrary sleeps.
 
 Run `PLAYBACK_TEST_ONLY=admin-metrics-logs make test-e2e` for isolated dashboard and log checks. Disk fixtures use per-mount bandwidth, IOPS and latency, including unavailable readings; assertions cover the four throughput lines, missing-sample gaps, capacity table and expanded-chart layout.
 Activity checks cover concurrent sessions, client-version labels and unknown fallback, hidden latency, and paired source/output formats.
@@ -22,3 +24,5 @@ Run `node tests/e2e/playback-capabilities.cjs https://localhost:5173 webkit` (or
 For focused WebUI profile autosave checks, start the development preview and run `node tests/e2e/profile-autosave.cjs https://localhost:5173`. Every API request is intercepted with an in-memory synthetic profile; no preview profile or PIN is changed. Coverage includes unchanged-value suppression, PIN confirmation, five-second success feedback and fade, queued edits, failure/retry, and compact layout. This is browser behavior coverage; the existing isolated settings scenario covers persistence against the server.
 
 For focused guide checks, run `node tests/e2e/guide-live.cjs https://localhost:5173`, or select `guide-live` in the isolated harness. All API calls are intercepted; preview data is untouched. Controlled time covers keyboard/wheel/touch navigation pauses, deadline extension, programmatic-scroll exclusion, exact expiry and resumed minute polling. Restoration checks cover fullscreen CH 101 to CH 115, midnight/program/half-hour boundaries, lower/final channels and failed refreshes with cached airings. These exercise guide state/geometry, not media decoding or physical-device playback.
+
+Run `PLAYBACK_TEST_ONLY=library-paths make test-e2e` for Customize defaults, Cancel, group overrides, Save persistence, empty commercial selections, preservation of other paths/settings, removal, and failure/retry. GitHub Actions runs real persistence and intercepted failure/layout cases through `test-source` → `make test-e2e`. The intercepted cases can also run standalone with `node tests/e2e/library-path-customize-ui.cjs https://localhost:5173` without changing preview data. `make test` includes the focused WebUI unit tests; lint rejects warnings.

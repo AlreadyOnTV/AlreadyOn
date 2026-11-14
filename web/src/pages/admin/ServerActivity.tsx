@@ -137,7 +137,7 @@ export default function ServerActivity() {
   const [error, setError] = useState(false);
   useEffect(() => {
     const controller = new AbortController();
-    let timer: ReturnType<typeof setTimeout>;
+    const poll = { timer: undefined as ReturnType<typeof setTimeout> | undefined };
     async function update() {
       try {
         const response = await apiFetch("/api/server/activity", {
@@ -153,12 +153,12 @@ export default function ServerActivity() {
         if (!controller.signal.aborted) setError(true);
       }
       if (!controller.signal.aborted)
-        timer = setTimeout(() => void update(), 3000);
+        poll.timer = setTimeout(() => void update(), 3000);
     }
     void update();
     return () => {
       controller.abort();
-      clearTimeout(timer);
+      clearTimeout(poll.timer);
     };
   }, []);
   const slots = activity?.transcodeSlots;

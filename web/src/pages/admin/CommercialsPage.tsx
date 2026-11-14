@@ -162,6 +162,7 @@ export default function CommercialsPage() {
           counts={Object.fromEntries(savedFolders.commercials.paths.map(p => [p.path, p.count ?? 0]))}
           statuses={Object.fromEntries(savedFolders.commercials.paths.map((p): [string, FolderPathStatus] => [p.path, p.status]))}
           requireAbsolute
+          customizeKind="commercials"
           disabled={folderSaving}
           onChange={next => void saveFolders(next)}
         />

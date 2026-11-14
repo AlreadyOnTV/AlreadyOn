@@ -181,10 +181,10 @@ export default function ServerMetrics({
   const [now, setNow] = useState(() => Math.floor(Date.now() / 1000));
   useEffect(() => {
     const controller = new AbortController();
-    let pending = false;
+    const poll = { pending: false };
     const load = async () => {
-      if (pending) return;
-      pending = true;
+      if (poll.pending) return;
+      poll.pending = true;
       try {
         const data = await getServerMetrics(minutes, controller.signal);
         if (!controller.signal.aborted) {
@@ -195,7 +195,7 @@ export default function ServerMetrics({
       } catch (e) {
         if (!controller.signal.aborted) setError((e as Error).message);
       } finally {
-        pending = false;
+        poll.pending = false;
       }
     };
     void load();
@@ -211,10 +211,10 @@ export default function ServerMetrics({
     // A tiny uncached same-origin request approximates ping over the existing
     // keep-alive connection; it includes HTTP handling, not just network RTT.
     const controller = new AbortController();
-    let pending = false;
+    const poll = { pending: false };
     const ping = async () => {
-      if (pending) return;
-      pending = true;
+      if (poll.pending) return;
+      poll.pending = true;
       const started = performance.now();
       const at = Math.floor(Date.now() / 1000);
       let value: number | null = null;
@@ -239,7 +239,7 @@ export default function ServerMetrics({
             { at, value },
           ]);
         }
-        pending = false;
+        poll.pending = false;
       }
     };
     void ping();

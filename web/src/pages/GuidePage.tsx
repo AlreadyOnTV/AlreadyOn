@@ -347,7 +347,7 @@ export default function GuidePage() {
   };
   useEffect(() => () => window.clearTimeout(navigationTimer.current), []);
   useEffect(() => {
-    let timer: number;
+    const clock = { timer: undefined as number | undefined };
     const refresh = () => {
       const stamp = Date.now();
       if (performance.now() >= navigationDeadline.current) setNowMs(stamp);
@@ -357,8 +357,8 @@ export default function GuidePage() {
           .map((p) => Date.parse(p.endsAt))
           .filter((end) => end > stamp)
           .reduce((next, end) => Math.min(next, end), Infinity) ?? Infinity;
-      window.clearTimeout(timer);
-      timer = window.setTimeout(
+      window.clearTimeout(clock.timer);
+      clock.timer = window.setTimeout(
         refresh,
         Math.max(
           1,
@@ -374,7 +374,7 @@ export default function GuidePage() {
     window.addEventListener("focus", refresh);
     document.addEventListener("visibilitychange", refresh);
     return () => {
-      window.clearTimeout(timer);
+      window.clearTimeout(clock.timer);
       window.removeEventListener("focus", refresh);
       document.removeEventListener("visibilitychange", refresh);
     };
@@ -485,7 +485,7 @@ export default function GuidePage() {
   const slotCount = GUIDE_HOURS * 2;
 
   useEffect(() => {
-    let cancelled = false;
+    const controller = new AbortController();
     const query = JSON.stringify([
       currentUser.id,
       audienceTier,
@@ -509,7 +509,7 @@ export default function GuidePage() {
         getProfile(currentUser.id),
       ])
         .then(([data, viewer]) => {
-          if (cancelled || performance.now() < navigationDeadline.current)
+          if (controller.signal.aborted || performance.now() < navigationDeadline.current)
             return;
           loadedGuideQuery.current = query;
           // Commercial breaks are real, timed entries the schedule engine
@@ -577,7 +577,7 @@ export default function GuidePage() {
           }
         })
         .catch((err: Error) => {
-          if (!cancelled && navigationDeadline.current === 0)
+          if (!controller.signal.aborted && navigationDeadline.current === 0)
             setLoadError(err.message);
         });
     };
@@ -592,7 +592,7 @@ export default function GuidePage() {
     window.addEventListener("focus", loadGuide);
     document.addEventListener("visibilitychange", loadGuide);
     return () => {
-      cancelled = true;
+      controller.abort();
       window.clearInterval(intervalId);
       window.removeEventListener("focus", loadGuide);
       document.removeEventListener("visibilitychange", loadGuide);

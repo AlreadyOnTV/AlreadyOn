@@ -12,10 +12,11 @@ import (
 )
 
 // ChannelSettings overrides enablement and folder selection only. A nil Enabled
-// inherits the global setting; an empty Folders list selects all configured roots.
+// inherits the global setting; an empty Folders list selects all configured roots unless ExplicitFolders is set.
 type ChannelSettings struct {
-	Enabled *bool    `json:"enabled"`
-	Folders []string `json:"folders"`
+	Enabled         *bool    `json:"enabled"`
+	Folders         []string `json:"folders"`
+	ExplicitFolders bool     `json:"explicitFolders,omitempty"`
 }
 
 // ChannelPolicy includes effective values so administrators can distinguish
@@ -55,12 +56,23 @@ func GetChannelPolicy(ctx context.Context, db *sql.DB, id int64) (ChannelPolicy,
 			p.Enabled = &enabled.Bool
 			p.EffectiveEnabled = enabled.Bool
 		}
-		if err := json.Unmarshal([]byte(raw), &p.Folders); err != nil {
+		// Legacy rows store an array. Explicit selections use an object so an
+		// empty selection survives without changing the meaning of existing rows.
+		if len(raw) > 0 && raw[0] == '{' {
+			var selection struct {
+				Folders []string `json:"folders"`
+			}
+			if err := json.Unmarshal([]byte(raw), &selection); err != nil {
+				return p, err
+			}
+			p.Folders = selection.Folders
+			p.ExplicitFolders = true
+		} else if err := json.Unmarshal([]byte(raw), &p.Folders); err != nil {
 			return p, err
 		}
 	}
 	p.EffectiveFolders = append([]string{}, p.AvailableFolders...)
-	if len(p.Folders) > 0 {
+	if p.ExplicitFolders || len(p.Folders) > 0 {
 		available := map[string]bool{}
 		for _, folder := range p.AvailableFolders {
 			available[folder] = true
@@ -102,7 +114,13 @@ func SaveChannelSettings(ctx context.Context, db *sql.DB, id int64, s ChannelSet
 			seen[folder] = true
 		}
 	}
-	raw, err := json.Marshal(clean)
+	var selection any = clean
+	if s.ExplicitFolders {
+		selection = struct {
+			Folders []string `json:"folders"`
+		}{clean}
+	}
+	raw, err := json.Marshal(selection)
 	if err != nil {
 		return err
 	}
@@ -117,7 +135,7 @@ func SaveChannelSettings(ctx context.Context, db *sql.DB, id int64, s ChannelSet
 // IncludesPath compares directory boundaries rather than string prefixes. Scanner
 // paths are canonical, so resolve configured symlink roots before comparing them.
 func (p ChannelPolicy) IncludesPath(path string) bool {
-	if len(p.Folders) == 0 {
+	if !p.ExplicitFolders && len(p.Folders) == 0 {
 		return true
 	} // Preserve the existing global pool.
 	for _, folder := range p.EffectiveFolders {

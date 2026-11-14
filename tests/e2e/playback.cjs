@@ -82,9 +82,10 @@ const noWorkers = async (unreleased = () => 0) => {
   });
   const errors = [];
   // The first browser creates the account through the setup dialog; later ones sign in.
-  const login = async (page) => {
-    await page.goto(url);
-    const guide = page.locator(".guide-slot-box").first();
+  // Management scenarios can authenticate even when prior folder edits leave no playable guide.
+  const login = async (page, destination = "/", readySelector = ".guide-slot-box") => {
+    await page.goto(url + destination);
+    const guide = page.locator(readySelector).first();
     const dialog = page.getByRole("dialog");
     await guide.or(dialog).waitFor();
     if (await dialog.count()) {
@@ -3350,9 +3351,10 @@ const noWorkers = async (unreleased = () => 0) => {
       .getByRole("button", { name: "Select Folder", exact: true })
       .click();
     assert((await added).ok(), "Folder addition persisted immediately");
-    await folders.getByText(addedPath, { exact: true }).waitFor();
+    // The row label now includes its scanned-item count; the fixture folder is empty.
+    await folders.getByText(`${addedPath} (Found 0)`, { exact: true }).waitFor();
     await breaks.getByRole("button", { name: "Cancel", exact: true }).click();
-    await folders.getByText(addedPath, { exact: true }).waitFor();
+    await folders.getByText(`${addedPath} (Found 0)`, { exact: true }).waitFor();
     assert(
       (await page.getByLabel("Commercial Volume Offset (dB)").inputValue()) !==
         "-3",
@@ -4246,6 +4248,10 @@ const noWorkers = async (unreleased = () => 0) => {
         url,
         assert,
       });
+    if (!only || only.includes("library-paths")) {
+      await require("./library-path-customize-ui.cjs")({ browser, url });
+      await require("./library-path-customize.cjs")({ browser, login, url, root });
+    }
     assert(errors.length === 0, "Browser errors: " + JSON.stringify(errors));
   } finally {
     await browser.close();

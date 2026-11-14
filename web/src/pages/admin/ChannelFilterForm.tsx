@@ -1,3 +1,4 @@
+import { selectedChannelPaths, setChannelPath } from './channelPaths';
 import SettingToggle from './SettingToggle';
 // The "what does this channel air" form for any channel: audience,
 // genres, media type, era and a title filter, with a live match count.
@@ -91,15 +92,13 @@ export default function ChannelFilterForm({ filter, onChange }: { filter: Channe
         <label>Included Media Paths</label>
         <div className="included-paths">
           {[...new Set([...paths, ...(filter.includedPaths ?? []), ...(filter.excludedPaths ?? [])])].sort().map((path) => {
-            const selected =
-              filter.includedPaths ??
-              paths.filter((p) => !(filter.excludedPaths ?? []).some((root) => p === root || p.startsWith(root.replace(/\/$/, '') + '/')));
+            const selected = selectedChannelPaths(filter, paths);
             return (
               <label key={path}>
                 <SettingToggle
                   label={path}
                   checked={selected.includes(path)}
-                  onChange={(enabled) => set({ includedPaths: enabled ? [...selected, path] : selected.filter((p) => p !== path), excludedPaths: [] })}
+                  onChange={(enabled) => onChange(setChannelPath(filter, paths, path, enabled))}
                 />
                 <span>{path}</span>
               </label>

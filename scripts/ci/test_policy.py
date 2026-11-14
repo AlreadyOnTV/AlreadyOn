@@ -85,6 +85,7 @@ class PublicationPolicy(unittest.TestCase):
         self.assertNotIn('  workflow_call:', validation)
         self.assertIn('make test-e2e', test_action)
         self.assertEqual(validation.count('  auto_merge:\n'), 1)
+        self.assertIn('&& !github.event.pull_request.draft', validation)
         self.assertIn('needs: [build_candidate, quality, android, tests, dependency_review]', validation)
         self.assertIn('name: E2E Test Suite', validation)
         self.assertIn('workflow == "CodeQL"', validation)

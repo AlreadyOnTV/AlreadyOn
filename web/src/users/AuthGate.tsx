@@ -41,18 +41,19 @@ export function AuthGate({ children }: { children: ReactNode }) {
   const [notice, setNotice] = useState('');
   const [account, setAccount] = useState<Account>({ username: '', role: 'viewer', passwordLocked: false });
 
-  const check = useCallback(async () => {
-    try {
-      const res = await fetch('/api/auth/status', { cache: 'no-store' });
+  const check = useCallback(() => {
+    // Authentication state follows the server response, including on first mount.
+    return fetch('/api/auth/status', { cache: 'no-store' }).then((res) => {
       if (!res.ok) throw new Error();
-      const status: AuthStatus = await res.json();
+      return res.json() as Promise<AuthStatus>;
+    }).then((status) => {
       if (status.authenticated) {
         setAccount({ username: status.username ?? '', role: status.role === 'owner' ? 'owner' : 'viewer', passwordLocked: !!status.passwordLocked });
       }
       setPhase(status.setupRequired ? 'setup' : !status.authenticated ? 'login' : status.mustChangePassword ? 'change-password' : 'ready');
-    } catch {
+    }).catch(() => {
       setPhase('unreachable');
-    }
+    });
   }, []);
 
   useEffect(() => {

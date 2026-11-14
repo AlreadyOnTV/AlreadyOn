@@ -1,3 +1,5 @@
+import CustomizePathDialog from './CustomizePathDialog';
+import type { LibraryPathKind } from './channelPaths';
 import FolderBrowser from "./FolderBrowser";
 import { useState } from "react";
 import type { FolderPathStatus } from "../../api/client";
@@ -24,10 +26,11 @@ export default function FolderListCard({
   draft,
   defaults,
   statuses,
- counts,
+  counts,
   requireAbsolute,
   disabled = false,
   onChange,
+  customizeKind,
 }: {
   title: string;
   hint?: string;
@@ -39,11 +42,13 @@ export default function FolderListCard({
   // Live status of the folders as last saved on the server; unsaved
   // entries have none.
   statuses?: Record<string, FolderPathStatus>;
- counts?: Record<string,number>;
+  counts?: Record<string, number>;
   requireAbsolute?: boolean;
   disabled?: boolean;
   onChange: (next: ListDraft) => void;
+  customizeKind?: LibraryPathKind;
 }) {
+  const [customizing, setCustomizing] = useState<string | null>(null);
   const [browsing, setBrowsing] = useState(false);
   const [text, setText] = useState("");
   const [error, setError] = useState<string | null>(null);
@@ -80,14 +85,19 @@ export default function FolderListCard({
         values.map((v) => {
           const status = statuses?.[v];
           return (
-            <div className="admin-list-item" key={v}>
-              <span className="folder-path">{v}</span>
-              <span className="folder-item-actions">
-                {status && (
+            <div className="admin-list-item folder-list-item" key={v}>
+              <span className="folder-path">
+                {v}{status === "ok" && counts && <span className="folder-status"> (Found {counts[v] ?? 0})</span>}
+                {status && (status !== "ok" || !counts) && (
                   <span className={"folder-status" + (status === "ok" ? "" : " folder-status-problem")}>
-                    {status === "ok" ? "" : "\u26A0 "}
-                    {status==="ok" && counts ? "Found: "+(counts[v] ?? 0) : STATUS_LABELS[status]}
+                    {status === "ok" ? " " : " ⚠ "}{STATUS_LABELS[status]}
                   </span>
+                )}
+              </span>
+              <span className="folder-item-actions">
+                {customizeKind && (
+                  <button type="button" disabled={disabled || !status} className="admin-btn admin-btn-secondary"
+                    aria-label={`Customize ${v}`} onClick={() => setCustomizing(v)}>Customize</button>
                 )}
                 <button disabled={disabled}
                   className="admin-btn admin-btn-secondary"
@@ -115,6 +125,7 @@ export default function FolderListCard({
           {addLabel}
         </button>
       </div>
+      {customizing && customizeKind && <CustomizePathDialog path={customizing} kind={customizeKind} onClose={() => setCustomizing(null)} />}
       {browsing && <FolderBrowser title={title} onClose={() => setBrowsing(false)} onSelect={(path) => {
         if (!values.includes(path)) onChange(normalizeDraft([...values, path], defaults));
         setBrowsing(false);

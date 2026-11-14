@@ -12,7 +12,7 @@ export default function ServerDetails({ actions }: { actions?: ReactNode }) {
   const [error, setError] = useState(false);
   useEffect(() => {
     const controller = new AbortController();
-    let timer: ReturnType<typeof setTimeout>;
+    const poll = { timer: undefined as ReturnType<typeof setTimeout> | undefined };
     async function update() {
       try {
         const response = await apiFetch('/api/server/details', { signal: controller.signal });
@@ -20,10 +20,10 @@ export default function ServerDetails({ actions }: { actions?: ReactNode }) {
         const next: Details = await response.json();
         if (!controller.signal.aborted) { setDetails(next); setError(false); }
       } catch { if (!controller.signal.aborted) setError(true); }
-      if (!controller.signal.aborted) timer = setTimeout(() => void update(), 1000);
+      if (!controller.signal.aborted) poll.timer = setTimeout(() => void update(), 1000);
     }
     void update();
-    return () => { controller.abort(); clearTimeout(timer); };
+    return () => { controller.abort(); clearTimeout(poll.timer); };
   }, []);
   return <>
     <div className="folder-card-header"><h3>Server Details</h3>{actions}</div>

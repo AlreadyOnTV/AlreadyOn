@@ -50,13 +50,11 @@ export function useProfileAutosave(values: Values) {
       setSaved(previous => ({ ...previous, [key]: undefined }));
       setErrors(previous => ({ ...previous, [key]: undefined }));
     }
-    let didSave = false;
     const result = queue.current.then(async () => {
-      if (revisions.current[key] !== revision || confirmed.current[key] === value) return;
+      if (revisions.current[key] !== revision || confirmed.current[key] === value) return false;
       try {
         await write();
         confirmed.current[key] = value;
-        didSave = true;
         if (mounted.current && revisions.current[key] === revision) {
           setSaved(previous => ({ ...previous, [key]: revision }));
           // Hold the check for five seconds, then allow the CSS fade to finish.
@@ -64,14 +62,16 @@ export function useProfileAutosave(values: Values) {
             setSaved(previous => ({ ...previous, [key]: undefined }));
           }, 5300);
         }
+        return true;
       } catch (error) {
         if (mounted.current && revisions.current[key] === revision) {
           setErrors(previous => ({ ...previous, [key]: error instanceof Error ? error.message : "Couldn't save this setting." }));
         }
+        return false;
       }
     }).finally(() => { pending.current[key] = (pending.current[key] ?? 1) - 1; });
-    queue.current = result;
-    const request = result.then(() => didSave);
+    queue.current = result.then(() => undefined);
+    const request = result;
     requests.current[key] = request;
     return request;
   }, []);

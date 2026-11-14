@@ -58,6 +58,23 @@ func TestChannelCommercialsAPI(t *testing.T) {
 	if p := call("PUT", `{"enabled":null,"folders":[]}`, 200); p.Enabled != nil || p.EffectiveEnabled != p.GlobalEnabled {
 		t.Fatal("reset did not inherit")
 	}
+	// Explicit empty selections must persist as no commercials, without
+	// switching off the channel or changing legacy empty-list inheritance.
+	p = call("PUT", `{"enabled":true,"folders":[],"explicitFolders":true}`, 200)
+	if !p.ExplicitFolders || !p.EffectiveEnabled || len(p.EffectiveFolders) != 0 || p.IncludesPath("/ads/one/ad.mp4") {
+		t.Fatalf("explicit empty selection was not honored: %+v", p)
+	}
+	if p := call("GET", "", 200); !p.ExplicitFolders || len(p.EffectiveFolders) != 0 {
+		t.Fatalf("explicit empty selection did not persist: %+v", p)
+	}
+	p = call("PUT", `{"enabled":null,"folders":["/ads/two"],"explicitFolders":true}`, 200)
+	if !p.IncludesPath("/ads/two/ad.mp4") || p.IncludesPath("/ads/one/ad.mp4") {
+		t.Fatalf("explicit selection did not restrict commercials: %+v", p)
+	}
+	p = call("PUT", `{"enabled":null,"folders":[]}`, 200)
+	if p.ExplicitFolders || len(p.EffectiveFolders) != 2 || !p.IncludesPath("/ads/one/ad.mp4") {
+		t.Fatalf("legacy all-folders selection changed: %+v", p)
+	}
 	secured := auth.RequireAuth(db, router)
 	for _, method := range []string{"GET", "PUT"} {
 		w := httptest.NewRecorder()

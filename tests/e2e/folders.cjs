@@ -49,8 +49,8 @@ let server, browser;
     await modal.getByText('No subfolders. You can select this folder.').waitFor();
     await modal.getByRole('button', { name: 'Select Folder' }).click();
     await modal.waitFor({ state: 'detached' });
-    await card.getByText(root + '/media/' + name, { exact: true }).waitFor();
-    if (tab === 'commercials') await page.getByRole('button', { name: /Save/ }).click();
+    // Folder rows include counts, and selection persists immediately without the break-settings Save button.
+    await card.getByText(root + '/media/' + name + ' (Found 0)', { exact: true }).waitFor();
     await page.waitForFunction(async ({ key, expected }) => {
       const settings = await (await fetch('/api/settings/folders')).json();
       return settings[key].paths.some(p => p.path === expected);

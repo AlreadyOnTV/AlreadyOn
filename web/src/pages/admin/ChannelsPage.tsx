@@ -16,7 +16,8 @@ import {
 } from '../../api/client';
 import ChannelEditDialog from './ChannelEditDialog';
 import { EyeIcon, PencilIcon, TrashIcon } from './AdminIcons';
-import { LastTime, useRefreshTimes } from './useRefreshTimes';
+import { useRefreshTimes } from './useRefreshTimes';
+import { LastTime } from './LastTime';
 
 import './AdminShared.css';
 
