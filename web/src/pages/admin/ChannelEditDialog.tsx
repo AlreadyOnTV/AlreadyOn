@@ -56,10 +56,6 @@ export default function ChannelEditDialog({
       setError('The channel needs a name.');
       return;
     }
-    if (commercials?.enabled && commercials.available.length > 0 && commercials.selected.length === 0) {
-      setError('Select at least one commercial path, or turn commercials off.');
-      return;
-    }
     setSaving(true);
     setError(null);
     try {

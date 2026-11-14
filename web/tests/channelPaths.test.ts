@@ -1,6 +1,7 @@
+// Folder customization preserves unrelated selections and applies the correct channel-group defaults.
 import assert from 'node:assert/strict';
 import { test } from 'node:test';
-import { selectedChannelPaths, setChannelPath } from '../src/pages/admin/channelPaths.ts';
+import { selectedChannelPaths, setChannelPath, defaultPathChoices, channelPathGroup } from '../src/pages/admin/channelPaths.ts';
 
 const paths = ['/media/movies', '/media/tv', '/media/tv-extra'];
 const filter = { audienceTier: 'adult', genres: ['comedy'], mediaType: 'both', era: 'both', titleContains: 'holiday' } as const;
@@ -31,4 +32,19 @@ test('legacy exclusions respect directory boundaries and enable overrides exclus
 test('unlisted explicit selections survive changes to another path', () => {
   const custom = { ...base, includedPaths: ['/old/path', paths[0]] };
   assert.deepEqual(setChannelPath(custom, paths, paths[0], false).includedPaths, ['/old/path']);
+});
+
+
+test('path dialog defaults match the folder kind, including commercials', () => {
+  assert.deepEqual(defaultPathChoices('movies'), { movies: true, tv: false, custom: false });
+  assert.deepEqual(defaultPathChoices('tv'), { movies: false, tv: true, custom: false });
+  assert.deepEqual(defaultPathChoices('commercials'), { movies: true, tv: true, custom: false });
+});
+
+test('custom channels take precedence over media type and demo channels are skipped', () => {
+  assert.equal(channelPathGroup({ number: 133, filter: { ...base, mediaType: 'movie' } }), 'movies');
+  assert.equal(channelPathGroup({ number: 101, filter: { ...base, mediaType: 'tv' } }), 'tv');
+  assert.equal(channelPathGroup({ number: 200, filter: { ...base, mediaType: 'movie' } }), 'custom');
+  assert.equal(channelPathGroup({ number: 99, filter: base }), 'custom');
+  assert.equal(channelPathGroup({ number: 196, filter: null }), null);
 });

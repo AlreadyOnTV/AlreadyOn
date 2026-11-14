@@ -929,6 +929,7 @@ export const runLoudness = (): Promise<LoudnessStatus> => apiRequest('/api/setti
 
 // Per-channel commercial overrides preserve the global break timing and size.
 export interface ChannelCommercialSettings {
+  explicitFolders?: boolean;
   enabled: boolean | null;
   folders: string[];
 }

@@ -16,3 +16,18 @@ export function setChannelPath(filter: ChannelFilter, paths: string[], path: str
     excludedPaths: [],
   };
 }
+
+export type LibraryPathKind = 'movies' | 'tv' | 'commercials';
+export type ChannelPathGroup = 'movies' | 'tv' | 'custom';
+export type ChannelPathChoices = Record<ChannelPathGroup, boolean>;
+
+export function defaultPathChoices(kind: LibraryPathKind): ChannelPathChoices {
+  return { movies: kind !== 'tv', tv: kind !== 'movies', custom: false };
+}
+
+// Custom channels form their own group regardless of their media filter.
+export function channelPathGroup(channel: { number: number; filter: ChannelFilter | null }): ChannelPathGroup | null {
+  if (channel.number < 100 || channel.number > 199) return 'custom';
+  if (!channel.filter) return null;
+  return channel.filter.mediaType === 'movie' ? 'movies' : 'tv';
+}

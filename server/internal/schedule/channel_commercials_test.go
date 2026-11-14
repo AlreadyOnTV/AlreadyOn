@@ -88,6 +88,16 @@ func TestChannelCommercialOverrides(t *testing.T) {
 			if airing != after {
 				t.Fatal("changed currently airing entry")
 			}
+			// Disabling the last path must leave an empty pool even while
+			// commercials remain globally enabled and current playback is stable.
+			if err := commercial.SaveChannelSettings(ctx, db, id, commercial.ChannelSettings{ExplicitFolders: true, Folders: []string{}}); err != nil {
+				t.Fatal(err)
+			}
+			verify("", false)
+			after, _, _ = Current(ctx, db, FixedClock{Time: now}, id)
+			if airing != after {
+				t.Fatal("empty commercial pool changed current airing")
+			}
 			off := false
 			if err := commercial.SaveChannelSettings(ctx, db, id, commercial.ChannelSettings{Enabled: &off}); err != nil {
 				t.Fatal(err)

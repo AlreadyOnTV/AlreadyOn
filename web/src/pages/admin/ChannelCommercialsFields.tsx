@@ -31,8 +31,9 @@ export async function saveChannelCommercials(channelId: number, draft: ChannelCo
   const allFolders = draft.available.every((f) => draft.selected.includes(f));
   const enabled = draft.enabled === policy.globalEnabled ? null : draft.enabled;
   const folders = allFolders ? [] : draft.selected;
-  const unchanged = enabled === policy.enabled && JSON.stringify(folders) === JSON.stringify(policy.folders) && !policy.foldersFallback;
-  if (!unchanged) await updateChannelCommercials(channelId, { enabled, folders });
+  const explicitFolders = !allFolders;
+  const unchanged = enabled === policy.enabled && JSON.stringify(folders) === JSON.stringify(policy.folders) && !policy.foldersFallback && explicitFolders === !!policy.explicitFolders;
+  if (!unchanged) await updateChannelCommercials(channelId, { enabled, folders, explicitFolders });
 }
 
 export default function ChannelCommercialsFields({ draft, onChange }: { draft: ChannelCommercialsDraft; onChange: (d: ChannelCommercialsDraft) => void }) {

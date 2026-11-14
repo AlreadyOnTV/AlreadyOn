@@ -4405,6 +4405,10 @@ components:
       type: object
       additionalProperties: false
       properties:
+        explicitFolders:
+          type: boolean
+          default: false
+          description: Treat folders as an explicit selection, including an empty selection for no folders.
         enabled:
           type: [boolean, "null"]
           description: Null inherits global enablement; true or false overrides it.
@@ -4412,7 +4416,7 @@ components:
           type: [array, "null"]
           maxItems: 50
           items: { type: string }
-          description: Exact configured commercial folder paths. Empty or null means all; duplicates are normalized.
+          description: Exact configured commercial folder paths. Empty or null means all unless explicitFolders is true; duplicates are normalized.
     ChannelCommercialPolicy:
       type: object
       required:
@@ -4426,6 +4430,10 @@ components:
           foldersFallback,
         ]
       properties:
+        explicitFolders:
+          type: boolean
+          default: false
+          description: Treat folders as an explicit selection, including an empty selection for no folders.
         enabled: { type: [boolean, "null"] }
         folders: { type: array, items: { type: string } }
         globalEnabled: { type: boolean }

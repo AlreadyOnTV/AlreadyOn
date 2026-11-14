@@ -1,3 +1,5 @@
+import CustomizePathDialog from './CustomizePathDialog';
+import type { LibraryPathKind } from './channelPaths';
 import FolderBrowser from "./FolderBrowser";
 import { useState } from "react";
 import type { FolderPathStatus } from "../../api/client";
@@ -28,7 +30,7 @@ export default function FolderListCard({
   requireAbsolute,
   disabled = false,
   onChange,
-  onSetPathEnabled,
+  customizeKind,
 }: {
   title: string;
   hint?: string;
@@ -44,8 +46,9 @@ export default function FolderListCard({
   requireAbsolute?: boolean;
   disabled?: boolean;
   onChange: (next: ListDraft) => void;
-  onSetPathEnabled?: (path: string, enabled: boolean) => void;
+  customizeKind?: LibraryPathKind;
 }) {
+  const [customizing, setCustomizing] = useState<string | null>(null);
   const [browsing, setBrowsing] = useState(false);
   const [text, setText] = useState("");
   const [error, setError] = useState<string | null>(null);
@@ -92,12 +95,10 @@ export default function FolderListCard({
                 )}
               </span>
               <span className="folder-item-actions">
-                {onSetPathEnabled && <>
+                {customizeKind && (
                   <button type="button" disabled={disabled || !status} className="admin-btn admin-btn-secondary"
-                    aria-label={`Enable ${v} for all channels`} onClick={() => onSetPathEnabled(v, true)}>Enable All</button>
-                  <button type="button" disabled={disabled || !status} className="admin-btn admin-btn-secondary"
-                    aria-label={`Disable ${v} for all channels`} onClick={() => onSetPathEnabled(v, false)}>Disable All</button>
-                </>}
+                    aria-label={`Customize ${v}`} onClick={() => setCustomizing(v)}>Customize</button>
+                )}
                 <button disabled={disabled}
                   className="admin-btn admin-btn-secondary"
                   onClick={() => onChange(normalizeDraft(values.filter((existing) => existing !== v), defaults))}
@@ -124,6 +125,7 @@ export default function FolderListCard({
           {addLabel}
         </button>
       </div>
+      {customizing && customizeKind && <CustomizePathDialog path={customizing} kind={customizeKind} onClose={() => setCustomizing(null)} />}
       {browsing && <FolderBrowser title={title} onClose={() => setBrowsing(false)} onSelect={(path) => {
         if (!values.includes(path)) onChange(normalizeDraft([...values, path], defaults));
         setBrowsing(false);
