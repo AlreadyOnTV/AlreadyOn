@@ -55,6 +55,7 @@ func handleCustomizeLibraryPath(db *sql.DB) http.HandlerFunc {
 }
 func handleLibraryUpdates(db *sql.DB) http.HandlerFunc {
 	return func(w http.ResponseWriter, r *http.Request) {
+		w.Header().Set("Cache-Control", "no-store")
 		state, err := refresh.GetUpdateStatus(r.Context(), db)
 		if r.Method == http.MethodPost {
 			state, err = refresh.RetryUpdates(r.Context(), db)

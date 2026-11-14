@@ -53,9 +53,9 @@ export default function LibraryUpdateStatus() {
     finally { retryPending.current = false; setRetrying(false); }
   };
   return <>
-    {status && status.revision > 0 && status.state !== 'failed' && (
+    {status && status.revision > 0 && status.state !== 'failed' && status.state !== 'idle' && (
       <p className="admin-section-hint" role="status" aria-live="polite">
-        {status.state === 'idle' ? 'Library changes applied.' : status.needsMetadata && !status.needsScan ? 'Saved—updating metadata in the background…' : status.state === 'scanning' ? 'Saved—scanning the library in the background…' : status.state === 'updating' ? `Saved—updating channels (${status.processed} of ${status.total})…` : 'Saved—channel updates queued. You can keep making changes.'}
+        {status.needsMetadata && !status.needsScan ? 'Saved—updating metadata in the background…' : status.state === 'scanning' ? 'Saved—scanning the library in the background…' : status.state === 'updating' ? `Saved—updating channels (${status.processed} of ${status.total})…` : 'Saved—channel updates queued. You can keep making changes.'}
       </p>
     )}
     {status?.state === 'failed' && <div role="alert" className="profile-field-error">

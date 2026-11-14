@@ -3,9 +3,11 @@ package refresh
 import (
 	"context"
 	"database/sql"
+	"reflect"
 	"testing"
 	"time"
 
+	"github.com/alreadyonapp/alreadyon/server/internal/channel"
 	"github.com/alreadyonapp/alreadyon/server/internal/commercial"
 	"github.com/alreadyonapp/alreadyon/server/internal/metadata"
 )
@@ -196,5 +198,31 @@ func TestMetadataWorkIsDurableAndUsesLatestSettingsWithoutScan(t *testing.T) {
 	state, err = GetUpdateStatus(t.Context(), db)
 	if err != nil || state.NeedsMetadata || state.AppliedRevision != 2 {
 		t.Fatalf("metadata not applied: %+v %v", state, err)
+	}
+}
+
+func TestSharedSettingsInitializeOnlyMissingBuiltInFilters(t *testing.T) {
+	db, ids := updateFixture(t)
+	if err := channel.ClearFilter(t.Context(), db, ids[0]); err != nil {
+		t.Fatal(err)
+	}
+	customBefore, err := channel.GetFilter(t.Context(), db, ids[2])
+	if err != nil {
+		t.Fatal(err)
+	}
+	err = MutateSettings(t.Context(), db, func(*sql.Tx) (SettingsWork, error) { return SettingsWork{Changed: true, Rebuild: true}, nil })
+	if err != nil {
+		t.Fatal(err)
+	}
+	filters, err := channel.ListSavedFilters(t.Context(), db)
+	if err != nil {
+		t.Fatal(err)
+	}
+	if _, ok := filters[ids[0]]; !ok {
+		t.Fatal("shared update lost default filter initialization")
+	}
+	customAfter, err := channel.GetFilter(t.Context(), db, ids[2])
+	if err != nil || !reflect.DeepEqual(customBefore, customAfter) {
+		t.Fatalf("shared update replaced custom filter: %v", err)
 	}
 }

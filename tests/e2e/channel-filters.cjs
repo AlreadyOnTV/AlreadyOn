@@ -174,16 +174,11 @@ let server, browser;
     'Match feedback immediately precedes Save/Cancel');
   await dialog.getByRole('button', { name: 'Save', exact: true }).scrollIntoViewIfNeeded();
   assert.equal(await dialog.getByRole('button', { name: 'Save', exact: true }).isVisible(), true);
+  const created = page.waitForResponse((response) => response.url().endsWith('/api/channels') && response.request().method() === 'POST');
   await dialog.getByRole('button', { name: 'Save', exact: true }).click();
+  assert.equal((await created).status(), 201);
   await dialog.waitFor({ state: 'detached' });
-  const applied = async () => {
-    await page.waitForFunction(async () => {
-      const response = await fetch('/api/settings/folders/updates');
-      const state = await response.json();
-      if (state.state === 'failed') throw new Error(state.error);
-      return state.state === 'idle' && state.appliedRevision === state.revision;
-    }, undefined, { timeout: 30000 });
-  };
+  const applied = () => require('./wait-library-updates.cjs')(context.request, url, 30000);
   await applied();
   const channels = await (await context.request.get(url + '/api/channels')).json();
   const custom = channels.find((c) => c.number === 250);

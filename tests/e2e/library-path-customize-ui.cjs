@@ -14,6 +14,7 @@ module.exports = async ({ browser, url }) => {
     let commercialSettings = { enabled: true, mode: 'between-only', intervalMinutes: 30, tvCommercialsPerBreak: 2, movieCommercialsPerBreak: 5, volumeOffsetDb: 0 };
     const counts = { '/media/movies': { movies: 23, tv: 2, custom: 1 }, '/media/tv': { movies: 0, tv: 15, custom: 2 }, '/ads': { movies: 7, tv: 8, custom: 0 } };
     let failSave = false;
+    let failCommercialSave = false;
     let status = { revision: 0, appliedRevision: 0, state: 'idle', processed: 0, total: 0, error: '', needsScan: false };
     await context.route('**/*', async (route) => {
       const path = new URL(route.request().url());
@@ -41,8 +42,10 @@ module.exports = async ({ browser, url }) => {
       else if (path.pathname === '/api/settings/media') body = { pollIntervalMinutes: 60 };
       else if (path.pathname === '/api/settings/commercials') {
         if (request.method() === 'PUT') {
-          commercialSettings = request.postDataJSON();
-          commercialWrites.push(commercialSettings);
+          const next = request.postDataJSON();
+          commercialWrites.push(next);
+          if (failCommercialSave) return route.fulfill({ status: 500, json: { error: 'Synthetic commercial save failure' } });
+          commercialSettings = next;
           status = { ...status, revision: status.revision + 1, state: 'queued' };
         }
         body = commercialSettings;
@@ -114,23 +117,60 @@ module.exports = async ({ browser, url }) => {
     await page.getByText('Saved—updating channels (2 of 40)…', { exact: true }).waitFor();
     status = { ...status, state: 'idle', appliedRevision: status.revision, processed: 40 };
     await page.evaluate(() => window.dispatchEvent(new Event('alreadyon-library-update')));
-    await page.getByText('Library changes applied.', { exact: true }).waitFor();
+    await page.getByText('Saved—updating channels (2 of 40)…', { exact: true }).waitFor({ state: 'hidden' });
+    assert.equal(await page.getByText('Library changes applied.', { exact: true }).count(), 0);
     await page.setViewportSize({ width: 1280, height: 900 });
     const breaks = page.locator('.commercial-settings');
     const tvCount = breaks.locator('select').nth(1);
+    assert.equal(await breaks.getByRole('button', { name: 'Save Changes', exact: true }).count(), 0);
+    assert.equal(await breaks.getByRole('button', { name: 'Cancel', exact: true }).count(), 0);
+    assert.equal(commercialWrites.length, 0, 'Loading saved settings must not autosave');
+    let reloads = 0;
+    page.on('framenavigated', (frame) => { if (frame === page.mainFrame()) reloads++; });
+    const commercialResponse = (matches) => page.waitForResponse((response) => response.url().endsWith('/api/settings/commercials') && response.request().method() === 'PUT' && matches(response.request().postDataJSON()));
+    let persisted = commercialResponse((settings) => settings.tvCommercialsPerBreak === 3);
     await tvCount.selectOption('3');
-    await Promise.all([page.waitForEvent('load'), breaks.getByRole('button', { name: 'Save Changes', exact: true }).click()]);
+    assert.ok((await persisted).ok());
+    await breaks.getByText('Commercial settings saved.', { exact: true }).waitFor();
     await page.getByText(/Saved—channel updates queued/).waitFor();
-    assert.equal(await tvCount.inputValue(), '3');
-    assert.equal(commercialWrites.length, 1);
-    assert.equal(status.state, 'queued', 'Commercial save returns before processing finishes');
+    assert.equal(status.state, 'queued', 'Autosave returns before processing finishes');
+    persisted = commercialResponse((settings) => settings.tvCommercialsPerBreak === 4 && settings.movieCommercialsPerBreak === 2 && settings.mode === 'interval' && settings.intervalMinutes === 15 && settings.volumeOffsetDb === -6);
     await tvCount.selectOption('4');
-    await Promise.all([page.waitForEvent('load'), breaks.getByRole('button', { name: 'Save Changes', exact: true }).click()]);
-    await page.getByText(/Saved—channel updates queued/).waitFor();
-    assert.equal(commercialWrites.length, 2, 'Another save is available while work remains queued');
-    assert.equal(await tvCount.inputValue(), '4');
+    await breaks.locator('select').nth(2).selectOption('2');
+    await breaks.locator('select').nth(0).selectOption('interval-15');
+    await breaks.getByLabel('Commercial Volume Offset (dB)').fill('-6');
+    assert.ok((await persisted).ok());
+    await breaks.getByText('Commercial settings saved.', { exact: true }).waitFor();
+    assert.equal(reloads, 0, 'Autosave keeps the form available without reloading');
+    failCommercialSave = true;
+    await tvCount.selectOption('5');
+    await breaks.getByRole('alert').filter({ hasText: 'Synthetic commercial save failure' }).waitFor();
+    assert.equal(await tvCount.inputValue(), '5', 'Failed persistence retains the draft');
+    failCommercialSave = false;
+    persisted = commercialResponse((settings) => settings.tvCommercialsPerBreak === 5);
+    await breaks.getByRole('button', { name: 'Retry', exact: true }).click();
+    assert.ok((await persisted).ok());
+    await breaks.getByText('Commercial settings saved.', { exact: true }).waitFor();
+    await breaks.getByLabel('Commercial Volume Offset (dB)').fill('99');
+    await breaks.getByRole('alert').filter({ hasText: 'between -30 and 12' }).waitFor();
+    persisted = commercialResponse((settings) => settings.volumeOffsetDb === -3);
+    await breaks.getByLabel('Commercial Volume Offset (dB)').fill('-3');
+    assert.ok((await persisted).ok());
+    assert.ok(commercialWrites.every((settings) => settings.volumeOffsetDb >= -30 && settings.volumeOffsetDb <= 12), 'Invalid volume values never reach persistence');
+    persisted = commercialResponse((settings) => !settings.enabled);
+    await breaks.getByRole('button', { name: 'On', exact: true }).click();
+    assert.ok((await persisted).ok());
+    assert.equal(await tvCount.isDisabled(), true);
+    persisted = commercialResponse((settings) => settings.enabled);
+    await breaks.getByRole('button', { name: 'Off', exact: true }).click();
+    assert.ok((await persisted).ok());
+    await page.reload();
+    assert.equal(await tvCount.inputValue(), '5');
+    assert.equal(await breaks.locator('select').nth(0).inputValue(), 'interval-15');
+    assert.equal(await breaks.locator('select').nth(2).inputValue(), '2');
+    assert.equal(await breaks.getByLabel('Commercial Volume Offset (dB)').inputValue(), '-3');
     assert.deepEqual(errors, []);
-    console.log('PASS: Customize defaults, single atomic requests, immediate close while queued, subsequent edits, save failure, background progress/retry, modal geometry/focus and consecutive commercial saves while processing remains queued');
+    console.log('PASS: Customize defaults, single atomic requests, immediate close while queued, subsequent edits, save failure, background progress/retry, modal geometry/focus and commercial autosave, validation, failure/retry and reload persistence while processing remains queued');
   } finally { await context.close(); }
 };
 if (require.main === module) {

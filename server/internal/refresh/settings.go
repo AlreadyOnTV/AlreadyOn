@@ -5,6 +5,7 @@ import (
 	"database/sql"
 
 	"github.com/alreadyonapp/alreadyon/server/internal/channel"
+	"github.com/alreadyonapp/alreadyon/server/internal/lineup"
 )
 
 // SettingsWork describes derived work invalidated by a saved preference. Nil
@@ -31,6 +32,13 @@ func MutateSettings(ctx context.Context, db *sql.DB, save func(*sql.Tx) (Setting
 	if work.Changed {
 		ids := work.Channels
 		if ids == nil {
+			// Shared filter/provider saves retain full refresh's initialization
+			// of missing built-in defaults without replacing saved custom rules.
+			if work.Rebuild {
+				if _, err := lineup.SeedDefaultFilters(ctx, tx); err != nil {
+					return err
+				}
+			}
 			channels, err := channel.List(ctx, tx)
 			if err != nil {
 				return err

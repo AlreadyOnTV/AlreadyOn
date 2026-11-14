@@ -41,12 +41,7 @@ module.exports = async ({ browser, login, url, root }) => {
     await page.getByRole('button', { name: `Customize ${folder}`, exact: true }).click();
     await page.getByRole('dialog', { name: 'Customize Library Path' }).waitFor();
   };
-  const waitApplied = async () => page.waitForFunction(async () => {
-    const response = await fetch('/api/settings/folders/updates');
-    const state = await response.json();
-    if (state.state === 'failed') throw new Error(state.error);
-    return state.state === 'idle' && !state.needsScan && state.appliedRevision === state.revision;
-  }, undefined, { timeout: 60000 });
+  const waitApplied = () => require('./wait-library-updates.cjs')(context.request, url, 60000);
   const save = async () => {
     const started = Date.now();
     await page.getByRole('dialog').getByRole('button', { name: 'Save', exact: true }).click();

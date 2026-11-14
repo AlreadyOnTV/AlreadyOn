@@ -10,12 +10,13 @@ import {
   updateCommercialSettings,
   updateFolderSettings,
   type CommercialMode,
+  type CommercialSettings,
   type FolderPathStatus,
   type FolderSettings,
 } from "../../api/client";
 import FolderListCard from "./FolderListCard";
 import { draftFromSaved, draftValues, type ListDraft } from "./folderDraft";
-import SettingsActions from "./SettingsActions";
+import { commercialSaveQueue, type CommercialSaveState } from "./commercialSaveQueue";
 import "./AdminShared.css";
 
 // The API models this as mode + intervalMinutes (two interval settings
@@ -49,17 +50,36 @@ export default function CommercialsPage() {
   const [loading, setLoading] = useState(true);
   const [loadError, setLoadError] = useState<string | null>(null);
 
-  const [savedVolumeOffset, setSavedVolumeOffset] = useState(0);
   const [volumeOffset, setVolumeOffset] = useState("0");
-  const [savedEnabled, setSavedEnabled] = useState(false);
-  const [savedSelection, setSavedSelection] = useState<ModeSelection>("between-only");
-  const [savedTvCount, setSavedTvCount] = useState(2);
-  const [savedMovieCount, setSavedMovieCount] = useState(5);
 
   const [enabled, setEnabled] = useState(false);
   const [selection, setSelection] = useState<ModeSelection>("between-only");
   const [tvCount, setTvCount] = useState(2);
   const [movieCount, setMovieCount] = useState(5);
+
+  const latestSettings = useRef<CommercialSettings | null>(null);
+  const mounted = useRef(true);
+  const savedTimer = useRef<ReturnType<typeof setTimeout> | undefined>(undefined);
+  const [saveState, setSaveState] = useState<CommercialSaveState | 'idle'>('idle');
+  const [saveError, setSaveError] = useState<string | null>(null);
+  const [volumeError, setVolumeError] = useState<string | null>(null);
+  const queue = useRef<ReturnType<typeof commercialSaveQueue> | null>(null);
+  useEffect(() => {
+    mounted.current = true;
+    queue.current = commercialSaveQueue(updateCommercialSettings, (state, error) => {
+      if (!mounted.current) return;
+      clearTimeout(savedTimer.current);
+      setSaveState(state);
+      setSaveError(error ?? null);
+      if (state === 'saved') savedTimer.current = setTimeout(() => { if (mounted.current) setSaveState('idle'); }, 2000);
+    });
+    return () => {
+      mounted.current = false;
+      clearTimeout(savedTimer.current);
+      // Navigating away must not discard the last debounced edit.
+      void queue.current?.flush();
+    };
+  }, []);
 
   const [savedFolders, setSavedFolders] = useState<FolderSettings | null>(null);
   const [folderLoadError, setFolderLoadError] = useState<string | null>(null);
@@ -79,12 +99,8 @@ export default function CommercialsPage() {
     getCommercialSettings()
       .then((s) => {
         const loadedSelection = toSelection(s.mode, s.intervalMinutes);
-        setSavedVolumeOffset(s.volumeOffsetDb ?? 0);
+        latestSettings.current = { ...s, volumeOffsetDb: s.volumeOffsetDb ?? 0 };
         setVolumeOffset(String(s.volumeOffsetDb ?? 0));
-        setSavedEnabled(s.enabled);
-        setSavedSelection(loadedSelection);
-        setSavedTvCount(s.tvCommercialsPerBreak);
-        setSavedMovieCount(s.movieCommercialsPerBreak);
         setEnabled(s.enabled);
         setSelection(loadedSelection);
         setTvCount(s.tvCommercialsPerBreak);
@@ -95,7 +111,7 @@ export default function CommercialsPage() {
       .finally(() => setLoading(false));
   }, []);
 
-  // Persist folders independently so Cancel only discards commercial break settings.
+  // Folder edits and break preferences persist independently without reloading the form.
   const saveFolders = async (next: ListDraft) => {
     if (folderPending.current) return;
     folderPending.current = true;
@@ -114,31 +130,26 @@ export default function CommercialsPage() {
     }
   };
 
-  const hasChanges =
-    Number(volumeOffset) !== savedVolumeOffset ||
-    enabled !== savedEnabled ||
-    selection !== savedSelection ||
-    tvCount !== savedTvCount ||
-    movieCount !== savedMovieCount;
-
   const pathError =
     enabled && savedFolders !== null && draftValues(pathDraft, savedFolders.commercials.default).length === 0
       ? "Add at least one commercials folder while commercial breaks are enabled."
       : null;
 
-  const handleSave = async () => {
-    // The server queues background channel updates when break timing/counts change.
-    // Volume-only changes apply to new streams without rebuilding it.
-    const { mode, intervalMinutes } = fromSelection(selection);
-    if (volumeOffset.trim() === "" || !Number.isFinite(Number(volumeOffset)) || Number(volumeOffset) < -30 || Number(volumeOffset) > 12) throw new Error("Volume offset must be between -30 and 12 dB.");
-    await updateCommercialSettings({
-      volumeOffsetDb: Number(volumeOffset),
-      enabled,
-      mode,
-      intervalMinutes,
-      tvCommercialsPerBreak: tvCount,
-      movieCommercialsPerBreak: movieCount,
-    });
+  const changeSettings = (patch: Partial<CommercialSettings>) => {
+    const previous = latestSettings.current;
+    if (!previous || Object.entries(patch).every(([key, value]) => previous[key as keyof CommercialSettings] === value)) return;
+    const next = { ...previous, ...patch };
+    latestSettings.current = next;
+    queue.current?.enqueue(next);
+  };
+  const changeVolume = (value: string) => {
+    setVolumeOffset(value);
+    if (!value.trim() || !Number.isFinite(Number(value)) || Number(value) < -30 || Number(value) > 12) {
+      setVolumeError('Volume offset must be between -30 and 12 dB.');
+      return;
+    }
+    setVolumeError(null);
+    changeSettings({ volumeOffsetDb: Number(value) });
   };
 
   if (loading) {
@@ -177,7 +188,7 @@ export default function CommercialsPage() {
           <button
             type="button"
             className={"admin-badge" + (enabled ? " admin-badge-on" : "")}
-            onClick={() => setEnabled((e) => !e)}
+            onClick={() => { setEnabled(!enabled); changeSettings({ enabled: !enabled }); }}
           >
             {enabled ? "On" : "Off"}
           </button>
@@ -186,7 +197,7 @@ export default function CommercialsPage() {
           <label>Mode</label>
           <select
             value={selection}
-            onChange={(e) => setSelection(e.target.value as ModeSelection)}
+            onChange={(e) => { const next = e.target.value as ModeSelection; setSelection(next); changeSettings(fromSelection(next)); }}
             disabled={!enabled}
           >
             {MODE_SELECTION_OPTIONS.map((opt) => (
@@ -198,7 +209,7 @@ export default function CommercialsPage() {
         </div>
         <div className="admin-field-row">
           <label>TV Commercials Per Break</label>
-          <select value={tvCount} onChange={(e) => setTvCount(Number(e.target.value))} disabled={!enabled}>
+          <select value={tvCount} onChange={(e) => { const next = Number(e.target.value); setTvCount(next); changeSettings({ tvCommercialsPerBreak: next }); }} disabled={!enabled}>
             {COMMERCIALS_PER_BREAK_OPTIONS.map((n) => (
               <option key={n} value={n}>
                 {n}
@@ -208,7 +219,7 @@ export default function CommercialsPage() {
         </div>
         <div className="admin-field-row">
           <label>Movie Commercials Per Break</label>
-          <select value={movieCount} onChange={(e) => setMovieCount(Number(e.target.value))} disabled={!enabled}>
+          <select value={movieCount} onChange={(e) => { const next = Number(e.target.value); setMovieCount(next); changeSettings({ movieCommercialsPerBreak: next }); }} disabled={!enabled}>
             {COMMERCIALS_PER_BREAK_OPTIONS.map((n) => (
               <option key={n} value={n}>
                 {n}
@@ -218,9 +229,11 @@ export default function CommercialsPage() {
         </div>
         <div className="admin-field-row">
           <label htmlFor="commercial-volume-offset">Commercial Volume Offset (dB)</label>
-          <input id="commercial-volume-offset" type="number" min="-30" max="12" step="0.5" value={volumeOffset} onChange={e => setVolumeOffset(e.target.value)} />
+          <input id="commercial-volume-offset" type="number" min="-30" max="12" step="0.5" value={volumeOffset} aria-invalid={!!volumeError} onChange={e => changeVolume(e.target.value)} />
         </div>
-        <SettingsActions hasChanges={hasChanges && !folderSaving} onSave={handleSave} />
+        {volumeError && <p className="profile-field-error" role="alert">{volumeError}</p>}
+        {saveError && <p className="profile-field-error" role="alert">{saveError} <button type="button" className="admin-btn admin-btn-secondary" onClick={() => void queue.current?.retry()}>Retry</button></p>}
+        {(saveState === 'saving' || saveState === 'saved') && <p className="admin-section-hint" role="status">{saveState === 'saving' ? 'Saving commercial settings…' : 'Commercial settings saved.'}</p>}
       </div>
 
       {folderLoadError && <p className="profile-field-error">{folderLoadError}</p>}

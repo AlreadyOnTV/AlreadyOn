@@ -99,3 +99,12 @@ func TestBulkPathSaveValidationAndAuthorization(t *testing.T) {
 		}
 	}
 }
+
+func TestLibraryUpdateProgressIsNotCached(t *testing.T) {
+	router := NewRouter(t.TempDir(), t.TempDir(), openTestDB(t))
+	response := httptest.NewRecorder()
+	router.ServeHTTP(response, httptest.NewRequest(http.MethodGet, "/api/settings/folders/updates", nil))
+	if response.Code != 200 || response.Header().Get("Cache-Control") != "no-store" {
+		t.Fatalf("progress can be stale: status=%d cache=%q", response.Code, response.Header().Get("Cache-Control"))
+	}
+}
