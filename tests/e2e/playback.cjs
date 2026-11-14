@@ -3351,9 +3351,10 @@ const noWorkers = async (unreleased = () => 0) => {
       .getByRole("button", { name: "Select Folder", exact: true })
       .click();
     assert((await added).ok(), "Folder addition persisted immediately");
-    await folders.getByText(addedPath, { exact: true }).waitFor();
+    // The row label now includes its scanned-item count; the fixture folder is empty.
+    await folders.getByText(`${addedPath} (Found 0)`, { exact: true }).waitFor();
     await breaks.getByRole("button", { name: "Cancel", exact: true }).click();
-    await folders.getByText(addedPath, { exact: true }).waitFor();
+    await folders.getByText(`${addedPath} (Found 0)`, { exact: true }).waitFor();
     assert(
       (await page.getByLabel("Commercial Volume Offset (dB)").inputValue()) !==
         "-3",
