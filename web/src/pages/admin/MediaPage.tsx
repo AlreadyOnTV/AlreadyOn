@@ -1,3 +1,4 @@
+import { setChannelPath } from './channelPaths';
 // TV folders, movie folders and exclusion patterns are stored on the
 // server (GET/PUT /api/settings/folders); a list an admin hasn't customized
 // shows the server's built-in default. The polling interval is a separate
@@ -8,6 +9,8 @@
 // after the previous request has finished.
 import { useCallback, useEffect, useRef, useState } from "react";
 import {
+  getChannels,
+  updateChannel,
   getFolderSettings,
   getMediaSettings,
   refreshMedia,
@@ -50,6 +53,11 @@ export default function MediaPage() {
   const [pollLoading, setPollLoading] = useState(true);
   const [pollLoadError, setPollLoadError] = useState<string | null>(null);
   const [pollInterval, setPollInterval] = useState(60);
+
+  const [pathBusy, setPathBusy] = useState(false);
+  const pathBusyRef = useRef(false);
+  const [pathMessage, setPathMessage] = useState<string | null>(null);
+  const [pathError, setPathError] = useState<string | null>(null);
 
   const [refreshBusy, setRefreshBusy] = useState(false);
   const [refreshMessage, setRefreshMessage] = useState<string | null>(null);
@@ -128,6 +136,42 @@ export default function MediaPage() {
     });
   };
 
+  const handleSetPathEnabled = async (path: string, enabled: boolean) => {
+    if (pathBusyRef.current) return;
+    pathBusyRef.current = true;
+    setPathBusy(true);
+    setPathMessage(null);
+    setPathError(null);
+    try {
+      // Wait for newly added folders to finish saving before reading selections.
+      await queue.current;
+      const [folders, channels] = await Promise.all([getFolderSettings(), getChannels()]);
+      const paths = [...new Set([...folders.tv.paths, ...folders.movies.paths].map((p) => p.path))];
+      const failed: string[] = [];
+      let updated = 0;
+      for (const channel of channels) {
+        if (!channel.filter) continue;
+        try {
+          await updateChannel(channel.id, {
+            number: channel.number,
+            name: channel.name,
+            filter: setChannelPath(channel.filter, paths, path, enabled),
+          });
+          updated++;
+        } catch {
+          failed.push(`${channel.number} (${channel.name})`);
+        }
+      }
+      setPathMessage(`${enabled ? "Enabled" : "Disabled"} ${path} for ${updated} channels.`);
+      if (failed.length) setPathError(`Could not update channels: ${failed.join(", ")}. Retry to finish applying the change.`);
+    } catch (err) {
+      setPathError(err instanceof Error ? err.message : "Failed to update channel paths");
+    } finally {
+      pathBusyRef.current = false;
+      setPathBusy(false);
+    }
+  };
+
   const changeTv = (next: ListDraft) => {
     setTvDraft(next);
     enqueue(() => updateFolderSettings({ tv: next }));
@@ -177,6 +221,9 @@ export default function MediaPage() {
       {folderLoadError && (
         <p className="profile-field-error">{folderLoadError}</p>
       )}
+      {pathBusy && <p role="status" className="admin-section-hint">Updating channel paths…</p>}
+      {pathMessage && <p role="status" className="admin-section-hint">{pathMessage}</p>}
+      {pathError && <p role="alert" className="profile-field-error">{pathError}</p>}
       {saveError && <p className="profile-field-error">{saveError}</p>}
       {saveState !== "idle" && !saveError && (
         <p className="admin-section-hint media-save-status" role="status">
@@ -254,6 +301,8 @@ export default function MediaPage() {
               saved.movies.paths.map((p) => [p.path, p.count ?? 0]),
             )}
             requireAbsolute
+            disabled={pathBusy || saveState === "saving"}
+            onSetPathEnabled={(path, enabled) => void handleSetPathEnabled(path, enabled)}
             onChange={changeMovies}
           />
 
@@ -269,6 +318,8 @@ export default function MediaPage() {
               saved.tv.paths.map((p) => [p.path, p.count ?? 0]),
             )}
             requireAbsolute
+            disabled={pathBusy || saveState === "saving"}
+            onSetPathEnabled={(path, enabled) => void handleSetPathEnabled(path, enabled)}
             onChange={changeTv}
           />
         </>

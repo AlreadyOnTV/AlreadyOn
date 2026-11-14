@@ -2095,3 +2095,14 @@ button.admin-badge:disabled {
     transition: none;
   }
 }
+
+/* Keep the full path and bulk controls usable on narrow settings pages. */
+.folder-list-item {
+  flex-wrap: wrap;
+  gap: 10px;
+}
+
+.folder-list-item .folder-item-actions {
+  flex-wrap: wrap;
+  margin-left: auto;
+}
