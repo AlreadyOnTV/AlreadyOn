@@ -50,6 +50,10 @@ func NewRouter(webDir, uploadDir string, db *sql.DB, playbackHandlers ...*Playba
 // other embedded callers.
 func NewRouterWithSessionCookie(webDir, uploadDir string, db *sql.DB, cookieName string, playbackHandlers ...*PlaybackHTTP) http.Handler {
 	mux := http.NewServeMux()
+	mux.HandleFunc("GET /api/settings/folders/customize", handleLibraryPathCounts(db))
+	mux.HandleFunc("PUT /api/settings/folders/customize", handleCustomizeLibraryPath(db))
+	mux.HandleFunc("GET /api/settings/folders/updates", handleLibraryUpdates(db))
+	mux.HandleFunc("POST /api/settings/folders/updates/retry", handleLibraryUpdates(db))
 	mux.HandleFunc("GET /api/settings/loudness", handleLoudness(db))
 	mux.HandleFunc("PUT /api/settings/loudness", handleLoudness(db))
 	mux.HandleFunc("POST /api/settings/loudness/run", handleLoudness(db))

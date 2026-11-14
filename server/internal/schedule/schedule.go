@@ -8,6 +8,8 @@ import (
 	"database/sql"
 	"errors"
 	"fmt"
+	"github.com/alreadyonapp/alreadyon/server/internal/storage"
+	"github.com/alreadyonapp/alreadyon/server/internal/workrevision"
 	"time"
 
 	"github.com/alreadyonapp/alreadyon/server/internal/activity"
@@ -223,7 +225,7 @@ func Regenerate(ctx context.Context, db *sql.DB, channelID int64, now time.Time)
 func regenerateChannel(ctx context.Context, db *sql.DB, channelID int64, now time.Time) error {
 	now = now.UTC()
 	// A missing source must not be retained as the currently airing program or ad.
-	if _, err := db.ExecContext(ctx, `DELETE FROM schedule_entries
+	if _, err := workrevision.Exec(ctx, db, `DELETE FROM schedule_entries
  WHERE channel_id=? AND ends_at_unix>? AND NOT EXISTS
  (SELECT 1 FROM media_files WHERE id=schedule_entries.media_file_id AND status='ok')`, channelID, now.Unix()); err != nil {
 		return fmt.Errorf("schedule: remove unavailable sources: %w", err)
@@ -238,7 +240,7 @@ func regenerateChannel(ctx context.Context, db *sql.DB, channelID int64, now tim
 	windowStart := now.Add(-TrailingWindow)
 	windowEnd := now.Add(LeadingWindow)
 
-	if _, err := db.ExecContext(ctx, `DELETE FROM schedule_entries WHERE channel_id = ? AND ends_at_unix <= ?`,
+	if _, err := workrevision.Exec(ctx, db, `DELETE FROM schedule_entries WHERE channel_id = ? AND ends_at_unix <= ?`,
 		channelID, windowStart.Unix()); err != nil {
 		return fmt.Errorf("schedule: regenerate channel %d: prune: %w", channelID, err)
 	}
@@ -261,16 +263,11 @@ func regenerateChannel(ctx context.Context, db *sql.DB, channelID int64, now tim
 			query += ` AND (starts_at_unix > ? OR ends_at_unix <= ?)`
 			args = append(args, now.Unix(), windowStart.Unix())
 		}
-		_, err := db.ExecContext(ctx, query, args...)
+		_, err := workrevision.Exec(ctx, db, query, args...)
 		if err != nil {
 			return fmt.Errorf("schedule: regenerate channel %d: clear: %w", channelID, err)
 		}
 		return nil
-	}
-
-	genFrom, err := regenerateFromPoint(ctx, db, channelID, now, windowStart)
-	if err != nil {
-		return fmt.Errorf("schedule: regenerate channel %d: %w", channelID, err)
 	}
 
 	ads, err := loadChannelCommercialPool(ctx, db, channelID)
@@ -282,6 +279,11 @@ func regenerateChannel(ctx context.Context, db *sql.DB, channelID int64, now tim
 		return fmt.Errorf("schedule: regenerate channel %d: %w", channelID, err)
 	}
 	defer tx.Rollback()
+
+	genFrom, err := regenerateFromPoint(ctx, tx, channelID, now, windowStart)
+	if err != nil {
+		return fmt.Errorf("schedule: regenerate channel %d: %w", channelID, err)
+	}
 
 	// Manual lineups repeat their program sequence, but commercials must keep
 	// walking the whole library across loops and refreshes. Resume after the
@@ -319,6 +321,9 @@ func regenerateChannel(ctx context.Context, db *sql.DB, channelID int64, now tim
 		}
 		t = endsAt
 	}
+	if err := workrevision.Check(ctx, tx); err != nil {
+		return err
+	}
 	if err := tx.Commit(); err != nil {
 		return fmt.Errorf("schedule: regenerate channel %d: %w", channelID, err)
 	}
@@ -330,7 +335,7 @@ func regenerateChannel(ctx context.Context, db *sql.DB, channelID int64, now tim
 // wall-clock point new entries should be laid out from — either right
 // after the currently-playing entry ends, or windowStart if there isn't
 // one.
-func regenerateFromPoint(ctx context.Context, db *sql.DB, channelID int64, now, windowStart time.Time) (time.Time, error) {
+func regenerateFromPoint(ctx context.Context, db storage.Querier, channelID int64, now, windowStart time.Time) (time.Time, error) {
 	var currentEndsAtUnix int64
 	err := db.QueryRowContext(ctx, `
 		SELECT ends_at_unix FROM schedule_entries

@@ -212,22 +212,25 @@ func TestRescan_WaitsForARunInProgress(t *testing.T) {
 	}
 }
 
-func TestNotifyFoldersChanged_CoalescesAndNeverBlocks(t *testing.T) {
-	select { // drain anything left by other tests
-	case <-FoldersChanged():
-	default:
+// A burst wakes one owned worker while durable SQL retains every pending edit.
+func TestNotifyUpdateCoalescesAndNeverBlocks(t *testing.T) {
+	db, err := storage.Open(t.TempDir())
+	if err != nil {
+		t.Fatal(err)
 	}
-	NotifyFoldersChanged()
-	NotifyFoldersChanged()
-	NotifyFoldersChanged()
+	defer db.Close()
+	defer updateSignals.Delete(db.DB)
+	NotifyUpdate(db.DB, false)
+	NotifyUpdate(db.DB, false)
+	NotifyUpdate(db.DB, true)
 	select {
-	case <-FoldersChanged():
+	case <-signalFor(db.DB).wake:
 	default:
 		t.Fatal("no signal delivered")
 	}
 	select {
-	case <-FoldersChanged():
-		t.Error("notifications were not coalesced into one")
+	case <-signalFor(db.DB).wake:
+		t.Fatal("notifications were not coalesced")
 	default:
 	}
 }

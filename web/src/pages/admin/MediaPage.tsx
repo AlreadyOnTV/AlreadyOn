@@ -1,3 +1,5 @@
+import LibraryUpdateStatus from './LibraryUpdateStatus';
+import { announceLibraryUpdate } from './libraryUpdateEvents';
 // TV folders, movie folders and exclusion patterns are stored on the
 // server (GET/PUT /api/settings/folders); a list an admin hasn't customized
 // shows the server's built-in default. The polling interval is a separate
@@ -106,6 +108,7 @@ export default function MediaPage() {
     queue.current = queue.current.then(async () => {
       try {
         await save();
+        announceLibraryUpdate();
       } catch (err) {
         setSaveError(
           err instanceof Error ? err.message : "Failed to save the change",
@@ -178,6 +181,7 @@ export default function MediaPage() {
       {folderLoadError && (
         <p className="profile-field-error">{folderLoadError}</p>
       )}
+      <LibraryUpdateStatus />
       {saveError && <p className="profile-field-error">{saveError}</p>}
       {saveState !== "idle" && !saveError && (
         <p className="admin-section-hint media-save-status" role="status">

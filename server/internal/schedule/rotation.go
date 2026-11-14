@@ -8,6 +8,7 @@ import (
 	"encoding/json"
 	"errors"
 	"fmt"
+	"github.com/alreadyonapp/alreadyon/server/internal/workrevision"
 	"sort"
 	"strings"
 	"time"
@@ -239,6 +240,9 @@ func regenerateRotation(ctx context.Context, db *sql.DB, channelID int64, now ti
 			return err
 		}
 		at = until
+	}
+	if err := workrevision.Check(ctx, tx); err != nil {
+		return err
 	}
 	return tx.Commit()
 }

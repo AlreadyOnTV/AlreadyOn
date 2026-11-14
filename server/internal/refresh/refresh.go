@@ -49,21 +49,6 @@ const (
 	scanIfNew
 )
 
-var foldersChanged = make(chan struct{}, 1)
-
-// NotifyFoldersChanged tells the folder watcher (see FoldersChanged) that
-// an admin saved different folders or exclusions. Never blocks; several
-// notifications before the watcher wakes collapse into one.
-func NotifyFoldersChanged() {
-	select {
-	case foldersChanged <- struct{}{}:
-	default:
-	}
-}
-
-// FoldersChanged delivers a value after each NotifyFoldersChanged.
-func FoldersChanged() <-chan struct{} { return foldersChanged }
-
 // Metadata saves are coalesced and consumed by the server, not HTTP handlers.
 // Tests/embedded routers do not spawn unowned workers or external API requests.
 var metadataChanged = make(chan struct{}, 1)
@@ -191,6 +176,46 @@ func runLocked(ctx context.Context, db *sql.DB, trigger status.Trigger, mode sca
 	}()
 
 	if mode != scanNone {
+		var stop context.CancelFunc
+		ctx, stop, err = ScanContext(ctx, db)
+		if err != nil {
+			return res, err
+		}
+		defer stop()
+	}
+	res, err = prepareLocked(ctx, db, mode)
+	if err != nil {
+		return res, err
+	}
+	if mode == scanIfNew && res.FilesAdded == 0 {
+		return res, nil
+	}
+
+	status.Default.SetPhase(status.PhasePopulating)
+	refreshed, err := lineup.Refresh(ctx, db)
+	if err != nil {
+		return res, fmt.Errorf("refresh: refresh channels: %w", err)
+	}
+	res.ChannelsRefreshed = refreshed
+
+	if _, err := lineup.SyncDemoChannels(ctx, db); err != nil {
+		return res, fmt.Errorf("refresh: sync demo channels: %w", err)
+	}
+
+	status.Default.SetPhase(status.PhaseScheduling)
+	regenerated, err := schedule.RegenerateAll(ctx, db, time.Now())
+	if err != nil {
+		return res, fmt.Errorf("refresh: regenerate schedules: %w", err)
+	}
+	res.SchedulesRegenerated = regenerated
+
+	return res, nil
+}
+
+// prepareLocked reuses discovery/classification without repeating lineup or scheduling work.
+func prepareLocked(ctx context.Context, db *sql.DB, mode scanMode) (res Result, err error) {
+
+	if mode != scanNone {
 		scanCfg, cerr := library.LoadScanConfig(ctx, db)
 		if cerr != nil {
 			return res, fmt.Errorf("refresh: load folder settings: %w", cerr)
@@ -238,24 +263,6 @@ func runLocked(ctx context.Context, db *sql.DB, trigger status.Trigger, mode sca
 		}
 		res.Classified, res.Enriched = true, true
 	}
-
-	status.Default.SetPhase(status.PhasePopulating)
-	refreshed, err := lineup.Refresh(ctx, db)
-	if err != nil {
-		return res, fmt.Errorf("refresh: refresh channels: %w", err)
-	}
-	res.ChannelsRefreshed = refreshed
-
-	if _, err := lineup.SyncDemoChannels(ctx, db); err != nil {
-		return res, fmt.Errorf("refresh: sync demo channels: %w", err)
-	}
-
-	status.Default.SetPhase(status.PhaseScheduling)
-	regenerated, err := schedule.RegenerateAll(ctx, db, time.Now())
-	if err != nil {
-		return res, fmt.Errorf("refresh: regenerate schedules: %w", err)
-	}
-	res.SchedulesRegenerated = regenerated
 
 	return res, nil
 }

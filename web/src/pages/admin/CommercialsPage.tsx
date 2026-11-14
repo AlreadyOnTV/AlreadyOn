@@ -1,3 +1,4 @@
+import { announceLibraryUpdate } from './libraryUpdateEvents';
 // Enabled/Mode/etc. are backed by GET/PUT /api/settings/commercials (see
 // server/internal/commercial and #24). The commercials folders are stored
 // on the server too (GET/PUT /api/settings/folders), shown as the built-in
@@ -102,6 +103,7 @@ export default function CommercialsPage() {
     setFolderLoadError(null);
     try {
       const saved = await updateFolderSettings({ commercials: next });
+      announceLibraryUpdate();
       setSavedFolders(saved);
       setPathDraft(draftFromSaved(saved.commercials.source, saved.commercials.paths.map(p => p.path)));
     } catch (err) {

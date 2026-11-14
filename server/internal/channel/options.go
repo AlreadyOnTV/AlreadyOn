@@ -5,6 +5,7 @@ import (
 	"database/sql"
 	"encoding/json"
 	"fmt"
+	"github.com/alreadyonapp/alreadyon/server/internal/storage"
 	"path/filepath"
 	"slices"
 	"strings"
@@ -39,7 +40,7 @@ type FilterOption struct {
 }
 type FilterCatalog map[string][]FilterOption
 
-func ListOptions(ctx context.Context, db *sql.DB) (FilterCatalog, error) {
+func ListOptions(ctx context.Context, db storage.Querier) (FilterCatalog, error) {
 	rows, err := db.QueryContext(ctx, `SELECT kind,id,definition,default_position FROM channel_filter_options ORDER BY kind,position,id`)
 	if err != nil {
 		return nil, err
@@ -186,7 +187,7 @@ func ResolveFilter(f Filter, catalog FilterCatalog) (Filter, error) {
 	}
 	return f, nil
 }
-func Resolve(ctx context.Context, db *sql.DB, f Filter) (Filter, error) {
+func Resolve(ctx context.Context, db storage.Querier, f Filter) (Filter, error) {
 	catalog, err := ListOptions(ctx, db)
 	if err != nil {
 		return f, err
