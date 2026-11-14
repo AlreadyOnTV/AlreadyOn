@@ -22,44 +22,39 @@ export function useStartupStatus(): { status: StartupStatus | null; completions:
   const tickRef = useRef<(() => Promise<void>) | null>(null);
 
   useEffect(() => {
-    let cancelled = false;
-    // Keep this guard within the effect: StrictMode cleanup must not leave
-    // the replacement poller blocked behind a discarded request.
-    let inFlight = false;
-    let timer: number | undefined;
-    let wasBusy = false;
-    let failures = 0;
+    // Each setup owns its poller; cleanup cannot cancel the replacement run.
+    const poll = { cancelled: false, inFlight: false, timer: undefined as number | undefined, wasBusy: false, failures: 0 };
 
     const tick = async () => {
-      if (inFlight) return;
-      inFlight = true;
-      window.clearTimeout(timer);
+      if (poll.inFlight) return;
+      poll.inFlight = true;
+      window.clearTimeout(poll.timer);
       try {
         const next = await getStartupStatus();
-        if (cancelled) return;
-        failures = 0;
+        if (poll.cancelled) return;
+        poll.failures = 0;
         setStatus(next);
         const busy = isBusy(next);
-        if (wasBusy && !busy) setCompletions((n) => n + 1);
-        wasBusy = busy;
-        if (busy) timer = window.setTimeout(tick, POLL_INTERVAL_MS);
+        if (poll.wasBusy && !busy) setCompletions((n) => n + 1);
+        poll.wasBusy = busy;
+        if (busy) poll.timer = window.setTimeout(tick, POLL_INTERVAL_MS);
       } catch {
-        if (cancelled) return;
+        if (poll.cancelled) return;
         // A server that's restarting mid-run, or an older server without
         // this endpoint: give up quietly rather than retry forever.
-        failures += 1;
-        if (failures < MAX_CONSECUTIVE_FAILURES) timer = window.setTimeout(tick, POLL_INTERVAL_MS * 2);
+        poll.failures += 1;
+        if (poll.failures < MAX_CONSECUTIVE_FAILURES) poll.timer = window.setTimeout(tick, POLL_INTERVAL_MS * 2);
       } finally {
-        inFlight = false;
+        poll.inFlight = false;
       }
     };
 
     tickRef.current = tick;
     void tick();
     return () => {
-      cancelled = true;
+      poll.cancelled = true;
       tickRef.current = null;
-      window.clearTimeout(timer);
+      window.clearTimeout(poll.timer);
     };
   }, []);
 

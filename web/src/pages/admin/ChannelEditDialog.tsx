@@ -4,7 +4,8 @@
 // Its commercial settings are saved alongside through the channel commercials API.
 import { useEffect, useState } from 'react';
 import { createChannel, updateChannel, DEFAULT_CHANNEL_FILTER, type Channel, type ChannelFilter } from '../../api/client';
-import ChannelCommercialsFields, { loadChannelCommercials, saveChannelCommercials, type ChannelCommercialsDraft } from './ChannelCommercialsFields';
+import ChannelCommercialsFields from './ChannelCommercialsFields';
+import { loadChannelCommercials, saveChannelCommercials, type ChannelCommercialsDraft } from './channelCommercials';
 import ChannelFilterForm from './ChannelFilterForm';
 import ChannelFilterPreview from './ChannelFilterPreview';
 import InfoModal from './InfoModal';

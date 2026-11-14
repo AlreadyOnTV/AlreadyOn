@@ -1,12 +1,13 @@
-// Run against the managed loopback preview. Every API request is intercepted:
+// Run standalone on a loopback preview or from the isolated playback suite. Every API request is intercepted:
 // fixtures and captured writes never reach the preview database.
 const assert = require('node:assert/strict');
-const { chromium } = require('playwright');
+const { chromium } = require('../../web/node_modules/playwright');
 
-(async () => {
-  const browser = await chromium.launch();
+module.exports = async ({ browser, url }) => {
+  const origin = new URL(url);
+  if (!['localhost', '127.0.0.1'].includes(origin.hostname)) throw new Error('A loopback fixture URL is required');
+  const context = await browser.newContext({ ignoreHTTPSErrors: true, serviceWorkers: 'block', viewport: { width: 1280, height: 900 } });
   try {
-    const context = await browser.newContext({ ignoreHTTPSErrors: true, serviceWorkers: 'block', viewport: { width: 1280, height: 900 } });
     const list = (path) => ({ source: 'admin', default: [], paths: [{ path, status: 'ok', count: 219 }] });
     const folders = { movies: list('/media/movies'), tv: list('/media/tv'), commercials: list('/ads'), exclusions: { patterns: [], default: [], source: 'admin' } };
     const filter = { audienceTier: 'adult', genres: ['comedy'], mediaType: 'movie', era: 'both', titleContains: '' };
@@ -39,8 +40,9 @@ const { chromium } = require('playwright');
       await route.fulfill({ json: body });
     });
     const page = await context.newPage();
-    page.on('pageerror', (err) => console.error('Browser error:', err.message));
-    await page.goto('https://localhost:5173/admin/library-paths');
+    const errors = [];
+    page.on('pageerror', (err) => errors.push(err.message));
+    await page.goto(new URL('/admin/library-paths', origin).href);
     await page.getByRole('button', { name: 'Customize /media/movies', exact: true }).waitFor({ timeout: 5000 }).catch(async (err) => { console.error(await page.locator('body').innerText()); throw err; });
     const open = async (path) => {
       await page.getByRole('button', { name: `Customize ${path}`, exact: true }).click();
@@ -51,11 +53,19 @@ const { chromium } = require('playwright');
         assert.equal(await page.getByRole('switch', { name, exact: true }).getAttribute('aria-checked'), String(checked));
       }
     };
+    await page.getByText('/media/movies (Found 219)', { exact: true }).waitFor();
     await open('/media/movies');
     await defaults(true, false, false);
+    const desktop = await page.getByRole('dialog').boundingBox();
+    assert.ok(Math.abs(desktop.x + desktop.width / 2 - 640) < 2 && Math.abs(desktop.y + desktop.height / 2 - 450) < 2, 'Desktop dialog is centered');
     await page.getByRole('switch', { name: 'Enable for Custom Channels' }).click();
     await page.getByRole('dialog').getByRole('button', { name: 'Cancel', exact: true }).click();
     assert.equal(writes.length, 0, 'Cancel must not write');
+    await open('/media/movies');
+    await page.keyboard.press('Escape');
+    await page.getByRole('dialog').waitFor({ state: 'hidden' });
+    assert.equal(writes.length, 0, 'Escape must not write');
+    assert.equal(await page.getByRole('button', { name: 'Customize /media/movies', exact: true }).evaluate((button) => button === document.activeElement), true, 'Modal restores opener focus');
     await open('/media/tv');
     await defaults(false, true, false);
     await page.getByRole('button', { name: 'Save', exact: true }).click();
@@ -65,11 +75,10 @@ const { chromium } = require('playwright');
     writes.length = 0;
     await open('/ads');
     await defaults(true, true, false);
-    await page.screenshot({ path: '/tmp/alreadyon-customize-desktop.png', fullPage: true });
     await page.setViewportSize({ width: 390, height: 844 });
-    await page.screenshot({ path: '/tmp/alreadyon-customize-mobile.png', fullPage: true });
     const box = await page.getByRole('dialog').boundingBox();
     assert.ok(box.x >= 0 && box.x + box.width <= 391, 'Mobile dialog fits viewport');
+    assert.ok(Math.abs(box.y + box.height / 2 - 422) < 2, 'Mobile dialog is centered');
     await page.getByRole('button', { name: 'Save', exact: true }).click();
     await page.getByRole('dialog').waitFor({ state: 'hidden' });
     assert.equal(writes.length, 3);
@@ -84,8 +93,17 @@ const { chromium } = require('playwright');
     failTV = false;
     await page.getByRole('button', { name: 'Save', exact: true }).click();
     await page.getByRole('dialog').waitFor({ state: 'hidden' });
+    assert.deepEqual(errors, [], 'No browser runtime errors');
     console.log('Customize browser checks passed: defaults, cancel, group overrides, commercials, failure/retry, desktop/mobile layout. All APIs mocked.');
   } finally {
-    await browser.close();
+    await context.close();
   }
-})().catch((err) => { console.error(err); process.exitCode = 1; });
+};
+
+if (require.main === module) {
+  (async () => {
+    const browser = await chromium.launch();
+    try { await module.exports({ browser, url: process.argv[2] || 'https://localhost:5173' }); }
+    finally { await browser.close(); }
+  })().catch((err) => { console.error(err); process.exitCode = 1; });
+}

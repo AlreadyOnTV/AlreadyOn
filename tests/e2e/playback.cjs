@@ -82,9 +82,10 @@ const noWorkers = async (unreleased = () => 0) => {
   });
   const errors = [];
   // The first browser creates the account through the setup dialog; later ones sign in.
-  const login = async (page) => {
-    await page.goto(url);
-    const guide = page.locator(".guide-slot-box").first();
+  // Management scenarios can authenticate even when prior folder edits leave no playable guide.
+  const login = async (page, destination = "/", readySelector = ".guide-slot-box") => {
+    await page.goto(url + destination);
+    const guide = page.locator(readySelector).first();
     const dialog = page.getByRole("dialog");
     await guide.or(dialog).waitFor();
     if (await dialog.count()) {
@@ -4246,6 +4247,10 @@ const noWorkers = async (unreleased = () => 0) => {
         url,
         assert,
       });
+    if (!only || only.includes("library-paths")) {
+      await require("./library-path-customize-ui.cjs")({ browser, url });
+      await require("./library-path-customize.cjs")({ browser, login, url, root });
+    }
     assert(errors.length === 0, "Browser errors: " + JSON.stringify(errors));
   } finally {
     await browser.close();

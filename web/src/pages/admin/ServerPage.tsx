@@ -178,14 +178,14 @@ function RestartCard() {
     }
     setRestarting(true);
     const begun = Date.now();
-    let wentDown = false;
+    const health = { wentDown: false };
     timer.current = window.setInterval(() => {
       getHealth().then(
         () => {
-          if (wentDown || Date.now() - begun > 15000) reloadKeepingQuality();
+          if (health.wentDown || Date.now() - begun > 15000) reloadKeepingQuality();
         },
         () => {
-          wentDown = true;
+          health.wentDown = true;
         },
       );
     }, 1000);

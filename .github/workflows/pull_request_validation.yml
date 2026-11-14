@@ -121,7 +121,9 @@ jobs:
         with:
           fail-on-severity: moderate
   auto_merge:
+    # Draft PRs run validation but remain open until the maintainer marks them ready.
     if: github.event_name == 'pull_request'
+      && !github.event.pull_request.draft
       && needs.build_candidate.result == 'success'
       && needs.quality.result == 'success'
       && needs.android.result == 'success'

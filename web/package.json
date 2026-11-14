@@ -6,7 +6,8 @@
   "scripts": {
     "dev": "vite",
     "build": "tsc -b && vite build",
-    "lint": "oxlint",
+    "lint": "oxlint --deny-warnings",
+    "test": "node --test tests/*.test.ts",
     "test:security": "node --test tests/safeNext.test.ts",
     "preview": "vite preview"
   },

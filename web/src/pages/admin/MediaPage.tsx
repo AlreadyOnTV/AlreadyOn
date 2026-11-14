@@ -20,7 +20,8 @@ import { useUsers } from "../../users/UsersContext";
 import CommercialsPage from "./CommercialsPage";
 import FolderListCard from "./FolderListCard";
 import { draftFromSaved, type ListDraft } from "./folderDraft";
-import { LastTime, useRefreshTimes } from "./useRefreshTimes";
+import { useRefreshTimes } from './useRefreshTimes';
+import { LastTime } from './LastTime';
 import "./AdminShared.css";
 
 const POLL_INTERVAL_OPTIONS = [

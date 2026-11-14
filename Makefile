@@ -10,6 +10,7 @@ dev:
 
 test:
 	@cd server && go test ./...
+	@cd web && npm test
 	@echo "web: browser coverage runs separately with make test-e2e"
 
 test-integration: test-container

@@ -2,15 +2,15 @@
 
 [![AlreadyOn](../web/public/branding/header-doc.svg)](../README.md)
 
-Channels contain persisted UTC airings generated from library filters. Published airings stay stable: library additions or metadata refreshes extend future coverage rather than rewriting the current program.
+Channels persist UTC airings from library filters. Additions and metadata refreshes extend coverage without rewriting current programming.
 
-Rotation is deterministic for a channel's existing state. Repeat limits, duration accounting and commercial placement must produce valid, non-overlapping entries. Changes to generation should be tested with a fixed clock and small synthetic catalogs.
+Rotation is deterministic. Test repeat limits, duration accounting and non-overlapping commercial placement with fixed clocks and synthetic catalogs.
 
 All metadata configurations use the same audience-focused defaults. TVmaze/Wikidata fill gaps after optional TMDb; manual corrections win. Free sources supply genres/dates, not age certification. Ratings determine the automatic audience: G/PG and TV-Y/TV-Y7/TV-Y7-FV/TV-G are Kids; PG-13/TV-PG/TV-14 are Teens; R/NC-17/TV-MA and missing/invalid/unrated certifications are Unrestricted. Missing ratings do not require manual review or prevent unrestricted scheduling. Genres alone do not raise the audience. Teen and unrestricted TV Mix channels accept all genres, including absent genre metadata. Classics requires a known year; Modern also accepts unknown dates. Existing saved filters and audience overrides remain unchanged unless the owner explicitly resets them. Legacy broad free mixes are hidden without deleting their published schedules.
 
 Channel filter previews and applied schedules must use the same selection semantics. Document deliberate contract changes in [OpenAPI](../api/openapi.yaml) and add focused regression cases.
 
-Do not rebuild published schedules to hide a test failure. Inspect persisted entries, generation inputs and clock handling. Live library investigation must remain non-destructive.
+Investigate persisted entries, generation inputs and clocks without rebuilding published schedules or altering live libraries.
 
 Guides retain real ended airings overlapping the current half-hour column. The API supplies these separately as `previousPrograms`; clients clip them to the viewport without changing original timestamps or real gaps. Ended boxes are grey and do not tune. Text is shown only when the complete time span fits; titles and episode labels truncate to one line. Current/upcoming navigation remains separate.
 
@@ -18,10 +18,10 @@ Guides retain real ended airings overlapping the current half-hour column. The A
 
 Preview and apply share selection semantics. Combine inclusion/exclusion rules explicitly and consistently handle missing metadata, excluded folders and unavailable files. Test empty/overlapping selections and provider combinations and manual inheritance with synthetic catalogs. Coverage extends future programming without rewriting published airings or rotation state.
 
-Server Settings → Library Paths shows each folder’s found-item count. Customize opens movie, TV show and custom channel toggles; Save overrides that path’s previous selections across the groups while preserving other paths and filter settings. Movie folders default to movie channels only, TV folders to TV channels only, and commercial folders to both movie and TV channels; custom channels default off. Custom channels are outside the built-in 100–199 range, regardless of their media filter. Demo and hand-managed channels without library filters are skipped for media selections. Cancel discards unsaved choices. Failures identify channels to retry. Commercial selections preserve channel/global commercial enablement and break settings; an explicit empty folder selection supplies no commercials. Remove still removes the configured library folder.
+Library Paths → Customize applies one folder’s movie, TV and custom channel selections, overriding prior selections for that path. Other paths and filters are preserved; Cancel discards edits. Defaults: movies use movie channels, TV uses TV channels, commercials use both; custom channels default off. Channels outside 100–199 are custom; unfiltered channels are skipped for media. Failures identify channels to retry. Empty commercial selections supply no ads without changing break enablement/timing. Remove deletes the configured path.
 
 Date Range defaults are All, Modern (2010 onward), and Classics (through 2009). Custom ranges remain supported. The upgrade removes untouched, unused decade presets; edited or channel-referenced ranges are preserved. API keys `era` and `eras` retain their existing names for compatibility.
 
-Filename identification recognizes ordinary seasons and explicit year-based seasons from 1900–2099 (`S1940E01` and `Season 1940` folders). Episode markers take precedence over parenthesized movie years. Alternate `1x02` seasons remain limited to two digits to avoid interpreting resolutions such as `1920x800` as TV. A normal library rescan repairs prior automatic movie guesses for unchanged year-season episodes without re-probing their media. Type changes clear incompatible provider identities, dates and automatic classification so metadata can refresh as TV; manual identity corrections and independent manual genre, rating and audience overrides remain protected. Existing file/item IDs and published airings are preserved.
+Identification recognizes ordinary and 1900–2099 year-based seasons (`S1940E01`, `Season 1940`). Episode markers precede parenthesized movie years. Alternate `1x02` seasons remain two digits to exclude resolutions such as `1920x800`. Rescanning repairs automatic movie guesses for year-season episodes without re-probing. Type changes clear incompatible automatic identity/classification; manual corrections, file/item IDs and published airings remain intact.
 
 The WebUI guide’s top-left header cell shows the current device-local time using the profile’s time format. It updates on each minute boundary and refreshes when the tab becomes visible or regains focus, independently of guide-data polling.
