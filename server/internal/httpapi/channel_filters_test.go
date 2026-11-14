@@ -1,9 +1,11 @@
 package httpapi
 
 import (
+	"context"
 	"database/sql"
 	"encoding/json"
 	"fmt"
+	"github.com/alreadyonapp/alreadyon/server/internal/refresh"
 	"net/http"
 	"strings"
 	"testing"
@@ -37,6 +39,30 @@ func decodeChannel(t *testing.T, body []byte) channelResponse {
 	return c
 }
 
+// Wait on durable applied state, never on incidental log order or elapsed sleeps.
+func applyPendingSettings(t *testing.T, db *sql.DB) {
+	t.Helper()
+	ctx, cancel := context.WithCancel(t.Context())
+	done := make(chan struct{})
+	go func() { defer close(done); refresh.RunUpdateWorker(ctx, db) }()
+	defer func() { cancel(); <-done }()
+	deadline := time.Now().Add(5 * time.Second)
+	for time.Now().Before(deadline) {
+		state, err := refresh.GetUpdateStatus(t.Context(), db)
+		if err != nil {
+			t.Fatal(err)
+		}
+		if state.State == "failed" {
+			t.Fatal(state.Error)
+		}
+		if state.State == "idle" && state.AppliedRevision == state.Revision {
+			return
+		}
+		time.Sleep(10 * time.Millisecond)
+	}
+	t.Fatal("background settings did not apply")
+}
+
 const potterFilter = `{"audienceTier":"teen","genres":[],"mediaType":"movie","era":"both","titleContains":"harry potter"}`
 
 func TestChannels_CreateWithFilterBuildsTheLineup(t *testing.T) {
@@ -51,10 +77,14 @@ func TestChannels_CreateWithFilterBuildsTheLineup(t *testing.T) {
 		t.Fatalf("create status = %d, body=%s", rec.Code, rec.Body.String())
 	}
 	c := decodeChannel(t, rec.Body.Bytes())
-	if c.ItemCount != 2 || c.Filter == nil || c.Filter.TitleContains != "harry potter" || c.Filter.MediaType != "movie" {
-		t.Errorf("created = %+v (filter %+v), want 2 items and the saved filter", c, c.Filter)
+	if c.ItemCount != 0 || c.Filter == nil || c.Filter.TitleContains != "harry potter" || c.Filter.MediaType != "movie" {
+		t.Errorf("created = %+v (filter %+v), want pending lineup and the saved filter", c, c.Filter)
 	}
 
+	applyPendingSettings(t, db)
+	if err := db.QueryRow(`SELECT count(*) FROM channel_items WHERE channel_id=?`, c.ID).Scan(&c.ItemCount); err != nil || c.ItemCount != 2 {
+		t.Fatalf("background lineup=%d err=%v", c.ItemCount, err)
+	}
 	rec = doJSON(t, router, http.MethodGet, "/api/channels", "")
 	var list []channelResponse
 	json.Unmarshal(rec.Body.Bytes(), &list)
@@ -71,6 +101,7 @@ func TestChannels_UpdateFilterRebuildsAndNullClears(t *testing.T) {
 	rec := doJSON(t, router, http.MethodPost, "/api/channels", `{"number":200,"name":"Custom","filter":`+potterFilter+`}`)
 	id := decodeChannel(t, rec.Body.Bytes()).ID
 
+	applyPendingSettings(t, db)
 	// Renaming without a filter field keeps the filter and the lineup.
 	rec = doJSON(t, router, http.MethodPut, fmt.Sprintf("/api/channels/%d", id), `{"number":200,"name":"Renamed"}`)
 	c := decodeChannel(t, rec.Body.Bytes())
@@ -85,6 +116,7 @@ func TestChannels_UpdateFilterRebuildsAndNullClears(t *testing.T) {
 	if c.ItemCount != 1 || c.Filter == nil || len(c.Filter.Genres) != 1 || c.Filter.Genres[0] != "comedy" {
 		t.Fatalf("after filter change = %+v", c)
 	}
+	applyPendingSettings(t, db)
 	var title string
 	db.QueryRow(`SELECT ii.title FROM channel_items ci JOIN identified_items ii ON ii.media_file_id = ci.media_file_id WHERE ci.channel_id = ?`, id).Scan(&title)
 	if title != "Funny Movie" {

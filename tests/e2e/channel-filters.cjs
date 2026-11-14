@@ -176,6 +176,15 @@ let server, browser;
   assert.equal(await dialog.getByRole('button', { name: 'Save', exact: true }).isVisible(), true);
   await dialog.getByRole('button', { name: 'Save', exact: true }).click();
   await dialog.waitFor({ state: 'detached' });
+  const applied = async () => {
+    await page.waitForFunction(async () => {
+      const response = await fetch('/api/settings/folders/updates');
+      const state = await response.json();
+      if (state.state === 'failed') throw new Error(state.error);
+      return state.state === 'idle' && state.appliedRevision === state.revision;
+    }, undefined, { timeout: 30000 });
+  };
+  await applied();
   const channels = await (await context.request.get(url + '/api/channels')).json();
   const custom = channels.find((c) => c.number === 250);
   assert.equal(custom.itemCount, 2);
@@ -185,6 +194,7 @@ let server, browser;
   const options = await (await context.request.get(url + '/api/channel-filter-options')).json();
   const age = options.age.find((a) => a.id === custom.filter.ageRestrictionId);
   assert.equal((await context.request.put(url + '/api/channel-filter-options/age/' + age.id, { data: { ...age, ratings: ['G'] } })).ok(), true);
+  await applied();
   const updated = await (await context.request.get(url + '/api/channels/' + custom.id)).json();
   assert.equal(updated.itemCount, 0);
   const base = {

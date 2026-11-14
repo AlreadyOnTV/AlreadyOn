@@ -51,33 +51,6 @@ const (
 
 // Metadata saves are coalesced and consumed by the server, not HTTP handlers.
 // Tests/embedded routers do not spawn unowned workers or external API requests.
-var metadataChanged = make(chan struct{}, 1)
-
-func NotifyMetadataChanged() {
-	select {
-	case metadataChanged <- struct{}{}:
-	default:
-	}
-}
-func MetadataChanged() <-chan struct{} { return metadataChanged }
-
-// ApplyMetadataChange reconciles broad channels first, then enriches in the
-// background worker. Slow free lookups cannot delay scheduling usable files.
-func ApplyMetadataChange(ctx context.Context, db *sql.DB) (Result, error) {
-	running.Lock()
-	defer running.Unlock()
-	if _, err := lineup.Refresh(ctx, db); err != nil {
-		return Result{}, err
-	}
-	if _, err := lineup.SyncDemoChannels(ctx, db); err != nil {
-		return Result{}, err
-	}
-	if _, err := schedule.RegenerateAll(ctx, db, time.Now()); err != nil {
-		return Result{}, err
-	}
-	return runLocked(ctx, db, status.TriggerRefresh, scanNone)
-}
-
 var keylessClient = metadata.NewKeylessClient()
 
 // ErrBusy is returned by Run when another refresh (or the startup

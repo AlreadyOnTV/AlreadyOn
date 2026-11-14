@@ -25,11 +25,12 @@ type UpdateStatus struct {
 	Total           int    `json:"total"`
 	Error           string `json:"error"`
 	NeedsScan       bool   `json:"needsScan"`
+	NeedsMetadata   bool   `json:"needsMetadata"`
 }
 
 func GetUpdateStatus(ctx context.Context, db storage.Querier) (UpdateStatus, error) {
 	var s UpdateStatus
-	err := db.QueryRowContext(ctx, `SELECT revision,applied_revision,state,processed,total,error,needs_scan FROM library_update_state WHERE id=1`).Scan(&s.Revision, &s.AppliedRevision, &s.State, &s.Processed, &s.Total, &s.Error, &s.NeedsScan)
+	err := db.QueryRowContext(ctx, `SELECT revision,applied_revision,state,processed,total,error,needs_scan,needs_metadata FROM library_update_state WHERE id=1`).Scan(&s.Revision, &s.AppliedRevision, &s.State, &s.Processed, &s.Total, &s.Error, &s.NeedsScan, &s.NeedsMetadata)
 	return s, err
 }
 
@@ -88,7 +89,7 @@ func runUpdateWorker(ctx context.Context, db *sql.DB, process func(context.Conte
 	s := signalFor(db)
 	defer updateSignals.Delete(db)
 	// Running states belong to the old process; preferences and dirty rows are durable.
-	_, err := db.ExecContext(ctx, `UPDATE library_update_state SET state='queued' WHERE needs_scan=1 OR EXISTS(SELECT 1 FROM library_update_channels)`)
+	_, err := db.ExecContext(ctx, `UPDATE library_update_state SET state='queued' WHERE needs_scan=1 OR needs_metadata=1 OR EXISTS(SELECT 1 FROM library_update_channels)`)
 	if err != nil {
 		logging.Error("library updates: recover: %v", err)
 		return
@@ -156,7 +157,7 @@ func processUpdateUsing(parent context.Context, db *sql.DB, steps updateSteps) (
 	}
 	defer running.Unlock()
 	current, err := GetUpdateStatus(parent, db)
-	if err != nil || (current.State == "idle" && !current.NeedsScan) || current.State == "failed" {
+	if err != nil || (current.State == "idle" && !current.NeedsScan && !current.NeedsMetadata) || current.State == "failed" {
 		return err
 	}
 	var revision = current.Revision
@@ -170,16 +171,25 @@ func processUpdateUsing(parent context.Context, db *sql.DB, steps updateSteps) (
 			_, _ = db.ExecContext(parent, `UPDATE library_update_state SET state='failed',error='Library update failed. Retry to apply saved preferences.' WHERE id=1 AND revision=?`, revision)
 		}
 	}()
-	scanned := current.NeedsScan
-	if current.NeedsScan {
-		logging.Info("content folders changed: rescanning")
+	scanned := current.NeedsScan || current.NeedsMetadata
+	if scanned {
+		logging.Info("library update: reconciling media and metadata")
 		scanCtx, stop, scanErr := ScanContext(parent, db)
 		if scanErr != nil {
 			return scanErr
 		}
-		_, _ = db.ExecContext(parent, `UPDATE library_update_state SET state='scanning' WHERE id=1`)
-		status.Default.SetPhase(status.PhaseScanning)
-		_, err = steps.prepare(scanCtx, db, scanAlways)
+		phase := "updating"
+		status.Default.SetPhase(status.PhaseClassifying)
+		if current.NeedsScan {
+			phase = "scanning"
+			status.Default.SetPhase(status.PhaseScanning)
+		}
+		_, _ = db.ExecContext(parent, `UPDATE library_update_state SET state=? WHERE id=1`, phase)
+		mode := scanNone
+		if current.NeedsScan {
+			mode = scanAlways
+		}
+		_, err = steps.prepare(scanCtx, db, mode)
 		if err == nil {
 			err = finishScan(scanCtx, db)
 		}
@@ -193,7 +203,7 @@ func processUpdateUsing(parent context.Context, db *sql.DB, steps updateSteps) (
 	if err != nil {
 		return err
 	}
-	if current.NeedsScan {
+	if current.NeedsScan || current.NeedsMetadata {
 		NotifyUpdate(db, true)
 		return context.Canceled
 	}
@@ -260,6 +270,9 @@ func processUpdateUsing(parent context.Context, db *sql.DB, steps updateSteps) (
 			return err
 		}
 	}
+	if _, _, err = channel.ApplyAutoVisibility(ctx, db); err != nil {
+		return err
+	}
 	if _, err = lineup.SyncDemoChannels(ctx, db); err != nil {
 		return err
 	}
@@ -284,7 +297,7 @@ func processUpdateUsing(parent context.Context, db *sql.DB, steps updateSteps) (
 	}
 	err = tx.Commit()
 	if err == nil && scanned {
-		logging.Info("content folders changed: rescan complete (channelsRefreshed=%d)", len(ids))
+		logging.Info("library update complete (channelsRefreshed=%d)", len(ids))
 	}
 	return err
 }
@@ -305,7 +318,7 @@ func finishScan(ctx context.Context, db *sql.DB) error {
 	if _, err = tx.ExecContext(ctx, `INSERT INTO library_update_channels(channel_id,rebuild,revision) SELECT id,1,(SELECT revision FROM library_update_state WHERE id=1) FROM channels WHERE true ON CONFLICT(channel_id) DO UPDATE SET rebuild=1,revision=excluded.revision`); err != nil {
 		return err
 	}
-	if _, err = tx.ExecContext(ctx, `UPDATE library_update_state SET needs_scan=0,state='queued' WHERE id=1`); err != nil {
+	if _, err = tx.ExecContext(ctx, `UPDATE library_update_state SET needs_scan=0,needs_metadata=0,state='queued' WHERE id=1`); err != nil {
 		return err
 	}
 	return tx.Commit()

@@ -56,8 +56,7 @@ module.exports = async ({ browser, login, url, root }) => {
   try {
     await request('PUT', '/api/settings/folders', { movies: [moviePath, removePath], tv: [tvPath], commercials: [adPath, otherAdPath] });
     // Wait for real pipeline completion so lazy default filters exist before bulk saves.
-    const profiles = await request('GET', '/api/profiles');
-    await request('POST', '/api/admin/refresh-media', { profileId: profiles.find((profile) => profile.role === 'admin').id });
+    await waitApplied();
     const movie = originalChannels.find((channel) => channel.number === 133);
     const tv = originalChannels.find((channel) => channel.number === 121);
     assert.ok(movie && tv, 'Built-in movie and TV channel rows exist');

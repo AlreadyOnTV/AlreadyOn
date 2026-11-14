@@ -294,7 +294,6 @@ func run() (restart bool) {
 		go runScheduleMaintenance(ctx, db.DB)
 	}
 	go runContentPolling(ctx, db.DB)
-	go runMetadataWatcher(ctx, db.DB)
 
 	logging.StartHeartbeat(ctx, 15*time.Minute, 30*time.Second)
 
@@ -509,28 +508,12 @@ func runContentPolling(ctx context.Context, db *sql.DB) {
 	}
 }
 
-// runMetadataWatcher rebuilds provider-mode channels after settings saves.
-// It shares the refresh lock and stops with the server; bursts are coalesced.
-func runMetadataWatcher(ctx context.Context, db *sql.DB) {
-	for {
-		select {
-		case <-ctx.Done():
-			return
-		case <-refresh.MetadataChanged():
-		}
-		if _, err := refresh.ApplyMetadataChange(ctx, db); err != nil && ctx.Err() == nil {
-			logging.Error("metadata settings changed: refresh: %v", err)
-		}
-	}
-}
-
 // runScheduleMaintenance periodically brings every channel's persisted
 // schedule (see schedule.RegenerateAll) back up to its full look-ahead
 // window and prunes anything past its trailing edge — the thing that
 // actually keeps the guide's "now" moving forward across a long-running
 // server, on top of the explicit triggers (Refresh Schedule button,
-// commercial-settings save, content polling) that already call this via
-// internal/refresh.Run. It runs at the top of every hour (config.ScheduleMaintenanceOffset),
+// content polling) and saved-setting background jobs. It runs at the top of every hour (config.ScheduleMaintenanceOffset),
 // independent of content polling. Returns once ctx is done.
 func runScheduleMaintenance(ctx context.Context, db *sql.DB) {
 	runHourlyAt(ctx, config.ScheduleMaintenanceOffset, func() {

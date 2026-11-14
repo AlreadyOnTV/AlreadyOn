@@ -1,7 +1,7 @@
 // Poll owned background work independently of the edit modal so later edits remain available.
 import { useEffect, useRef, useState } from 'react';
 import { getLibraryUpdates, retryLibraryUpdates, type LibraryUpdateStatus as Status } from '../../api/client';
-import { announceLibraryUpdate, LIBRARY_UPDATE_EVENT } from './libraryUpdateEvents';
+import { announceLibraryUpdate, LIBRARY_UPDATE_EVENT, LIBRARY_APPLIED_EVENT } from '../../api/libraryUpdateEvents';
 
 export default function LibraryUpdateStatus() {
   const [status, setStatus] = useState<Status | null>(null);
@@ -10,12 +10,16 @@ export default function LibraryUpdateStatus() {
   const retryPending = useRef(false);
   useEffect(() => {
     const controller = new AbortController();
-    const poll = { version: 0, timer: undefined as number | undefined };
+    const poll = { applied: 0, version: 0, timer: undefined as number | undefined };
     const load = () => {
       const version = ++poll.version;
       window.clearTimeout(poll.timer);
       getLibraryUpdates(controller.signal).then((next) => {
         if (controller.signal.aborted || version !== poll.version) return;
+        if (next.state === 'idle' && next.appliedRevision > poll.applied) {
+          poll.applied = next.appliedRevision;
+          window.dispatchEvent(new Event(LIBRARY_APPLIED_EVENT));
+        }
         setStatus(next);
         setError(null);
         if (next.state !== 'idle' && next.state !== 'failed') poll.timer = window.setTimeout(load, 1500);
@@ -51,7 +55,7 @@ export default function LibraryUpdateStatus() {
   return <>
     {status && status.revision > 0 && status.state !== 'failed' && (
       <p className="admin-section-hint" role="status" aria-live="polite">
-        {status.state === 'idle' ? 'Library changes applied.' : status.state === 'scanning' ? 'Saved—scanning the library in the background…' : status.state === 'updating' ? `Saved—updating channels (${status.processed} of ${status.total})…` : 'Saved—channel updates queued. You can keep making changes.'}
+        {status.state === 'idle' ? 'Library changes applied.' : status.needsMetadata && !status.needsScan ? 'Saved—updating metadata in the background…' : status.state === 'scanning' ? 'Saved—scanning the library in the background…' : status.state === 'updating' ? `Saved—updating channels (${status.processed} of ${status.total})…` : 'Saved—channel updates queued. You can keep making changes.'}
       </p>
     )}
     {status?.state === 'failed' && <div role="alert" className="profile-field-error">

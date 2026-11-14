@@ -9,16 +9,28 @@ import (
 	"strings"
 	"testing"
 
+	"database/sql"
+	"github.com/alreadyonapp/alreadyon/server/internal/library"
 	"github.com/alreadyonapp/alreadyon/server/internal/logging"
 	"github.com/alreadyonapp/alreadyon/server/internal/metadata"
 	"github.com/alreadyonapp/alreadyon/server/internal/profile"
 	"github.com/alreadyonapp/alreadyon/server/internal/refresh"
 )
 
+// Refresh tests use empty configured roots, never workstation default folders.
+func emptyRefreshDB(t *testing.T) *sql.DB {
+	t.Helper()
+	db := openTestDB(t)
+	if _, err := library.SaveFolderSettings(t.Context(), db, library.FolderSettings{TV: []string{}, Movie: []string{}, Commercial: []string{}}); err != nil {
+		t.Fatal(err)
+	}
+	return db
+}
+
 // Automatic free sources run even without a TMDb key. This empty synthetic
 // library verifies the refresh contract without making provider network calls.
 func TestRefreshScheduleAPI_AutomaticSourcesWithoutTMDb_StillRefreshesChannels(t *testing.T) {
-	db := openTestDB(t)
+	db := emptyRefreshDB(t)
 	router := NewRouter(t.TempDir(), t.TempDir(), db)
 
 	req := httptest.NewRequest(http.MethodPost, "/api/admin/refresh-schedule", nil)
@@ -38,7 +50,7 @@ func TestRefreshScheduleAPI_AutomaticSourcesWithoutTMDb_StillRefreshesChannels(t
 }
 
 func TestRefreshScheduleAPI_ReturnsConflictWhileStartupPipelineRuns(t *testing.T) {
-	db := openTestDB(t)
+	db := emptyRefreshDB(t)
 	router := NewRouter(t.TempDir(), t.TempDir(), db)
 
 	held, release := make(chan struct{}), make(chan struct{})
@@ -57,7 +69,7 @@ func TestRefreshScheduleAPI_ReturnsConflictWhileStartupPipelineRuns(t *testing.T
 // TestRefreshScheduleAPI_KeyFromServerSettings_CountsAsConfigured: the
 // refresh handler reads the TMDb key saved in Server Settings.
 func TestRefreshScheduleAPI_KeyFromServerSettings_CountsAsConfigured(t *testing.T) {
-	db := openTestDB(t)
+	db := emptyRefreshDB(t)
 	if err := metadata.SaveSettings(context.Background(), db, metadata.Settings{TMDbAPIKey: "saved-tmdb-key"}); err != nil {
 		t.Fatalf("SaveSettings: %v", err)
 	}
@@ -98,7 +110,7 @@ func loggedMessage(t *testing.T, substr string) bool {
 }
 
 func TestRefreshMediaAPI_LogsWhichProfileRequestedTheRescan(t *testing.T) {
-	db := openTestDB(t)
+	db := emptyRefreshDB(t)
 	router := NewRouter(t.TempDir(), t.TempDir(), db)
 
 	list, err := profile.List(context.Background(), db, 1)
@@ -117,7 +129,7 @@ func TestRefreshMediaAPI_LogsWhichProfileRequestedTheRescan(t *testing.T) {
 }
 
 func TestRefreshMediaAPI_BodyIsOptionalAndUnknownProfileIsRejected(t *testing.T) {
-	db := openTestDB(t)
+	db := emptyRefreshDB(t)
 	router := NewRouter(t.TempDir(), t.TempDir(), db)
 
 	req := httptest.NewRequest(http.MethodPost, "/api/admin/refresh-media", nil)
@@ -132,7 +144,7 @@ func TestRefreshMediaAPI_BodyIsOptionalAndUnknownProfileIsRejected(t *testing.T)
 }
 
 func TestRefreshMediaAPI_ReturnsConflictWhileARunIsInProgress(t *testing.T) {
-	db := openTestDB(t)
+	db := emptyRefreshDB(t)
 	router := NewRouter(t.TempDir(), t.TempDir(), db)
 
 	held, release := make(chan struct{}), make(chan struct{})

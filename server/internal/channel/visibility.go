@@ -5,6 +5,7 @@ import (
 	"database/sql"
 	"errors"
 	"fmt"
+	"github.com/alreadyonapp/alreadyon/server/internal/storage"
 	"github.com/alreadyonapp/alreadyon/server/internal/workrevision"
 	"slices"
 	"strings"
@@ -78,4 +79,23 @@ func ApplyAutoVisibility(ctx context.Context, db *sql.DB) (hidden, shown int, er
 		}
 	}
 	return len(toHide), len(toShow), nil
+}
+
+// SaveVisibility persists lightweight visibility choices in the caller's transaction.
+// The background worker handles subsequent derived channel work.
+func SaveVisibility(ctx context.Context, db storage.Querier, ids []int64, visibility string) error {
+	if !slices.Contains([]string{VisibilityAuto, VisibilityShow, VisibilityHide}, visibility) {
+		return ErrInvalidVisibility
+	}
+	counts, err := SeriesCounts(ctx, db)
+	if err != nil {
+		return err
+	}
+	for _, id := range ids {
+		hidden := visibility == VisibilityHide || (visibility == VisibilityAuto && counts[id] == 0)
+		if _, err = db.ExecContext(ctx, `UPDATE channels SET visibility=?,hidden=?,updated_at_unix=unixepoch() WHERE id=?`, visibility, hidden, id); err != nil {
+			return err
+		}
+	}
+	return nil
 }

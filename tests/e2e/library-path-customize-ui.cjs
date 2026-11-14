@@ -10,6 +10,8 @@ module.exports = async ({ browser, url }) => {
     const list = (path) => ({ source: 'admin', default: [], paths: [{ path, status: 'ok', count: 219 }] });
     const folders = { movies: list('/media/movies'), tv: list('/media/tv'), commercials: list('/ads'), exclusions: { patterns: [], default: [], source: 'admin' } };
     const writes = [];
+    const commercialWrites = [];
+    let commercialSettings = { enabled: true, mode: 'between-only', intervalMinutes: 30, tvCommercialsPerBreak: 2, movieCommercialsPerBreak: 5, volumeOffsetDb: 0 };
     const counts = { '/media/movies': { movies: 23, tv: 2, custom: 1 }, '/media/tv': { movies: 0, tv: 15, custom: 2 }, '/ads': { movies: 7, tv: 8, custom: 0 } };
     let failSave = false;
     let status = { revision: 0, appliedRevision: 0, state: 'idle', processed: 0, total: 0, error: '', needsScan: false };
@@ -37,7 +39,14 @@ module.exports = async ({ browser, url }) => {
       else if (path.pathname === '/api/profiles') body = [{ id: 1, name: 'Fixture Owner', role: 'admin', audienceTier: 'adult', hasPin: false, icon: null }];
       else if (path.pathname === '/api/settings/folders') body = folders;
       else if (path.pathname === '/api/settings/media') body = { pollIntervalMinutes: 60 };
-      else if (path.pathname === '/api/settings/commercials') body = { enabled: true, mode: 'between-only', intervalMinutes: 30, tvCommercialsPerBreak: 2, movieCommercialsPerBreak: 5, volumeOffsetDb: 0 };
+      else if (path.pathname === '/api/settings/commercials') {
+        if (request.method() === 'PUT') {
+          commercialSettings = request.postDataJSON();
+          commercialWrites.push(commercialSettings);
+          status = { ...status, revision: status.revision + 1, state: 'queued' };
+        }
+        body = commercialSettings;
+      }
       else if (path.pathname === '/api/status/startup') body = { phase: 'ready', startupComplete: true, active: false, mediaRoots: 2, library: {} };
       await route.fulfill({ json: body });
     });
@@ -106,8 +115,22 @@ module.exports = async ({ browser, url }) => {
     status = { ...status, state: 'idle', appliedRevision: status.revision, processed: 40 };
     await page.evaluate(() => window.dispatchEvent(new Event('alreadyon-library-update')));
     await page.getByText('Library changes applied.', { exact: true }).waitFor();
+    await page.setViewportSize({ width: 1280, height: 900 });
+    const breaks = page.locator('.commercial-settings');
+    const tvCount = breaks.locator('select').nth(1);
+    await tvCount.selectOption('3');
+    await Promise.all([page.waitForEvent('load'), breaks.getByRole('button', { name: 'Save Changes', exact: true }).click()]);
+    await page.getByText(/Saved—channel updates queued/).waitFor();
+    assert.equal(await tvCount.inputValue(), '3');
+    assert.equal(commercialWrites.length, 1);
+    assert.equal(status.state, 'queued', 'Commercial save returns before processing finishes');
+    await tvCount.selectOption('4');
+    await Promise.all([page.waitForEvent('load'), breaks.getByRole('button', { name: 'Save Changes', exact: true }).click()]);
+    await page.getByText(/Saved—channel updates queued/).waitFor();
+    assert.equal(commercialWrites.length, 2, 'Another save is available while work remains queued');
+    assert.equal(await tvCount.inputValue(), '4');
     assert.deepEqual(errors, []);
-    console.log('PASS: Customize defaults, single atomic requests, immediate close while queued, subsequent edits, save failure, background progress/retry, modal geometry/focus');
+    console.log('PASS: Customize defaults, single atomic requests, immediate close while queued, subsequent edits, save failure, background progress/retry, modal geometry/focus and consecutive commercial saves while processing remains queued');
   } finally { await context.close(); }
 };
 if (require.main === module) {

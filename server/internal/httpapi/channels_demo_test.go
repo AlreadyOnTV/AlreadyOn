@@ -61,6 +61,7 @@ func TestDemoChannels_DeletingADemoChannelDoesNotRecreateIt(t *testing.T) {
 		t.Fatal(err)
 	}
 	doJSON(t, router, http.MethodPost, "/api/channels/bulk-visibility", `{"ids":[],"visibility":"auto"}`)
+	applyPendingSettings(t, db)
 	var hidden bool
 	if err := db.QueryRow(`SELECT hidden FROM channels WHERE number=198`).Scan(&hidden); err != nil || !hidden {
 		t.Fatalf("legacy demo was not retired: hidden=%v error=%v", hidden, err)

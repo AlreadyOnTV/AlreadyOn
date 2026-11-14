@@ -88,7 +88,7 @@ func validateOption(kind string, o FilterOption) error {
 	}
 	return nil
 }
-func SaveOption(ctx context.Context, db *sql.DB, kind string, o FilterOption) error {
+func SaveOption(ctx context.Context, db storage.Querier, kind string, o FilterOption) error {
 	if err := validateOption(kind, o); err != nil {
 		return err
 	}
@@ -100,7 +100,7 @@ func SaveOption(ctx context.Context, db *sql.DB, kind string, o FilterOption) er
 	_, err = db.ExecContext(ctx, `INSERT INTO channel_filter_options(kind,id,definition,position,default_position) VALUES(?,?,?,(SELECT COALESCE(MAX(position),-1)+1 FROM channel_filter_options WHERE kind=?),(SELECT COALESCE(MAX(default_position),-1)+1 FROM channel_filter_options WHERE kind=?)) ON CONFLICT(kind,id) DO UPDATE SET definition=excluded.definition`, kind, o.ID, string(raw), kind, kind)
 	return err
 }
-func DeleteOption(ctx context.Context, db *sql.DB, kind, id string) error {
+func DeleteOption(ctx context.Context, db storage.Querier, kind, id string) error {
 	if kind != "age" && kind != "era" {
 		return ErrInvalidFilterOptions
 	}

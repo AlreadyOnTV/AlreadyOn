@@ -1,6 +1,7 @@
 package httpapi
 
 import (
+	"context"
 	"database/sql"
 	"encoding/json"
 	"errors"
@@ -8,7 +9,6 @@ import (
 	"strconv"
 
 	"github.com/alreadyonapp/alreadyon/server/internal/channel"
-	"github.com/alreadyonapp/alreadyon/server/internal/lineup"
 	"github.com/alreadyonapp/alreadyon/server/internal/refresh"
 )
 
@@ -66,37 +66,61 @@ func handleListChannels(db *sql.DB) http.HandlerFunc {
 	}
 }
 
-func handleCreateChannel(db *sql.DB) http.HandlerFunc {
+func handleCreateChannel(db *sql.DB) http.HandlerFunc { return handleSaveChannel(db, true) }
+
+// Both edits and newly created custom channels return after desired state and
+// dirty work commit, without acquiring the scan/refresh lock.
+func handleSaveChannel(db *sql.DB, create bool) http.HandlerFunc {
 	return func(w http.ResponseWriter, r *http.Request) {
-		refresh.Exclusive(func() {
-			var body channelRequestBody
-			if err := json.NewDecoder(r.Body).Decode(&body); err != nil {
-				writeJSONError(w, http.StatusBadRequest, "invalid request body")
-				return
-			}
-			filter, err := validateFilterChange(db, body.Filter)
+		var body channelRequestBody
+		if !decodeStrict(w, r, &body) {
+			return
+		}
+		var id int64
+		if !create {
+			var err error
+			id, err = strconv.ParseInt(r.PathValue("id"), 10, 64)
 			if err != nil {
-				if !writeFilterError(w, err) {
-					writeJSONError(w, http.StatusInternalServerError, err.Error())
-				}
+				writeJSONError(w, 400, "invalid channel id")
 				return
 			}
-			c, err := channel.Create(r.Context(), db, channel.Draft{Number: body.Number, Name: body.Name})
+		}
+		var c channel.Channel
+		err := refresh.MutateSettings(r.Context(), db, func(tx *sql.Tx) (refresh.SettingsWork, error) {
+			filter, err := validateFilterChange(r.Context(), tx, body.Filter)
 			if err != nil {
-				writeChannelError(w, err)
-				return
+				return refresh.SettingsWork{}, err
 			}
-			if err := applyFilterChange(r.Context(), db, c.ID, body.Filter, filter); err != nil {
-				writeJSONError(w, http.StatusInternalServerError, err.Error())
-				return
+			draft := channel.Draft{Number: body.Number, Name: body.Name}
+			if create {
+				c, err = channel.Create(r.Context(), tx, draft)
+			} else {
+				c, err = channel.Update(r.Context(), tx, id, draft)
 			}
-			resp, err := channelResponseFor(r.Context(), db, c)
 			if err != nil {
-				writeJSONError(w, http.StatusInternalServerError, err.Error())
-				return
+				return refresh.SettingsWork{}, err
 			}
-			writeJSON(w, http.StatusCreated, resp)
+			if err = applyFilterChange(r.Context(), tx, c.ID, body.Filter, filter); err != nil {
+				return refresh.SettingsWork{}, err
+			}
+			return refresh.SettingsWork{Changed: body.Filter.Set, Channels: []int64{c.ID}, Rebuild: true}, nil
 		})
+		if err != nil {
+			if !writeFilterError(w, err) {
+				writeChannelError(w, err)
+			}
+			return
+		}
+		resp, err := channelResponseFor(r.Context(), db, c)
+		if err != nil {
+			writeChannelError(w, err)
+			return
+		}
+		code := http.StatusOK
+		if create {
+			code = http.StatusCreated
+		}
+		writeJSON(w, code, resp)
 	}
 }
 
@@ -121,44 +145,7 @@ func handleGetChannel(db *sql.DB) http.HandlerFunc {
 	}
 }
 
-func handleUpdateChannel(db *sql.DB) http.HandlerFunc {
-	return func(w http.ResponseWriter, r *http.Request) {
-		refresh.Exclusive(func() {
-			id, err := strconv.ParseInt(r.PathValue("id"), 10, 64)
-			if err != nil {
-				writeJSONError(w, http.StatusBadRequest, "invalid channel id")
-				return
-			}
-			var body channelRequestBody
-			if err := json.NewDecoder(r.Body).Decode(&body); err != nil {
-				writeJSONError(w, http.StatusBadRequest, "invalid request body")
-				return
-			}
-			filter, err := validateFilterChange(db, body.Filter)
-			if err != nil {
-				if !writeFilterError(w, err) {
-					writeJSONError(w, http.StatusInternalServerError, err.Error())
-				}
-				return
-			}
-			c, err := channel.Update(r.Context(), db, id, channel.Draft{Number: body.Number, Name: body.Name})
-			if err != nil {
-				writeChannelError(w, err)
-				return
-			}
-			if err := applyFilterChange(r.Context(), db, id, body.Filter, filter); err != nil {
-				writeJSONError(w, http.StatusInternalServerError, err.Error())
-				return
-			}
-			resp, err := channelResponseFor(r.Context(), db, c)
-			if err != nil {
-				writeJSONError(w, http.StatusInternalServerError, err.Error())
-				return
-			}
-			writeJSON(w, http.StatusOK, resp)
-		})
-	}
-}
+func handleUpdateChannel(db *sql.DB) http.HandlerFunc { return handleSaveChannel(db, false) }
 
 // handleSetChannelVisibility serves PUT /api/channels/{id}/visibility: the
 // per-row Auto/Show/Hide button on the Channels admin tab.
@@ -179,7 +166,7 @@ func handleSetChannelVisibility(db *sql.DB) http.HandlerFunc {
 			writeChannelError(w, err)
 			return
 		}
-		if err := channel.SetVisibility(r.Context(), db, []int64{id}, body.Visibility); err != nil {
+		if err := saveVisibilityUpdate(r.Context(), db, []int64{id}, body.Visibility); err != nil {
 			if errors.Is(err, channel.ErrInvalidVisibility) {
 				writeJSONError(w, http.StatusBadRequest, err.Error())
 				return
@@ -191,9 +178,6 @@ func handleSetChannelVisibility(db *sql.DB) http.HandlerFunc {
 		if err != nil {
 			writeChannelError(w, err)
 			return
-		}
-		if !lineup.IsDemoChannelNumber(c.Number) {
-			resyncDemoChannels(r.Context(), db)
 		}
 		resp, err := channelResponseFor(r.Context(), db, c)
 		if err != nil {
@@ -216,7 +200,7 @@ func handleBulkSetChannelsVisibility(db *sql.DB) http.HandlerFunc {
 		if !decodeStrict(w, r, &body) {
 			return
 		}
-		if err := channel.SetVisibility(r.Context(), db, body.IDs, body.Visibility); err != nil {
+		if err := saveVisibilityUpdate(r.Context(), db, body.IDs, body.Visibility); err != nil {
 			if errors.Is(err, channel.ErrInvalidVisibility) {
 				writeJSONError(w, http.StatusBadRequest, err.Error())
 				return
@@ -224,32 +208,26 @@ func handleBulkSetChannelsVisibility(db *sql.DB) http.HandlerFunc {
 			writeJSONError(w, http.StatusInternalServerError, err.Error())
 			return
 		}
-		resyncDemoChannels(r.Context(), db)
 		writeJSON(w, http.StatusOK, map[string]int{"updated": len(body.IDs)})
 	}
 }
 
 func handleDeleteChannel(db *sql.DB) http.HandlerFunc {
 	return func(w http.ResponseWriter, r *http.Request) {
-		refresh.Exclusive(func() {
-			id, err := strconv.ParseInt(r.PathValue("id"), 10, 64)
-			if err != nil {
-				writeJSONError(w, http.StatusBadRequest, "invalid channel id")
-				return
-			}
-			wasDemo := false
-			if c, err := channel.Get(r.Context(), db, id); err == nil {
-				wasDemo = lineup.IsDemoChannelNumber(c.Number)
-			}
-			if err := channel.Delete(r.Context(), db, id); err != nil {
-				writeChannelError(w, err)
-				return
-			}
-			if !wasDemo {
-				resyncDemoChannels(r.Context(), db)
-			}
-			w.WriteHeader(http.StatusNoContent)
+		id, err := strconv.ParseInt(r.PathValue("id"), 10, 64)
+		if err != nil {
+			writeJSONError(w, 400, "invalid channel id")
+			return
+		}
+		err = refresh.MutateSettings(r.Context(), db, func(tx *sql.Tx) (refresh.SettingsWork, error) {
+			err := channel.Delete(r.Context(), tx, id)
+			return refresh.SettingsWork{Changed: true, Channels: []int64{}}, err
 		})
+		if err != nil {
+			writeChannelError(w, err)
+			return
+		}
+		w.WriteHeader(http.StatusNoContent)
 	}
 }
 
@@ -279,4 +257,11 @@ func writeJSONError(w http.ResponseWriter, status int, message string) {
 // clients branch on (for example "stream_limit" or "password_locked").
 func writeJSONCode(w http.ResponseWriter, status int, code, message string) {
 	writeJSON(w, status, map[string]string{"error": message, "code": code})
+}
+
+func saveVisibilityUpdate(ctx context.Context, db *sql.DB, ids []int64, visibility string) error {
+	return refresh.MutateSettings(ctx, db, func(tx *sql.Tx) (refresh.SettingsWork, error) {
+		err := channel.SaveVisibility(ctx, tx, ids, visibility)
+		return refresh.SettingsWork{Changed: true, Channels: []int64{}}, err
+	})
 }

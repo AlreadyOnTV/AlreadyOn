@@ -1,7 +1,7 @@
 // Apply one folder selection across channel groups without touching other paths or filter rules.
 import { useEffect, useRef, useState } from 'react';
 import { customizeLibraryPath, getLibraryPathCounts } from '../../api/client';
-import { announceLibraryUpdate } from './libraryUpdateEvents';
+import { announceLibraryUpdate } from '../../api/libraryUpdateEvents';
 import { defaultPathChoices, type ChannelPathChoices, type ChannelPathGroup, type LibraryPathKind } from './channelPaths';
 import InfoModal from './InfoModal';
 import SettingToggle from './SettingToggle';

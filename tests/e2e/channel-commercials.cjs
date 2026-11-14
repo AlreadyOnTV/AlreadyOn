@@ -2,7 +2,7 @@
 // selection, removed-folder fallback and returning to the global defaults.
 module.exports = async ({ browser, login, url, assert }) => {
   const context = await browser.newContext(); const page = await context.newPage();
-  await login(page);
+  await login(page, "/admin/channels", ".admin-card");
   const savedFolders = await (await page.request.get(url + '/api/settings/folders')).json();
   const old = savedFolders.commercials.source === 'default' ? null : savedFolders.commercials.paths.map(p => p.path);
   const name = 'Channel Commercial Controls';

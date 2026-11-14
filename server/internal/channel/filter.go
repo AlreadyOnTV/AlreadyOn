@@ -2,7 +2,6 @@ package channel
 
 import (
 	"context"
-	"database/sql"
 	"encoding/json"
 	"errors"
 	"fmt"
@@ -170,7 +169,7 @@ func SetFilter(ctx context.Context, db storage.Querier, channelID int64, f Filte
 
 // ClearFilter removes a channel's filter. Its current lineup is left as
 // is, from then on managed by hand again.
-func ClearFilter(ctx context.Context, db *sql.DB, channelID int64) error {
+func ClearFilter(ctx context.Context, db storage.Querier, channelID int64) error {
 	if _, err := db.ExecContext(ctx, `DELETE FROM channel_filters WHERE channel_id = ?`, channelID); err != nil {
 		return fmt.Errorf("channel: clear filter: %w", err)
 	}

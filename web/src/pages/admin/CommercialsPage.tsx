@@ -1,4 +1,4 @@
-import { announceLibraryUpdate } from './libraryUpdateEvents';
+import { announceLibraryUpdate } from '../../api/libraryUpdateEvents';
 // Enabled/Mode/etc. are backed by GET/PUT /api/settings/commercials (see
 // server/internal/commercial and #24). The commercials folders are stored
 // on the server too (GET/PUT /api/settings/folders), shown as the built-in
@@ -127,7 +127,7 @@ export default function CommercialsPage() {
       : null;
 
   const handleSave = async () => {
-    // The server refreshes the schedule when break timing/counts change.
+    // The server queues background channel updates when break timing/counts change.
     // Volume-only changes apply to new streams without rebuilding it.
     const { mode, intervalMinutes } = fromSelection(selection);
     if (volumeOffset.trim() === "" || !Number.isFinite(Number(volumeOffset)) || Number(volumeOffset) < -30 || Number(volumeOffset) > 12) throw new Error("Volume offset must be between -30 and 12 dB.");

@@ -5,7 +5,6 @@ package commercial
 
 import (
 	"context"
-	"database/sql"
 	"errors"
 	"fmt"
 	"github.com/alreadyonapp/alreadyon/server/internal/storage"
@@ -105,7 +104,7 @@ func GetSettings(ctx context.Context, db storage.Querier) (Settings, error) {
 
 // SaveSettings validates and persists s, replacing the single settings
 // row.
-func SaveSettings(ctx context.Context, db *sql.DB, s Settings) error {
+func SaveSettings(ctx context.Context, db storage.Querier, s Settings) error {
 	if math.IsNaN(s.VolumeOffsetDB) || math.IsInf(s.VolumeOffsetDB, 0) || s.VolumeOffsetDB < -30 || s.VolumeOffsetDB > 12 {
 		return ErrInvalidVolumeOffset
 	}

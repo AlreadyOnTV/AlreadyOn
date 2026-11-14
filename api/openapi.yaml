@@ -2,7 +2,17 @@ openapi: 3.1.0
 info:
   title: AlreadyOn API
   version: 0.1.0-draft
-  description: AlreadyOn server API.
+  description: >
+    AlreadyOn server API. Settings mutations persist desired preferences and durable
+    work atomically, returning before media scans, lineup rebuilds or schedule
+    generation. Folder lists/customization, channel filters, commercial settings,
+    shared filter definitions and metadata-provider changes share a debounced worker.
+    Consecutive saves merge; latest values win overlapping changes. Replaced work
+    cannot publish stale schedules. Poll GET /api/settings/folders/updates for saved
+    versus applied revision, progress and errors; POST its retry endpoint retries
+    failed work. Existing save response shapes/status codes remain unchanged.
+    Channel itemCount reflects the currently applied lineup and can lag a saved
+    filter. Explicit refresh actions retain their separate completion contract.
 security:
   - BrowserSession: []
   - ManagementKey: []
@@ -966,7 +976,7 @@ paths:
         `filter` is optional: absent leaves the channel's filter alone,
         `null` removes it (the current lineup stays, managed by hand
         again), and an object saves it. Saving a filter rebuilds the
-        lineup and regenerates the schedule immediately. Built-in
+        lineup and regenerates future schedules in the background. Built-in
         channels (100-199) can have a filter too; each starts with one
         equivalent to its original theme.
       requestBody:
@@ -1530,6 +1540,14 @@ paths:
       operationId: updateCommercialSettings
       tags: [settings]
       summary: Replace commercial break settings
+      description: >
+        Saves settings and pending schedule updates atomically, returning before
+        background processing completes. Timing/count/enablement changes merge
+        with pending library updates and supersede obsolete channel work without
+        rescanning media or rebuilding lineups. Volume-only and unchanged saves
+        do not queue schedule work. Poll GET /api/settings/folders/updates for
+        progress and use its retry endpoint after failures. The response remains
+        the saved settings for compatibility.
       requestBody:
         required: true
         content:
@@ -2683,7 +2701,7 @@ paths:
       x-alreadyon-roles: [owner]
       operationId: putChannelCommercials
       tags: [channels]
-      summary: Replace commercial overrides and refresh this channel's future schedule
+      summary: Replace commercial overrides and queue this channel's future schedule
       description: >
         The currently airing entry is retained. Future ads disabled or excluded by
         this policy are removed, including pending rotation-checkpoint ads. Break
@@ -2697,7 +2715,7 @@ paths:
             schema: { $ref: "#/components/schemas/ChannelCommercialSettings" }
       responses:
         "200":
-          description: Saved and future schedule refreshed
+          description: Preferences saved and future schedule update queued
           content:
             application/json:
               schema: { $ref: "#/components/schemas/ChannelCommercialPolicy" }
@@ -2709,7 +2727,7 @@ paths:
         "404": { description: Unknown channel }
         "500":
           {
-            description: Save or schedule refresh failed; a refresh failure may follow a successful settings save,
+            description: Settings or pending work could not be saved,
           }
 
   /api/playback/sessions:
@@ -3103,7 +3121,7 @@ paths:
         schema: { type: string }
     put:
       x-alreadyon-roles: [owner]
-      summary: Save shared definition and rebuild pools and schedules
+      summary: Save shared definition and queue pool and schedule updates
       requestBody:
         required: true
         content:
@@ -4577,7 +4595,7 @@ components:
 
     LibraryUpdateStatus:
       type: object
-      required: [revision, appliedRevision, state, processed, total, error, needsScan]
+      required: [revision, appliedRevision, state, processed, total, error, needsScan, needsMetadata]
       properties:
         revision: { type: integer, minimum: 0, description: Latest saved preference revision }
         appliedRevision: { type: integer, minimum: 0, description: Latest fully applied revision }
@@ -4585,6 +4603,9 @@ components:
         processed: { type: integer, minimum: 0 }
         total: { type: integer, minimum: 0 }
         error: { type: string, description: Public failure message; empty unless failed }
+        needsMetadata:
+          type: boolean
+          description: Metadata-provider reconciliation is pending without a required filesystem scan.
         needsScan: { type: boolean, description: A changed folder list still requires discovery }
     FolderSettings:
       type: object

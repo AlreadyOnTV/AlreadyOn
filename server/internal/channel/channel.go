@@ -73,7 +73,7 @@ func IsBuiltInNumber(n int) bool { return isReservedNumber(n) }
 // Create adds a new channel. Returns ErrReservedNumber if draft.Number
 // falls in the built-in default range, or ErrDuplicateNumber if it's
 // already in use by another channel.
-func Create(ctx context.Context, db *sql.DB, draft Draft) (Channel, error) {
+func Create(ctx context.Context, db storage.Querier, draft Draft) (Channel, error) {
 	if err := draft.validate(); err != nil {
 		return Channel{}, err
 	}
@@ -140,7 +140,7 @@ func List(ctx context.Context, db storage.Querier) ([]Channel, error) {
 // existing number; the check only blocks assigning a *new* one there),
 // or ErrDuplicateNumber if draft.Number is already in use by a
 // different channel.
-func Update(ctx context.Context, db *sql.DB, id int64, draft Draft) (Channel, error) {
+func Update(ctx context.Context, db storage.Querier, id int64, draft Draft) (Channel, error) {
 	if err := draft.validate(); err != nil {
 		return Channel{}, err
 	}
@@ -177,7 +177,7 @@ func Update(ctx context.Context, db *sql.DB, id int64, draft Draft) (Channel, er
 
 // Delete removes the channel with the given id. Returns ErrNotFound if
 // it doesn't exist.
-func Delete(ctx context.Context, db *sql.DB, id int64) error {
+func Delete(ctx context.Context, db storage.Querier, id int64) error {
 	res, err := db.ExecContext(ctx, `DELETE FROM channels WHERE id = ?`, id)
 	if err != nil {
 		return fmt.Errorf("channel: delete %d: %w", id, err)
@@ -220,7 +220,7 @@ func SetHidden(ctx context.Context, db *sql.DB, ids []int64, hidden bool) error 
 // episodes count as that one show, not one each (see #90). A channel
 // with zero channel_items rows simply doesn't appear in the result
 // (equivalent to a count of 0).
-func SeriesCounts(ctx context.Context, db *sql.DB) (map[int64]int, error) {
+func SeriesCounts(ctx context.Context, db storage.Querier) (map[int64]int, error) {
 	rows, err := db.QueryContext(ctx, `
 		SELECT ci.channel_id,
 		       COUNT(DISTINCT CASE WHEN ii.media_type = 'episode' THEN COALESCE(NULLIF(ii.series_title, ''), ii.title, 'file:' || ci.media_file_id) ELSE 'file:' || ci.media_file_id END)

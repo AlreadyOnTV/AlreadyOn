@@ -9,6 +9,9 @@ import (
 	"net/http/httptest"
 	"testing"
 	"time"
+
+	"github.com/alreadyonapp/alreadyon/server/internal/commercial"
+	"github.com/alreadyonapp/alreadyon/server/internal/refresh"
 )
 
 func TestCommercialSettingsAPI_GetDefaultThenPutRoundTrips(t *testing.T) {
@@ -75,37 +78,39 @@ func TestCommercialSettingsAPI_PutOutOfRangeCommercialsPerBreak_ReturnsBadReques
 	}
 }
 
-// TestCommercialSettingsAPI_PutTriggersScheduleRefresh confirms the save
-// handler actually calls internal/refresh.Run (not just that it returns
-// 200) by checking its real side effect: an empty default channel with
-// no genre-matching content classified yet is filled once classified
-// content matching its saved filter exists. A custom nostalgia Sci-Fi
-// filter is independent of automatic provider-mode catalog selection.
-func TestCommercialSettingsAPI_PutTriggersScheduleRefresh(t *testing.T) {
+// Saving must not wait for an in-progress scan or perform catalog/schedule work.
+func TestCommercialSettingsAPI_QueuesBackgroundUpdate(t *testing.T) {
 	db := openTestDB(t)
-	channelID := insertTestChannelWithContent(t, db, 200, "Custom Sci-Fi")
-	// Custom filters refresh in every provider mode; no provider HTTP calls.
-	db.Exec(`INSERT INTO channel_filters(channel_id,audience_tier,genres,media_type,era,title_contains) VALUES(?,'adult','["scifi"]','movie','nostalgia','')`, channelID)
-	a := insertClassifiedForRefreshTest(t, db, "Some Show", 1, `["scifi"]`)
-	b := insertClassifiedForRefreshTest(t, db, "Some Other Show", 1, `["scifi"]`)
+	channelID := insertTestChannelWithContent(t, db, 200, "Synthetic")
+	before, err := commercial.GetSettings(t.Context(), db)
+	if err != nil {
+		t.Fatal(err)
+	}
+	next := before
+	next.Enabled = !before.Enabled
+	body, _ := json.Marshal(toCommercialSettingsResponse(next))
 	router := NewRouter(t.TempDir(), t.TempDir(), db)
-
-	before := channelItemMediaFileIDsForRefreshTest(t, db, channelID)
-	if len(before) != 0 {
-		t.Fatalf("before = %v, want an empty lineup to start", before)
+	refresh.Exclusive(func() {
+		ctx, cancel := context.WithTimeout(t.Context(), time.Second)
+		defer cancel()
+		req := httptest.NewRequest(http.MethodPut, "/api/settings/commercials", bytes.NewReader(body)).WithContext(ctx)
+		rec := httptest.NewRecorder()
+		router.ServeHTTP(rec, req)
+		if rec.Code != http.StatusOK {
+			t.Fatalf("save blocked/failed: %d %s", rec.Code, rec.Body.String())
+		}
+	})
+	got, err := commercial.GetSettings(t.Context(), db)
+	if err != nil || got != next {
+		t.Fatalf("preferences not saved: %+v %v", got, err)
 	}
-
-	putBody, _ := json.Marshal(map[string]any{"enabled": false, "mode": "between-only", "intervalMinutes": 30, "tvCommercialsPerBreak": 2, "movieCommercialsPerBreak": 5})
-	req := httptest.NewRequest(http.MethodPut, "/api/settings/commercials", bytes.NewReader(putBody))
-	rec := httptest.NewRecorder()
-	router.ServeHTTP(rec, req)
-	if rec.Code != http.StatusOK {
-		t.Fatalf("put status = %d, want %d, body=%s", rec.Code, http.StatusOK, rec.Body.String())
+	var pending, rebuild int
+	if err = db.QueryRow(`SELECT count(*),coalesce(sum(rebuild),0) FROM library_update_channels WHERE channel_id=?`, channelID).Scan(&pending, &rebuild); err != nil || pending != 1 || rebuild != 0 {
+		t.Fatalf("schedule work not queued correctly: %d %d %v", pending, rebuild, err)
 	}
-
-	after := channelItemMediaFileIDsForRefreshTest(t, db, channelID)
-	if len(after) != 2 {
-		t.Fatalf("after = %v, want the 2 classified items populated by the auto-triggered refresh (got %v, %v available)", after, a, b)
+	state, err := refresh.GetUpdateStatus(t.Context(), db)
+	if err != nil || state.State != "queued" || state.NeedsScan {
+		t.Fatalf("unexpected state %+v %v", state, err)
 	}
 }
 
