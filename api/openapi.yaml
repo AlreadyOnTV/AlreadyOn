@@ -1682,6 +1682,101 @@ paths:
           description: Folder is not readable by the server
         "404":
           description: Folder does not exist
+  /api/settings/folders/customize:
+    get:
+      x-alreadyon-roles: [owner]
+      tags: [settings]
+      summary: Count saved path selections by channel group
+      description: Counts selected path checkboxes, including saved changes still awaiting background processing. Media counts skip unfiltered channels. Commercial counts do not depend on global or per-channel break enablement.
+      parameters:
+        - in: query
+          name: kind
+          required: true
+          schema: { type: string, enum: [movies, tv, commercials] }
+        - in: query
+          name: path
+          required: true
+          schema: { type: string }
+      responses:
+        "200":
+          description: Current saved selections for each group
+          content:
+            application/json:
+              schema:
+                type: object
+                required: [movies, tv, custom]
+                properties:
+                  movies: { type: integer, minimum: 0 }
+                  tv: { type: integer, minimum: 0 }
+                  custom: { type: integer, minimum: 0 }
+        "400": { description: Invalid kind or unconfigured path }
+        "401": { description: Sign in required }
+        "403": { description: Owner account required }
+    put:
+      x-alreadyon-roles: [owner]
+      tags: [settings]
+      summary: Save one library folder's channel group preferences atomically
+      description: >
+        Requires an exact configured folder path and all three group choices.
+        Initializes missing known built-in default filters, reads current channel rules, preserves other paths/rules,
+        and skips unchanged selections. Custom channels are outside 100–199;
+        built-in channels use their movie or TV filter. Unfiltered built-in
+        channels are skipped; media selections also skip unfiltered custom channels.
+        All preferences and pending work commit together before acknowledgement.
+        A single owned background worker merges dirty channels across paths;
+        newer choices supersede obsolete derivation without repeating useful scans.
+        A selection-only edit never requests a filesystem scan. Pending work
+        survives restart. Currently airing playable entries remain unchanged.
+      requestBody:
+        required: true
+        content:
+          application/json:
+            schema:
+              type: object
+              additionalProperties: false
+              required: [kind, path, movies, tv, custom]
+              properties:
+                kind: { type: string, enum: [movies, tv, commercials] }
+                path: { type: string }
+                movies: { type: boolean }
+                tv: { type: boolean }
+                custom: { type: boolean }
+      responses:
+        "202":
+          description: Preferences persisted; background work may still be pending, or idle for an unchanged selection
+          content:
+            application/json:
+              schema: { $ref: "#/components/schemas/LibraryUpdateStatus" }
+        "400": { description: Invalid choices or unconfigured folder }
+        "401": { description: Sign in required }
+        "403": { description: Owner account required }
+  /api/settings/folders/updates:
+    get:
+      x-alreadyon-roles: [owner]
+      tags: [settings]
+      summary: Read durable library update progress
+      description: Distinguishes persisted preferences from applied lineups/schedules. Poll while queued, scanning or updating; failed work retains preferences and pending channels for retry.
+      responses:
+        "200":
+          description: Current revision and background state
+          content:
+            application/json:
+              schema: { $ref: "#/components/schemas/LibraryUpdateStatus" }
+        "401": { description: Sign in required }
+        "403": { description: Owner account required }
+  /api/settings/folders/updates/retry:
+    post:
+      x-alreadyon-roles: [owner]
+      tags: [settings]
+      summary: Retry failed library updates without resaving preferences
+      responses:
+        "202":
+          description: Failed pending work requeued; other states remain unchanged
+          content:
+            application/json:
+              schema: { $ref: "#/components/schemas/LibraryUpdateStatus" }
+        "401": { description: Sign in required }
+        "403": { description: Owner account required }
   /api/settings/folders:
     get:
       x-alreadyon-roles: [owner]
@@ -1716,7 +1811,9 @@ paths:
         exist yet are accepted and reported as `notFound`. A change starts
         a background rescan (files under removed folders or matching new
         patterns become missing; new files are picked up); progress shows
-        in `GET /api/status/startup`.
+        in `GET /api/status/startup` and `GET /api/settings/folders/updates`.
+        Edits persist with a durable scan request. Rapid edits supersede obsolete
+        scans; canceled discovery cannot mark unvisited files missing.
       requestBody:
         required: true
         content:
@@ -4478,6 +4575,17 @@ components:
           maximum: 5
           description: Maximum unique commercials per break after/during a movie. Default 5. A smaller pool produces a shorter break.
 
+    LibraryUpdateStatus:
+      type: object
+      required: [revision, appliedRevision, state, processed, total, error, needsScan]
+      properties:
+        revision: { type: integer, minimum: 0, description: Latest saved preference revision }
+        appliedRevision: { type: integer, minimum: 0, description: Latest fully applied revision }
+        state: { type: string, enum: [idle, queued, scanning, updating, failed] }
+        processed: { type: integer, minimum: 0 }
+        total: { type: integer, minimum: 0 }
+        error: { type: string, description: Public failure message; empty unless failed }
+        needsScan: { type: boolean, description: A changed folder list still requires discovery }
     FolderSettings:
       type: object
       required: [tv, movies, commercials, exclusions]

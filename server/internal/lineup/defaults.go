@@ -2,8 +2,8 @@ package lineup
 
 import (
 	"context"
-	"database/sql"
 	"fmt"
+	"github.com/alreadyonapp/alreadyon/server/internal/storage"
 
 	"github.com/alreadyonapp/alreadyon/server/internal/channel"
 )
@@ -60,7 +60,7 @@ var defaultFilters = map[int]channel.Filter{
 // its starting one, so every channel is built the same way and an admin can
 // edit what a default channel airs. Channels that already have a filter are
 // left alone. Returns how many filters it saved.
-func SeedDefaultFilters(ctx context.Context, db *sql.DB) (int, error) {
+func SeedDefaultFilters(ctx context.Context, db storage.Querier) (int, error) {
 	rows, err := db.QueryContext(ctx, `
 		SELECT c.id, c.number FROM channels c
 		LEFT JOIN channel_filters f ON f.channel_id = c.id

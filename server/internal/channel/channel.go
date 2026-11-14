@@ -7,6 +7,7 @@ import (
 	"database/sql"
 	"errors"
 	"fmt"
+	"github.com/alreadyonapp/alreadyon/server/internal/storage"
 	"strings"
 )
 
@@ -97,7 +98,7 @@ func Create(ctx context.Context, db *sql.DB, draft Draft) (Channel, error) {
 }
 
 // Get returns the channel with the given id, or ErrNotFound.
-func Get(ctx context.Context, db *sql.DB, id int64) (Channel, error) {
+func Get(ctx context.Context, db storage.Querier, id int64) (Channel, error) {
 	var c Channel
 	err := db.QueryRowContext(ctx, `SELECT id, number, name, hidden, visibility FROM channels WHERE id = ?`, id).
 		Scan(&c.ID, &c.Number, &c.Name, &c.Hidden, &c.Visibility)
@@ -111,7 +112,7 @@ func Get(ctx context.Context, db *sql.DB, id int64) (Channel, error) {
 }
 
 // List returns every channel, ordered by channel number.
-func List(ctx context.Context, db *sql.DB) ([]Channel, error) {
+func List(ctx context.Context, db storage.Querier) ([]Channel, error) {
 	rows, err := db.QueryContext(ctx, `SELECT id, number, name, hidden, visibility FROM channels ORDER BY number`)
 	if err != nil {
 		return nil, fmt.Errorf("channel: list: %w", err)

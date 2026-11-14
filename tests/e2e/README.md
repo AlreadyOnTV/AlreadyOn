@@ -2,7 +2,7 @@
 
 [![AlreadyOn](../../web/public/branding/header-doc.svg)](../../README.md)
 
-`make test-e2e` runs playback, channel filters, library catalog, profile autosave, library path customization and settings feedback browser suites against an isolated synthetic server. The harness prepares generated fixtures and temporary application storage; it must not target a live preview or production installation.
+`make test-e2e` runs playback, channel filters, library catalog, profile autosave, library path customization and settings feedback browser suites against an isolated synthetic server. The harness uses temporary fixtures/storage; never target a live installation.
 
 Folder checks assert `path (Found N)` and immediate persistence independently of commercial break drafts.
 
@@ -25,4 +25,4 @@ For focused WebUI profile autosave checks, start the development preview and run
 
 For focused guide checks, run `node tests/e2e/guide-live.cjs https://localhost:5173`, or select `guide-live` in the isolated harness. All API calls are intercepted; preview data is untouched. Controlled time covers keyboard/wheel/touch navigation pauses, deadline extension, programmatic-scroll exclusion, exact expiry and resumed minute polling. Restoration checks cover fullscreen CH 101 to CH 115, midnight/program/half-hour boundaries, lower/final channels and failed refreshes with cached airings. These exercise guide state/geometry, not media decoding or physical-device playback.
 
-Run `PLAYBACK_TEST_ONLY=library-paths make test-e2e` for Customize defaults, Cancel, group overrides, Save persistence, empty commercial selections, preservation of other paths/settings, removal, and failure/retry. GitHub Actions runs real persistence and intercepted failure/layout cases through `test-source` → `make test-e2e`. The intercepted cases can also run standalone with `node tests/e2e/library-path-customize-ui.cjs https://localhost:5173` without changing preview data. `make test` includes the focused WebUI unit tests; lint rejects warnings.
+Run `PLAYBACK_TEST_ONLY=library-paths make test-e2e` for Customize defaults, Cancel, atomic bulk saves, immediate acknowledgement, background progress/retry, group overrides, empty commercial selections, reload and Remove. GitHub Actions runs real persistence and intercepted failure/layout cases through `test-source` → `make test-e2e`. Intercepted cases also run with `node tests/e2e/library-path-customize-ui.cjs https://localhost:5173` without changing preview data. Worker regressions cover coalescing, cancellation, stale-commit rejection and recovery using isolated databases. `make test` includes WebUI unit tests; lint rejects warnings.

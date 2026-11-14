@@ -5,6 +5,7 @@ import (
 	"database/sql"
 	"errors"
 	"fmt"
+	"github.com/alreadyonapp/alreadyon/server/internal/workrevision"
 	"slices"
 	"strings"
 )
@@ -35,7 +36,7 @@ func SetVisibility(ctx context.Context, db *sql.DB, ids []int64, visibility stri
 		args = append(args, id)
 	}
 	query := fmt.Sprintf(`UPDATE channels SET visibility = ?, updated_at_unix = unixepoch() WHERE id IN (%s)`, strings.Join(placeholders, ","))
-	if _, err := db.ExecContext(ctx, query, args...); err != nil {
+	if _, err := workrevision.Exec(ctx, db, query, args...); err != nil {
 		return fmt.Errorf("channel: set visibility: %w", err)
 	}
 	_, _, err := ApplyAutoVisibility(ctx, db)

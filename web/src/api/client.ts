@@ -1037,3 +1037,24 @@ export async function getInactiveSessionPolicy(): Promise<InactiveSessionPolicy>
 export async function setInactiveSessionPolicy(policy: InactiveSessionPolicy): Promise<InactiveSessionPolicy> {
   return apiRequest('/api/auth/session-inactivity', jsonInit('PUT', policy), 'failed to save inactivity policy');
 }
+
+// Preferences are durable before acknowledgement; derived channels update separately.
+export interface LibraryUpdateStatus {
+  revision: number;
+  appliedRevision: number;
+  state: 'idle' | 'queued' | 'scanning' | 'updating' | 'failed';
+  processed: number;
+  total: number;
+  error: string;
+  needsScan: boolean;
+}
+export const getLibraryUpdates = (signal?: AbortSignal): Promise<LibraryUpdateStatus> =>
+  apiRequest('/api/settings/folders/updates', { signal, cache: 'no-store' }, 'Could not check library update progress');
+export const customizeLibraryPath = (choices: { kind: 'movies' | 'tv' | 'commercials'; path: string; movies: boolean; tv: boolean; custom: boolean }): Promise<LibraryUpdateStatus> =>
+  apiRequest('/api/settings/folders/customize', jsonInit('PUT', choices), 'Could not save path preferences');
+export const retryLibraryUpdates = (): Promise<LibraryUpdateStatus> =>
+  apiRequest('/api/settings/folders/updates/retry', { method: 'POST' }, 'Could not retry library updates');
+
+// Counts show the saved path checkboxes, including selections awaiting background application.
+export const getLibraryPathCounts = (kind: 'movies' | 'tv' | 'commercials', path: string, signal?: AbortSignal): Promise<{ movies: number; tv: number; custom: number }> =>
+  apiRequest('/api/settings/folders/customize?' + new URLSearchParams({ kind, path }), { signal, cache: 'no-store' }, 'Could not load channel counts');

@@ -8,6 +8,7 @@ import (
 	"database/sql"
 	"errors"
 	"fmt"
+	"github.com/alreadyonapp/alreadyon/server/internal/storage"
 	"math"
 )
 
@@ -86,7 +87,7 @@ var (
 // GetSettings returns the current settings. There's always exactly one
 // row (seeded by migration 0007, reshaped by 0015), so a missing row is
 // a schema bug, not a valid "unconfigured" state.
-func GetSettings(ctx context.Context, db *sql.DB) (Settings, error) {
+func GetSettings(ctx context.Context, db storage.Querier) (Settings, error) {
 	var s Settings
 	var mode string
 	var enabled int

@@ -69,34 +69,32 @@ func TestFolderSettingsAPI_DefaultsThenSetPartialAndReset(t *testing.T) {
 	}
 }
 
-func signalPending() bool {
-	select {
-	case <-refresh.FoldersChanged():
-		return true
-	default:
-		return false
-	}
-}
-
-func TestFolderSettingsAPI_OnlyRealChangesSignalTheWatcher(t *testing.T) {
-	router := NewRouter(t.TempDir(), t.TempDir(), openTestDB(t))
-	signalPending() // drain anything left by other tests
-
-	foldersRequest(t, router, http.MethodPut, `{"tv":["/a/tv"]}`)
-	if !signalPending() {
-		t.Error("saving different folders didn't signal a rescan")
+// Durable revisions change only for actual valid folder edits, including resets.
+func TestFolderSettingsAPI_OnlyRealChangesQueueScans(t *testing.T) {
+	db := openTestDB(t)
+	router := NewRouter(t.TempDir(), t.TempDir(), db)
+	revision := func() int64 {
+		s, err := refresh.GetUpdateStatus(t.Context(), db)
+		if err != nil {
+			t.Fatal(err)
+		}
+		return s.Revision
 	}
 	foldersRequest(t, router, http.MethodPut, `{"tv":["/a/tv"]}`)
-	if signalPending() {
-		t.Error("saving identical folders signalled a rescan")
+	if revision() != 1 {
+		t.Fatal("changed folders did not queue scan")
+	}
+	foldersRequest(t, router, http.MethodPut, `{"tv":["/a/tv"]}`)
+	if revision() != 1 {
+		t.Fatal("identical folders queued another scan")
 	}
 	foldersRequest(t, router, http.MethodPut, `{"tv":null}`)
-	if !signalPending() {
-		t.Error("resetting to the default didn't signal a rescan")
+	if revision() != 2 {
+		t.Fatal("default reset did not queue scan")
 	}
 	foldersRequest(t, router, http.MethodPut, `{"tv":["relative"]}`)
-	if signalPending() {
-		t.Error("a rejected save signalled a rescan")
+	if revision() != 2 {
+		t.Fatal("rejected save queued scan")
 	}
 }
 

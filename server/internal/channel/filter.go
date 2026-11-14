@@ -6,6 +6,7 @@ import (
 	"encoding/json"
 	"errors"
 	"fmt"
+	"github.com/alreadyonapp/alreadyon/server/internal/storage"
 	"slices"
 	"strings"
 	"unicode"
@@ -99,7 +100,7 @@ func (f Filter) Normalize() (Filter, error) {
 }
 
 // GetFilter returns the channel's filter, or nil if it has none.
-func GetFilter(ctx context.Context, db *sql.DB, channelID int64) (*Filter, error) {
+func GetFilter(ctx context.Context, db storage.Querier, channelID int64) (*Filter, error) {
 	filters, err := listFilters(ctx, db, `WHERE channel_id = ?`, channelID)
 	if err != nil {
 		return nil, err
@@ -111,39 +112,15 @@ func GetFilter(ctx context.Context, db *sql.DB, channelID int64) (*Filter, error
 }
 
 // ListFilters returns every channel's filter, keyed by channel id.
-func ListFilters(ctx context.Context, db *sql.DB) (map[int64]Filter, error) {
+func ListFilters(ctx context.Context, db storage.Querier) (map[int64]Filter, error) {
 	return listFilters(ctx, db, ``)
 }
 
-func listFilters(ctx context.Context, db *sql.DB, where string, args ...any) (map[int64]Filter, error) {
-	rows, err := db.QueryContext(ctx, `SELECT channel_id, audience_tier, genres, media_type, era, title_contains, extra FROM channel_filters `+where, args...)
+func listFilters(ctx context.Context, db storage.Querier, where string, args ...any) (map[int64]Filter, error) {
+	out, err := listSavedFilters(ctx, db, where, args...)
 	if err != nil {
-		return nil, fmt.Errorf("channel: list filters: %w", err)
-	}
-	defer rows.Close()
-	out := map[int64]Filter{}
-	for rows.Next() {
-		var id int64
-		var f Filter
-		var genres, extra string
-		if err := rows.Scan(&id, &f.AudienceTier, &genres, &f.MediaType, &f.Era, &f.TitleContains, &extra); err != nil {
-			return nil, fmt.Errorf("channel: list filters: %w", err)
-		}
-		if err := json.Unmarshal([]byte(genres), &f.Genres); err != nil {
-			return nil, fmt.Errorf("channel: decode filter genres: %w", err)
-		}
-		if err := json.Unmarshal([]byte(extra), &f.FilterExtra); err != nil {
-			return nil, err
-		}
-		if f.Genres == nil {
-			f.Genres = []string{}
-		}
-		out[id] = f
-	}
-	if err := rows.Err(); err != nil {
 		return nil, err
 	}
-	rows.Close()
 	catalog, err := ListOptions(ctx, db)
 	if err != nil {
 		return nil, err
@@ -159,7 +136,7 @@ func listFilters(ctx context.Context, db *sql.DB, where string, args ...any) (ma
 }
 
 // SetFilter validates and saves f for a channel and returns the saved form.
-func SetFilter(ctx context.Context, db *sql.DB, channelID int64, f Filter) (Filter, error) {
+func SetFilter(ctx context.Context, db storage.Querier, channelID int64, f Filter) (Filter, error) {
 	f, err := f.Normalize()
 	if err != nil {
 		return Filter{}, err
@@ -198,4 +175,58 @@ func ClearFilter(ctx context.Context, db *sql.DB, channelID int64) error {
 		return fmt.Errorf("channel: clear filter: %w", err)
 	}
 	return nil
+}
+
+// ListSavedFilters reads current rules without filesystem resolution for atomic settings patches.
+func ListSavedFilters(ctx context.Context, db storage.Querier) (map[int64]Filter, error) {
+	return listSavedFilters(ctx, db, "")
+}
+func listSavedFilters(ctx context.Context, db storage.Querier, where string, args ...any) (map[int64]Filter, error) {
+	rows, err := db.QueryContext(ctx, `SELECT channel_id, audience_tier, genres, media_type, era, title_contains, extra FROM channel_filters `+where, args...)
+	if err != nil {
+		return nil, fmt.Errorf("channel: list filters: %w", err)
+	}
+	defer rows.Close()
+	out := map[int64]Filter{}
+	for rows.Next() {
+		var id int64
+		var f Filter
+		var genres, extra string
+		if err := rows.Scan(&id, &f.AudienceTier, &genres, &f.MediaType, &f.Era, &f.TitleContains, &extra); err != nil {
+			return nil, fmt.Errorf("channel: list filters: %w", err)
+		}
+		if err := json.Unmarshal([]byte(genres), &f.Genres); err != nil {
+			return nil, fmt.Errorf("channel: decode filter genres: %w", err)
+		}
+		if err := json.Unmarshal([]byte(extra), &f.FilterExtra); err != nil {
+			return nil, err
+		}
+		if f.Genres == nil {
+			f.Genres = []string{}
+		}
+		out[id] = f
+	}
+	if err := rows.Err(); err != nil {
+		return nil, err
+	}
+	rows.Close()
+
+	return out, nil
+}
+
+// SetIncludedPaths patches only the extra rules already read in the same transaction.
+// Normalize validates the new list without resolving media paths on the Save request.
+func SetIncludedPaths(ctx context.Context, db storage.Querier, id int64, f Filter, paths []string) error {
+	f.IncludedPaths = &paths
+	f.ExcludedPaths = nil
+	f, err := f.Normalize()
+	if err != nil {
+		return err
+	}
+	raw, err := json.Marshal(f.FilterExtra)
+	if err != nil {
+		return err
+	}
+	_, err = db.ExecContext(ctx, `UPDATE channel_filters SET extra=?,updated_at_unix=unixepoch() WHERE channel_id=?`, string(raw), id)
+	return err
 }

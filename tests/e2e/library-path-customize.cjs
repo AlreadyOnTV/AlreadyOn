@@ -29,6 +29,8 @@ module.exports = async ({ browser, login, url, root }) => {
   for (const folder of [moviePath, tvPath, adPath, otherAdPath, removePath]) fs.mkdirSync(folder, { recursive: true });
   let custom;
   const group = (channel) => channel.number < 100 || channel.number > 199 ? 'custom' : channel.filter?.mediaType === 'movie' ? 'movies' : 'tv';
+  // Unchanged rules can keep the documented implicit-all selection rather than materializing a list.
+  const selected = (channel, folder) => channel.filter.includedPaths?.includes(folder) ?? !(channel.filter.excludedPaths ?? []).some((root) => folder === root.replace(/\/$/, '') || folder.startsWith(root.replace(/\/$/, '') + '/'));
   const choices = async (expected) => {
     for (const [label, value] of [['Movie', expected.movies], ['TV Show', expected.tv], ['Custom', expected.custom]]) {
       assert.equal(await page.getByRole('dialog').getByRole('switch', { name: `Enable for ${label} Channels`, exact: true }).getAttribute('aria-checked'), String(value));
@@ -39,9 +41,17 @@ module.exports = async ({ browser, login, url, root }) => {
     await page.getByRole('button', { name: `Customize ${folder}`, exact: true }).click();
     await page.getByRole('dialog', { name: 'Customize Library Path' }).waitFor();
   };
+  const waitApplied = async () => page.waitForFunction(async () => {
+    const response = await fetch('/api/settings/folders/updates');
+    const state = await response.json();
+    if (state.state === 'failed') throw new Error(state.error);
+    return state.state === 'idle' && !state.needsScan && state.appliedRevision === state.revision;
+  }, undefined, { timeout: 60000 });
   const save = async () => {
+    const started = Date.now();
     await page.getByRole('dialog').getByRole('button', { name: 'Save', exact: true }).click();
-    await page.getByRole('dialog').waitFor({ state: 'detached', timeout: 60000 });
+    await page.getByRole('dialog').waitFor({ state: 'detached', timeout: 3000 });
+    assert.ok(Date.now() - started < 3000, 'Save acknowledges before background processing');
   };
   try {
     await request('PUT', '/api/settings/folders', { movies: [moviePath, removePath], tv: [tvPath], commercials: [adPath, otherAdPath] });
@@ -71,8 +81,12 @@ module.exports = async ({ browser, login, url, root }) => {
     await save();
     current = await request('GET', '/api/channels');
     for (const channel of current.filter((c) => c.filter)) {
-      assert.equal(channel.filter.includedPaths.includes(moviePath), group(channel) === 'movies', `Movie path group for ${channel.number}`);
+      assert.equal(selected(channel, moviePath), group(channel) === 'movies', `Movie path group for ${channel.number}`);
     }
+    const counts = await request('GET', '/api/settings/folders/customize?' + new URLSearchParams({ kind: 'movies', path: moviePath }));
+    assert.equal(counts.movies, current.filter((c) => c.filter && group(c) === 'movies').length);
+    assert.equal(counts.tv, 0);
+    assert.equal(counts.custom, 0);
     for (const channel of [builtinMovie, builtinTV, custom]) {
       const saved = current.find((c) => c.id === channel.id);
       assert.ok(saved.filter.includedPaths.includes(tvPath), 'Other media path preserved');
@@ -87,14 +101,31 @@ module.exports = async ({ browser, login, url, root }) => {
     await save();
     current = await request('GET', '/api/channels');
     for (const channel of current.filter((c) => c.filter)) {
-      assert.equal(channel.filter.includedPaths.includes(tvPath), group(channel) !== 'movies', `TV path group for ${channel.number}`);
-      assert.equal(channel.filter.includedPaths.includes(moviePath), group(channel) === 'movies', 'Movie selection survives TV save');
+      assert.equal(selected(channel, tvPath), group(channel) !== 'movies', `TV path group for ${channel.number}`);
+      assert.equal(selected(channel, moviePath), group(channel) === 'movies', 'Movie selection survives TV save');
     }
     // Reopen the channel editor after a full page navigation to verify the saved checkbox.
     await page.goto(url + '/admin/channels');
     await page.getByRole('button', { name: `Edit ${custom.name}`, exact: true }).click();
     assert.equal(await page.getByRole('dialog').getByRole('switch', { name: tvPath, exact: true }).getAttribute('aria-checked'), 'true');
     assert.equal(await page.getByRole('dialog').getByRole('switch', { name: moviePath, exact: true }).getAttribute('aria-checked'), 'false');
+    const assertPathLabelAlignment = async () => {
+      const delta = await page.getByRole('dialog').locator('.channel-paths-row').evaluate((row) => {
+        const heading = row.querySelector(':scope > label');
+        const first = row.querySelector('.included-paths label > span');
+        const range = document.createRange();
+        range.selectNodeContents(heading);
+        const firstText = document.createRange();
+        firstText.selectNodeContents(first);
+        return Math.abs(range.getBoundingClientRect().top - firstText.getBoundingClientRect().top);
+      });
+      assert.ok(delta <= 2, 'Included Media Paths aligns with the first path');
+    };
+    await assertPathLabelAlignment();
+    await page.getByRole('dialog').getByRole('button', { name: 'Cancel', exact: true }).click();
+    await page.getByRole('button', { name: '+ Create Custom Channel', exact: true }).click();
+    await page.getByRole('dialog').getByRole('switch', { name: tvPath, exact: true }).waitFor();
+    await assertPathLabelAlignment();
     await page.getByRole('dialog').getByRole('button', { name: 'Cancel', exact: true }).click();
     await open(adPath);
     await choices({ movies: true, tv: true, custom: false });
@@ -111,6 +142,7 @@ module.exports = async ({ browser, login, url, root }) => {
     let policy = await request('GET', `/api/channels/${custom.id}/commercials`);
     assert.equal(policy.explicitFolders, true);
     assert.deepEqual(policy.effectiveFolders, []);
+    await waitApplied();
     await page.reload();
     policy = await request('GET', `/api/channels/${custom.id}/commercials`);
     assert.deepEqual(policy.effectiveFolders, [], 'Empty commercial selection persists after reload');
@@ -120,6 +152,7 @@ module.exports = async ({ browser, login, url, root }) => {
       const settings = await (await fetch('/api/settings/folders')).json();
       return !settings.movies.paths.some((p) => p.path === folder);
     }, removePath);
+    await waitApplied();
     assert.deepEqual(errors, []);
     console.log('PASS: Customize real API persistence, defaults, cancel, all channel groups, unrelated selections, explicit empty commercials, reload and Remove');
   } finally {
