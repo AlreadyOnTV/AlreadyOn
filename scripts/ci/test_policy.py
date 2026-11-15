@@ -5,6 +5,7 @@ import importlib.util
 import json
 import pathlib
 import os
+import re
 import subprocess
 import unittest
 from unittest.mock import patch
@@ -86,7 +87,6 @@ class PublicationPolicy(unittest.TestCase):
         self.assertIn('make test-e2e', test_action)
         self.assertEqual(validation.count('  auto_merge:\n'), 1)
         self.assertIn('&& !github.event.pull_request.draft', validation)
-        self.assertIn('needs: [build_candidate, quality, android, tests, dependency_review]', validation)
         self.assertIn('name: E2E Test Suite', validation)
         self.assertIn('workflow == "CodeQL"', validation)
         self.assertIn('.event == "pull_request"', validation)
@@ -114,13 +114,59 @@ class PublicationPolicy(unittest.TestCase):
         self.assertIn('workflow_dispatch', build)
         self.assertIn("github.event_name == 'push'", build)
 
+    def test_pr_candidate_gates_and_cache_boundaries(self):
+        root = pathlib.Path(__file__).resolve().parents[2]
+        validation = (root / '.github/workflows/pull_request_validation.yml').read_text()
+        action = (root / '.github/actions/build-validation/action.yml').read_text()
+        test_action = (root / '.github/actions/test-source/action.yml').read_text()
+        warmer = (root / '.github/workflows/validation_cache.yml').read_text()
+        base = (root / 'deploy/base.Dockerfile').read_text()
+        application = (root / 'deploy/Dockerfile').read_text()
+        jobs = {match.group(1): match.group(2) for match in re.finditer(
+            r'^  ([a-z_]+):\n(.*?)(?=^  [a-z_]+:\n|\Z)', validation, re.M | re.S)}
+        self.assertIn('image-only: "true"', jobs['build_candidate'])
+        self.assertIn('needs: [build_candidate]', jobs['tests'])
+        self.assertIn('needs: [build_candidate, android_candidate]', jobs['candidate_scan'])
+        for gate in ('build_candidate', 'quality', 'android', 'android_candidate',
+                     'candidate_scan', 'tests', 'dependency_review'):
+            self.assertIn(f"needs.{gate}.result == 'success'", jobs['auto_merge'])
+        self.assertIn('--image-archive "$RUNNER_TEMP/candidate/runtime.tar"', jobs['candidate_scan'])
+        self.assertIn('--android-runtime-locks "$RUNNER_TEMP/candidate/android-runtime"', jobs['candidate_scan'])
+        self.assertIn('--packaged-only', jobs['candidate_scan'])
+        self.assertIn(':app:assembleRelease :tv:assembleRelease', jobs['android_candidate'])
+        self.assertIn('securityInventory', jobs['android_candidate'])
+        self.assertIn(':app:testDebugUnitTest :tv:testDebugUnitTest :app:lintRelease :tv:lintRelease', jobs['android'])
+        for job in ('build_candidate', 'android', 'android_candidate', 'candidate_scan', 'tests'):
+            self.assertNotIn('packages: write', jobs[job])
+            self.assertNotIn('secrets.', jobs[job])
+        self.assertIn('default: "false"', action.split('  image-only:', 1)[1].split('runs:', 1)[0])
+        self.assertIn('if: inputs.image-only != \'true\'', action)
+        self.assertIn('go clean -testcache', test_action)
+        self.assertIn('GOMODCACHE=/ci-cache/mod', test_action)
+        self.assertIn('GOCACHE=/ci-cache/build', test_action)
+        self.assertIn('branches: [main]', warmer)
+        self.assertEqual(warmer.count('ref: main'), 2)
+        self.assertNotIn('pull_request', warmer)
+        self.assertNotIn('packages: write', warmer)
+        self.assertNotIn('secrets.', warmer)
+        self.assertIn('cache-from: type=gha,scope=source-validation-runtime', warmer)
+        self.assertIn('cache-to: type=gha,scope=source-validation-runtime,mode=max', warmer)
+        self.assertIn('cache-from: type=gha,scope=source-validation-runtime', action)
+        self.assertIn('COPY deploy/patches/ffmpeg-readrate-initial-burst.patch', base)
+        self.assertIn('COPY server/go.mod server/go.sum', application)
+        self.assertIn('COPY web/package.json web/package-lock.json', application)
+        self.assertIn('COPY server/ .', application)
+        self.assertIn('COPY web/ .', application)
+        self.assertIn('VCS_REF="$SOURCE_REVISION"', action)
+        self.assertIn('BUILD_TIMESTAMP="$GITHUB_RUN_ID-$GITHUB_RUN_ATTEMPT"', action)
+
     def test_final_workflow_inventory_and_daily_base_retention(self):
         root = pathlib.Path(__file__).resolve().parents[2]
         workflow_dir = root / '.github/workflows'
         self.assertEqual({path.name for path in workflow_dir.glob('*.yml')}, {
             'android_release.yml', 'build_publish.yml', 'codeql.yml',
             'daily_base_image.yml', 'publish_github_pages.yml',
-            'pull_request_validation.yml', 'security_scan.yml', 'weekly_cleanup.yml',
+            'pull_request_validation.yml', 'security_scan.yml', 'validation_cache.yml', 'weekly_cleanup.yml',
         })
         daily = (workflow_dir / 'daily_base_image.yml').read_text()
         self.assertIn('cron: "43 6 * * *"', daily)

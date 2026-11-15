@@ -27,6 +27,8 @@ PY
 )
 (cd web && npm run build)
 (cd server && go build -tags=e2e -ldflags "-X github.com/alreadyonapp/alreadyon/server/internal/config.dataDir=$playback_tmp/data -X github.com/alreadyonapp/alreadyon/server/internal/config.webDir=$repo_root/web/dist" -o "$playback_tmp/server" ./cmd/server)
+echo "E2E build setup: ${SECONDS}s"
+SECONDS=0
 # Two top-left blocks encode the source second (base 12, 18 luma units per digit)
 # so the browser test can check decoded content independently of its diagnostics.
 clock="if(lt(X,20),20+18*floor(floor(T+0.0001)/12),20+18*mod(floor(T+0.0001),12))"
@@ -41,6 +43,7 @@ for color in blue red green; do
   suffix="-$color"; [[ $color == blue ]] && suffix=''
   ffmpeg -nostdin -v error -f lavfi -i "color=$color:size=640x360:rate=24:duration=12" -c:v mpeg4 "$playback_tmp/media/ad$suffix.avi"
 done
+echo "E2E fixture setup: ${SECONDS}s"
 ALREADYON_WEB_PORT="$management_port" "$playback_tmp/server" > "$playback_tmp/server.log" 2>&1 &
 server_pid=$!
 export PLAYBACK_TEST_ROOT="$playback_tmp" PLAYBACK_TEST_URL="http://localhost:$management_port" PLAYBACK_TEST_SERVER_PID="$server_pid"

@@ -1,0 +1,66 @@
+# Only trusted main warms caches; daily uncached builds refresh upstream packages.
+name: Warm validation caches
+on:
+  push:
+    branches: [main]
+    paths:
+      - .github/workflows/validation_cache.yml
+      - deploy/base.Dockerfile
+      - deploy/Dockerfile
+      - deploy/patches/**
+      - deploy/check-media-stack.sh
+      - apps/android/**
+      - scripts/security/android-inventory.gradle
+  schedule:
+    - cron: "17 8 * * *"
+permissions:
+  contents: read
+concurrency:
+  group: validation-cache-main
+  cancel-in-progress: true
+jobs:
+  runtime:
+    runs-on: ubuntu-26.04
+    timeout-minutes: 45
+    steps:
+      - uses: actions/checkout@v7
+        with:
+          ref: main
+          persist-credentials: false
+      - uses: docker/setup-buildx-action@v4
+      - name: Read shared Ubuntu version
+        id: ubuntu
+        run: echo "version=$(sed -n 's/^ARG UBUNTU_VERSION=//p' deploy/Dockerfile)" >> "$GITHUB_OUTPUT"
+      - uses: docker/build-push-action@v7
+        with:
+          context: .
+          file: deploy/base.Dockerfile
+          target: runtime-base
+          pull: true
+          no-cache: ${{ github.event_name == 'schedule' }}
+          build-args: |
+            UBUNTU_VERSION=${{ steps.ubuntu.outputs.version }}
+            FFMPEG_BUILD_JOBS=2
+          cache-from: type=gha,scope=source-validation-runtime
+          cache-to: type=gha,scope=source-validation-runtime,mode=max
+  android:
+    runs-on: ubuntu-24.04
+    timeout-minutes: 40
+    steps:
+      - uses: actions/checkout@v7
+        with:
+          ref: main
+          persist-credentials: false
+      - uses: actions/setup-java@v6
+        with:
+          distribution: temurin
+          java-version: "17"
+      - uses: gradle/actions/setup-gradle@ed408507eac070d1f99cc633dbcf757c94c7933a # v4.4.3
+      - uses: android-actions/setup-android@v4
+        with:
+          packages: "platform-tools platforms;android-37.0 build-tools;36.0.0"
+      - name: Warm unsigned release dependencies
+        run: |
+          apps/android/gradlew -p apps/android --no-daemon --build-cache :app:assembleRelease :tv:assembleRelease
+          apps/android/gradlew -p apps/android --no-daemon -I "$GITHUB_WORKSPACE/scripts/security/android-inventory.gradle" \
+            -PsecurityInventoryDirectory="$RUNNER_TEMP/android-runtime" securityInventory

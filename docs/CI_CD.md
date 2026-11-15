@@ -6,7 +6,7 @@ Maintainers control releases. Titles are `YY.MM.DD-nightly` and `YY.MM.DD-stable
 
 ## Development and releases
 
-The release date is generated in `America/New_York` when Nightly publication is dispatched.
+Nightly dates use `America/New_York`.
 
 Work on `dev`, validate with the HTTPS preview, disposable Docker tests and phone/TV builds, then open a PR to `main`. PRs run CodeQL, dependency review, Android and full e2e/runtime checks. The merge job waits for all gates; drafts validate without auto-merging. Dependabot opens grouped weekly PRs; see [maintenance](DEPENDENCY_MAINTENANCE.md).
 
@@ -42,6 +42,8 @@ Dev changes reach users only after the reviewed main PR merges. See [retention](
 
 PR validation scans the exact unpublished candidate with read-only credentials; publication credentials are unavailable. Security Scan covers the final runtime image and Android release-runtime dependencies, not CI/build/test tools. Critical/High findings block publication; secret matches require private review. New cycles require [signed image evidence](ARTIFACT_PROVENANCE.md); [weekly Dependabot PRs](DEPENDENCY_MAINTENANCE.md) use the same validation gates.
 
+PR image and unsigned Android builds run independently; E2E starts with the image, while merge requires the combined scan and all other gates. See [toolchain caching](TOOLCHAIN.md#validation-caches).
+
 CodeQL analyzes Go/TypeScript only on PRs to `dev` or `main`; Pages uses its independent redirect workflow. Nightly and Stable APKs are published by Build and Publish; see [Android policy](ANDROID_RELEASES.md).
 
-New images use `ghcr.io/alreadyontv/alreadyon`. Go module and Android package identities stay compatible. Stable publication is manual and reuses the tested Nightly digest. **Daily Build Base Image** refreshes shared bases and removes stale base versions after 30 days; CI bases pin their runtime digest.
+Images use `ghcr.io/alreadyontv/alreadyon`; Go module and Android identities remain compatible. **Daily Build Base Image** refreshes shared bases and removes stale versions after 30 days; CI bases pin their runtime digest.
