@@ -1,3 +1,4 @@
+# Only trusted main warms caches; daily uncached builds refresh upstream packages.
 name: Warm validation caches
 on:
   push:
