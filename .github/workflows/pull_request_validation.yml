@@ -24,6 +24,7 @@ jobs:
       - uses: ./.github/actions/build-validation
         with:
           revision: ${{ github.sha }}
+          image-only: "true"
   quality:
     runs-on: ubuntu-26.04
     timeout-minutes: 20
@@ -75,11 +76,78 @@ jobs:
         with:
           distribution: temurin
           java-version: "17"
+      - uses: gradle/actions/setup-gradle@ed408507eac070d1f99cc633dbcf757c94c7933a # v4.4.3
+        with:
+          cache-read-only: "true"
       - uses: android-actions/setup-android@v4
         with:
           packages: "platform-tools platforms;android-37.0 build-tools;36.0.0"
       - name: Phone and TV unit tests and release lint
         run: apps/android/gradlew -p apps/android --no-daemon :app:testDebugUnitTest :tv:testDebugUnitTest :app:lintRelease :tv:lintRelease
+  android_candidate:
+    name: Build unsigned Android candidate
+    runs-on: ubuntu-24.04
+    timeout-minutes: 40
+    permissions:
+      contents: read
+    steps:
+      - uses: actions/checkout@v7
+        with:
+          ref: ${{ github.sha }}
+          persist-credentials: false
+      - uses: actions/setup-java@v6
+        with:
+          distribution: temurin
+          java-version: "17"
+      - uses: gradle/actions/setup-gradle@ed408507eac070d1f99cc633dbcf757c94c7933a # v4.4.3
+        with:
+          cache-read-only: "true"
+      - uses: android-actions/setup-android@v4
+        with:
+          packages: "platform-tools platforms;android-37.0 build-tools;36.0.0"
+      - name: Build minified unsigned phone and TV release APKs
+        run: apps/android/gradlew -p apps/android --no-daemon --build-cache :app:assembleRelease :tv:assembleRelease
+      - name: Export release-runtime dependency locks
+        run: |
+          apps/android/gradlew -p apps/android --no-daemon -I "$GITHUB_WORKSPACE/scripts/security/android-inventory.gradle" \
+            -PsecurityInventoryDirectory="$RUNNER_TEMP/android-candidate/android-runtime" securityInventory
+          cp apps/android/app/build/outputs/apk/release/app-release-unsigned.apk "$RUNNER_TEMP/android-candidate/alreadyon-android.apk"
+          cp apps/android/tv/build/outputs/apk/release/tv-release-unsigned.apk "$RUNNER_TEMP/android-candidate/alreadyon-tv.apk"
+      - uses: actions/upload-artifact@v7
+        with:
+          name: android-candidate-${{ github.run_id }}-${{ github.run_attempt }}
+          path: ${{ runner.temp }}/android-candidate
+          if-no-files-found: error
+          retention-days: 1
+  candidate_scan:
+    name: Scan unpublished candidate
+    needs: [build_candidate, android_candidate]
+    runs-on: ubuntu-26.04
+    timeout-minutes: 30
+    permissions:
+      contents: read
+    steps:
+      - uses: actions/checkout@v7
+        with:
+          ref: ${{ github.sha }}
+          persist-credentials: false
+      - uses: actions/download-artifact@v8
+        with:
+          name: runtime-candidate-${{ github.run_id }}-${{ github.run_attempt }}
+          path: ${{ runner.temp }}/candidate
+      - uses: actions/download-artifact@v8
+        with:
+          name: android-candidate-${{ github.run_id }}-${{ github.run_attempt }}
+          path: ${{ runner.temp }}/candidate
+      - name: Scan only shipped runtime components
+        run: |
+          python3 scripts/security/install-trivy.py "$RUNNER_TEMP/security-tools"
+          python3 scripts/security/scan.py \
+            --trivy "$RUNNER_TEMP/security-tools/trivy" \
+            --image-archive "$RUNNER_TEMP/candidate/runtime.tar" \
+            --android-runtime-locks "$RUNNER_TEMP/candidate/android-runtime" \
+            --packaged-only --output "$RUNNER_TEMP/security-report"
+          cat "$RUNNER_TEMP/security-report/summary.json" >> "$GITHUB_STEP_SUMMARY"
   tests:
     name: E2E Test Suite
     needs: [build_candidate]
@@ -106,6 +174,7 @@ jobs:
         with:
           ci-base: alreadyon-validation:ci
           pull-base: "false"
+          host-go-cache: "true"
       - name: Validate packaged runtime with disposable fixtures
         run: python3 tests/integration/container.py
         env:
@@ -127,9 +196,20 @@ jobs:
       && needs.build_candidate.result == 'success'
       && needs.quality.result == 'success'
       && needs.android.result == 'success'
+      && needs.android_candidate.result == 'success'
+      && needs.candidate_scan.result == 'success'
       && needs.tests.result == 'success'
       && needs.dependency_review.result == 'success'
-    needs: [build_candidate, quality, android, tests, dependency_review]
+    needs:
+      [
+        build_candidate,
+        quality,
+        android,
+        android_candidate,
+        candidate_scan,
+        tests,
+        dependency_review,
+      ]
     runs-on: ubuntu-latest
     timeout-minutes: 100
     permissions:

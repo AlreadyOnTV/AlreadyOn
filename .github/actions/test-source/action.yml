@@ -8,6 +8,9 @@ inputs:
   pull-base:
     description: Pull ci-base from its registry before testing
     default: "true"
+  host-go-cache:
+    description: Mount the setup-go module and build caches into the test container
+    default: "false"
 runs:
   using: composite
   steps:
@@ -19,6 +22,7 @@ runs:
       env:
         TEST_MEMORY: 5g
         TEST_TMPFS: 2g
+        HOST_GO_CACHE: ${{ inputs.host-go-cache }}
       shell: bash
       run: |
         # Source tests run without Git installed; pass the checkout identity as
@@ -26,12 +30,21 @@ runs:
         revision_file=$(mktemp "$RUNNER_TEMP/alreadyon-web-revision.XXXXXX")
         trap 'rm -f "$revision_file"' EXIT
         git rev-parse HEAD > "$revision_file"
+        cache_args=()
+        if [[ "$HOST_GO_CACHE" == true ]]; then
+          module_cache=$(go env GOMODCACHE)
+          build_cache=$(go env GOCACHE)
+          mkdir -p "$module_cache" "$build_cache"
+          cache_args=(-v "$module_cache:/ci-cache/mod" -v "$build_cache:/ci-cache/build" \
+            -e GOMODCACHE=/ci-cache/mod -e GOCACHE=/ci-cache/build)
+        fi
         docker run --rm --name "alreadyon-ci-tests-$GITHUB_RUN_ID-$GITHUB_RUN_ATTEMPT" \
           --memory="$TEST_MEMORY" --tmpfs "/tmp:rw,exec,size=$TEST_TMPFS,mode=1777" --user "$(id -u):$(id -g)" \
           -e GOFLAGS=-p=1 -e HOME=/tmp -e TZ \
+          "${cache_args[@]}" \
           -v "$GITHUB_WORKSPACE:/workspaces/alreadyon"           -v "$revision_file:/workspaces/web-build-revision:ro" \
           '${{ inputs.ci-base }}' bash -euc \
-          'npm ci --prefix web; go clean -testcache; make test; make test-e2e'
+          'TIMEFORMAT="CI phase %3R seconds"; time npm ci --prefix web; go clean -testcache; time make test; time make test-e2e'
     - name: Clean up the test container after cancellation
       if: always()
       shell: bash

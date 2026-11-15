@@ -5,6 +5,9 @@ inputs:
   revision:
     description: Exact checkout revision being validated
     required: true
+  image-only:
+    description: Upload images without building or scanning Android artifacts
+    default: "false"
 runs:
   using: composite
   steps:
@@ -48,16 +51,20 @@ runs:
           --build-arg BUILD_TIMESTAMP="$GITHUB_RUN_ID-$GITHUB_RUN_ATTEMPT" \
           --tag alreadyon-ci:candidate .
     - uses: actions/setup-java@v6
+      if: inputs.image-only != 'true'
       with:
         distribution: temurin
         java-version: "17"
     - uses: android-actions/setup-android@v4
+      if: inputs.image-only != 'true'
       with:
         packages: "platform-tools platforms;android-37.0 build-tools;36.0.0"
     - name: Build minified unsigned phone and TV release APKs
+      if: inputs.image-only != 'true'
       shell: bash
       run: apps/android/gradlew -p apps/android --no-daemon :app:assembleRelease :tv:assembleRelease
     - name: Export release-runtime dependency locks
+      if: inputs.image-only != 'true'
       shell: bash
       run: |
         apps/android/gradlew -p apps/android --no-daemon -I "$GITHUB_WORKSPACE/scripts/security/android-inventory.gradle" \
@@ -65,13 +72,19 @@ runs:
     - name: Package exact image and runtime dependencies
       shell: bash
       run: |
-        mkdir -p "$RUNNER_TEMP/candidate/android-runtime"
+        mkdir -p "$RUNNER_TEMP/candidate"
         docker save alreadyon-ci:candidate -o "$RUNNER_TEMP/candidate/runtime.tar"
         docker save alreadyon-validation:ci -o "$RUNNER_TEMP/candidate/ci.tar"
+    - name: Add Android release artifacts
+      if: inputs.image-only != 'true'
+      shell: bash
+      run: |
+        mkdir -p "$RUNNER_TEMP/candidate/android-runtime"
         cp apps/android/app/build/outputs/apk/release/app-release-unsigned.apk "$RUNNER_TEMP/candidate/alreadyon-android.apk"
         cp apps/android/tv/build/outputs/apk/release/tv-release-unsigned.apk "$RUNNER_TEMP/candidate/alreadyon-tv.apk"
         cp "$RUNNER_TEMP"/android-runtime/* "$RUNNER_TEMP/candidate/android-runtime/"
     - name: Scan only shipped runtime components
+      if: inputs.image-only != 'true'
       shell: bash
       run: |
         python3 scripts/security/install-trivy.py "$RUNNER_TEMP/security-tools"

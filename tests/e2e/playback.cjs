@@ -59,6 +59,7 @@ const noWorkers = async (unreleased = () => 0) => {
   }
 };
 (async () => {
+  const startupStarted = Date.now();
   for (let i = 0; i < 100; i++) {
     try {
       if ((await fetch(url + "/healthz")).ok) break;
@@ -75,6 +76,7 @@ const noWorkers = async (unreleased = () => 0) => {
       break;
     await delay(100);
   }
+  console.log(`E2E server startup: ${(Date.now() - startupStarted) / 1000}s`);
   seed();
   const browser = await chromium.launch({
     headless: true,
