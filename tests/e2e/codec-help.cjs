@@ -5,6 +5,7 @@ module.exports = async ({ browser, login, assert }) => {
   try {
     let scenario = "capabilities";
     let lastCapabilities;
+    let capacityToken;
     await page.route("**/api/channels/*/tune", async (route) => {
       const body = route.request().postDataJSON();
       lastCapabilities = body.capabilities;
@@ -17,7 +18,15 @@ module.exports = async ({ browser, login, assert }) => {
         };
         return route.continue({ postData: JSON.stringify(body) });
       }
+      if (scenario === 'capacity') {
+        capacityToken = body.token;
+        assert(capacityToken, 'The failure scenario must use an issued playback token');
+        const channelId = Number(new URL(route.request().url()).pathname.split('/')[3]);
+        const released = await context.request.delete(new URL('/api/playback/sessions', page.url()).href, { data: { channelId, token: capacityToken } });
+        assert(released.status() === 204, 'Simulate server-side revocation before failed-tune cleanup');
+      }
       const errors = {
+        capacity: { code: 'server_capacity_unsustainable', error: "The server's measured transcoding pipeline cannot sustain this output quality. Choose a lower quality or try again after capacity is remeasured." },
         server: {
           code: "server_decoder_missing",
           error:
@@ -203,14 +212,17 @@ module.exports = async ({ browser, login, assert }) => {
       (await help.count()) === 0,
       "Server decoder failure must not show client installation advice",
     );
-    for (const next of ["network", "budget", "missing"]) {
+    for (const next of ["network", "budget", "missing", "capacity"]) {
       scenario = next;
+      const cleanup = next === 'capacity' ? page.waitForResponse((response) => response.url().endsWith('/api/playback/sessions') && response.request().method() === 'DELETE' && response.request().postDataJSON().token === capacityToken) : null;
       await retry();
       await page
         .getByRole("alert")
         .filter({
           hasText:
-            next === "network"
+            next === "capacity"
+              ? "cannot sustain this output quality"
+              : next === "network"
               ? "could not be reached"
               : next === "missing"
                 ? "video file is missing"
@@ -221,6 +233,12 @@ module.exports = async ({ browser, login, assert }) => {
         (await help.count()) === 0,
         `${next} failure misclassified as missing codecs`,
       );
+      if (cleanup) {
+        assert((await cleanup).status() === 204, 'Already-revoked playback cleanup must succeed');
+        const status = await (await context.request.get(new URL('/api/auth/status', page.url()).href)).json();
+        assert(status.authenticated, 'Playback failure must preserve account authentication');
+        assert((await context.request.get(new URL('/api/profiles', page.url()).href)).ok(), 'Profiles remain available after failed playback');
+      }
     }
     await page.unroute("**/api/channels/*/tune");
     for (const code of [3, 4, 2]) {
@@ -271,7 +289,7 @@ module.exports = async ({ browser, login, assert }) => {
       );
     }
     console.log(
-      "PASS: codec message and More Info, no conversion retry, ordered OS instructions, <=100-word introduction, focus/Escape/Close, server/network/budget/missing separation, decode/format/network media errors",
+      "PASS: codec message and More Info, no conversion retry, ordered OS instructions, <=100-word introduction, focus/Escape/Close, server/network/budget/missing/capacity separation and sign-in retention, decode/format/network media errors",
     );
   } finally {
     await context.close();

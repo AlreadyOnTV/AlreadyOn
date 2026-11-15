@@ -30,9 +30,9 @@ type Capabilities struct {
 	AutoMaxHeight int `json:"autoMaxHeight,omitempty"`
 	// Ladder is the server's opt-in for a low rung on large conversions.
 	Ladder bool `json:"-"`
-	// ServerMaxHeight and ServerMaxFPS are the largest software conversion this
-	// server keeps ahead of real time (from Capacity.Limit); zero means no limit.
-	// They bound only Auto quality: a size the viewer picked is honored.
+	// ServerMaxHeight and ServerMaxFPS describe the measured sustainable pipeline.
+	// Zero means no ceiling. Matched hardware SDR samples and the separate HDR
+	// matrix also bound conversion targets; direct play needs no conversion.
 	ServerMaxHeight   int     `json:"-"`
 	ServerMaxFPS      float64 `json:"-"`
 	ServerMeasured    bool    `json:"-"`
@@ -431,7 +431,7 @@ func choose(source library.ProbeResult, caps Capabilities, allowDirect, forceEnc
 		if c.Level < 40 {
 			w, h = min(w, 1280), min(h, 720)
 		}
-		serverCap := (caps.Encoder == "" || (p.ToneMap && caps.HDRMeasured)) && caps.ServerMaxHeight > 0
+		serverCap := (caps.Encoder == "" || (caps.ServerMeasured && !caps.HDRMeasured) || (p.ToneMap && caps.HDRMeasured)) && caps.ServerMaxHeight > 0
 		if serverCap {
 			h = min(h, caps.ServerMaxHeight)
 			w = min(w, (h*16+8)/9)

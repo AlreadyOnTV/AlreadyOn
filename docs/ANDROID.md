@@ -26,7 +26,7 @@ Signed releases offer verified APK updates while preserving settings; debug pack
 
 See [subtitle modes](SUBTITLES.md).
 
-Phone/TV Sign Out retains the encrypted session. Selecting the recent server revalidates it before skipping credentials; profile PINs still apply. WebUI revocation, expiry and account restrictions require fresh authentication. Network/TLS failures retain the cookie.
+Phone/TV Sign Out retains the encrypted session. Selecting the recent server revalidates it before skipping credentials; profile PINs still apply. WebUI revocation, expiry and account restrictions require fresh authentication. Network/TLS and scoped playback failures retain the cookie. Only a management authentication challenge expires it; playback capacity errors remain recoverable and identify the server limitation.
 
 Active clients refresh shared profile settings and avatars every five minutes and on app resume, preserving local settings drafts and playback choices.
 

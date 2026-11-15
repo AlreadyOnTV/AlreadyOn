@@ -2763,6 +2763,12 @@ paths:
       operationId: revokePlaybackSession
       tags: [playback]
       summary: Revoke an owned playback authorization
+      description: >
+        Releasing an already-revoked or unknown well-formed token is an idempotent
+        no-op. A token still present must belong to the authenticated principal
+        and channel; mismatched scope remains unauthorized and is not modified.
+        Scoped authorization errors do not invalidate the account session. Only
+        management authentication failures carry the WWW-Authenticate challenge.
       requestBody:
         required: true
         content:
@@ -2777,9 +2783,9 @@ paths:
                   type: string
       responses:
         "204":
-          description: Revoked
+          description: Released or already absent
         "401":
-          description: Invalid or unowned session
+          description: Invalid management authentication, malformed token or unowned session
 
   /api/playback/probe:
     post:

@@ -203,10 +203,11 @@ func (c *Capacity) Limit(encoder string) (height int, fps float64) {
 	return c.status.MaxHeight, c.status.MaxFPS
 }
 
-// LimitFor returns the measured software ceiling for a source workload. An
-// unmeasured class does not inherit a more optimistic result from another codec.
+// LimitFor returns the sustainable ceiling for this source and encoder. Hardware
+// SDR uses its matching samples too; HDR hardware uses the separate pipeline matrix.
+// Unmeasured classes and other encoders never inherit these measurements.
 func (c *Capacity) LimitFor(encoder string, source library.StreamInfo) (height int, fps float64, measured, sustainable bool) {
-	if c == nil || encoder != "" {
+	if c == nil || (encoder != "" && IsHDRTransfer(source.ColorTransfer)) {
 		return 0, 0, false, true
 	}
 	class := classifySource(source)
@@ -276,7 +277,10 @@ func (c *Capacity) AdmissionError(active []Job, candidate Job) error {
 			}
 		}
 		speed, measured := 0.0, false
-		if job.Plan.Encoder == encoder {
+		// A copied picture does not run the measured video pipeline (for
+		// example, audio-only loudness normalization). Use the existing bounded
+		// unmeasured-pipeline budget instead of a slower video-encoding sample.
+		if !job.Plan.VideoCopy && job.Plan.Encoder == encoder {
 			speed, measured = hdrSpeedForJob(hdr, job, threads)
 			if !measured {
 				video, _ := Tracks(job.Source)

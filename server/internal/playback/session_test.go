@@ -178,3 +178,33 @@ func TestClaimForEnforcesAccountDeviceLimit(t *testing.T) {
 		t.Fatalf("slot not freed by expiry: %v", err)
 	}
 }
+
+func TestReleaseForIsIdempotentWithoutReleasingOtherOwnersOrChannels(t *testing.T) {
+	clock := &testClock{now: time.Now()}
+	sessions := NewSessions(clock)
+	token, issued, err := sessions.Issue(1, 107)
+	if err != nil {
+		t.Fatal(err)
+	}
+	for _, scope := range [][2]int64{{2, 107}, {1, 108}} {
+		if _, err = sessions.ReleaseFor(token, scope[0], scope[1]); err == nil {
+			t.Fatal("unowned/scoped token released")
+		}
+		if _, err = sessions.Validate(token, 107); err != nil {
+			t.Fatal("unauthorized cleanup changed the token")
+		}
+	}
+	clock.advance(SessionTTL)
+	released, err := sessions.ReleaseFor(token, 1, 107)
+	if err != nil || released.ID != issued.ID {
+		t.Fatalf("owned expired token not cleaned up: %+v %v", released, err)
+	}
+	for range 2 {
+		if released, err = sessions.ReleaseFor(token, 1, 107); err != nil || released.ID != "" {
+			t.Fatalf("repeated cleanup failed: %+v %v", released, err)
+		}
+	}
+	if _, err = sessions.ReleaseFor("", 1, 107); err == nil {
+		t.Fatal("malformed cleanup accepted")
+	}
+}

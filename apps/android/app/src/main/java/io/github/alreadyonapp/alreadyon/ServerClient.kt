@@ -102,7 +102,7 @@ internal class ServerClient(val origin: String, store: SessionStore, trustedCa: 
                         "profile not found" -> "This profile is no longer available."
                         else -> null
                     } else null
-                    val message = profileMessage ?: when (code) {
+                    val message = profileMessage ?: playbackFailureMessage(it.code, path, code, it.header("WWW-Authenticate")) ?: when (code) {
                         "password_change_required" -> "Change your password before continuing."
                         "password_locked" -> "This account’s username and password are locked."
                         "username_taken" -> "That username is already in use."
@@ -112,13 +112,13 @@ internal class ServerClient(val origin: String, store: SessionStore, trustedCa: 
                         401 -> if (path == "/api/auth/tv-login") "Username or TV PIN was not accepted." else "Sign-in or profile PIN was not accepted."
                         403 -> "The server refused this request."
                         409 -> "Server setup or schedule changed. Try again."
-                        422 -> "This channel cannot play with the phone’s supported formats."
+                        422 -> "This channel cannot play with this device’s supported formats."
                         429 -> "Too many attempts. Retry after ${it.header("Retry-After") ?: "a few"} seconds."
                         503 -> "Server playback capacity is unavailable. Try again shortly."
                         else -> "Server request failed (${it.code})."
                     }
                     }
-                    val expired = it.code == 401 && path != "/api/auth/login" && path != "/api/auth/tv-login" && !path.endsWith("/verify-pin")
+                    val expired = expiresAccountSession(it.code, path, it.header("WWW-Authenticate"))
                     if (expired) clearSession()
                     throw ServerFailure(it.code, message, sessionExpired = expired, code = code)
                 }
