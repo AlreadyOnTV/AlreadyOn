@@ -85,7 +85,11 @@ const noWorkers = async (unreleased = () => 0) => {
   const errors = [];
   // The first browser creates the account through the setup dialog; later ones sign in.
   // Management scenarios can authenticate even when prior folder edits leave no playable guide.
-  const login = async (page, destination = "/", readySelector = ".guide-slot-box") => {
+  const login = async (
+    page,
+    destination = "/",
+    readySelector = ".guide-slot-box",
+  ) => {
     await page.goto(url + destination);
     const guide = page.locator(readySelector).first();
     const dialog = page.getByRole("dialog");
@@ -295,7 +299,12 @@ const noWorkers = async (unreleased = () => 0) => {
       "Saved profile preference must select Japanese",
     );
     await page.goto(url + "/admin/commercials");
-    const offsetSaved = page.waitForResponse((response) => response.url().endsWith('/api/settings/commercials') && response.request().method() === 'PUT' && response.request().postDataJSON().volumeOffsetDb === -6);
+    const offsetSaved = page.waitForResponse(
+      (response) =>
+        response.url().endsWith("/api/settings/commercials") &&
+        response.request().method() === "PUT" &&
+        response.request().postDataJSON().volumeOffsetDb === -6,
+    );
     await page.getByLabel("Commercial Volume Offset (dB)").fill("-6");
     assert((await offsetSaved).ok(), "Commercial offset autosaved");
     await page.getByLabel("Commercial Volume Offset (dB)").waitFor();
@@ -1300,10 +1309,7 @@ const noWorkers = async (unreleased = () => 0) => {
         .querySelector(".playback-player")
         ?.classList.contains("is-large"),
     }));
-    assert(
-      phone.playerLarge,
-      "Phone portrait forces the large player",
-    );
+    assert(phone.playerLarge, "Phone portrait forces the large player");
 
     await page.locator(".guide-slot-box").first().click();
     await page.locator(".playback-controls").waitFor();
@@ -3177,8 +3183,9 @@ const noWorkers = async (unreleased = () => 0) => {
       });
       assert((await card.count()) === 1, title + " has its own card");
       assert(
-        (await card.getByRole("button", { name: action, exact: true }).count()) ===
-          1,
+        (await card
+          .getByRole("button", { name: action, exact: true })
+          .count()) === 1,
         title + " has an add action",
       );
       const headers = await card
@@ -3246,8 +3253,18 @@ const noWorkers = async (unreleased = () => 0) => {
     assert(initialSave.ok(), "Prepared an isolated folder for removal");
     await page.goto(url + "/admin/commercials");
     const breaks = page.locator(".commercial-settings");
-    await breaks.getByRole('heading', { name: 'Commercial Breaks', exact: true }).waitFor();
-    assert(await breaks.getByRole('button', { name: 'Save Changes', exact: true }).count() === 0 && await breaks.getByRole('button', { name: 'Cancel', exact: true }).count() === 0, 'Commercial breaks autosave without manual actions');
+    await breaks
+      .getByRole("heading", { name: "Commercial Breaks", exact: true })
+      .waitFor();
+    assert(
+      (await breaks
+        .getByRole("button", { name: "Save Changes", exact: true })
+        .count()) === 0 &&
+        (await breaks
+          .getByRole("button", { name: "Cancel", exact: true })
+          .count()) === 0,
+      "Commercial breaks autosave without manual actions",
+    );
     assert(
       (await breaks.getByText(/Breaks never land/).count()) === 0,
       "Timing hint removed",
@@ -3276,10 +3293,20 @@ const noWorkers = async (unreleased = () => 0) => {
       await page.request.get(url + "/api/settings/folders")
     ).json();
     // Keep these mutations in the disposable fixture; folders and breaks save independently.
-    const originalCommercials = await (await page.request.get(url + '/api/settings/commercials')).json();
-    const offsetAutosaved = page.waitForResponse((response) => response.url().endsWith('/api/settings/commercials') && response.request().method() === 'PUT' && response.request().postDataJSON().volumeOffsetDb === -3);
+    const originalCommercials = await (
+      await page.request.get(url + "/api/settings/commercials")
+    ).json();
+    const offsetAutosaved = page.waitForResponse(
+      (response) =>
+        response.url().endsWith("/api/settings/commercials") &&
+        response.request().method() === "PUT" &&
+        response.request().postDataJSON().volumeOffsetDb === -3,
+    );
     await page.getByLabel("Commercial Volume Offset (dB)").fill("-3");
-    assert((await offsetAutosaved).ok(), 'Commercial offset saved without a manual button');
+    assert(
+      (await offsetAutosaved).ok(),
+      "Commercial offset saved without a manual button",
+    );
     const folderSaved = page.waitForResponse(
       (r) =>
         r.url().endsWith("/api/settings/folders") &&
@@ -3348,15 +3375,26 @@ const noWorkers = async (unreleased = () => 0) => {
       .click();
     assert((await added).ok(), "Folder addition persisted immediately");
     // The row label now includes its scanned-item count; the fixture folder is empty.
-    await folders.getByText(`${addedPath} (Found 0)`, { exact: true }).waitFor();
+    await folders
+      .getByText(`${addedPath} (Found 0)`, { exact: true })
+      .waitFor();
     await page.reload();
-    await folders.getByText(`${addedPath} (Found 0)`, { exact: true }).waitFor();
+    await folders
+      .getByText(`${addedPath} (Found 0)`, { exact: true })
+      .waitFor();
     assert(
       (await page.getByLabel("Commercial Volume Offset (dB)").inputValue()) ===
         "-3",
       "Autosaved breaks and folders survive reload",
     );
-    assert((await page.request.put(url + '/api/settings/commercials', { data: originalCommercials })).ok(), 'Restore synthetic commercial settings');
+    assert(
+      (
+        await page.request.put(url + "/api/settings/commercials", {
+          data: originalCommercials,
+        })
+      ).ok(),
+      "Restore synthetic commercial settings",
+    );
     const restoredFolders = await page.request.put(
       url + "/api/settings/folders",
       {
@@ -3373,7 +3411,7 @@ const noWorkers = async (unreleased = () => 0) => {
       "Restore the original synthetic folder settings",
     );
     // Superseded scans stop early, so wait for the durable latest revision rather than matching log counts.
-    await require('./wait-library-updates.cjs')(page.request, url);
+    await require("./wait-library-updates.cjs")(page.request, url);
     await page.goto(url + "/admin/server");
     await page.locator(".settings-grid").waitFor();
     assert(
@@ -4225,7 +4263,12 @@ const noWorkers = async (unreleased = () => 0) => {
       });
     if (!only || only.includes("library-paths")) {
       await require("./library-path-customize-ui.cjs")({ browser, url });
-      await require("./library-path-customize.cjs")({ browser, login, url, root });
+      await require("./library-path-customize.cjs")({
+        browser,
+        login,
+        url,
+        root,
+      });
     }
     assert(errors.length === 0, "Browser errors: " + JSON.stringify(errors));
   } finally {
