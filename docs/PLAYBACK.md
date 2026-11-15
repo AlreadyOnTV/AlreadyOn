@@ -14,7 +14,7 @@ Tablets use the large guide player in portrait and compact player in landscape; 
 
 ## Session contract
 
-Tunes require scoped playback credentials. Never expose management keys in manifests, browser logs or receiver requests. Session status and leases govern activity and cleanup. [OpenAPI](../api/openapi.yaml) defines fields and errors.
+Tunes require scoped playback credentials. Never expose management keys in manifests, browser logs or receiver requests. Session status and leases govern activity and cleanup. Releasing an already-revoked token is idempotent; live tokens still require their owning principal/channel. [OpenAPI](../api/openapi.yaml) defines fields and errors.
 
 Dashboard Playback Time shows program position/full duration as `HH:MM/HH:MM`, retained during commercials, or `Unavailable`.
 
@@ -24,17 +24,17 @@ Schedule times are UTC. Presentation uses a four-second delay; transition prepar
 
 FFmpeg work has bounded lifetimes and cooperative resource controls. Foreground reservations can pause governed background work for the specific high-cost HDR conversion path. These controls are sampled policies, not operating-system hard caps. Preserve cancellation, stream limits and process cleanup when changing delivery.
 
-At airing transitions, a conversion without a matching capacity sample may use the conservative single-rendition fallback only while aggregate CPU, memory and transcode-slot budgets allow it. A measured-unsustainable pipeline remains blocked.
+At airing transitions, a conversion without a matching capacity sample may use the conservative single-rendition fallback only while aggregate CPU, memory and transcode-slot budgets allow it. A measured-unsustainable pipeline remains blocked. Matching hardware SDR measurements select a sustainable output before admission, including lower-quality fallback; HDR still requires its matching pipeline matrix.
 
 Media paths must stay within configured roots. Serve only authorized resources and reject unsupported or unsafe inputs. Keep read-only mounts for normal library playback.
 
 ## Validation
 
-Browser sign-in checks identify setup and login by the dialog’s accessible name so branded layouts do not require a heading. Admin layout checks include account TV PIN management before profiles and browser sessions. Use synthetic fixtures for channel changes, seeking, program transitions, session expiry, concurrent viewers and failure recovery. Check direct, remux and transcode paths separately. Hardware and physical-device compatibility need their own evidence; browser automation cannot certify every GPU or television.
+Browser sign-in fixtures identify dialogs by accessible name. Use synthetic fixtures for channel changes, seeking, program transitions, session expiry, concurrent viewers and failure recovery. Check direct, remux and transcode paths separately. Hardware and physical-device compatibility need their own evidence; browser automation cannot certify every GPU or television.
 
 See [scheduling](SCHEDULING.md), [TLS](TLS.md) and [runtime tests](../tests/integration/README.md).
 
-Browser settings checks verify friendly server-name persistence through the settings API. Direct HTTPS API tests cover native discovery; proxied requests remain outside the LAN pairing boundary.
+Direct HTTPS tests cover discovery; proxied requests remain outside LAN pairing.
 
 See [channel navigation](CHANNEL_NAVIGATION.md) for wraparound controls and edge cases.
 

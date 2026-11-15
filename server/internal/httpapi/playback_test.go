@@ -4,6 +4,7 @@ import (
 	"context"
 	"crypto/tls"
 	"encoding/json"
+	"fmt"
 	"net/http/httptest"
 	"strings"
 	"testing"
@@ -152,5 +153,45 @@ func TestMediaOriginSharesApplicationListener(t *testing.T) {
 				t.Fatal("explicit client refused")
 			}
 		})
+	}
+}
+
+func TestFailedTuneCleanupKeepsManagementAuthorization(t *testing.T) {
+	db := openTestDB(t)
+	raw, key, err := auth.GenerateAPIKey(t.Context(), db, testOwnerID(t, db), "Synthetic playback recovery")
+	if err != nil {
+		t.Fatal(err)
+	}
+	sessions := playback.NewSessions(&httpClock{time.Now()})
+	p := NewPlaybackHTTP(db, sessions, nil)
+	handler := auth.RequireAuth(db, NewRouter(t.TempDir(), t.TempDir(), db, p))
+	token, _, err := sessions.Issue(key.ID, 107)
+	if err != nil {
+		t.Fatal(err)
+	}
+	// Manager admission failure revokes the token before Android's finally block releases it.
+	sessions.Revoke(token)
+	body := fmt.Sprintf(`{"token":%q,"channelId":107}`, token)
+	for range 2 {
+		request := httptest.NewRequest("DELETE", "/api/playback/sessions", strings.NewReader(body))
+		request.Header.Set("Authorization", "Bearer "+raw)
+		response := httptest.NewRecorder()
+		handler.ServeHTTP(response, request)
+		if response.Code != 204 || response.Header().Get("WWW-Authenticate") != "" {
+			t.Fatalf("cleanup invalidated sign-in: %d %s", response.Code, response.Body.String())
+		}
+	}
+	request := httptest.NewRequest("GET", "/api/profiles", nil)
+	request.Header.Set("Authorization", "Bearer "+raw)
+	response := httptest.NewRecorder()
+	handler.ServeHTTP(response, request)
+	if response.Code != 200 {
+		t.Fatalf("management access lost after playback failure: %d", response.Code)
+	}
+	request = httptest.NewRequest("DELETE", "/api/playback/sessions", strings.NewReader(body))
+	response = httptest.NewRecorder()
+	handler.ServeHTTP(response, request)
+	if response.Code != 401 || response.Header().Get("WWW-Authenticate") != "Bearer" {
+		t.Fatalf("anonymous cleanup bypassed management auth: %d", response.Code)
 	}
 }

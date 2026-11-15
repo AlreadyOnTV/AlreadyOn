@@ -114,12 +114,11 @@ func (p *PlaybackHTTP) revoke(w http.ResponseWriter, r *http.Request) {
 	if !decodeStrict(w, r, &body) {
 		return
 	}
-	s, err := p.Sessions.Validate(body.Token, body.ChannelID)
-	if err != nil || s.KeyID != auth.PrincipalID(r.Context()) {
-		writeJSONError(w, 401, "invalid playback session")
+	s, err := p.Sessions.ReleaseFor(body.Token, auth.PrincipalID(r.Context()), body.ChannelID)
+	if err != nil {
+		writeJSONCode(w, 401, "playback_session_invalid", "invalid playback session")
 		return
 	}
-	s = p.Sessions.Revoke(body.Token)
 	if p.Manager != nil && s.StreamKey != "" {
 		p.Manager.Release(s.StreamKey, s.ID)
 		logging.Info("stream stopped: %s, viewer left", channelLabel(r.Context(), p.DB, body.ChannelID))

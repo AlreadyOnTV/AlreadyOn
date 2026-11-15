@@ -422,3 +422,78 @@ func BenchmarkCapacityMatrix(b *testing.B) {
 		}
 	}
 }
+
+// A nonmonotonic benchmark can leave a useful middle rung. Hardware Auto must
+// select it before admission instead of rejecting an otherwise playable source.
+func TestHardwareSDRChoosesSustainableRungBeforeAdmission(t *testing.T) {
+	source := sourceInfo()
+	source.Streams[0].FrameRate = 24000.0 / 1001
+	c := &Capacity{Threads: func() int { return 2 }, memory: func() uint64 { return 16 << 30 }, cpus: 4}
+	c.Load(CapacityRecord{MeasuredAt: time.Now(), Encoder: EncoderIntelVAAPI, Samples: []RungSample{
+		{SourceClass: SourceH264HD, Height: 1080, FPS: 60, Speed: 1.02},
+		{SourceClass: SourceH264HD, Height: 720, FPS: 30, Speed: 0.85},
+		{SourceClass: SourceH264HD, Height: 480, FPS: 30, Speed: 2.24},
+		{SourceClass: SourceH264HD, Height: 360, FPS: 30, Speed: 1.02},
+	}})
+	h, f, measured, sustainable := c.LimitFor(EncoderIntelVAAPI, source.Streams[0])
+	if h != 480 || f != 30 || !measured || !sustainable {
+		t.Fatalf("hardware ceiling %dp%g measured=%t sustainable=%t", h, f, measured, sustainable)
+	}
+	for _, maxHeight := range []int{0, 720, 1080} {
+		caps := clientCaps()
+		caps.Encoder = EncoderIntelVAAPI
+		caps.MaxHeight = maxHeight
+		caps.ServerMaxHeight, caps.ServerMaxFPS = h, f
+		caps.ServerMeasured, caps.ServerSustainable = measured, sustainable
+		plan, err := Choose(source, caps, false, true)
+		if err != nil || plan.Height != 480 || !plan.ServerLimited {
+			t.Fatalf("target %d plan=%+v err=%v", maxHeight, plan, err)
+		}
+		if err = c.AdmissionError(nil, Job{Source: source, Threads: 2, Plan: plan}); err != nil {
+			t.Fatalf("sustainable fallback rejected: %v", err)
+		}
+		if direct, err := Choose(source, caps, true, false); maxHeight == 0 && (err != nil || direct.Mode != "direct") {
+			t.Fatalf("direct play affected: %+v %v", direct, err)
+		}
+	}
+	for _, other := range []string{"", EncoderIntelQSV} {
+		if _, _, measured, _ := c.LimitFor(other, source.Streams[0]); measured {
+			t.Fatal("another encoder inherited hardware samples")
+		}
+	}
+	hdr := source.Streams[0]
+	hdr.Codec = "hevc"
+	hdr.ColorTransfer = "smpte2084"
+	if _, _, measured, _ := c.LimitFor(EncoderIntelVAAPI, hdr); measured {
+		t.Fatal("HDR bypassed its exact pipeline matrix")
+	}
+}
+
+func TestHardwareSDRWithNoSustainableRungStillRefusesConversion(t *testing.T) {
+	c := &Capacity{}
+	c.Load(CapacityRecord{MeasuredAt: time.Now(), Encoder: EncoderIntelVAAPI, Samples: []RungSample{
+		{SourceClass: SourceH264HD, Height: 720, FPS: 30, Speed: 0.8},
+		{SourceClass: SourceH264HD, Height: 480, FPS: 30, Speed: 0.9},
+		{SourceClass: SourceH264HD, Height: 360, FPS: 30, Speed: 1.1},
+	}})
+	caps := clientCaps()
+	caps.Encoder = EncoderIntelVAAPI
+	caps.ServerMaxHeight, caps.ServerMaxFPS, caps.ServerMeasured, caps.ServerSustainable = c.LimitFor(caps.Encoder, sourceInfo().Streams[0])
+	if _, err := Choose(sourceInfo(), caps, false, true); !errors.Is(err, ErrCapacityUnsustainable) {
+		t.Fatalf("unsafe pipeline accepted: %v", err)
+	}
+}
+
+func TestAudioOnlyConversionDoesNotInheritVideoBenchmarkFailure(t *testing.T) {
+	c := &Capacity{Threads: func() int { return 2 }, memory: func() uint64 { return 16 << 30 }, cpus: 4}
+	c.Load(CapacityRecord{MeasuredAt: time.Now(), Encoder: EncoderIntelVAAPI, Samples: []RungSample{
+		{SourceClass: SourceH264HD, Height: 360, FPS: 30, Speed: 0.8},
+	}})
+	job := Job{Source: sourceInfo(), Threads: 2, Plan: Plan{Mode: "transcode", Encoder: EncoderIntelVAAPI, VideoCopy: true, AudioCopy: false, AudioBitrate: 192000, AudioChannels: 2}}
+	if err := c.AdmissionError(nil, job); err != nil {
+		t.Fatalf("audio-only conversion inherited video failure: %v", err)
+	}
+	if err := c.AdmissionError([]Job{job, job}, job); !errors.Is(err, ErrBusy) {
+		t.Fatalf("audio-only fallback bypassed aggregate budgets: %v", err)
+	}
+}

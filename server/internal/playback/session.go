@@ -100,6 +100,30 @@ func (s *Sessions) Validate(token string, channelID int64) (Session, error) {
 	}
 	return v, nil
 }
+
+// ReleaseFor atomically releases an owned token. Missing tokens are already
+// released; a live token for another principal/channel remains untouched.
+func (s *Sessions) ReleaseFor(token string, keyID, channelID int64) (Session, error) {
+	if len(token) != 43 {
+		return Session{}, ErrUnauthorized
+	}
+	if decoded, err := base64.RawURLEncoding.DecodeString(token); err != nil || len(decoded) != 32 {
+		return Session{}, ErrUnauthorized
+	}
+	s.mu.Lock()
+	defer s.mu.Unlock()
+	hash := sha256.Sum256([]byte(token))
+	session, ok := s.items[hash]
+	if !ok {
+		return Session{}, nil
+	}
+	if session.KeyID != keyID || session.ChannelID != channelID {
+		return Session{}, ErrUnauthorized
+	}
+	delete(s.items, hash)
+	return session, nil
+}
+
 func (s *Sessions) Revoke(token string) Session {
 	s.mu.Lock()
 	defer s.mu.Unlock()
