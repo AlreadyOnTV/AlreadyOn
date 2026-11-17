@@ -83,7 +83,7 @@ jobs:
         with:
           packages: "platform-tools platforms;android-37.0 build-tools;36.0.0"
       - name: Phone and TV unit tests and release lint
-        run: apps/android/gradlew -p apps/android --no-daemon :app:testDebugUnitTest :tv:testDebugUnitTest :app:lintRelease :tv:lintRelease
+        run: python3 scripts/ci/retry-android.py apps/android/gradlew -p apps/android --no-daemon :app:testDebugUnitTest :tv:testDebugUnitTest :app:lintRelease :tv:lintRelease
   android_candidate:
     name: Build unsigned Android candidate
     runs-on: ubuntu-24.04
@@ -106,10 +106,10 @@ jobs:
         with:
           packages: "platform-tools platforms;android-37.0 build-tools;36.0.0"
       - name: Build minified unsigned phone and TV release APKs
-        run: apps/android/gradlew -p apps/android --no-daemon --build-cache :app:assembleRelease :tv:assembleRelease
+        run: python3 scripts/ci/retry-android.py apps/android/gradlew -p apps/android --no-daemon --build-cache :app:assembleRelease :tv:assembleRelease
       - name: Export release-runtime dependency locks
         run: |
-          apps/android/gradlew -p apps/android --no-daemon -I "$GITHUB_WORKSPACE/scripts/security/android-inventory.gradle" \
+          python3 scripts/ci/retry-android.py apps/android/gradlew -p apps/android --no-daemon -I "$GITHUB_WORKSPACE/scripts/security/android-inventory.gradle" \
             -PsecurityInventoryDirectory="$RUNNER_TEMP/android-candidate/android-runtime" securityInventory
           cp apps/android/app/build/outputs/apk/release/app-release-unsigned.apk "$RUNNER_TEMP/android-candidate/alreadyon-android.apk"
           cp apps/android/tv/build/outputs/apk/release/tv-release-unsigned.apk "$RUNNER_TEMP/android-candidate/alreadyon-tv.apk"

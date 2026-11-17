@@ -50,7 +50,7 @@ def dependency_pins_only(changes, read_diff):
             continue
         if name.startswith(('.github/workflows/', '.github/actions/')):
             lines = [line.strip() for line in read_diff(name) if line.strip()]
-            if lines and all(re.fullmatch(r'(?:- )?uses: [A-Za-z0-9_./-]+@[A-Za-z0-9_.-]+', line)
+            if lines and all(re.fullmatch(r'(?:- )?uses: [A-Za-z0-9_./-]+@[A-Za-z0-9_.-]+(?:\s+#.*)?', line)
                              for line in lines):
                 continue
         return False

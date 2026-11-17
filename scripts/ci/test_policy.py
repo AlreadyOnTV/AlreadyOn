@@ -440,6 +440,30 @@ class BaseRetentionPolicy(unittest.TestCase):
                              ['tag', 'push', 'tag', 'push'])
             record.assert_called_once_with('owner/repo', SHA, digest)
 
+    def test_weekly_scan_resolves_one_pulled_image(self):
+        root = pathlib.Path(__file__).resolve().parents[2]
+        workflow = (root / '.github/workflows/weekly_cleanup.yml').read_text()
+        script = workflow.split('        run: |\n', 1)[1].split('  security-scan:', 1)[0]
+        script = '\n'.join(line[10:] for line in script.splitlines())
+        with tempfile.TemporaryDirectory() as directory:
+            folder = pathlib.Path(directory)
+            docker = folder / 'docker'
+            docker.write_text("#!/bin/bash\n"
+                              "[[ \" $* \" == *' ghcr.io/alreadyontv/alreadyon:nightly '* ]] || exit 1\n"
+                              "case $1 in\n"
+                              "pull) ;;\n"
+                              "inspect) echo ghcr.io/alreadyontv/alreadyon@sha256:" + 'a' * 64 + " ;;\n"
+                              "image) echo " + SHA + " ;;\n"
+                              "*) exit 1 ;;\nesac\n")
+            docker.chmod(0o755)
+            output = folder / 'output'
+            result = subprocess.run(['bash', '-e', '-c', script], capture_output=True, text=True,
+                                    env=dict(os.environ, PATH=f"{folder}:{os.environ['PATH']}",
+                                             GITHUB_OUTPUT=str(output)))
+            self.assertEqual(result.returncode, 0, result.stderr)
+            self.assertIn('image=ghcr.io/alreadyontv/alreadyon@sha256:' + 'a' * 64, output.read_text())
+            self.assertIn('revision=' + SHA, output.read_text())
+
     def test_weekly_cleanup_and_manual_nightly_publication(self):
         root = pathlib.Path(__file__).resolve().parents[2]
         cleanup = (root / '.github/workflows/weekly_cleanup.yml').read_text()
@@ -455,6 +479,15 @@ class BaseRetentionPolicy(unittest.TestCase):
 
 class DocumentationPolicy(unittest.TestCase):
     """Check rejection as well as acceptance; deletions and odd paths matter."""
+
+    def test_action_version_comments_are_dependency_pins(self):
+        changes = [('M', '.github/workflows/check.yml')]
+        content = '# Validate the dependency update contract.\n'
+        pins = ['- uses: gradle/actions/setup-gradle@abc123 # v4.4.3',
+                '- uses: gradle/actions/setup-gradle@def456 # v6.4.1']
+        self.assertEqual(docs(changes, lambda _: content, lambda _: pins), [])
+        self.assertTrue(docs(changes, lambda _: content,
+                             lambda _: pins + ['run: echo changed']))
 
     def test_clean_checkout_checks_latest_commit_and_respects_explicit_base(self):
         script = pathlib.Path(__file__).with_name('check-documentation.py').resolve()
