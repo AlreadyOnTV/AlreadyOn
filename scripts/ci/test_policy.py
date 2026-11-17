@@ -97,7 +97,7 @@ class PublicationPolicy(unittest.TestCase):
         self.assertIn('gh pr merge "$PR_NUMBER" --repo "$REPOSITORY"', validation)
         self.assertIn('gh pr merge "$PR_NUMBER" --repo "$REPOSITORY" --squash --match-head-commit', validation)
         self.assertNotIn('--merge --match-head-commit', validation)
-        self.assertIn('on:\n  push:\n    branches: [main]', build)
+        self.assertNotIn('  push:', build)
         channels = build.split('  channels:\n', 1)[1].split('\n  stable_android:\n', 1)[0]
         self.assertIn('permissions:\n      contents: write', channels)
 
@@ -112,7 +112,7 @@ class PublicationPolicy(unittest.TestCase):
         self.assertIn('runtime-candidate-${{ github.run_id }}-${{ github.run_attempt }}', build)
         self.assertIn('docker save alreadyon-ci:candidate', build)
         self.assertIn('workflow_dispatch', build)
-        self.assertIn("github.event_name == 'push'", build)
+        self.assertNotIn("github.event_name == 'push'", build)
 
     def test_pr_candidate_gates_and_cache_boundaries(self):
         root = pathlib.Path(__file__).resolve().parents[2]

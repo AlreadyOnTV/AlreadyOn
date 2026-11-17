@@ -100,10 +100,17 @@ class ReleaseWorkflowContract(unittest.TestCase):
                     self.assertIn('go clean -testcache', arguments[-1])
                     self.assertIn('make test-e2e', arguments[-1])
 
+    def test_main_merge_does_not_publish_a_release(self):
+        workflow = yaml.safe_load((ROOT / '.github/workflows/build_publish.yml').read_text())
+        self.assertEqual(set(workflow[True]), {'workflow_dispatch', 'workflow_call'})
+        for job in ('select', 'bases', 'candidate'):
+            self.assertNotIn("github.event_name == 'push'", workflow['jobs'][job]['if'])
+            self.assertIn("github.event_name == 'workflow_dispatch'", workflow['jobs'][job]['if'])
+
     def test_manual_nightly_dispatch_publishes_from_dev_or_main(self):
         build = yaml.safe_load((ROOT / '.github/workflows/build_publish.yml').read_text())
         self.assertIn('workflow_dispatch', build[True])
-        self.assertEqual(build[True]['push']['branches'], ['main'])
+        self.assertNotIn('push', build[True])
         self.assertIn('dev|main', build['jobs']['select']['steps'][-1]['run'])
         self.assertEqual(build['jobs']['android']['with']['operation'], 'nightly')
         self.assertEqual(build['jobs']['android']['needs'],

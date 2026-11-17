@@ -1,6 +1,6 @@
 # Release descriptions
 
-Release descriptions live in GitHub Releases; PRs, issues and commit subjects supply their content. Do not write `docs/release-notes/` fragments or a repository known-issue list. Keep review captures outside Git.
+Release descriptions live in GitHub Releases; PRs, issues and commits supply content. Do not write `docs/release-notes/` fragments or a repository known-issue list.
 
 Titles are only `YY.MM.DD-nightly` or `YY.MM.DD-stable`. Preserve installed APK versions, exact signed artifacts and hidden provenance. Historical alpha/RC releases remain unchanged.
 
@@ -19,6 +19,6 @@ Maintain product metadata in GitHub:
 
 API reads paginate; failures stop generation. Review descriptions during release acceptance; no handwritten draft or repository fragment is required. GitHub state is captured when the candidate is built. Exact-source reruns reuse their description after checking provenance, so later issue edits do not rewrite that snapshot. A validated same-date Nightly replacement with a new source SHA regenerates notes from that source and its baseline.
 
-Publication follows maintainer-approved [delivery gates](CI_CD.md).
+Publication is manual after maintainer-approved [delivery gates](CI_CD.md); merging never publishes.
 
-Stable consolidates its predecessor range and preserves the selected Nightly’s known issues. It rebuilds signed APKs with the Stable version and a higher code while Docker `latest` reuses the Nightly digest. Description-only backfills replace changelog content and preserve downloads, signed assets, tags and hidden provenance. Historical alpha/RC descriptions stay unchanged.
+Stable consolidates its predecessor range and preserves the selected Nightly’s known issues. It rebuilds signed APKs with the Stable version and a higher code while Docker `latest` reuses the Nightly digest. Description-only backfills replace changelog content and preserve downloads, signed assets, tags and hidden provenance. Historical alpha/RC descriptions remain unchanged.

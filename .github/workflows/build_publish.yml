@@ -1,8 +1,6 @@
 # Maintainers manually publish a validated Nightly from dev or main.
 name: Build and Publish
 on:
-  push:
-    branches: [main]
   workflow_dispatch:
     inputs:
       operation:
@@ -29,7 +27,7 @@ concurrency:
   cancel-in-progress: false
 jobs:
   select:
-    if: github.event_name == 'push' || (github.event_name == 'workflow_dispatch' && inputs.operation == 'nightly')
+    if: github.event_name == 'workflow_dispatch' && inputs.operation == 'nightly'
     runs-on: ubuntu-26.04
     outputs:
       existing: ${{ steps.source.outputs.existing }}
@@ -100,7 +98,7 @@ jobs:
         run: python3 scripts/ci/android-release.py plan-latest-stable --sha "$(git rev-parse HEAD)" >> "$GITHUB_OUTPUT"
   bases:
     needs: select
-    if: (github.event_name == 'push' || (github.event_name == 'workflow_dispatch' && inputs.operation == 'nightly')) && needs.select.outputs.existing != 'true'
+    if: (github.event_name == 'workflow_dispatch' && inputs.operation == 'nightly') && needs.select.outputs.existing != 'true'
     runs-on: ubuntu-26.04
     timeout-minutes: 90
     concurrency:
@@ -130,7 +128,7 @@ jobs:
   candidate:
     name: Build, scan and attest the Nightly image
     needs: [select, bases]
-    if: (github.event_name == 'push' || (github.event_name == 'workflow_dispatch' && inputs.operation == 'nightly')) && needs.select.outputs.existing != 'true'
+    if: (github.event_name == 'workflow_dispatch' && inputs.operation == 'nightly') && needs.select.outputs.existing != 'true'
     runs-on: ubuntu-26.04
     timeout-minutes: 120
     outputs:
