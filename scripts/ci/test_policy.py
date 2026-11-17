@@ -165,7 +165,7 @@ class PublicationPolicy(unittest.TestCase):
         workflow_dir = root / '.github/workflows'
         self.assertEqual({path.name for path in workflow_dir.glob('*.yml')}, {
             'android_release.yml', 'build_publish.yml', 'codeql.yml',
-            'daily_base_image.yml', 'publish_github_pages.yml',
+            'daily_base_image.yml', 'dependabot_routing.yml', 'publish_github_pages.yml',
             'pull_request_validation.yml', 'security_scan.yml', 'validation_cache.yml', 'weekly_cleanup.yml',
         })
         daily = (workflow_dir / 'daily_base_image.yml').read_text()
