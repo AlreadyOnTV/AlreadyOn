@@ -3,10 +3,14 @@ import unittest
 from unittest.mock import patch
 import subprocess
 
-from release_notes import candidate_changes, generated_changes, source_commits, published_changelog, release_body, render_fragments, promotion_changes, replace_changelog
+from release_notes import candidate_changes, generated_changes, source_commits, published_changelog, release_body, render_fragments, promotion_changes, replace_changelog, summary_line
 
 
 class ReleaseNotesTests(unittest.TestCase):
+    def test_change_summary_is_one_plain_line(self):
+        result = summary_line('fix(ci): restore\n  release planning [skip ci]', 'https://example.com/source')
+        self.assertEqual(result, '- [Restore release planning](https://example.com/source)')
+
     def test_categories_and_duplicate_entries(self):
         result = render_fragments(['## Features\n\n- Discover servers.\n',
                                    '## Bug fixes\n\n- Keep mute settings.\n',
@@ -150,6 +154,18 @@ class ReleaseNotesTests(unittest.TestCase):
                  patch('release_notes.github_json', return_value={**detail, 'labels': [{'name': label}]}), \
                  patch('release_notes.subprocess.check_output', return_value='2026-10-15T00:00:00+00:00'):
                 self.assertEqual('Add captions' in generated_changes('owner/repo', 'sha', None), expected)
+
+    def test_internal_fix_uses_change_summary_without_requiring_a_product_bug(self):
+        detail = {'title': 'fix(ci): grant date tag write permission',
+                  'url': 'https://github.com/owner/repo/pull/10',
+                  'labels': [{'name': 'ci'}], 'closingIssuesReferences': []}
+        with patch('release_notes.source_commits', return_value=['a']), \
+                patch('release_notes.github_pages', side_effect=[
+                    [{'number': 10, 'merged_at': 'date', 'merge_commit_sha': 'a'}], []]), \
+                patch('release_notes.github_json', return_value=detail):
+            result = generated_changes('owner/repo', 'sha', None)
+        self.assertIn('Grant date tag write permission', result.split('# Other Changes')[1])
+        self.assertIn('- No bugfixes in this release.', result)
 
     def test_bug_pr_without_issue_and_api_errors_fail_closed(self):
         with patch('release_notes.source_commits', return_value=['a']), \

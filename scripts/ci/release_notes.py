@@ -81,6 +81,15 @@ def issue_line(issue):
     return f"- [{title}]({issue['html_url']})"
 
 
+def summary_line(title, url):
+    """Turn commit/PR subjects into plain one-line summaries without CI directives."""
+    title = re.sub(r'\s*\[skip ci\]', '', ' '.join(title.split()), flags=re.IGNORECASE)
+    title = re.sub(r'^(?:feat|fix|chore|ci|docs|style|refactor|test|build|perf|security)(?:\([^)]*\))?!?:\s*',
+                   '', title, flags=re.IGNORECASE)
+    title = title[:1].upper() + title[1:]
+    return f'- [{title}]({url})'
+
+
 def priority(issue):
     names = labels(issue)
     for rank, aliases in enumerate([{'p0', 'priority:critical', 'critical'},
@@ -119,6 +128,9 @@ def generated_changes(repo, sha, baseline_tag):
         # Explicit exclusions remain honored; maintenance belongs in Other Changes.
         if 'release:skip' in labels(pr):
             continue
+        if labels(pr) & {'dependencies', 'documentation', 'chore', 'ci'}:
+            groups['Other Changes'].append(summary_line(pr['title'], pr['url']))
+            continue
         linked_features = False
         linked_bug = False
         for ref in pr.get('closingIssuesReferences', []):
@@ -140,9 +152,9 @@ def generated_changes(repo, sha, baseline_tag):
         if section == 'Bugfixes' and not linked_bug:
             raise ValueError(f'Bugfix PR #{number} must link a closing bug issue for release notes')
         if section == 'New Features' and not linked_features:
-            groups[section].append(f"- [{' '.join(pr['title'].split())}]({pr['url']})")
+            groups[section].append(summary_line(pr['title'], pr['url']))
         if not section and not linked_features and not linked_bug:
-            groups['Other Changes'].append(f"- [{' '.join(pr['title'].split())}]({pr['url']})")
+            groups['Other Changes'].append(summary_line(pr['title'], pr['url']))
     for commit in commits:
         if associated[commit]:
             continue
@@ -151,7 +163,7 @@ def generated_changes(repo, sha, baseline_tag):
             ['git', 'show', '--no-patch', '--format=%P%x00%s', commit], text=True).strip().split('\0', 1)
         if len(parents.split()) > 1:
             continue
-        groups['Other Changes'].append(f"- [{' '.join(subject.split())}](https://github.com/{repo}/commit/{commit})")
+        groups['Other Changes'].append(summary_line(subject, f'https://github.com/{repo}/commit/{commit}'))
     if not any(groups[section] for section in SECTIONS if section != 'Known Issues'):
         if not commits:
             comparison = (f' since [{baseline_tag}](https://github.com/{repo}/releases/tag/{baseline_tag})'
