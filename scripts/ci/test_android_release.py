@@ -43,6 +43,14 @@ class AndroidReleaseTests(unittest.TestCase):
                 shutil.copyfile(source / name, destination / name)
         return download
 
+    def test_changelog_uses_nightly_or_stable_for_nightly_and_only_stable_for_stable(self):
+        entries = [{'tag_name': tag, 'draft': False} for tag in
+                   ('26.11.10-stable', '26.11.14-nightly', '26.11.15-nightly')]
+        self.assertEqual(release.changelog_baseline(entries, '26.11.15-stable'), '26.11.10-stable')
+        self.assertEqual(release.changelog_baseline(entries, '26.11.15-nightly'), '26.11.14-nightly')
+        entries.append({'tag_name': '26.11.14-stable', 'draft': False})
+        self.assertEqual(release.changelog_baseline(entries, '26.11.15-nightly'), '26.11.14-stable')
+
     def test_manifest_binds_exact_source_phone_tv_and_checksums(self):
         with tempfile.TemporaryDirectory() as temp:
             directory = Path(temp)

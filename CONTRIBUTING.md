@@ -8,7 +8,7 @@ Use the [documentation index](docs/README.md) for current guides. Start with [th
 
 1. External contributors normally use a fork and focused branch. Maintainers use one checkout and develop directly on `dev`, as documented in [development setup](docs/DEVELOPMENT.md).
 2. Implement one coherent change. Preserve existing behavior outside its scope.
-3. Update the relevant guide and [OpenAPI](api/openapi.yaml) when contracts change. Explain unusual logic in source comments. Describe user-facing changes in the PR for [release preparation](docs/RELEASE_NOTES.md). Release descriptions are generated from product-labelled PRs and linked issues, not repository Markdown. Fixes link exact issue titles. Omit internal maintenance.
+3. Update the relevant guide and [OpenAPI](api/openapi.yaml) when contracts change. Explain unusual logic in source comments. Describe user-facing changes in the PR for [release preparation](docs/RELEASE_NOTES.md). Release descriptions summarize PRs, linked issues and direct commits, not repository fragments. Fixes link exact issue titles; maintenance appears under Other Changes.
 4. Run relevant checks and describe results in the PR. Include screenshots for visible interface changes and reproduction steps for fixes.
 5. For maintainer releases, validate against the native preview and test devices, then open a PR from `dev` to `main`. CodeQL, Dependabot dependency review, Android checks and full e2e/runtime checks must pass before auto-merge. Maintainers manually publish Nightly from `dev` or `main`; Stable is manually published from the latest validated Nightly reachable from `main`.
 

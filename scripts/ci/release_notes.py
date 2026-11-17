@@ -3,10 +3,11 @@ import re
 import json
 import subprocess
 
-SECTIONS = ('New Features', 'Bugfixes', 'Known Issues')
+SECTIONS = ('New Features', 'Bugfixes', 'Other Changes', 'Known Issues')
 ALIASES = {'Features': 'New Features', 'Improvements': 'New Features', 'Bug fixes': 'Bugfixes'}
 EMPTY = {'New Features': 'No new features in this release.',
          'Bugfixes': 'No bugfixes in this release.',
+         'Other Changes': 'No other changes in this release.',
          'Known Issues': 'No known issues are currently listed for this release.'}
 START = '<!-- end-user-changelog:start -->'
 END = '<!-- end-user-changelog:end -->'
@@ -26,23 +27,26 @@ def render_fragments(fragments):
                 section = ALIASES.get(heading[1], heading[1])
                 if section not in groups:
                     raise ValueError('Release notes require supported headings')
+            elif section and line in {EMPTY[section], '- ' + EMPTY[section]}:
+                continue
             elif line.startswith('- ') and section:
                 if line not in groups[section]:
                     groups[section].append(line)
-            elif section and line == EMPTY[section]:
-                continue
             else:
                 raise ValueError('Release notes require supported headings and single-line bullet entries')
     return '\n\n'.join('# ' + section + '\n\n' +
-                         ('\n'.join(entries) if entries else EMPTY[section])
+                         ('\n'.join(entries) if entries else '- ' + EMPTY[section])
                          for section, entries in groups.items())
 
 
-def promotion_changes(body):
-    """Identical promoted artifacts add no changes; retain their reviewed known issues."""
+def promotion_changes(body, changes=None):
+    """Stable summarizes its own range while retaining the tested known-issue snapshot."""
     notes = render_fragments([published_changelog(body)])
+    if changes is None:
+        return notes
     known = notes.split('# Known Issues\n\n', 1)[1]
-    return render_fragments(['# Known Issues\n\n' + known])
+    changes = render_fragments([changes]).split('# Known Issues\n\n', 1)[0]
+    return render_fragments([changes + '# Known Issues\n\n' + known])
 
 
 def github_json(*args):
@@ -99,18 +103,21 @@ def generated_changes(repo, sha, baseline_tag):
     commits = source_commits(sha, baseline_tag)
     commit_set = set(commits)
     prs = {}
+    associated = {}
     for commit in commits:
+        associated[commit] = set()
         for pr in github_pages(f'repos/{repo}/commits/{commit}/pulls?per_page=100'):
             if pr.get('merged_at') and pr.get('merge_commit_sha') in commit_set:
                 prs[pr['number']] = pr
+                associated[commit].add(pr['number'])
     groups = {section: [] for section in SECTIONS}
     fixed = set()
     emitted = set()
     for number in sorted(prs):
         pr = github_json('pr', 'view', str(number), '--repo', repo,
                          '--json', 'number,title,url,labels,closingIssuesReferences')
-        # Internal/dependency PRs never become product claims just because they merged.
-        if labels(pr) & {'dependencies', 'documentation', 'release:skip', 'chore', 'ci'}:
+        # Explicit exclusions remain honored; maintenance belongs in Other Changes.
+        if 'release:skip' in labels(pr):
             continue
         linked_features = False
         linked_bug = False
@@ -134,6 +141,26 @@ def generated_changes(repo, sha, baseline_tag):
             raise ValueError(f'Bugfix PR #{number} must link a closing bug issue for release notes')
         if section == 'New Features' and not linked_features:
             groups[section].append(f"- [{' '.join(pr['title'].split())}]({pr['url']})")
+        if not section and not linked_features and not linked_bug:
+            groups['Other Changes'].append(f"- [{' '.join(pr['title'].split())}]({pr['url']})")
+    for commit in commits:
+        if associated[commit]:
+            continue
+        # Integration merges duplicate their underlying commits; summarize direct work once.
+        parents, subject = subprocess.check_output(
+            ['git', 'show', '--no-patch', '--format=%P%x00%s', commit], text=True).strip().split('\0', 1)
+        if len(parents.split()) > 1:
+            continue
+        groups['Other Changes'].append(f"- [{' '.join(subject.split())}](https://github.com/{repo}/commit/{commit})")
+    if not any(groups[section] for section in SECTIONS if section != 'Known Issues'):
+        if not commits:
+            comparison = (f' since [{baseline_tag}](https://github.com/{repo}/releases/tag/{baseline_tag})'
+                          if baseline_tag else '')
+            groups['Other Changes'].append(f'- No source changes{comparison}.')
+        else:
+            groups['Other Changes'].append(
+                f'- [Review source changes](https://github.com/{repo}/compare/{baseline_tag}...{sha}).'
+                if baseline_tag else f'- [Initial source snapshot](https://github.com/{repo}/tree/{sha}).')
     issues = github_pages(f'repos/{repo}/issues?state=open&per_page=100')
     for issue in sorted(issues, key=priority):
         if 'pull_request' in issue or kind(issue) != 'Bugfixes' or issue['number'] in fixed:
@@ -171,6 +198,16 @@ def published_changelog(body):
     return notes
 
 
+def replace_changelog(body, changes):
+    """Backfill descriptions without changing download links or hidden provenance."""
+    published_changelog(body)
+    prefix, rest = body.split(START, 1)
+    _, suffix = rest.split(END, 1)
+    # Older manually reviewed descriptions placed this now-stale claim above the snapshot.
+    prefix = re.sub(r'This Nightly contains no user-facing changes since [^\n]+\.\n\n', '', prefix)
+    return prefix + START + '\n' + render_fragments([changes]) + '\n' + END + suffix
+
+
 def release_body(repo, tag, sha, code, changes, candidate_tag=None, changelog_baseline=None):
     """Link this release’s APKs; hidden metadata preserves rerun/promotion identity."""
     changes = render_fragments([changes])
@@ -178,7 +215,7 @@ def release_body(repo, tag, sha, code, changes, candidate_tag=None, changelog_ba
     for line in changes.splitlines():
         if line.startswith('# '):
             section = line[2:]
-        elif line.startswith('- ') and section in {'Bugfixes', 'Known Issues'}:
+        elif line.startswith('- ') and section in {'Bugfixes', 'Known Issues'} and line != '- ' + EMPTY[section]:
             if not re.fullmatch(r'- \[.+\]\(https://github\.com/[^/]+/[^/]+/issues/\d+\)(?:: .+)?', line):
                 raise ValueError(f'{section} entries must link a GitHub issue using its title')
     # Legacy readers rely on these labels. Keep them invisible without moving or
