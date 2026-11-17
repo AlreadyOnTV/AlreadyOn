@@ -7,7 +7,8 @@ on:
 permissions:
   contents: read
 concurrency:
-  group: validation-${{ github.event.pull_request.number }}
+  # Metadata-only runs must not cancel validation of the unchanged candidate.
+  group: validation-${{ github.event.pull_request.number }}-${{ github.event.action == 'edited' && github.event.changes.base.ref == null && 'metadata' || 'candidate' }}
   cancel-in-progress: true
 jobs:
   build_candidate:

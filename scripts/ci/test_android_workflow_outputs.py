@@ -36,6 +36,8 @@ class ReleaseWorkflowContract(unittest.TestCase):
     def test_retargeted_dependency_prs_validate_and_merge_only_into_dev(self):
         workflow = yaml.safe_load((ROOT / '.github/workflows/pull_request_validation.yml').read_text())
         codeql = yaml.safe_load((ROOT / '.github/workflows/codeql.yml').read_text())
+        self.assertIn("github.event.action == 'edited' && github.event.changes.base.ref == null && 'metadata' || 'candidate'",
+                      workflow['concurrency']['group'])
         self.assertIn('edited', workflow[True]['pull_request']['types'])
         self.assertIn('edited', codeql[True]['pull_request']['types'])
         condition = "github.event.action != 'edited' || github.event.changes.base.ref != null"
