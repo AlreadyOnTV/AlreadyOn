@@ -3,7 +3,7 @@ name: Pull Request Validation
 on:
   pull_request:
     branches: [dev, main]
-    types: [opened, synchronize, reopened, ready_for_review]
+    types: [opened, synchronize, reopened, ready_for_review, edited]
 permissions:
   contents: read
 concurrency:
@@ -11,6 +11,7 @@ concurrency:
   cancel-in-progress: true
 jobs:
   build_candidate:
+    if: github.event.action != 'edited' || github.event.changes.base.ref != null
     name: Build unpublished release candidate
     runs-on: ubuntu-26.04
     timeout-minutes: 120
@@ -26,6 +27,7 @@ jobs:
           revision: ${{ github.sha }}
           image-only: "true"
   quality:
+    if: github.event.action != 'edited' || github.event.changes.base.ref != null
     runs-on: ubuntu-26.04
     timeout-minutes: 20
     permissions:
@@ -64,6 +66,7 @@ jobs:
       - name: Test CI policy helpers
         run: python3 -m unittest discover -s scripts/ci -p 'test_*.py'
   android:
+    if: github.event.action != 'edited' || github.event.changes.base.ref != null
     runs-on: ubuntu-24.04
     timeout-minutes: 40
     permissions:
@@ -85,6 +88,7 @@ jobs:
       - name: Phone and TV unit tests and release lint
         run: python3 scripts/ci/retry-android.py apps/android/gradlew -p apps/android --no-daemon :app:testDebugUnitTest :tv:testDebugUnitTest :app:lintRelease :tv:lintRelease
   android_candidate:
+    if: github.event.action != 'edited' || github.event.changes.base.ref != null
     name: Build unsigned Android candidate
     runs-on: ubuntu-24.04
     timeout-minutes: 40
@@ -120,6 +124,7 @@ jobs:
           if-no-files-found: error
           retention-days: 1
   candidate_scan:
+    if: github.event.action != 'edited' || github.event.changes.base.ref != null
     name: Scan unpublished candidate
     needs: [build_candidate, android_candidate]
     runs-on: ubuntu-26.04
@@ -149,6 +154,7 @@ jobs:
             --packaged-only --output "$RUNNER_TEMP/security-report"
           cat "$RUNNER_TEMP/security-report/summary.json" >> "$GITHUB_STEP_SUMMARY"
   tests:
+    if: github.event.action != 'edited' || github.event.changes.base.ref != null
     name: E2E Test Suite
     needs: [build_candidate]
     runs-on: ubuntu-26.04
@@ -180,6 +186,7 @@ jobs:
         env:
           CONTAINER_IMAGE: alreadyon-ci:candidate
   dependency_review:
+    if: github.event.action != 'edited' || github.event.changes.base.ref != null
     name: Dependabot
     runs-on: ubuntu-latest
     permissions:
@@ -190,9 +197,10 @@ jobs:
         with:
           fail-on-severity: moderate
   auto_merge:
-    # Draft PRs run validation but remain open until the maintainer marks them ready.
+    # Drafts await approval; Dependabot updates enter dev before any main promotion.
     if: github.event_name == 'pull_request'
       && !github.event.pull_request.draft
+      && (github.event.pull_request.user.login != 'dependabot[bot]' || github.event.pull_request.base.ref == 'dev')
       && needs.build_candidate.result == 'success'
       && needs.quality.result == 'success'
       && needs.android.result == 'success'

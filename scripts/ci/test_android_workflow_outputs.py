@@ -33,6 +33,23 @@ class ReleaseWorkflowContract(unittest.TestCase):
         self.assertIn('/candidate/runtime.tar', scan)
         self.assertIn('/candidate/android-runtime', scan)
 
+    def test_retargeted_dependency_prs_validate_and_merge_only_into_dev(self):
+        workflow = yaml.safe_load((ROOT / '.github/workflows/pull_request_validation.yml').read_text())
+        codeql = yaml.safe_load((ROOT / '.github/workflows/codeql.yml').read_text())
+        self.assertIn('edited', workflow[True]['pull_request']['types'])
+        self.assertIn('edited', codeql[True]['pull_request']['types'])
+        condition = "github.event.action != 'edited' || github.event.changes.base.ref != null"
+        for job in ('build_candidate', 'quality', 'android', 'android_candidate',
+                    'candidate_scan', 'tests', 'dependency_review'):
+            self.assertEqual(workflow['jobs'][job]['if'], condition)
+        self.assertEqual(codeql['jobs']['analyze']['if'], condition)
+        self.assertIn("github.event.pull_request.user.login != 'dependabot[bot]' || github.event.pull_request.base.ref == 'dev'",
+                      workflow['jobs']['auto_merge']['if'])
+        dependabot = yaml.safe_load((ROOT / '.github/dependabot.yml').read_text())
+        for update in dependabot['updates']:
+            self.assertEqual(update['target-branch'], 'dev')
+            self.assertGreater(update.get('open-pull-requests-limit', 5), 0)
+
     def test_cache_warmer_only_runs_trusted_main_without_publication(self):
         warmer = yaml.safe_load((ROOT / '.github/workflows/validation_cache.yml').read_text())
         self.assertEqual(set(warmer[True]), {'push', 'schedule'})
