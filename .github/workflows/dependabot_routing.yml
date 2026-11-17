@@ -1,0 +1,52 @@
+# Trusted metadata-only routing keeps the App key away from dependency PR code.
+name: Route Dependabot PRs to dev
+on:
+  workflow_run:
+    workflows: [CodeQL]
+    types: [completed]
+  schedule:
+    - cron: "17 * * * *"
+  workflow_dispatch:
+permissions: {}
+concurrency:
+  group: dependabot-routing
+  cancel-in-progress: false
+jobs:
+  route:
+    if: github.event_name != 'workflow_run' || github.event.workflow_run.event == 'pull_request'
+    runs-on: ubuntu-26.04
+    timeout-minutes: 5
+    steps:
+      - name: Create repository-scoped routing token
+        id: app
+        uses: actions/create-github-app-token@bcd2ba49218906704ab6c1aa796996da409d3eb1 # v3.2.0
+        with:
+          app-id: ${{ vars.DEPENDABOT_ROUTER_APP_ID }}
+          private-key: ${{ secrets.DEPENDABOT_ROUTER_PRIVATE_KEY }}
+          permission-pull-requests: write
+      - name: Retarget same-repository Dependabot PRs
+        uses: actions/github-script@3a2844b7e9c422d3c10d287c895573f7108da1b3 # v9.0.0
+        with:
+          github-token: ${{ steps.app.outputs.token }}
+          script: |
+            // Only fresh, same-repository bot metadata can authorize a base change.
+            // Never consume workflow artifacts, checkout a PR, or merge with this token.
+            const {owner, repo} = context.repo;
+            const repository = `${owner}/${repo}`;
+            const eligible = pr => pr.state === 'open'
+              && pr.user?.login === 'dependabot[bot]'
+              && pr.user?.type === 'Bot'
+              && pr.base?.ref === 'main'
+              && pr.base?.repo?.full_name === repository
+              && pr.head?.repo?.full_name === repository
+              && pr.head?.ref?.startsWith('dependabot/');
+            const pulls = await github.paginate(github.rest.pulls.list,
+              {owner, repo, state: 'open', base: 'main', per_page: 100});
+            for (const candidate of pulls.filter(eligible)) {
+              const {data: current} = await github.rest.pulls.get(
+                {owner, repo, pull_number: candidate.number});
+              if (!eligible(current)) continue;
+              await github.rest.pulls.update(
+                {owner, repo, pull_number: current.number, base: 'dev'});
+              core.info(`Retargeted Dependabot PR #${current.number} to dev; fresh PR gates must pass.`);
+            }

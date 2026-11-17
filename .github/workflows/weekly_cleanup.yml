@@ -40,9 +40,10 @@ jobs:
       - name: Resolve the exact Nightly digest and source revision
         id: nightly
         run: |
-          docker pull ghcr.io/alreadyontv/alreadyon:nightly
-          source=$(docker inspect ghcr.io/alreadyontv/alreadyon:nightly --format '{{index .RepoDigests 0}}')
-          revision=$(docker image inspect ghcr.io/alreadyon/alreadyon:nightly --format '{{index .Config.Labels "org.opencontainers.image.revision"}}')
+          image=ghcr.io/alreadyontv/alreadyon:nightly
+          docker pull "$image"
+          source=$(docker inspect "$image" --format '{{index .RepoDigests 0}}')
+          revision=$(docker image inspect "$image" --format '{{index .Config.Labels "org.opencontainers.image.revision"}}')
           [[ "$source" =~ @sha256:[0-9a-f]{64}$ ]]
           [[ "$revision" =~ ^[0-9a-f]{40}$ ]]
           echo "image=$source" >> "$GITHUB_OUTPUT"

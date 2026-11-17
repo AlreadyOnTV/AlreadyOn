@@ -17,7 +17,7 @@ SBOM_ASSETS = (*SBOM_NAMES, 'sbom-manifest.json')
 
 from image_registry import release_source as image_source
 from release_dates import release_day
-from release_notes import candidate_changes, promotion_changes, release_body
+from release_notes import candidate_changes, generated_changes, promotion_changes, release_body
 
 # Current lifecycle is Nightly on main plus manual Stable. Historical tags remain readable.
 NIGHTLY = re.compile(r"(\d{2}\.\d{2}\.\d{2})-nightly\Z")
@@ -86,10 +86,18 @@ def tag_version_code(entry):
 
 
 def changelog_baseline(entries, tag):
-    """Use the preceding release stage for this date, else the latest prior date."""
+    """Current channels compare against their own predecessor; retain legacy stage rules."""
     current = stage_tag(tag)
     if current is None:
         raise ValueError("Invalid release stage tag")
+    if current[1] in {'nightly', 'stable'}:
+        prior = [(parsed[0], parsed[1] == 'stable', entry['tag_name']) for entry in entries
+                 if not entry.get('draft', False)
+                 and (parsed := stage_tag(entry['tag_name'])) is not None
+                 and (parsed[1] == 'stable' if current[1] == 'stable'
+                      else parsed[1] in {'nightly', 'stable'})
+                 and parsed[0] < current[0]]
+        return max(prior)[2] if prior else previous_release_tag(entries, current[0])
     same_day = []
     for entry in entries:
         previous = stage_tag(entry["tag_name"])
@@ -355,10 +363,12 @@ def candidate(repo, tag, sha, code, directory, *, direct_stable=False, predecess
     verify_assets(directory, sha)
     entries = releases(repo)
     baseline_tag = changelog_baseline(entries, tag)
-    changes = (promotion_changes(predecessor.get("body") or "") if predecessor and release_source(predecessor) == sha
+    changes = (promotion_changes(predecessor.get("body") or "", generated_changes(repo, sha, baseline_tag))
+               if predecessor and release_source(predecessor) == sha
                else candidate_changes(repo, entries, tag, sha, baseline_tag,
                                       allow_source_replacement=nightly))
-    notes = (release_body(repo, tag, sha, code, changes, candidate_tag=predecessor["tag_name"])
+    notes = (release_body(repo, tag, sha, code, changes, candidate_tag=predecessor["tag_name"],
+                          changelog_baseline=baseline_tag)
              if predecessor else release_body(repo, tag, sha, code, changes, changelog_baseline=baseline_tag))
     publish_now = bool(predecessor) or parsed[1] in {"nightly", "stable"}
     publish(repo, tag, sha, directory, notes, not direct_stable, publish_now=publish_now,

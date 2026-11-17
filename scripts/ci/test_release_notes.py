@@ -3,10 +3,14 @@ import unittest
 from unittest.mock import patch
 import subprocess
 
-from release_notes import candidate_changes, generated_changes, source_commits, published_changelog, release_body, render_fragments, promotion_changes
+from release_notes import candidate_changes, generated_changes, source_commits, published_changelog, release_body, render_fragments, promotion_changes, replace_changelog, summary_line
 
 
 class ReleaseNotesTests(unittest.TestCase):
+    def test_change_summary_is_one_plain_line(self):
+        result = summary_line('fix(ci): restore\n  release planning [skip ci]', 'https://example.com/source')
+        self.assertEqual(result, '- [Restore release planning](https://example.com/source)')
+
     def test_categories_and_duplicate_entries(self):
         result = render_fragments(['## Features\n\n- Discover servers.\n',
                                    '## Bug fixes\n\n- Keep mute settings.\n',
@@ -35,11 +39,47 @@ class ReleaseNotesTests(unittest.TestCase):
         self.assertNotIn('/26.10.09-rc3/', stable)
         self.assertNotIn('Download Now', published_changelog(stable))
         self.assertEqual([line for line in stable.splitlines() if line.startswith('# ')],
-                         ['# Download Now', '# New Features', '# Bugfixes', '# Known Issues'])
+                         ['# Download Now', '# New Features', '# Bugfixes', '# Other Changes', '# Known Issues'])
         self.assertIn('<!--\nSource commit:', stable)
         self.assertIn('Source commit: `' + 'a' * 40 + '`', stable)
         with self.assertRaises(ValueError):
             published_changelog('Technical notes only.')
+
+    def test_stable_summarizes_its_range_and_keeps_nightly_known_issues(self):
+        nightly = release_body('owner/repo', '26.11.15-nightly', 'a' * 40, 1,
+            '# New Features\n\n- Nightly feature.\n\n# Known Issues\n\n'
+            '- [Tested issue](https://github.com/owner/repo/issues/2)')
+        changes = '# New Features\n\n- Feature since prior Stable.\n\n# Known Issues\n\n' \
+                  '- [Newer issue](https://github.com/owner/repo/issues/3)'
+        result = promotion_changes(nightly, changes)
+        self.assertIn('Feature since prior Stable.', result)
+        self.assertIn('Tested issue', result)
+        self.assertNotIn('Newer issue', result)
+
+    def test_direct_commits_are_summarized_without_integration_merge_noise(self):
+        with patch('release_notes.source_commits', return_value=['direct', 'merge']), \
+                patch('release_notes.github_pages', side_effect=[[], [], []]), \
+                patch('release_notes.subprocess.check_output', side_effect=[
+                    'parent\0Preserve playback sessions\n', 'left right\0Merge dev\n']):
+            result = generated_changes('owner/repo', 'sha', 'baseline')
+        self.assertIn('[Preserve playback sessions](https://github.com/owner/repo/commit/direct)', result)
+        self.assertNotIn('Merge dev', result)
+
+    def test_source_identical_release_has_an_explicit_bullet(self):
+        with patch('release_notes.source_commits', return_value=[]), \
+                patch('release_notes.github_pages', return_value=[]):
+            result = generated_changes('owner/repo', 'sha', 'baseline')
+        self.assertIn('- No source changes since [baseline]', result)
+
+    def test_backfill_preserves_downloads_and_provenance(self):
+        body = release_body('owner/repo', '26.11.15-stable', 'a' * 40, 123,
+                            render_fragments([]), candidate_tag='26.11.15-nightly')
+        updated = replace_changelog(body, '# Other Changes\n\n- A source summary.')
+        self.assertEqual(body.split('<!-- end-user-changelog:start -->')[0],
+                         updated.split('<!-- end-user-changelog:start -->')[0])
+        self.assertEqual(body.split('<!-- end-user-changelog:end -->')[1],
+                         updated.split('<!-- end-user-changelog:end -->')[1])
+        self.assertIn('- A source summary.', updated)
 
     def test_candidate_changelog_records_its_explicit_baseline(self):
         body = release_body('owner/repo', '26.10.10-beta', 'a' * 40, 123,
@@ -50,7 +90,7 @@ class ReleaseNotesTests(unittest.TestCase):
     def test_three_sections_and_empty_placeholders(self):
         result = render_fragments([])
         self.assertEqual([line for line in result.splitlines() if line.startswith('# ')],
-                         ['# New Features', '# Bugfixes', '# Known Issues'])
+                         ['# New Features', '# Bugfixes', '# Other Changes', '# Known Issues'])
         self.assertIn('No new features in this release.', result)
         self.assertIn('No bugfixes in this release.', result)
         self.assertEqual(render_fragments([result]), result)
@@ -70,13 +110,12 @@ class ReleaseNotesTests(unittest.TestCase):
             described,
         )
 
-    def test_identical_artifact_promotion_retains_only_known_issues(self):
+    def test_identical_artifact_promotion_preserves_tested_notes(self):
         body = release_body('owner/repo', '26.10.18-alpha2', 'a' * 40, 123,
                             '# New Features\n\n- Watch TV.\n\n# Known Issues\n\n'
                             '- [Remaining bug](https://github.com/owner/repo/issues/2)')
         result = promotion_changes(body)
-        self.assertNotIn('Watch TV.', result)
-        self.assertIn('No new features in this release.', result)
+        self.assertIn('Watch TV.', result)
         self.assertIn('[Remaining bug]', result)
 
     def issue(self, number, label='bug', title='Bug title'):
@@ -109,12 +148,24 @@ class ReleaseNotesTests(unittest.TestCase):
     def test_features_and_internal_prs(self):
         detail = {'title': 'Add captions', 'url': 'https://github.com/owner/repo/pull/10',
                   'labels': [{'name': 'enhancement'}], 'closingIssuesReferences': []}
-        for label, expected in [('enhancement', True), ('documentation', False), ('dependencies', False)]:
+        for label, expected in [('enhancement', True), ('documentation', True), ('dependencies', True), ('release:skip', False)]:
             with patch('release_notes.source_commits', return_value=['a']), \
                  patch('release_notes.github_pages', side_effect=[[{'number': 10, 'merged_at': 'date', 'merge_commit_sha': 'a'}], []]), \
                  patch('release_notes.github_json', return_value={**detail, 'labels': [{'name': label}]}), \
                  patch('release_notes.subprocess.check_output', return_value='2026-10-15T00:00:00+00:00'):
                 self.assertEqual('Add captions' in generated_changes('owner/repo', 'sha', None), expected)
+
+    def test_internal_fix_uses_change_summary_without_requiring_a_product_bug(self):
+        detail = {'title': 'fix(ci): grant date tag write permission',
+                  'url': 'https://github.com/owner/repo/pull/10',
+                  'labels': [{'name': 'ci'}], 'closingIssuesReferences': []}
+        with patch('release_notes.source_commits', return_value=['a']), \
+                patch('release_notes.github_pages', side_effect=[
+                    [{'number': 10, 'merged_at': 'date', 'merge_commit_sha': 'a'}], []]), \
+                patch('release_notes.github_json', return_value=detail):
+            result = generated_changes('owner/repo', 'sha', None)
+        self.assertIn('Grant date tag write permission', result.split('# Other Changes')[1])
+        self.assertIn('- No bugfixes in this release.', result)
 
     def test_bug_pr_without_issue_and_api_errors_fail_closed(self):
         with patch('release_notes.source_commits', return_value=['a']), \
