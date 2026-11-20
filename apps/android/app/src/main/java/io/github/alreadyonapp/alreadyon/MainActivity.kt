@@ -143,8 +143,8 @@ class MainActivity : ComponentActivity() {
                         pipControls = null
                     }
                 }
-                LaunchedEffect(controls, state.playback != null, state.paused, state.muted) {
-                    controls?.update(state.playback != null, state.paused, state.muted)
+                LaunchedEffect(controls, pip, state.channel?.id, state.playback != null, state.error != null, state.paused, state.muted) {
+                    controls?.update(pip, state)
                 }
                 val expanded = fullscreen || pip
                 val view = LocalView.current

@@ -614,19 +614,31 @@ internal class PhoneModel(application: Application) : AndroidViewModel(applicati
         // Resume rejoins the server's current schedule rather than playing behind live time.
         if (resume) state.value.channel?.let { watch(it, restart = true) }
     }
+    fun retryPlayback() {
+        val channel = state.value.channel ?: return
+        update { it.copy(paused = false) }
+        watch(channel, restart = true)
+    }
+
     // Physical phone buttons control output volume; the player controls only mute.
     // Deliberate fullscreen entry starts audible playback without toggling an already audible stream.
     fun unmute() = update { it.copy(muted = false) }
     fun toggleMute() = update { it.copy(muted = !it.muted) }
 
-    fun playerFailed(revision: Long, error: Exception? = null) {
+    fun playerFailed(revision: Long, error: Exception? = null, keepChannel: Boolean = false) {
         if (state.value.playback?.revision != revision) return
         if (error != null) {
             handleFailure(error)
             if (state.value.trustIssue) return
         }
-        stopWatching()
-        update { it.copy(error = "The phone could not play this stream. Select the channel to try again.") }
+        if (keepChannel) {
+            viewing?.cancel()
+            update { it.copy(playback = null, playbackReady = false, paused = false,
+                error = "The phone could not play this stream. Tap Play to try again.") }
+        } else {
+            stopWatching()
+            update { it.copy(error = "The phone could not play this stream. Select the channel to try again.") }
+        }
     }
 
     private suspend fun status(api: ServerClient, channel: Long, token: String): JSONObject =

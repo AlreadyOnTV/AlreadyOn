@@ -16,7 +16,7 @@ Native onboarding accepts the instance certificate on first connection without a
 
 Check sign-in, profile selection/PIN behavior, channel changes, transitions, tracks, rotation, picture-in-picture and background recovery. Use synthetic fixtures; actual device validation is distinct from emulator or browser testing. Record device/codec limitations without publishing personal host or device details.
 
-On phones, tap the picture-in-picture video to reveal Android’s menu. Use Play or Pause and Mute or Unmute in the bottom row. Resuming playback rejoins the current live airing.
+On phones, tap the picture-in-picture video to reveal Android’s menu. Use Play or Pause and Mute or Unmute in the bottom row. Resuming playback rejoins the current live airing. Controls stay visible while tuning. Tap Play to retry after errors.
 
 See [emulator setup](ANDROID_EMULATOR.md), [playback](PLAYBACK.md) and [OpenAPI](../api/openapi.yaml).
 
