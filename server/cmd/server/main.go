@@ -300,6 +300,7 @@ func run() (restart bool) {
 
 	restartRequested := make(chan struct{}, 1)
 	management := http.NewServeMux()
+	registerCapacityFixture(management, capacity, tuner, cfg.DataDir)
 	httpapi.RegisterTLS(management, certificateManager)
 	httpapi.RegisterDDNS(management, ddnsManager)
 	management.Handle("POST /api/server/restart", httpapi.RestartHandler(func() {

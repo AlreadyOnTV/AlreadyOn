@@ -1,3 +1,4 @@
+// Cancellation must release progress readers even before process admission.
 package playback
 
 import (

@@ -1,3 +1,4 @@
+// Cache tests cover identity changes and time bounds without live server state.
 package playback
 
 import (

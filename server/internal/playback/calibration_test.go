@@ -1,3 +1,4 @@
+// Calibration policy tests use controlled measurements to verify conservative admission.
 package playback
 
 import (

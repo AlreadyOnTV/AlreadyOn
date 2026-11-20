@@ -1,3 +1,4 @@
+// Prepared-input tests reject corrupted or redirected synthetic fixtures.
 package playback
 
 import (
