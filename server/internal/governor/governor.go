@@ -76,23 +76,25 @@ const (
 // Governor holds ranked background claims, CPU credit and host-pressure state.
 // All attached analysis processes share one CPU-time budget.
 type Governor struct {
-	mu         sync.Mutex
-	cores      int
-	max        int
-	target     int
-	fixed      bool
-	cpu        float64
-	limit      string
-	next       uint64
-	tickets    map[*Ticket]struct{}
-	changed    chan struct{} // closed and replaced whenever a waiter might proceed
-	budget     bool
-	throttled  bool
-	credit     time.Duration
-	quiet      int
-	allowance  float64
-	charged    time.Duration
-	foreground int
+	serialAnalysis bool
+	groups         map[int]int
+	mu             sync.Mutex
+	cores          int
+	max            int
+	target         int
+	fixed          bool
+	cpu            float64
+	limit          string
+	next           uint64
+	tickets        map[*Ticket]struct{}
+	changed        chan struct{} // closed and replaced whenever a waiter might proceed
+	budget         bool
+	throttled      bool
+	credit         time.Duration
+	quiet          int
+	allowance      float64
+	charged        time.Duration
+	foreground     int
 }
 
 // Ticket is one running job's claim on the pool. The job may pause with it
@@ -145,6 +147,7 @@ func New(most int) *Governor {
 	cores := runtime.NumCPU()
 	g := newGovernor(cores, min(most, max(1, cores-1)))
 	g.budget = true
+	g.serialAnalysis = true
 	g.allowance = cpuCapacity(cores)
 	return g
 }
@@ -183,13 +186,14 @@ func (g *Governor) Limit() string {
 	return g.limit
 }
 
-// ReserveForeground pauses every governed background task while a playback
-// pipeline needs the container's full CPU quota. Nested streams share the pause;
+// ReserveForeground pauses low-priority analysis while a playback
+// pipeline needs resources. Library refresh remains eligible under host pressure limits.
+// Nested streams share the analysis pause;
 // the returned release function is safe to call more than once.
 func (g *Governor) ReserveForeground() func() {
 	g.mu.Lock()
 	g.foreground++
-	g.target, g.quiet, g.limit = 0, 0, LimitPlayback
+	g.quiet, g.limit = 0, LimitPlayback
 	g.applyLocked()
 	g.signalLocked()
 	g.mu.Unlock()
@@ -222,7 +226,11 @@ func (g *Governor) Acquire(ctx context.Context, prio int) (*Ticket, error) {
 			return nil, err
 		}
 		g.mu.Lock()
-		if g.countAtOrAboveLocked(prio) < g.target {
+		limit := g.target
+		if g.serialAnalysis && prio >= PriorityHigh {
+			limit = min(limit, 1)
+		}
+		if g.eligibleLocked(prio) && g.countAtOrAboveLocked(prio) < limit {
 			g.next++
 			t := &Ticket{g: g, prio: prio, seq: g.next}
 			g.tickets[t] = struct{}{}
@@ -365,8 +373,15 @@ func (g *Governor) applyLocked() {
 		}
 		return ranked[i].seq < ranked[j].seq
 	})
+	analysis := 0
 	for i, t := range ranked {
-		want := i >= g.target || g.throttled
+		want := i >= g.target || g.throttled || !g.eligibleLocked(t.prio)
+		if g.serialAnalysis && t.prio >= PriorityHigh {
+			want = want || analysis >= 1
+			if !want {
+				analysis++
+			}
+		}
 		if t.pgid == 0 || t.stopped == want {
 			continue
 		}
@@ -443,9 +458,7 @@ func (g *Governor) Run(ctx context.Context, read Reader, every time.Duration) {
 		swapLimited := swapPressure.update(prevSample, cur, elapsed)
 		g.limit = pressureReason(prevSample, cur, util, swapLimited)
 		next := g.target
-		if g.foreground > 0 {
-			next, g.quiet, g.limit = 0, 0, LimitPlayback
-		} else if g.limit != "" {
+		if g.limit != "" {
 			next, g.quiet = 0, 0
 		} else {
 			g.quiet++
@@ -458,6 +471,9 @@ func (g *Governor) Run(ctx context.Context, read Reader, every time.Duration) {
 			if next == 0 {
 				g.limit = LimitRecovery
 			}
+		}
+		if g.foreground > 0 && g.limit == "" {
+			g.limit = LimitPlayback
 		}
 		changed := next != g.target
 		g.target = next

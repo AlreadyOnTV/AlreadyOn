@@ -2,9 +2,9 @@
 
 [![AlreadyOn](../../web/public/branding/header-doc.svg)](../../README.md)
 
-`make test-e2e` runs playback, channel filters, library catalog, profile autosave, library path customization and settings feedback browser suites against an isolated synthetic server. The harness uses temporary fixtures/storage; never target a live installation.
+`make test-e2e` runs playback, channel filters, library catalog, profile autosave, library path customization and settings feedback browser suites against an isolated synthetic server. Use temporary fixtures/storage; never target a live installation.
 
-Use reproducible fixtures/clocks and readiness signals instead of arbitrary sleeps. Queue readiness uses authenticated request polling; async Playwright predicates treat Promises as truthy.
+Use controlled clocks and readiness. Queue readiness uses authenticated request polling; async Playwright predicates treat Promises as truthy.
 
 Run `PLAYBACK_TEST_ONLY=admin,admin-metrics-logs make test-e2e` to check folder updates followed by dashboard/log access. Management scenarios sign in directly to their admin page; a playable guide is not a readiness requirement. Disk fixtures use per-mount bandwidth, IOPS and latency, including unavailable readings; assertions cover the four throughput lines, missing-sample gaps, capacity table and expanded-chart layout.
 Activity checks cover concurrent sessions, client-version labels and unknown fallback, hidden latency, and paired source/output formats.
@@ -13,7 +13,7 @@ Subtitle defaults select the language and mode by their visible labels. The prof
 
 Run `PLAYBACK_TEST_ONLY=volume make test-e2e` for volume persistence, mute/fullscreen, profiles and browser restarts with disposable storage.
 
-Full release runs require maintainer approval. Record commands, exit status and failures. Keep screenshots/logs ignored and sanitized.
+For startup readiness tests, see [background work](../../docs/BACKGROUND_JOBS.md). Full release runs require maintainer approval. Record commands, exit status and failures. Keep screenshots/logs ignored and sanitized.
 
 A browser pass does not certify every device, codec or GPU. Use [packaged-runtime tests](../integration/README.md) for image behavior and separate physical-device validation where necessary. See [delivery](../../docs/CI_CD.md).
 

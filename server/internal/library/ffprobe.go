@@ -108,7 +108,7 @@ func Probe(ctx context.Context, path string) (ProbeResult, error) {
 		if stream.CodecType != "video" || (stream.ColorTransfer != "smpte2084" && stream.ColorTransfer != "arib-std-b67") {
 			continue
 		}
-		frameCtx, cancel := context.WithTimeout(ctx, 3*time.Second)
+		frameCtx, cancel := governor.WithTimeout(ctx, 3*time.Second)
 		frameCmd := exec.CommandContext(frameCtx, "ffprobe", "-v", "error", "-protocol_whitelist", "file,pipe", "-threads", "1", "-select_streams", "v:0", "-read_intervals", "%+#64", "-show_frames", "-show_entries", "frame=stream_index:frame_side_data", "-of", "json", "--", path)
 		var frames bytes.Buffer
 		frameCmd.Stdout = &frames

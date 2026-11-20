@@ -2,5 +2,5 @@
 
 package main
 
-// Production always runs hourly maintenance; this is not a runtime setting.
+// Production always runs coordinated periodic maintenance; this is not a runtime setting.
 const periodicJobsEnabled = true

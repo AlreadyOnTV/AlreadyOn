@@ -134,15 +134,12 @@ def main():
     assert details['ffmpegVersion'] != 'Unavailable'
     assert all(ipaddress.ip_address(address).version == 4 for address in details['ipAddresses'])
     print('PASS: authenticated build identity, process uptime, time zone and installed FFmpeg version', flush=True)
-    # Calibration shares the background governor with media work. Wait before
-    # constructing the playback scenario so benchmark activity does not distort
-    # conversion admission and segment-decoding checks.
-    wait_for(lambda: api('GET', '/api/settings/transcoding/threads').get('state') == 'idle', 'thread benchmark')
-    # The optional HDR matrix deliberately remains part of the capacity run and
-    # has a ten-minute server-side deadline. Two-CPU hosted runners can need
-    # longer than the generic three-minute asynchronous-work allowance.
-    wait_for(lambda: api('GET', '/api/settings/transcoding/capacity').get('state') == 'idle',
-             'capacity benchmark', 660)
+    # Both status endpoints report the complete sequential startup group. The
+    # server permits up to three minutes of tuning plus thirty for capacity/HDR;
+    # the generic asynchronous-work deadline must not expire midway through it.
+    wait_for(lambda: api('GET', '/api/settings/transcoding/threads').get('state') == 'idle'
+             and api('GET', '/api/settings/transcoding/capacity').get('state') == 'idle',
+             'startup benchmark group', 2100)
     def updates_applied():
         state = api('GET', '/api/settings/folders/updates')
         assert state['state'] != 'failed', state.get('error', 'Background update failed')

@@ -4,6 +4,7 @@ import (
 	"context"
 	"database/sql"
 	"errors"
+	"github.com/alreadyonapp/alreadyon/server/internal/governor"
 	"sync"
 	"time"
 
@@ -152,6 +153,11 @@ func processUpdate(parent context.Context, db *sql.DB) error {
 	return processUpdateUsing(parent, db, updateSteps{prepare: prepareLocked, rebuild: lineup.BuildFilteredChannels, regenerate: schedule.Regenerate})
 }
 func processUpdateUsing(parent context.Context, db *sql.DB, steps updateSteps) (err error) {
+	parent, release := governor.Library(parent)
+	defer release()
+	if err := governor.Checkpoint(parent); err != nil {
+		return err
+	}
 	if err := lockUpdates(parent); err != nil {
 		return err
 	}

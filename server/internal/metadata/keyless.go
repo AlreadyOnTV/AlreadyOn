@@ -43,7 +43,7 @@ const (
 // NewKeylessClient returns a KeylessClient pointed at the real providers.
 func NewKeylessClient() *KeylessClient {
 	return &KeylessClient{
-		HTTPClient:       &http.Client{Transport: governor.BackgroundTransport{}, Timeout: 20 * time.Second},
+		HTTPClient:       &http.Client{Transport: governor.BackgroundTransport{Timeout: 20 * time.Second}},
 		TVmazeBase:       "https://api.tvmaze.com",
 		WikidataEndpoint: "https://query.wikidata.org/sparql",
 		UserAgent:        "AlreadyOn (+https://github.com/AlreadyOnTV/AlreadyOn)",

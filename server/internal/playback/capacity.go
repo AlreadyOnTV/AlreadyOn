@@ -117,8 +117,8 @@ type CapacityStatus struct {
 // viewer: the largest picture software encoding keeps ahead of real time (the
 // Auto quality never goes above it) and how many conversions can run at once.
 // The speed measurement is slow, so it runs at start, when the encoder setting
-// changes and once an hour; the parallel limit is recomputed from it, the CPU
-// count and the free memory on its own, cheaper schedule.
+// changes and every four hours through Benchmarks; the parallel limit is
+// recomputed at the end of that coordinated group.
 type Capacity struct {
 	// Context ends measurements when the server shuts down; nil never does.
 	Context    context.Context
@@ -331,13 +331,21 @@ func (c *Capacity) Processes() int {
 // Start measures in the background. It does nothing when a measurement is
 // already running, and (unless force) when a stream is playing.
 func (c *Capacity) Start(force bool) bool {
+	return c.start(c.Context, force, true)
+}
+
+// Measure runs synchronously inside the coordinated benchmark group.
+func (c *Capacity) Measure(ctx context.Context) bool {
+	return c.start(ctx, false, false)
+}
+func (c *Capacity) start(base context.Context, force, asynchronous bool) bool {
 	c.mu.Lock()
 	if c.started {
 		c.mu.Unlock()
 		return false
 	}
 	if !force && c.Busy != nil && c.Busy() {
-		c.status.Detail = "Skipped while a stream is playing; it runs again at the next hour."
+		c.status.Detail = "Skipped while a stream is playing; it is deferred until the server is idle."
 		c.mu.Unlock()
 		return false
 	}
@@ -345,15 +353,19 @@ func (c *Capacity) Start(force bool) bool {
 	c.status.State = "running"
 	c.status.Detail = ""
 	c.mu.Unlock()
-	base := c.Context
 	if base == nil {
 		base = context.Background()
 	}
-	go func() {
+	run := func() {
 		ctx, cancel := measurementContext(base, force, c.Busy)
 		defer cancel()
 		c.run(ctx)
-	}()
+	}
+	if asynchronous {
+		go run()
+	} else {
+		run()
+	}
 	return true
 }
 
@@ -406,7 +418,9 @@ func (c *Capacity) run(ctx context.Context) {
 	s.Detail = strings.Join(details, " ")
 	c.mu.Unlock()
 	logging.Info("server capacity: %s (%s)", c.describe(), describeRungs(samples))
-	c.RecomputeProcesses(ctx)
+	if governor.Priority(ctx) != governor.PriorityBenchmark {
+		c.RecomputeProcesses(ctx)
+	}
 
 	// The source matrix includes the software HDR pipelines. The optional HDR
 	// pass is still needed for a configured GPU decoder/tone mapper.
@@ -770,7 +784,7 @@ func hdrSpeedForJob(records []HDRCapacity, job Job, threads int) (float64, bool)
 	var selected *HDRCapacity
 	for i := range records {
 		record := &records[i]
-		if record.Encoder != job.Plan.Encoder || record.HardwareDecode != decode || record.Transfer != video.ColorTransfer || record.ToneMapper != job.Plan.ToneMapper || record.Threads != threads || record.SourceFPS < video.FrameRate || time.Since(record.MeasuredAt) > 2*time.Hour {
+		if record.Encoder != job.Plan.Encoder || record.HardwareDecode != decode || record.Transfer != video.ColorTransfer || record.ToneMapper != job.Plan.ToneMapper || record.Threads != threads || record.SourceFPS < video.FrameRate {
 			continue
 		}
 		if selected == nil || record.SourceFPS < selected.SourceFPS {

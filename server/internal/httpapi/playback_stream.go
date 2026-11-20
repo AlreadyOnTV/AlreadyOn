@@ -70,6 +70,11 @@ type tuneResponse struct {
 }
 
 func (p *PlaybackHTTP) tune(w http.ResponseWriter, r *http.Request) {
+	release, ok := p.admitPlayback(w, r)
+	if !ok {
+		return
+	}
+	defer release()
 	if p.Manager == nil {
 		writeJSONError(w, 503, "playback is unavailable")
 		return

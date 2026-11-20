@@ -3638,7 +3638,7 @@ const noWorkers = async (unreleased = () => 0) => {
         break;
       }
       assert(
-        Date.now() - began < 780000,
+        Date.now() - began < 2100000,
         "Startup thread/capacity measurements never finished",
       );
       await new Promise((r) => setTimeout(r, 1000));
@@ -4192,6 +4192,8 @@ const noWorkers = async (unreleased = () => 0) => {
   }
 
   try {
+    if (!only || only.includes("startup-benchmarks"))
+      await require("./startup-benchmarks.cjs")({ browser, login, playing, seed, url, assert });
     await waitForTuner();
     if (!only || only.includes("last-channel"))
       await require("./last-channel.cjs")({

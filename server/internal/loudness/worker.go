@@ -182,7 +182,7 @@ func process(ctx context.Context, db *sql.DB, c candidate, generation int64) {
 	defer finish()
 	activity.Default.SetCurrentFile(task, filepath.Base(c.path))
 	ctx = context.WithValue(ctx, analysisTaskKey{}, task)
-	job, cancel := context.WithTimeout(ctx, 24*time.Hour)
+	job, cancel := governor.WithTimeout(ctx, 24*time.Hour)
 	defer cancel()
 	done := make(chan struct{})
 	defer close(done)
@@ -227,7 +227,7 @@ func process(ctx context.Context, db *sql.DB, c candidate, generation int64) {
 		}
 	}
 	if err == nil {
-		probeCtx, probeCancel := context.WithTimeout(job, 15*time.Second)
+		probeCtx, probeCancel := governor.WithTimeout(job, 15*time.Second)
 		probe, probeErr := library.Probe(probeCtx, real)
 		probeCancel()
 		err = probeErr

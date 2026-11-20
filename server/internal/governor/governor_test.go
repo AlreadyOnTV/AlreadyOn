@@ -83,16 +83,16 @@ func TestForegroundReservationsNestAndRecover(t *testing.T) {
 	g.target = 3
 	releaseFirst := g.ReserveForeground()
 	releaseSecond := g.ReserveForeground()
-	if g.Target() != 0 || g.Limit() != LimitPlayback {
+	if g.Target() != 3 || g.Limit() != LimitPlayback {
 		t.Fatalf("reserved pool = %d %q", g.Target(), g.Limit())
 	}
 	releaseFirst()
-	if g.Target() != 0 || g.Limit() != LimitPlayback {
+	if g.Target() != 3 || g.Limit() != LimitPlayback {
 		t.Fatal("one stream released another stream's reservation")
 	}
 	releaseFirst() // Releases are idempotent.
 	releaseSecond()
-	if g.Target() != 0 || g.Limit() != LimitRecovery {
+	if g.Target() != 3 || g.Limit() != LimitRecovery {
 		t.Fatalf("released pool = %d %q", g.Target(), g.Limit())
 	}
 }

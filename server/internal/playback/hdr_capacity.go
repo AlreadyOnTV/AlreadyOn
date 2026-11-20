@@ -14,7 +14,8 @@ import (
 
 // HDRCapacity describes a measured complete HDR pipeline, not encoder throughput.
 // Results are intentionally process-local: device/driver changes across restarts
-// must not inherit a stale capability decision from the database.
+// must not inherit a stale capability decision from the database. Within this
+// process, exact-pipeline results remain valid when idle-only reruns are deferred.
 type HDRCapacity struct {
 	SourceFPS      float64      `json:"sourceFps"`
 	Encoder        string       `json:"encoder"`
@@ -37,7 +38,7 @@ func (c *Capacity) HDRLimit(encoder string, decode bool, v library.StreamInfo, t
 	defer c.mu.Unlock()
 	var selected *HDRCapacity
 	for _, r := range c.hdr {
-		if r.SourceFPS < v.FrameRate || r.Encoder != encoder || r.HardwareDecode != decode || r.Transfer != v.ColorTransfer || r.Threads != threads || time.Since(r.MeasuredAt) > 2*time.Hour {
+		if r.SourceFPS < v.FrameRate || r.Encoder != encoder || r.HardwareDecode != decode || r.Transfer != v.ColorTransfer || r.Threads != threads {
 			continue
 		}
 		if r.ToneMapper == "gpu" && c.Hardware != nil && !c.Hardware.ToneMapOnGPU(context.Background(), encoder) {

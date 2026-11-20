@@ -15,11 +15,12 @@ type Phase string
 const (
 	// PhasePending: nothing has started yet (only before main begins the
 	// startup run).
-	PhasePending     Phase = "pending"
-	PhaseScanning    Phase = "scanning"
-	PhaseClassifying Phase = "classifying"
-	PhasePopulating  Phase = "populating"
-	PhaseScheduling  Phase = "scheduling"
+	PhasePending      Phase = "pending"
+	PhaseScanning     Phase = "scanning"
+	PhaseBenchmarking Phase = "benchmarking"
+	PhaseClassifying  Phase = "classifying"
+	PhasePopulating   Phase = "populating"
+	PhaseScheduling   Phase = "scheduling"
 	// PhaseReady: the last run finished cleanly.
 	PhaseReady Phase = "ready"
 	// PhaseFailed: the last run recorded at least one error (see

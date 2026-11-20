@@ -5,7 +5,7 @@ import (
 	"context"
 	"database/sql"
 	"errors"
-	"fmt"
+	"net"
 	"net/http"
 	"os"
 	"os/signal"
@@ -188,8 +188,6 @@ func run() (restart bool) {
 	library.SetBackgroundGovernor(background)
 	governor.SetDefault(background)
 	go background.Run(ctx, governor.ReadProc, governor.DefaultInterval)
-	go keyframes.Run(ctx, db.DB, background)
-	go loudness.Run(ctx, db.DB, background)
 	go metrics.Collect(ctx, db.DB, cfg.DataDir, func(ctx context.Context) []string {
 		scan, err := library.LoadScanConfig(ctx, db.DB)
 		if err != nil {
@@ -280,31 +278,23 @@ func run() (restart bool) {
 	if record, err := playback.LoadCapacity(ctx, db.DB); err == nil {
 		capacity.Load(record)
 	}
-	// Measured in the background at every start; started before the listeners so no stream can begin first.
-	tuner.Start(false)
-	// The speed measurement waits for the thread count; the parallel limit is
-	// worked out at once from the last measurement and the hardware now present.
-	capacity.Start(false)
-	capacity.RecomputeProcesses(ctx)
-	// Browser fixtures own exact schedule entries and measurement timing. Only the
-	// separately tagged E2E binary disables these unrelated wall-clock jobs.
-	if periodicJobsEnabled {
-		go runHourlyAt(ctx, config.WorkerLimitOffset, func() { capacity.RecomputeProcesses(ctx) })
-		go runHourlyAt(ctx, config.CapacityMeasureOffset, func() { capacity.Start(false) })
-		go runScheduleMaintenance(ctx, db.DB)
+	// The same sequential group owns startup, periodic and explicit re-benchmarking.
+	benchmarks := &playback.Benchmarks{Context: ctx, Governor: background,
+		Busy: func() bool { processes, _, viewers := streams.Counts(); return processes > 0 || viewers > 0 },
+		Steps: []func(context.Context){
+			func(c context.Context) { tuner.Measure(c) },
+			func(c context.Context) { capacity.Measure(c) },
+			capacity.RecomputeProcesses,
+		},
 	}
-	go runContentPolling(ctx, db.DB)
+	playbackHTTP.Benchmarks = benchmarks
 
 	logging.StartHeartbeat(ctx, 15*time.Minute, 30*time.Second)
 
 	// Begun before the listener starts so a status request never sees a
-	// startup that hasn't been accounted for; with no media folders there
-	// is nothing to do, so it ends immediately.
+	// startup that hasn't been accounted for, including benchmarks on empty libraries.
 	status.Default.SetMediaRoots(scanCfg.MediaRootCount())
-	status.Default.Begin(status.TriggerStartup, status.PhaseScanning)
-	if len(scanCfg.Roots) == 0 {
-		status.Default.End()
-	}
+	status.Default.Begin(status.TriggerStartup, status.PhaseBenchmarking)
 
 	restartRequested := make(chan struct{}, 1)
 	management := http.NewServeMux()
@@ -328,12 +318,23 @@ func run() (restart bool) {
 		TLSConfig:   certificateManager.Config(),
 	}
 
+	// Bind before launching measurements: the website can accept connections first.
+	listener, err := net.Listen("tcp", srv.Addr)
+	if err != nil {
+		logging.Fatal("application listener: %v", err)
+	}
+	defer listener.Close()
 	go func() {
 		logging.Info("HTTPS application listener on %s", cfg.ManagementAddr)
-		if err := serveListener(srv); err != nil && err != http.ErrServerClosed {
+		if err := serveListener(srv, listener); err != nil && err != http.ErrServerClosed {
 			logging.Fatal("server: %v", err)
 		}
 	}()
+
+	benchmarks.Start(true)
+	if periodicJobsEnabled {
+		go benchmarks.RunPeriodic(ctx)
+	}
 
 	// The library pipeline can take minutes on a real library, so it runs
 	// after the listener is up rather than delaying it (#107).
@@ -348,8 +349,21 @@ func run() (restart bool) {
 	}()
 	go func() {
 		defer close(bootstrapDone)
+		if benchmarks.Wait(ctx) != nil {
+			return
+		}
 		if len(scanCfg.Roots) > 0 {
 			runBootstrap(ctx, db.DB)
+		} else {
+			status.Default.End()
+		}
+		if ctx.Err() != nil {
+			return
+		}
+		go keyframes.Run(ctx, db.DB, background)
+		go loudness.Run(ctx, db.DB, background)
+		if periodicJobsEnabled {
+			go runContentPolling(ctx, db.DB)
 		}
 	}()
 
@@ -361,10 +375,14 @@ func run() (restart bool) {
 		restart = true
 	}
 
+	stop() // Cancel measurements/workers before a requested in-process exec restart.
 	shutdownCtx, cancel := context.WithTimeout(context.Background(), 5*time.Second)
 	defer cancel()
 	if err := srv.Shutdown(shutdownCtx); err != nil {
 		logging.Error("shutdown: %v", err)
+	}
+	if err := benchmarks.Wait(shutdownCtx); err != nil {
+		logging.Warn("shutdown: benchmark group did not stop in time")
 	}
 	select {
 	case <-bootstrapDone:
@@ -379,9 +397,13 @@ func run() (restart bool) {
 // refresh lock (refresh.Exclusive) so a Refresh Schedule click or
 // content poll can't overlap it.
 func runBootstrap(ctx context.Context, db *sql.DB) {
+	ctx, release := governor.Library(ctx)
+	defer release()
+	if governor.Checkpoint(ctx) != nil {
+		return
+	}
 	start := time.Now()
 	logging.Info("startup: library pipeline starting (the web UI is already available)")
-	runKeyless := true
 	superseded := false
 
 	refresh.Exclusive(func() {
@@ -412,7 +434,6 @@ func runBootstrap(ctx context.Context, db *sql.DB) {
 		tmdbKey := metaSettings.TMDbAPIKey
 
 		if tmdbKey == "" {
-			runKeyless = true
 			// WARN, not INFO: if this key was configured before, a still-empty
 			// Server Settings row after a restart is worth an admin's
 			// attention (see #93) — this line, visible on the Logs page,
@@ -438,6 +459,14 @@ func runBootstrap(ctx context.Context, db *sql.DB) {
 			return
 		}
 
+		// Free providers fill remaining gaps before building channels once.
+		if err := library.ClassifyGenresKeyless(ctx, db, metadata.NewKeylessClient()); err != nil {
+			logging.Error("keyless metadata: %v", err)
+			status.Default.RecordError(err)
+		}
+		if ctx.Err() != nil {
+			return
+		}
 		status.Default.SetPhase(status.PhasePopulating)
 		if populated, err := lineup.Populate(ctx, db); err != nil {
 			logging.Error("lineup: populate default channels: %v", err)
@@ -466,9 +495,6 @@ func runBootstrap(ctx context.Context, db *sql.DB) {
 	}
 	logging.Info("startup: library pipeline finished in %s", time.Since(start).Round(time.Millisecond))
 
-	if runKeyless {
-		runKeylessClassification(ctx, db)
-	}
 }
 
 // runContentPolling re-scans the current content folders on a timer (see
@@ -479,7 +505,8 @@ func runBootstrap(ctx context.Context, db *sql.DB) {
 // finds new files it runs the same reclassify+refresh pipeline as the
 // Channels tab's "Refresh Schedule" button, so new content shows up in
 // the guide without anyone clicking anything (refresh.PollOnce does the
-// scan under the same lock as every other run). Returns once ctx is done.
+// scan under the same lock as every other run). Each interval refreshes
+// metadata, lineups and rolling schedules even when no files were added. Returns once ctx is done.
 func runContentPolling(ctx context.Context, db *sql.DB) {
 	for {
 		interval := time.Hour
@@ -495,7 +522,7 @@ func runContentPolling(ctx context.Context, db *sql.DB) {
 		case <-time.After(interval):
 		}
 
-		res, err := refresh.PollOnce(ctx, db)
+		res, err := refresh.RefreshLibrary(ctx, db)
 		switch {
 		case errors.Is(err, refresh.ErrBusy):
 			logging.Info("content polling: another library run is in progress; skipping this cycle")
@@ -506,78 +533,6 @@ func runContentPolling(ctx context.Context, db *sql.DB) {
 				res.FilesAdded, res.Classified, res.Enriched, res.ChannelsRefreshed)
 		}
 	}
-}
-
-// runScheduleMaintenance periodically brings every channel's persisted
-// schedule (see schedule.RegenerateAll) back up to its full look-ahead
-// window and prunes anything past its trailing edge — the thing that
-// actually keeps the guide's "now" moving forward across a long-running
-// server, on top of the explicit triggers (Refresh Schedule button,
-// content polling) and saved-setting background jobs. It runs at the top of every hour (config.ScheduleMaintenanceOffset),
-// independent of content polling. Returns once ctx is done.
-func runScheduleMaintenance(ctx context.Context, db *sql.DB) {
-	runHourlyAt(ctx, config.ScheduleMaintenanceOffset, func() {
-		if regenerated, err := schedule.RegenerateAll(ctx, db, time.Now()); err != nil {
-			logging.Error("schedule maintenance: regenerate all: %v", err)
-		} else {
-			logging.Info("schedule maintenance: regenerated %d channel schedule(s)", regenerated)
-		}
-	})
-}
-
-// runHourlyAt calls job every hour at offset past the hour (local time) until
-// ctx is done, so the hourly jobs never start together.
-func runHourlyAt(ctx context.Context, offset time.Duration, job func()) {
-	for {
-		timer := time.NewTimer(time.Until(config.NextHourlyAt(time.Now(), offset)))
-		select {
-		case <-ctx.Done():
-			timer.Stop()
-			return
-		case <-timer.C:
-			job()
-		}
-	}
-}
-
-// runKeylessClassification classifies the library through the no-key
-// providers (TVmaze/Wikidata) in the background — rate-limited lookups
-// can take minutes on a large library — then fills any still-empty
-// default channels and retires the demo channels if real ones now have
-// content.
-func runKeylessClassification(ctx context.Context, db *sql.DB) {
-	logging.Info("keyless metadata: classifying library via TVmaze/Wikidata (set a TMDb key for better results)")
-	start := time.Now()
-	// Not serialized by the refresh lock (it's the slow part), so only
-	// report status if no other run is active.
-	if status.Default.TryBegin(status.TriggerRefresh, status.PhaseClassifying) {
-		defer status.Default.End()
-	}
-	if err := library.ClassifyGenresKeyless(ctx, db, metadata.NewKeylessClient()); err != nil {
-		logging.Error("keyless metadata: classify: %v", err)
-		return
-	}
-	var populated, demo int
-	var err error
-	refresh.Exclusive(func() {
-		if populated, err = lineup.Populate(ctx, db); err != nil {
-			err = fmt.Errorf("populate default channels: %w", err)
-			return
-		}
-		if demo, err = lineup.SyncDemoChannels(ctx, db); err != nil {
-			err = fmt.Errorf("sync demo channels: %w", err)
-			return
-		}
-		if _, err = schedule.RegenerateAll(ctx, db, time.Now()); err != nil {
-			err = fmt.Errorf("regenerate schedules: %w", err)
-		}
-	})
-	if err != nil {
-		logging.Error("keyless metadata: %v", err)
-		return
-	}
-	logging.Info("keyless metadata: done in %s (populated %d channel(s), %d demo channel(s) remaining)",
-		time.Since(start).Round(time.Second), populated, demo)
 }
 
 // runStartupScan performs one library scan at boot when roots are

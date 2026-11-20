@@ -4,7 +4,7 @@
 
 Tuning selects the current persisted airing. Delivery uses direct play, remux or bounded transcoding according to browser support; GPU availability alone proves neither codec nor HDR compatibility.
 
-Clients show "Tuning" until playback begins.
+Clients show "Tuning" until playback begins. [Startup readiness](BACKGROUND_JOBS.md) gates playback during benchmarking.
 
 WebUI checks hls.js's media-source constructor, including Apple's `ManagedMediaSource`, with native HLS fallback where supported.
 
@@ -36,7 +36,7 @@ Keep media paths within configured roots and library mounts read-only. Authorize
 
 ## Validation
 
-Use synthetic fixtures for channel changes, seeking, program transitions, session expiry, concurrent viewers and failure recovery. Check direct, remux and transcode paths separately. Hardware/device compatibility needs separate evidence; browser automation cannot certify every GPU or television.
+Use synthetic fixtures for channel changes, seeking, program transitions, session expiry, concurrent viewers and failure recovery. Check direct, remux and transcode paths separately. Hardware compatibility requires separate evidence.
 
 See [scheduling](SCHEDULING.md), [TLS](TLS.md) and [runtime tests](../tests/integration/README.md).
 

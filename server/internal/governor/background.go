@@ -39,7 +39,7 @@ func Checkpoint(ctx context.Context) error {
 			return err
 		}
 		g.mu.Lock()
-		ready, wake := g.target > 0, g.changed
+		ready, wake := g.target > 0 && g.eligibleLocked(Priority(ctx)), g.changed
 		g.mu.Unlock()
 		if ready {
 			return nil
@@ -56,7 +56,7 @@ func Checkpoint(ctx context.Context) error {
 // to bypass the shared budget. Timings include throttling and are conservative.
 func BackgroundOutput(ctx context.Context, cmd *exec.Cmd) ([]byte, error) {
 	if g := defaultPool.Load(); g != nil && TicketFrom(ctx) == nil {
-		t, err := g.Acquire(ctx, PriorityLow)
+		t, err := g.Acquire(ctx, Priority(ctx))
 		if err != nil {
 			return nil, err
 		}
@@ -104,9 +104,16 @@ func (p *bytePacer) wait(ctx context.Context, n int) error {
 
 type pacedBody struct {
 	io.ReadCloser
-	ctx context.Context
+	ctx    context.Context
+	cancel context.CancelFunc
 }
 
+func (b *pacedBody) Close() error {
+	if b.cancel != nil {
+		defer b.cancel()
+	}
+	return b.ReadCloser.Close()
+}
 func (b *pacedBody) Read(p []byte) (int, error) {
 	if err := Checkpoint(b.ctx); err != nil {
 		return 0, err
@@ -120,15 +127,24 @@ func (b *pacedBody) Read(p []byte) (int, error) {
 
 // BackgroundTransport throttles metadata transfers without throttling streaming
 // responses. HTTP/TLS headers and kernel buffering are outside body pacing.
-type BackgroundTransport struct{ Base http.RoundTripper }
+type BackgroundTransport struct {
+	Base    http.RoundTripper
+	Timeout time.Duration
+}
 
 func (t BackgroundTransport) RoundTrip(req *http.Request) (*http.Response, error) {
+	cancel := func() {}
+	if t.Timeout > 0 {
+		ctx, stop := WithTimeout(req.Context(), t.Timeout)
+		req, cancel = req.Clone(ctx), stop
+	}
 	if err := Checkpoint(req.Context()); err != nil {
+		cancel()
 		return nil, err
 	}
 	clone := req.Clone(req.Context())
 	if clone.Body != nil {
-		clone.Body = &pacedBody{clone.Body, req.Context()}
+		clone.Body = &pacedBody{ReadCloser: clone.Body, ctx: req.Context()}
 	}
 	base := t.Base
 	if base == nil {
@@ -136,7 +152,9 @@ func (t BackgroundTransport) RoundTrip(req *http.Request) (*http.Response, error
 	}
 	resp, err := base.RoundTrip(clone)
 	if err == nil {
-		resp.Body = &pacedBody{resp.Body, req.Context()}
+		resp.Body = &pacedBody{ReadCloser: resp.Body, ctx: req.Context(), cancel: cancel}
+	} else {
+		cancel()
 	}
 	return resp, err
 }

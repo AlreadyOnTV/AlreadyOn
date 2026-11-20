@@ -163,7 +163,7 @@ func videoReason(v library.StreamInfo, p Plan, caps Capabilities) string {
 	}
 	text := "Converted because " + strings.Join(why, ", and ") + "."
 	if p.ServerLimited {
-		text += fmt.Sprintf(" The picture is also held to %dp%g because this server's measured conversion pipeline can't sustain a higher Auto quality in real time (measured every hour).", caps.ServerMaxHeight, caps.ServerMaxFPS)
+		text += fmt.Sprintf(" The picture is also held to %dp%g because this server's measured conversion pipeline can't sustain a higher Auto quality in real time (re-measured every four hours when idle).", caps.ServerMaxHeight, caps.ServerMaxFPS)
 	}
 	return text
 }

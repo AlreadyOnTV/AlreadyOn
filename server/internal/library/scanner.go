@@ -312,7 +312,7 @@ func (s *Scanner) visitFile(ctx context.Context, root config.ValidatedRoot, path
 	}
 
 	if g := backgroundPool.Load(); g != nil {
-		ticket, err := g.Acquire(ctx, governor.PriorityHigh)
+		ticket, err := g.Acquire(ctx, governor.PriorityLibrary)
 		if err != nil {
 			return err
 		}
@@ -320,7 +320,7 @@ func (s *Scanner) visitFile(ctx context.Context, root config.ValidatedRoot, path
 		ticket.SetTask("library probe")
 		ctx = governor.WithTicket(ctx, ticket)
 	}
-	probeCtx, cancel := context.WithTimeout(ctx, s.probeTimeout())
+	probeCtx, cancel := governor.WithTimeout(ctx, s.probeTimeout())
 	probe, err := Probe(probeCtx, path)
 	cancel()
 	if ctx.Err() != nil {
