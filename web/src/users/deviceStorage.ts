@@ -1,5 +1,6 @@
 // Device-local active profile. Capability/network measurements have their own
-// explicitly allowed cache module; application settings remain server-side.
+// explicitly allowed cache module; shared application settings remain server-side.
+import { VOLUME_KEY_PREFIX } from '../playback/volumePreference';
 import { PLAYBACK_CACHE_KEY } from '../playback/deviceCache';
 const ACTIVE_PROFILE_KEY = 'alreadyon.currentUserId';
 // 2160 (4K) is offered only while the server has a hardware encoder.
@@ -71,7 +72,7 @@ export function writeActiveProfileId(id: number): void {
 export function clearLegacyStorage(): void {
   try {
     for (const key of Object.keys(localStorage)) {
-      if (key.startsWith('alreadyon.') && key !== ACTIVE_PROFILE_KEY && key !== PLAYBACK_CACHE_KEY) {
+      if (key.startsWith('alreadyon.') && key !== ACTIVE_PROFILE_KEY && key !== PLAYBACK_CACHE_KEY && !key.startsWith(VOLUME_KEY_PREFIX)) {
         localStorage.removeItem(key);
       }
     }

@@ -1,5 +1,6 @@
+import { readVolume, writeVolume } from "./volumePreference";
 import { usePlayerFullscreen } from "./usePlayerFullscreen";
-import { useEffect, useMemo, useRef, useState } from "react";
+import { useCallback, useEffect, useMemo, useRef, useState } from "react";
 import Hls from "hls.js";
 import { APP_VERSION } from "../version";
 import { apiFetch } from "../api/access";
@@ -185,9 +186,33 @@ export function Player({
     };
   }, []);
   const [clock, setClock] = useState({ time: 0, duration: 0 });
-  const [volume, setVolume] = useState(1);
-  // Browsers only autoplay muted video, so a fresh page starts muted; entering full screen unmutes.
-  const [muted, setMuted] = useState(true);
+  const { currentUserId, currentUser } = useUsers();
+  const savedVolume = useMemo(() => readVolume(currentUserId), [currentUserId]);
+  const [chosenVolume, setChosenVolume] = useState<{
+    profileId: number;
+    value: number;
+  } | null>(null);
+  const volume = chosenVolume?.profileId === currentUserId
+    ? chosenVolume.value : savedVolume;
+  // Every fresh guide/profile starts muted, independently of its saved volume.
+  // Deriving by profile avoids briefly applying another profile's audible state.
+  const [muteChoice, setMuteChoice] = useState<{
+    profileId: number;
+    muted: boolean;
+  } | null>(null);
+  const muted = muteChoice?.profileId === currentUserId ? muteChoice.muted : true;
+  useEffect(() => {
+    setMuteChoice({ profileId: currentUserId, muted: true });
+  }, [currentUserId]);
+  const setMuted = useCallback((value: boolean) => {
+    setMuteChoice({ profileId: currentUserId, muted: value });
+  }, [currentUserId]);
+  const toggleMute = () => setMuted(!muted);
+  const chooseVolume = (value: number) => {
+    writeVolume(currentUserId, value);
+    setChosenVolume({ profileId: currentUserId, value });
+    setMuted(value === 0);
+  };
   const [showDetails, setShowDetails] = useState(false);
   // Pointer, touch and player keyboard input reset the three-second overlay deadline.
   const [idle, setIdle] = useState(false);
@@ -302,8 +327,7 @@ export function Player({
   const [cues, setCues] = useState<Cue[]>([]);
   const [caption, setCaption] = useState("");
   const freezeRef = useRef<HTMLCanvasElement>(null);
-  // The quality ceiling belongs to the profile on this device and applies to every channel.
-  const { currentUserId, currentUser } = useUsers();
+  // Audio choices follow the active profile while tuning channels.
   const audioRef = useRef<{
     audioLanguage: string;
     audioTrackIndex?: number;
@@ -1389,7 +1413,7 @@ export function Player({
       window.removeEventListener("pageshow", restored);
       shutdown();
     };
-  }, [channelId, retry, generation, currentUserId]);
+  }, [channelId, retry, generation, currentUserId, setMuted]);
 
   const togglePlay = () => {
     if (paused) api.current?.resume();
@@ -1414,7 +1438,7 @@ export function Player({
   // m, f, t, c, s and Space work in every player size; the guide owns the arrow keys.
   const keys = useRef({
     togglePlay,
-    toggleMute: () => setMuted((m) => !m),
+    toggleMute,
     fullscreen,
     toggleLarge: toggleLarge,
     toggleSubtitles,
@@ -1423,7 +1447,7 @@ export function Player({
   useEffect(() => {
     keys.current = {
       togglePlay,
-      toggleMute: () => setMuted((m) => !m),
+      toggleMute,
       fullscreen,
       toggleLarge: toggleLarge,
       toggleSubtitles,
@@ -1557,11 +1581,8 @@ export function Player({
           onAudioTrack={chooseAudio}
           subtitleLanguage={subtitleLanguage}
           onTogglePlay={togglePlay}
-          onVolume={(v) => {
-            setVolume(v);
-            setMuted(v === 0);
-          }}
-          onToggleMute={() => setMuted((m) => !m)}
+          onVolume={chooseVolume}
+          onToggleMute={toggleMute}
           onQuality={chooseQuality}
           onSubtitleLanguage={(language) =>
             setSubtitleChoice(language ?? false)
