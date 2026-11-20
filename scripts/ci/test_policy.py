@@ -164,7 +164,7 @@ class PublicationPolicy(unittest.TestCase):
         root = pathlib.Path(__file__).resolve().parents[2]
         workflow_dir = root / '.github/workflows'
         self.assertEqual({path.name for path in workflow_dir.glob('*.yml')}, {
-            'android_release.yml', 'build_publish.yml', 'codeql.yml',
+            'android_release.yml', 'build_publish.yml', 'codeql.yml', 'nightly_after_merge.yml',
             'daily_base_image.yml', 'dependabot_routing.yml', 'publish_github_pages.yml',
             'pull_request_validation.yml', 'security_scan.yml', 'validation_cache.yml', 'weekly_cleanup.yml',
         })
@@ -463,6 +463,29 @@ class BaseRetentionPolicy(unittest.TestCase):
             self.assertEqual(result.returncode, 0, result.stderr)
             self.assertIn('image=ghcr.io/alreadyontv/alreadyon@sha256:' + 'a' * 64, output.read_text())
             self.assertIn('revision=' + SHA, output.read_text())
+
+    def test_merged_dev_prs_dispatch_nightly_for_both_merge_paths(self):
+        root = pathlib.Path(__file__).resolve().parents[2]
+        manual = (root / '.github/workflows/nightly_after_merge.yml').read_text()
+        validation = (root / '.github/workflows/pull_request_validation.yml').read_text()
+        automatic = validation.split('  auto_merge:\n', 1)[1]
+        self.assertIn('branches: [main]', manual)
+        self.assertIn('types: [closed]', manual)
+        self.assertIn('github.event.pull_request.merged == true', manual)
+        self.assertIn("github.event.pull_request.base.ref == 'main'", automatic)
+        for route in (manual, automatic):
+            self.assertIn("github.event.pull_request.head.ref == 'dev'", route)
+            self.assertIn('github.event.pull_request.head.repo.full_name == github.repository', route)
+            self.assertIn('actions: write', route)
+            self.assertIn('--ref main -f operation=nightly', route)
+            self.assertNotIn('operation=stable', route)
+        self.assertLess(automatic.index('run: gh pr merge'),
+                        automatic.index('run: gh workflow run'))
+        self.assertNotIn('always()', automatic.split('      # GITHUB_TOKEN', 1)[1])
+        # Publication itself remains behind the existing dispatch-only release gates.
+        build = (root / '.github/workflows/build_publish.yml').read_text()
+        self.assertNotIn('  pull_request:', build)
+        self.assertIn("github.event_name == 'workflow_dispatch' && inputs.operation == 'nightly'", build)
 
     def test_weekly_cleanup_and_manual_nightly_publication(self):
         root = pathlib.Path(__file__).resolve().parents[2]

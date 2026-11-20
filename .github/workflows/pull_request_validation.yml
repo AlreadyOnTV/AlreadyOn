@@ -222,6 +222,7 @@ jobs:
     runs-on: ubuntu-latest
     timeout-minutes: 100
     permissions:
+      actions: write
       checks: read
       contents: write
       pull-requests: write
@@ -256,3 +257,9 @@ jobs:
           REPOSITORY: ${{ github.repository }}
           HEAD_SHA: ${{ github.event.pull_request.head.sha }}
         run: gh pr merge "$PR_NUMBER" --repo "$REPOSITORY" --squash --match-head-commit "$HEAD_SHA"
+      # GITHUB_TOKEN merges suppress pull_request events; dispatch explicitly.
+      - name: Publish Nightly after merging dev into main
+        if: github.event.pull_request.base.ref == 'main' && github.event.pull_request.head.ref == 'dev' && github.event.pull_request.head.repo.full_name == github.repository
+        env:
+          GH_TOKEN: ${{ github.token }}
+        run: gh workflow run build_publish.yml --repo "${{ github.repository }}" --ref main -f operation=nightly

@@ -1,6 +1,6 @@
 // Profiles come from the server (GET /api/profiles), so every device sees
 // the same set and per-profile preferences follow the profile. Only the
-// active profile id stays on the device (see deviceStorage.ts).
+// active profile id and playback volume stay on the device (see deviceStorage.ts).
 //
 // The list is refetched every five visible minutes and on window focus so changes on
 // another device shows up without a reload. Nothing here holds a PIN:

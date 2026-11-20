@@ -4211,6 +4211,8 @@ const noWorkers = async (unreleased = () => 0) => {
     if (!only || only.includes("transitions")) await transitions();
     if (!only || only.includes("short")) await shortEntries();
     if (!only || only.includes("controls")) await controls();
+    if (!only || only.includes("volume"))
+      await require("./volume-preference.cjs")({ login, playing, seed, url, assert, leave });
     if (!only || only.includes("mobile-ui")) await responsiveTouchUi();
     if (!only || only.includes("mobile-overlay")) await mobileOverlay();
     if (!only || only.includes("mobile-landscape")) await mobileLandscape();

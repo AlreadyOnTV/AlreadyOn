@@ -4,14 +4,14 @@
 
 `make test-e2e` runs playback, channel filters, library catalog, profile autosave, library path customization and settings feedback browser suites against an isolated synthetic server. The harness uses temporary fixtures/storage; never target a live installation.
 
-Player menus show detected audio languages, omitting untagged audio suffixes.
-
 Use reproducible fixtures/clocks and readiness signals instead of arbitrary sleeps. Queue readiness uses authenticated request polling; async Playwright predicates treat Promises as truthy.
 
 Run `PLAYBACK_TEST_ONLY=admin,admin-metrics-logs make test-e2e` to check folder updates followed by dashboard/log access. Management scenarios sign in directly to their admin page; a playable guide is not a readiness requirement. Disk fixtures use per-mount bandwidth, IOPS and latency, including unavailable readings; assertions cover the four throughput lines, missing-sample gaps, capacity table and expanded-chart layout.
 Activity checks cover concurrent sessions, client-version labels and unknown fallback, hidden latency, and paired source/output formats.
 
 Subtitle defaults select the language and mode by their visible labels. The profile scenario saves German with Always on, then checks playback captions and the C shortcut; selector order must not determine the setting being changed.
+
+Run `PLAYBACK_TEST_ONLY=volume make test-e2e` for volume persistence, mute/fullscreen, profiles and browser restarts with disposable storage.
 
 Full release runs require maintainer approval. Record commands, exit status and failures. Keep screenshots/logs ignored and sanitized.
 

@@ -1,4 +1,4 @@
-# Maintainers manually publish a validated Nightly from dev or main.
+# Publish Nightly manually or after dev merges into main; Stable remains manual.
 name: Build and Publish
 on:
   workflow_dispatch:

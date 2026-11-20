@@ -2,15 +2,15 @@
 
 [![AlreadyOn](../web/public/branding/header-doc.svg)](../README.md)
 
-Maintainers control releases. Titles are `YY.MM.DD-nightly` and `YY.MM.DD-stable`. [Release notes](RELEASE_NOTES.md) define their contents.
+Release titles are `YY.MM.DD-nightly` and `YY.MM.DD-stable`; see [release notes](RELEASE_NOTES.md).
 
 ## Development and releases
 
-Nightly dates use `America/New_York`.
+Dates use `America/New_York`.
 
 Work on `dev`, validate with the HTTPS preview, disposable Docker tests and phone/TV builds, then open a PR to `main`. PRs run CodeQL, dependency review, Android and full e2e/runtime checks. The merge job waits for all gates; drafts validate without auto-merging. Dependabot opens grouped weekly PRs; see [maintenance](DEPENDENCY_MAINTENANCE.md).
 
-Maintainers manually dispatch Nightly from the current `dev` or `main` tip. It validates the image, then publishes `nightly` and date aliases plus signed `YY.MM.DD-nightly` phone/TV APKs. A same-date rerun replaces assets only after all gates pass and with higher APK codes; the date tag advances to that SHA.
+Merging a same-repository `dev` PR into `main` dispatches Nightly from `main`. Auto-merge dispatches explicitly because `GITHUB_TOKEN` merges suppress PR events; manual merges use the PR-closed workflow. Other branches and unmerged closures do not publish. Manual Nightly from `dev` or `main` remains available. Validation precedes image aliases and signed APK publication. Same-date reruns replace assets only after all gates pass, with higher APK codes and the date tag advanced to the selected SHA.
 
 After Nightly acceptance, dispatch **Build and Publish** with `operation: stable` on `main`. It verifies Nightly provenance, reuses its image digest for `latest` and builds fresh Stable APKs from that commit.
 
@@ -26,15 +26,13 @@ After Nightly acceptance, dispatch **Build and Publish** with `operation: stable
 
 Resolve failures. Record the commit, image ID/digest and actual results. Live checks are non-destructive; synthetic suites use isolated data.
 
-Daily Base Image refreshes shared bases; `make refresh-local-bases` forces a local refresh.
+Refresh bases: `make refresh-local-bases`.
 
 ## Delivery
 
 On approval, deploy the tested image and verify revision, health, service count, mounts and playback. `scripts/deploy-production.sh <ssh-host> [compose-directory]` transfers it with updates paused, using the host's configured Compose tag. Digest-pinned references require maintainer review; preserve live data.
 
 Preserve the exact tested source and image digest through publication. Main intentionally has no branch protection, so the PR merge job performs a squash merge pinned to the checked head SHA after quality, Android, E2E/runtime, dependency-review and both CodeQL analyses succeed. A failed gate or changed head leaves the PR open. Do not rebuild or replace previously signed APKs or published release tags outside the validated same-date workflow.
-
-Grant the Nightly channel job `contents: write` for its source-date tag.
 
 Dev changes reach users only after the reviewed main PR merges. See [retention](IMAGE_RETENTION.md).
 
