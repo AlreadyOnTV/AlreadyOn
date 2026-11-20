@@ -100,17 +100,19 @@ type CapacityRecord struct {
 
 // CapacityStatus is the capacity API's answer.
 type CapacityStatus struct {
-	State       string        `json:"state"` // idle or running
-	MeasuredAt  *time.Time    `json:"measuredAt"`
-	Encoder     string        `json:"encoder"`
-	Samples     []RungSample  `json:"samples"`
-	MaxHeight   int           `json:"maxHeight"` // 0: no limit (hardware encoder, or not measured yet)
-	MaxFPS      float64       `json:"maxFps"`
-	Processes   int           `json:"processes"` // detected parallel conversions; 0 until known
-	ProcessesAt *time.Time    `json:"processesAt"`
-	CPUs        int           `json:"cpus"`
-	Detail      string        `json:"detail"`
-	HDR         []HDRCapacity `json:"hdr,omitempty"`
+	Profiles    []ProfileCapacity `json:"profiles,omitempty"`
+	Calibration string            `json:"calibration,omitempty"`
+	State       string            `json:"state"` // idle or running
+	MeasuredAt  *time.Time        `json:"measuredAt"`
+	Encoder     string            `json:"encoder"`
+	Samples     []RungSample      `json:"samples"`
+	MaxHeight   int               `json:"maxHeight"` // 0: no limit (hardware encoder, or not measured yet)
+	MaxFPS      float64           `json:"maxFps"`
+	Processes   int               `json:"processes"` // detected parallel conversions; 0 until known
+	ProcessesAt *time.Time        `json:"processesAt"`
+	CPUs        int               `json:"cpus"`
+	Detail      string            `json:"detail"`
+	HDR         []HDRCapacity     `json:"hdr,omitempty"`
 }
 
 // Capacity measures what this server can sustain and shares it with every
@@ -120,6 +122,8 @@ type CapacityStatus struct {
 // changes and every four hours through Benchmarks; the parallel limit is
 // recomputed at the end of that coordinated group.
 type Capacity struct {
+	calibrated bool
+	profiles   []ProfileCapacity
 	// Context ends measurements when the server shuts down; nil never does.
 	Context    context.Context
 	Executable string
@@ -169,6 +173,7 @@ func (c *Capacity) Status() CapacityStatus {
 	c.mu.Lock()
 	defer c.mu.Unlock()
 	s := c.status
+	s.Profiles = append([]ProfileCapacity(nil), c.profiles...)
 	if s.State == "" {
 		s.State = "idle"
 	}
@@ -237,6 +242,9 @@ func (c *Capacity) Allows(active []Job, candidate Job) bool {
 // AdmissionError distinguishes missing/unsafe measurements from an otherwise
 // valid pipeline that is temporarily out of aggregate CPU or memory headroom.
 func (c *Capacity) AdmissionError(active []Job, candidate Job) error {
+	if handled, err := c.calibratedAdmission(active, candidate); handled {
+		return err
+	}
 	if c == nil || jobResourceCost(candidate) == 0 {
 		return nil
 	}
@@ -657,6 +665,9 @@ func memoryAvailable() uint64 {
 // temporary directory. HDR10+ dynamic metadata is intentionally not fabricated:
 // the fixture represents Main 10 PQ/HLG transfer and BT.2020 color only.
 func makeCapacitySample(ctx context.Context, exe, dir string, source capacitySource) (string, error) {
+	if path, ok := preparedCapacityInput(ctx, source); ok {
+		return path, nil
+	}
 	path := filepath.Join(dir, string(source.class)+".mkv")
 	videoFilter := fmt.Sprintf("noise=alls=3:allf=t:all_seed=1,format=%s", source.pixelFormat)
 	if source.transfer != "" {

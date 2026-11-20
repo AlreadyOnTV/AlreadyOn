@@ -144,7 +144,7 @@ func (s *swapPressureState) update(prev, cur Sample, interval time.Duration) boo
 // New creates the shared multicore background pool. One logical CPU's worth
 // of capacity remains outside the pool; this is a capacity reservation, not pinning.
 func New(most int) *Governor {
-	cores := runtime.NumCPU()
+	cores := min(runtime.NumCPU(), runtime.GOMAXPROCS(0))
 	g := newGovernor(cores, min(most, max(1, cores-1)))
 	g.budget = true
 	g.serialAnalysis = true
@@ -227,6 +227,9 @@ func (g *Governor) Acquire(ctx context.Context, prio int) (*Ticket, error) {
 		}
 		g.mu.Lock()
 		limit := g.target
+		if prio == PriorityBenchmark && g.target > 0 {
+			limit = max(limit, 4)
+		}
 		if g.serialAnalysis && prio >= PriorityHigh {
 			limit = min(limit, 1)
 		}
@@ -376,6 +379,9 @@ func (g *Governor) applyLocked() {
 	analysis := 0
 	for i, t := range ranked {
 		want := i >= g.target || g.throttled || !g.eligibleLocked(t.prio)
+		if t.prio == PriorityBenchmark {
+			want = g.target == 0 || g.throttled || !g.eligibleLocked(t.prio)
+		}
 		if g.serialAnalysis && t.prio >= PriorityHigh {
 			want = want || analysis >= 1
 			if !want {

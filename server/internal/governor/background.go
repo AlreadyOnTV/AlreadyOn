@@ -158,3 +158,18 @@ func (t BackgroundTransport) RoundTrip(req *http.Request) (*http.Response, error
 	}
 	return resp, err
 }
+
+// BenchmarkCommand keeps process-level accounting and pressure safeguards while
+// a controlled multi-stream experiment holds the exclusive benchmark reservation.
+func BenchmarkCommand(ctx context.Context, cmd *exec.Cmd) error {
+	if g := defaultPool.Load(); g != nil {
+		ticket, err := g.Acquire(ctx, PriorityBenchmark)
+		if err != nil {
+			return err
+		}
+		defer ticket.Release()
+		ticket.SetTask("calibration")
+		ctx = WithTicket(ctx, ticket)
+	}
+	return RunCommand(ctx, cmd)
+}

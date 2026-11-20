@@ -19,17 +19,18 @@ import (
 )
 
 type Job struct {
-	Entry     schedule.Entry
-	Path      string
-	Source    library.ProbeResult
-	Plan      Plan
-	Offset    time.Duration
-	Duration  time.Duration
-	Burst     time.Duration // content read before real-time pacing; see ReadBurst
-	OutputDir string        // newly-created private directory owned by the supervisor
-	Device    string        // DRI render node for a hardware encoder
-	Threads   int           // CPU threads for decoding and filtering; 0 is DefaultThreads
-	Details   Details       // what the player shows about this stream; not used to run FFmpeg
+	ValidatedThreads bool // Keep the exact per-stream thread count used by concurrency validation.
+	Entry            schedule.Entry
+	Path             string
+	Source           library.ProbeResult
+	Plan             Plan
+	Offset           time.Duration
+	Duration         time.Duration
+	Burst            time.Duration // content read before real-time pacing; see ReadBurst
+	OutputDir        string        // newly-created private directory owned by the supervisor
+	Device           string        // DRI render node for a hardware encoder
+	Threads          int           // CPU threads for decoding and filtering; 0 is DefaultThreads
+	Details          Details       // what the player shows about this stream; not used to run FFmpeg
 	// Report is told when the runner falls back to a simpler pipeline, so the
 	// stream's plan and details stay true. It may be nil.
 	Report func(Plan, Pipeline)

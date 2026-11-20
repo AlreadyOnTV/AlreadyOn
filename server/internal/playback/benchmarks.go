@@ -20,6 +20,8 @@ type Benchmarks struct {
 	Governor        *governor.Governor
 	Busy            func() bool
 	Steps           []func(context.Context)
+	StartupSteps    []func(context.Context)
+	StartupBudget   time.Duration
 	mu              sync.Mutex
 	cancel          context.CancelFunc
 	done            chan struct{}
@@ -38,6 +40,14 @@ func (b *Benchmarks) Start(startup bool) bool {
 		return false
 	}
 	ctx, cancel := context.WithCancel(b.Context)
+	if startup {
+		budget := b.StartupBudget
+		if budget <= 0 {
+			budget = 120 * time.Second
+		}
+		cancel()
+		ctx, cancel = context.WithTimeout(b.Context, budget)
+	}
 	done := make(chan struct{})
 	b.done, b.cancel = done, cancel
 	// Reserve before launching so no lower-priority work can enter the startup gap.
@@ -46,7 +56,11 @@ func (b *Benchmarks) Start(startup bool) bool {
 	go func() {
 		defer cancel()
 		_, finish := activity.Default.Start("Performance Benchmarks", "benchmarking", 0)
-		for _, step := range b.Steps {
+		steps := b.Steps
+		if startup && b.StartupSteps != nil {
+			steps = b.StartupSteps
+		}
+		for _, step := range steps {
 			if ctx.Err() != nil {
 				break
 			}
@@ -55,7 +69,7 @@ func (b *Benchmarks) Start(startup bool) bool {
 		finish()
 		release()
 		b.mu.Lock()
-		if startup && ctx.Err() == nil {
+		if startup && b.Context.Err() == nil {
 			b.ready.Store(true)
 		}
 		b.done, b.cancel = nil, nil

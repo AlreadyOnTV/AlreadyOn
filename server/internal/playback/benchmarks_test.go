@@ -150,3 +150,17 @@ func TestPeriodicBenchmarkDefersUntilIdle(t *testing.T) {
 		t.Fatal("periodic loop did not stop")
 	}
 }
+
+func TestStartupDeadlineReleasesPlaybackAfterTeardown(t *testing.T) {
+	var stopped atomic.Bool
+	b := &Benchmarks{Context: t.Context(), Governor: governor.Fixed(2), StartupBudget: 20 * time.Millisecond, StartupSteps: []func(context.Context){func(ctx context.Context) { <-ctx.Done(); stopped.Store(true) }}}
+	if !b.Start(true) {
+		t.Fatal("start rejected")
+	}
+	if err := b.Wait(t.Context()); err != nil {
+		t.Fatal(err)
+	}
+	if !b.Ready() || !stopped.Load() {
+		t.Fatal("readiness preceded teardown")
+	}
+}

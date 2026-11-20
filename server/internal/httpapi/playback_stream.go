@@ -209,6 +209,7 @@ func (p *PlaybackHTTP) tune(w http.ResponseWriter, r *http.Request) {
 	if p.Tuner != nil {
 		threads = p.Tuner.Threads()
 	}
+	threads = p.Capacity.ProfileThreads(source, body.Capabilities.Encoder, body.Capabilities.HWDecode, threads)
 	if height, fps, measured, sustainable := p.Capacity.HDRLimit(body.Capabilities.Encoder, body.Capabilities.HWDecode, video, threads); measured {
 		body.Capabilities.ServerMaxHeight, body.Capabilities.ServerMaxFPS = height, fps
 		body.Capabilities.ServerMeasured, body.Capabilities.ServerSustainable = true, sustainable
@@ -263,6 +264,8 @@ func (p *PlaybackHTTP) tune(w http.ResponseWriter, r *http.Request) {
 	if p.Tuner != nil {
 		job.Threads = p.Tuner.Threads()
 	}
+	job.Threads = p.Capacity.ProfileThreads(source, plan.Encoder, plan.Decoder == "hardware", job.Threads)
+	job.ValidatedThreads = p.Capacity.ValidatedThreads(job)
 	job.Details = playback.Describe(path, source, plan, body.Capabilities)
 	if err := p.Manager.Configure(playback.EffectiveSettings(settings, p.Capacity)); err != nil {
 		writeJSONError(w, 500, "invalid playback limits")

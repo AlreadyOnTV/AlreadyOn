@@ -1995,9 +1995,10 @@ paths:
         up to 2160p60. Results remain valid within this process while idle-only
         remeasurement is deferred; pipeline identity must still match. Explicit quality is
         preserved. HDR measurements run off the request path and are cancelled
-        when automatic measurement encounters playback. They are not persisted.
-        The number of parallel conversions is worked out from that
-        speed, the CPU count and free memory after the coordinated benchmark group
+        when automatic measurement encounters playback. Fingerprint-matching representative results may be reused for up to 24 hours.
+        Representative startup calibration completes within a 120-second budget.
+        Parallel limits use simultaneous steady-state frame measurements, checked
+        per stream with a real-time safety margin and memory headroom
         (unless an administrator picks a number in the playback settings).
       responses:
         "200":
@@ -2057,6 +2058,28 @@ paths:
                       type: integer,
                       description: Detected parallel conversions; 0 until known.,
                     }
+                  calibration: { type: string, enum: [unverified, representative] }
+                  profiles:
+                    type: array
+                    description: Actual per-pipeline experiments; unverified paths retain conservative admission.
+                    items:
+                      type: object
+                      properties:
+                        sourceClass: { type: string }
+                        encoder: { type: string }
+                        hardwareDecode: { type: boolean }
+                        toneMapper: { type: string }
+                        sourceWidth: { type: integer }
+                        sourceHeight: { type: integer }
+                        sourceFps: { type: number }
+                        height: { type: integer }
+                        fps: { type: number }
+                        threads: { type: integer }
+                        validatedStreams: { type: integer }
+                        singleSpeed: { type: number }
+                        perStreamSpeeds: { type: array, items: { type: number } }
+                        verified: { type: boolean }
+                        measuredAt: { type: string, format: date-time }
                   processesAt:
                     { type: string, format: date-time, nullable: true }
                   cpus: { type: integer }

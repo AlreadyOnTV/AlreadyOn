@@ -25,8 +25,9 @@ with socket.socket() as a:
  print(a.getsockname()[1])
 PY
 )
+scripts/generate-benchmark-inputs.sh "$repo_root/.private/benchmark-inputs"
 (cd web && npm run build)
-(cd server && go build -tags=e2e -ldflags "-X github.com/alreadyonapp/alreadyon/server/internal/config.dataDir=$playback_tmp/data -X github.com/alreadyonapp/alreadyon/server/internal/config.webDir=$repo_root/web/dist" -o "$playback_tmp/server" ./cmd/server)
+(cd server && go build -tags=e2e -ldflags "-X github.com/alreadyonapp/alreadyon/server/internal/playback.BenchmarkInputsDir=$repo_root/.private/benchmark-inputs -X github.com/alreadyonapp/alreadyon/server/internal/config.dataDir=$playback_tmp/data -X github.com/alreadyonapp/alreadyon/server/internal/config.webDir=$repo_root/web/dist" -o "$playback_tmp/server" ./cmd/server)
 echo "E2E build setup: ${SECONDS}s"
 SECONDS=0
 # Two top-left blocks encode the source second (base 12, 18 luma units per digit)

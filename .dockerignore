@@ -7,6 +7,8 @@
 !api/**
 !deploy/
 !deploy/**
+!scripts/
+!scripts/generate-benchmark-inputs.sh
 !.dockerignore
 .git
 .github
