@@ -91,7 +91,7 @@ jobs:
       - uses: android-actions/setup-android@v4
         if: steps.version.outputs.existing != 'true'
         with:
-          packages: "platform-tools platforms;android-37.0 build-tools;36.0.0"
+          packages: "platform-tools platforms;android-37.2 build-tools;37.0.0"
       - name: Build release APK with allocated version
         if: steps.version.outputs.existing != 'true'
         env:
@@ -214,7 +214,7 @@ jobs:
       - uses: android-actions/setup-android@v4
         if: steps.plan.outputs.existing != 'true'
         with:
-          packages: "platform-tools platforms;android-37.0 build-tools;36.0.0"
+          packages: "platform-tools platforms;android-37.2 build-tools;37.0.0"
       - name: Build release APK with allocated version
         if: steps.plan.outputs.existing != 'true'
         env:

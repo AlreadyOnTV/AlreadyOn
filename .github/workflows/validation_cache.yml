@@ -58,7 +58,7 @@ jobs:
       - uses: gradle/actions/setup-gradle@8da46b539cd8fe6ab27ca75128919a18d757604c # v6.4.1
       - uses: android-actions/setup-android@v4
         with:
-          packages: "platform-tools platforms;android-37.0 build-tools;36.0.0"
+          packages: "platform-tools platforms;android-37.2 build-tools;37.0.0"
       - name: Warm unsigned release dependencies
         run: |
           apps/android/gradlew -p apps/android --no-daemon --build-cache :app:assembleRelease :tv:assembleRelease

@@ -2,7 +2,7 @@
 
 [![AlreadyOn](../web/public/branding/header-doc.svg)](../README.md)
 
-The production baseline is defined by [the runtime Dockerfile](../deploy/Dockerfile), [build base](../deploy/base.Dockerfile), [CI base](../deploy/ci-base.Dockerfile), `server/go.mod` and `web/package.json`. Current build recipes use Go 1.27, Node 24 and Ubuntu 26.04.
+The production baseline is defined by [the runtime Dockerfile](../deploy/Dockerfile), [build base](../deploy/base.Dockerfile), [CI base](../deploy/ci-base.Dockerfile), `server/go.mod` and `web/package.json`. Current build recipes use Go 1.27, Node 26 and Ubuntu 26.04.
 
 Run `make check-toolchain` for consistency checks. `make check-ubuntu-lts` additionally requires network access to inspect the upstream Ubuntu baseline. A native workstation may differ; validate release behavior in the production image.
 
@@ -20,4 +20,4 @@ BuildKit invalidates layers against Dockerfiles, upstream images and copied inpu
 
 Source-test logs report dependency, test, fixture and server-startup timings. The browser harness shares mutable server state and is not sharded. Benchmark image archive compression and separate runtime-test jobs against transfer and runner cost before changing them.
 
-The next candidate uses Compose BOM 2026.09.00, Compose compiler plugin 2.4.21 and UI Automator 2.4.0. Check both apps' unit tests and instrumentation-source compilation together. Go migrations use Goose 3.29.0. The npm 11.21.0 CLI retains its identity while its committed dependency tree updates abbrev, libnpmteam, node-gyp, parse-conflict-json and which; verify the replacement tree with clean installs and CLI smoke checks in the CI environment.
+The next candidate uses Compose BOM 2026.11.01, Compose compiler plugin 2.4.21 and UI Automator 2.4.1. Check both apps' unit tests and instrumentation-source compilation together. Go migrations use Goose 3.30.1. For npm 12.2.3, verify the locked replacement dependency tree with clean installs and CLI smoke checks in the CI environment.
