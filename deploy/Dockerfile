@@ -1,7 +1,7 @@
 # Build application layers on reusable local or GHCR bases. The version arguments stay
 # here so local toolchain checks and the published base images share one baseline.
 ARG GO_VERSION=1.27
-ARG NODE_VERSION=24
+ARG NODE_VERSION=26
 ARG UBUNTU_VERSION=26.04
 ARG CI_BASE=ghcr.io/alreadyontv/alreadyon-base:base-ci
 ARG RUNTIME_BASE=ghcr.io/alreadyontv/alreadyon-base:base-runtime

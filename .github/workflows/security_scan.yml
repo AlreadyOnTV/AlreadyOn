@@ -51,7 +51,7 @@ jobs:
       - uses: android-actions/setup-android@v4
         if: inputs.artifact_name == ''
         with:
-          packages: "platform-tools platforms;android-37.0 build-tools;36.0.0"
+          packages: "platform-tools platforms;android-37.2 build-tools;37.0.0"
       - name: Generate release-runtime package locks
         if: inputs.artifact_name == ''
         run: |

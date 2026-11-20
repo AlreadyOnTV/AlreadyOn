@@ -9,9 +9,6 @@ import androidx.compose.ui.graphics.compositeOver
 import androidx.compose.foundation.Image
 import androidx.compose.ui.res.painterResource
 import androidx.compose.ui.layout.ContentScale
-import android.app.PictureInPictureParams
-import android.os.Build
-import android.util.Rational
 import android.os.Bundle
 import android.util.TypedValue
 import androidx.compose.ui.platform.LocalContext
@@ -78,15 +75,14 @@ import java.util.Locale
 /** Native phone shell; credentials exist only while the sign-in form is on screen. */
 class MainActivity : ComponentActivity() {
     private var pip by mutableStateOf(false)
-    private var pipEligible = false
-    private val pipSupported get() = packageManager.hasSystemFeature(android.content.pm.PackageManager.FEATURE_PICTURE_IN_PICTURE)
+    private var pipControls: PhonePipControls? = null
     override fun onPictureInPictureModeChanged(isInPictureInPictureMode: Boolean, newConfig: Configuration) {
         super.onPictureInPictureModeChanged(isInPictureInPictureMode, newConfig)
         pip = isInPictureInPictureMode
     }
     override fun onUserLeaveHint() {
         super.onUserLeaveHint()
-        if (pipSupported && pipEligible && Build.VERSION.SDK_INT < 31) enterPictureInPictureMode(PictureInPictureParams.Builder().setAspectRatio(Rational(16, 9)).build())
+        pipControls?.enterOnOlderAndroid()
     }
     override fun onCreate(savedInstanceState: Bundle?) {
         super.onCreate(savedInstanceState)
@@ -135,10 +131,20 @@ class MainActivity : ComponentActivity() {
                     owner.lifecycle.addObserver(observer)
                     onDispose { owner.lifecycle.removeObserver(observer) }
                 }
-                LaunchedEffect(state.playback != null, state.paused) {
-                    pipEligible = state.playback != null && !state.paused
-                    if (pipSupported && Build.VERSION.SDK_INT >= 31) setPictureInPictureParams(PictureInPictureParams.Builder()
-                        .setAspectRatio(Rational(16, 9)).setAutoEnterEnabled(pipEligible).build())
+                val controls = remember(model) {
+                    if (packageManager.hasSystemFeature(android.content.pm.PackageManager.FEATURE_PICTURE_IN_PICTURE))
+                        PhonePipControls(this@MainActivity, model) else null
+                }
+                DisposableEffect(controls) {
+                    pipControls = controls
+                    controls?.register()
+                    onDispose {
+                        controls?.unregister()
+                        pipControls = null
+                    }
+                }
+                LaunchedEffect(controls, state.playback != null, state.paused, state.muted) {
+                    controls?.update(state.playback != null, state.paused, state.muted)
                 }
                 val expanded = fullscreen || pip
                 val view = LocalView.current
