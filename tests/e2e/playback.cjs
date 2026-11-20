@@ -1728,64 +1728,72 @@ const noWorkers = async (unreleased = () => 0) => {
       if (m) requested.push(m[1]);
     });
     await login(page);
-    await page.locator(".guide-slot-box").first().click();
-    await playing(page);
+    // Validate actual ladder playback with a scoped synthetic capacity result;
+    // admission safety and real calibration have separate regression coverage.
+    assert((await context.request.put(url + "/api/test/capacity")).ok(), "Install isolated ladder capacity");
+    let heights;
     try {
-      await page.waitForFunction(() => window.__heights.includes(720), null, {
-        timeout: 30000,
-      });
-    } catch (error) {
-      // Record playback state and token-free rendition names, never session URLs.
-      console.error(
-        "LADDER diagnostics:",
-        JSON.stringify({
-          requested,
-          state: await page.evaluate(() => {
-            const v = document.querySelector("video");
-            return {
-              heights: window.__heights,
-              height: v?.videoHeight,
-              time: v?.currentTime,
-              paused: v?.paused,
-              ready: v?.readyState,
-              error: v?.error?.code,
-            };
+      await page.locator(".guide-slot-box").first().click();
+      await playing(page);
+      try {
+        await page.waitForFunction(() => window.__heights.includes(720), null, {
+          timeout: 30000,
+        });
+      } catch (error) {
+        // Record playback state and token-free rendition names, never session URLs.
+        console.error(
+          "LADDER diagnostics:",
+          JSON.stringify({
+            requested,
+            state: await page.evaluate(() => {
+              const v = document.querySelector("video");
+              return {
+                heights: window.__heights,
+                height: v?.videoHeight,
+                time: v?.currentTime,
+                paused: v?.paused,
+                ready: v?.readyState,
+                error: v?.error?.code,
+              };
+            }),
           }),
-        }),
+        );
+        throw error;
+      }
+      heights = await page.evaluate(() => window.__heights);
+      assert(
+        heights[0] === 360,
+        `A ladder stream should start on its 360p rung, saw ${JSON.stringify(heights)}`,
       );
-      throw error;
+      assert(
+        requested[0] === "index.m3u8" &&
+          requested.includes("stream-0.m3u8") &&
+          requested.includes("stream-1.m3u8"),
+        `Master and both rungs should be requested: ${JSON.stringify(requested.slice(0, 8))}`,
+      );
+      const first = requested.findIndex((r) => r.startsWith("segment-"));
+      assert(
+        requested[first].startsWith("segment-0-"),
+        `The first segment should be from the low rung, got ${requested[first]}`,
+      );
+      assert(
+        requested.some((r) => r.startsWith("segment-1-")),
+        "The main rung never loaded",
+      );
+      await delay(6000);
+      assert(
+        !(await page.evaluate(() => document.querySelector("video").paused)) &&
+          (await page.evaluate(
+            () => document.querySelector("video").videoHeight,
+          )) === 720,
+        "Playback did not settle on the main rung",
+      );
+      await leave(page);
+      await noWorkers(unreleased);
+    } finally {
+      assert((await context.request.delete(url + "/api/test/capacity")).ok(), "Restore measured capacity");
+      await context.close();
     }
-    const heights = await page.evaluate(() => window.__heights);
-    assert(
-      heights[0] === 360,
-      `A ladder stream should start on its 360p rung, saw ${JSON.stringify(heights)}`,
-    );
-    assert(
-      requested[0] === "index.m3u8" &&
-        requested.includes("stream-0.m3u8") &&
-        requested.includes("stream-1.m3u8"),
-      `Master and both rungs should be requested: ${JSON.stringify(requested.slice(0, 8))}`,
-    );
-    const first = requested.findIndex((r) => r.startsWith("segment-"));
-    assert(
-      requested[first].startsWith("segment-0-"),
-      `The first segment should be from the low rung, got ${requested[first]}`,
-    );
-    assert(
-      requested.some((r) => r.startsWith("segment-1-")),
-      "The main rung never loaded",
-    );
-    await delay(6000);
-    assert(
-      !(await page.evaluate(() => document.querySelector("video").paused)) &&
-        (await page.evaluate(
-          () => document.querySelector("video").videoHeight,
-        )) === 720,
-      "Playback did not settle on the main rung",
-    );
-    await leave(page);
-    await noWorkers(unreleased);
-    await context.close();
     console.log(
       `PASS: ladder starts on 360p and moves up to 720p (${JSON.stringify(heights)})`,
     );
@@ -3638,7 +3646,7 @@ const noWorkers = async (unreleased = () => 0) => {
         break;
       }
       assert(
-        Date.now() - began < 780000,
+        Date.now() - began < 2100000,
         "Startup thread/capacity measurements never finished",
       );
       await new Promise((r) => setTimeout(r, 1000));
@@ -4192,6 +4200,8 @@ const noWorkers = async (unreleased = () => 0) => {
   }
 
   try {
+    if (!only || only.includes("startup-benchmarks"))
+      await require("./startup-benchmarks.cjs")({ browser, login, playing, seed, url, assert });
     await waitForTuner();
     if (!only || only.includes("last-channel"))
       await require("./last-channel.cjs")({

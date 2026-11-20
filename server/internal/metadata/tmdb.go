@@ -66,7 +66,7 @@ type Client struct {
 // NewClient returns a Client with a bounded request timeout. Passing an
 // empty apiKey is fine — see Client's doc comment.
 func NewClient(apiKey string) *Client {
-	return &Client{APIKey: apiKey, HTTPClient: &http.Client{Transport: governor.BackgroundTransport{}, Timeout: 10 * time.Second}, BaseURL: defaultAPIBase}
+	return &Client{APIKey: apiKey, HTTPClient: &http.Client{Transport: governor.BackgroundTransport{Timeout: 10 * time.Second}}, BaseURL: defaultAPIBase}
 }
 
 func (c *Client) enabled() bool { return c != nil && c.APIKey != "" }

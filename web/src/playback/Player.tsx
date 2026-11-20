@@ -664,6 +664,14 @@ export function Player({
     };
     const fail = (reason: RequestError) => {
       if (stopped) return;
+      if (reason.code === "server_starting") {
+        // Startup is a retryable readiness state, not a failed airing or sign-in.
+        setError(false);
+        setStatus("Server starting, please wait.");
+        unload();
+        recovery = setTimeout(() => { if (!stopped) setGeneration((n) => n + 1); }, 2000);
+        return;
+      }
       const retryAt = reason.retryAt
         ? Date.parse(reason.retryAt)
         : current

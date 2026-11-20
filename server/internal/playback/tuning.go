@@ -116,6 +116,14 @@ func (t *Tuner) cpuCount() int {
 // Start measures in the background. It does nothing when a measurement is
 // already running, and (unless force) when a stream is playing.
 func (t *Tuner) Start(force bool) bool {
+	return t.start(t.Context, force, true)
+}
+
+// Measure runs synchronously inside the coordinated benchmark group.
+func (t *Tuner) Measure(ctx context.Context) bool {
+	return t.start(ctx, false, false)
+}
+func (t *Tuner) start(base context.Context, force, asynchronous bool) bool {
 	t.mu.Lock()
 	if t.started {
 		t.mu.Unlock()
@@ -130,15 +138,19 @@ func (t *Tuner) Start(force bool) bool {
 	t.status.State = "running"
 	t.status.Detail = ""
 	t.mu.Unlock()
-	base := t.Context
 	if base == nil {
 		base = context.Background()
 	}
-	go func() {
+	run := func() {
 		ctx, cancel := measurementContext(base, force, t.Busy)
 		defer cancel()
 		t.run(ctx)
-	}()
+	}
+	if asynchronous {
+		go run()
+	} else {
+		run()
+	}
 	return true
 }
 

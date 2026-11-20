@@ -52,7 +52,7 @@ export async function getLogs(levels: LogLevel[], limit: number): Promise<LogsRe
   return res.json();
 }
 
-export type StartupPhase = 'pending' | 'scanning' | 'classifying' | 'populating' | 'scheduling' | 'ready' | 'failed';
+export type StartupPhase = 'benchmarking' | 'pending' | 'scanning' | 'classifying' | 'populating' | 'scheduling' | 'ready' | 'failed';
 
 export interface StartupStatus {
   phase: StartupPhase;

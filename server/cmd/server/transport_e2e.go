@@ -2,8 +2,11 @@
 
 package main
 
-import "net/http"
+import (
+	"net"
+	"net/http"
+)
 
 // Historical synthetic browser fixtures use explicitly loopback-only HTTP.
 // Production container tests exercise TLS with a trusted instance CA instead.
-func serveListener(server *http.Server) error { return server.ListenAndServe() }
+func serveListener(server *http.Server, listener net.Listener) error { return server.Serve(listener) }

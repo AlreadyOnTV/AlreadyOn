@@ -24,6 +24,8 @@ On a fresh checkout, create an owner through first-run setup. Optional local pro
 
 Store machine-specific notes in ignored `.private/`. Do not commit home paths, host aliases, tokens or signing material. Native clients have separate [Android setup](ANDROID.md).
 
+See [background work](BACKGROUND_JOBS.md) for startup ordering, playback readiness and recurring priorities.
+
 ## Validate
 
 Run `make lint` and relevant Go tests. Use isolated [browser tests](../tests/e2e/README.md) and [runtime tests](../tests/integration/README.md). [Delivery](CI_CD.md) describes release checks. Never point destructive tests at your preview or a live server.

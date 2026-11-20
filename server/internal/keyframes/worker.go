@@ -136,7 +136,7 @@ func process(ctx context.Context, db *sql.DB, c candidate) {
 		if v, _ := playback.Tracks(source); v.Index < 0 {
 			status = "no-video"
 		} else {
-			job, cancel := context.WithTimeout(ctx, 10*time.Minute)
+			job, cancel := governor.WithTimeout(ctx, 10*time.Minute)
 			gap, err = measure(job, real, source.DurationSeconds)
 			cancel()
 		}

@@ -303,3 +303,14 @@ func (w *activityFallbackWorker) Run(ctx context.Context, j playback.Job) error 
 		}
 	}
 }
+
+func TestBenchmarkActivityCollapsesParentAndStep(t *testing.T) {
+	tasks := []activity.Task{{Name: "Performance Benchmarks"}, {Name: "Transcode Thread Measurement"}, {Name: "Library Scan"}}
+	got := benchmarkActivity(tasks)
+	if len(got) != 2 || got[0].Name != "Performance Benchmarks" || got[0].Unit != "Transcode Thread Measurement" || got[1].Name != "Library Scan" {
+		t.Fatalf("tasks: %+v", got)
+	}
+	if got := benchmarkActivity(tasks[1:]); len(got) != 2 {
+		t.Fatal("standalone tasks hidden")
+	}
+}

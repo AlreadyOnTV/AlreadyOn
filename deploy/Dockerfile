@@ -16,6 +16,7 @@ COPY server/ .
 # Runtime paths are fixed at link time; -s -w removes linker/debug tables that
 # the application does not read while retaining normal Go panic stack traces.
 ARG LDFLAGS="-X github.com/alreadyonapp/alreadyon/server/internal/config.dataDir=/config \
+    -X github.com/alreadyonapp/alreadyon/server/internal/playback.BenchmarkInputsDir=/usr/local/share/alreadyon/benchmark-inputs \
     -X github.com/alreadyonapp/alreadyon/server/internal/config.webDir=/usr/local/share/alreadyon/web \
     -X github.com/alreadyonapp/alreadyon/server/internal/httpapi.openAPISpecPath=/usr/local/share/alreadyon/openapi.yaml"
 ENV CGO_ENABLED=0 GOAMD64=v1
@@ -32,7 +33,13 @@ ARG VCS_REF
 RUN echo "$VCS_REF" | grep -Eq '^[0-9a-f]{40}$' && printf '%s' "$VCS_REF" > /web-build-revision
 RUN npm run build
 
+# Source-independent fixture layer: only recipe or runtime FFmpeg changes rebuild it.
+FROM ${RUNTIME_BASE} AS benchmark-inputs
+COPY scripts/generate-benchmark-inputs.sh /tmp/generate-benchmark-inputs.sh
+RUN sh /tmp/generate-benchmark-inputs.sh /out/benchmark-inputs
+
 FROM ${RUNTIME_BASE} AS runtime
+COPY --from=benchmark-inputs /out/benchmark-inputs /usr/local/share/alreadyon/benchmark-inputs
 COPY --from=server-build /out/alreadyon-server /usr/local/bin/
 RUN for command in access-key clear-browser-sessions reset-password tls; do \
     ln -s alreadyon-server "/usr/local/bin/alreadyon-$command"; done

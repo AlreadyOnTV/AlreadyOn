@@ -100,26 +100,30 @@ type CapacityRecord struct {
 
 // CapacityStatus is the capacity API's answer.
 type CapacityStatus struct {
-	State       string        `json:"state"` // idle or running
-	MeasuredAt  *time.Time    `json:"measuredAt"`
-	Encoder     string        `json:"encoder"`
-	Samples     []RungSample  `json:"samples"`
-	MaxHeight   int           `json:"maxHeight"` // 0: no limit (hardware encoder, or not measured yet)
-	MaxFPS      float64       `json:"maxFps"`
-	Processes   int           `json:"processes"` // detected parallel conversions; 0 until known
-	ProcessesAt *time.Time    `json:"processesAt"`
-	CPUs        int           `json:"cpus"`
-	Detail      string        `json:"detail"`
-	HDR         []HDRCapacity `json:"hdr,omitempty"`
+	Profiles    []ProfileCapacity `json:"profiles,omitempty"`
+	Calibration string            `json:"calibration,omitempty"`
+	State       string            `json:"state"` // idle or running
+	MeasuredAt  *time.Time        `json:"measuredAt"`
+	Encoder     string            `json:"encoder"`
+	Samples     []RungSample      `json:"samples"`
+	MaxHeight   int               `json:"maxHeight"` // 0: no limit (hardware encoder, or not measured yet)
+	MaxFPS      float64           `json:"maxFps"`
+	Processes   int               `json:"processes"` // detected parallel conversions; 0 until known
+	ProcessesAt *time.Time        `json:"processesAt"`
+	CPUs        int               `json:"cpus"`
+	Detail      string            `json:"detail"`
+	HDR         []HDRCapacity     `json:"hdr,omitempty"`
 }
 
 // Capacity measures what this server can sustain and shares it with every
 // viewer: the largest picture software encoding keeps ahead of real time (the
 // Auto quality never goes above it) and how many conversions can run at once.
 // The speed measurement is slow, so it runs at start, when the encoder setting
-// changes and once an hour; the parallel limit is recomputed from it, the CPU
-// count and the free memory on its own, cheaper schedule.
+// changes and every four hours through Benchmarks; the parallel limit is
+// recomputed at the end of that coordinated group.
 type Capacity struct {
+	calibrated bool
+	profiles   []ProfileCapacity
 	// Context ends measurements when the server shuts down; nil never does.
 	Context    context.Context
 	Executable string
@@ -169,6 +173,7 @@ func (c *Capacity) Status() CapacityStatus {
 	c.mu.Lock()
 	defer c.mu.Unlock()
 	s := c.status
+	s.Profiles = append([]ProfileCapacity(nil), c.profiles...)
 	if s.State == "" {
 		s.State = "idle"
 	}
@@ -237,6 +242,9 @@ func (c *Capacity) Allows(active []Job, candidate Job) bool {
 // AdmissionError distinguishes missing/unsafe measurements from an otherwise
 // valid pipeline that is temporarily out of aggregate CPU or memory headroom.
 func (c *Capacity) AdmissionError(active []Job, candidate Job) error {
+	if handled, err := c.calibratedAdmission(active, candidate); handled {
+		return err
+	}
 	if c == nil || jobResourceCost(candidate) == 0 {
 		return nil
 	}
@@ -331,13 +339,21 @@ func (c *Capacity) Processes() int {
 // Start measures in the background. It does nothing when a measurement is
 // already running, and (unless force) when a stream is playing.
 func (c *Capacity) Start(force bool) bool {
+	return c.start(c.Context, force, true)
+}
+
+// Measure runs synchronously inside the coordinated benchmark group.
+func (c *Capacity) Measure(ctx context.Context) bool {
+	return c.start(ctx, false, false)
+}
+func (c *Capacity) start(base context.Context, force, asynchronous bool) bool {
 	c.mu.Lock()
 	if c.started {
 		c.mu.Unlock()
 		return false
 	}
 	if !force && c.Busy != nil && c.Busy() {
-		c.status.Detail = "Skipped while a stream is playing; it runs again at the next hour."
+		c.status.Detail = "Skipped while a stream is playing; it is deferred until the server is idle."
 		c.mu.Unlock()
 		return false
 	}
@@ -345,15 +361,19 @@ func (c *Capacity) Start(force bool) bool {
 	c.status.State = "running"
 	c.status.Detail = ""
 	c.mu.Unlock()
-	base := c.Context
 	if base == nil {
 		base = context.Background()
 	}
-	go func() {
+	run := func() {
 		ctx, cancel := measurementContext(base, force, c.Busy)
 		defer cancel()
 		c.run(ctx)
-	}()
+	}
+	if asynchronous {
+		go run()
+	} else {
+		run()
+	}
 	return true
 }
 
@@ -406,7 +426,9 @@ func (c *Capacity) run(ctx context.Context) {
 	s.Detail = strings.Join(details, " ")
 	c.mu.Unlock()
 	logging.Info("server capacity: %s (%s)", c.describe(), describeRungs(samples))
-	c.RecomputeProcesses(ctx)
+	if governor.Priority(ctx) != governor.PriorityBenchmark {
+		c.RecomputeProcesses(ctx)
+	}
 
 	// The source matrix includes the software HDR pipelines. The optional HDR
 	// pass is still needed for a configured GPU decoder/tone mapper.
@@ -643,6 +665,9 @@ func memoryAvailable() uint64 {
 // temporary directory. HDR10+ dynamic metadata is intentionally not fabricated:
 // the fixture represents Main 10 PQ/HLG transfer and BT.2020 color only.
 func makeCapacitySample(ctx context.Context, exe, dir string, source capacitySource) (string, error) {
+	if path, ok := preparedCapacityInput(ctx, source); ok {
+		return path, nil
+	}
 	path := filepath.Join(dir, string(source.class)+".mkv")
 	videoFilter := fmt.Sprintf("noise=alls=3:allf=t:all_seed=1,format=%s", source.pixelFormat)
 	if source.transfer != "" {
@@ -770,7 +795,7 @@ func hdrSpeedForJob(records []HDRCapacity, job Job, threads int) (float64, bool)
 	var selected *HDRCapacity
 	for i := range records {
 		record := &records[i]
-		if record.Encoder != job.Plan.Encoder || record.HardwareDecode != decode || record.Transfer != video.ColorTransfer || record.ToneMapper != job.Plan.ToneMapper || record.Threads != threads || record.SourceFPS < video.FrameRate || time.Since(record.MeasuredAt) > 2*time.Hour {
+		if record.Encoder != job.Plan.Encoder || record.HardwareDecode != decode || record.Transfer != video.ColorTransfer || record.ToneMapper != job.Plan.ToneMapper || record.Threads != threads || record.SourceFPS < video.FrameRate {
 			continue
 		}
 		if selected == nil || record.SourceFPS < selected.SourceFPS {

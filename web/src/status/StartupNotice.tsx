@@ -18,6 +18,7 @@ function describeStartup(status: StartupStatus | null): Notice | null {
     return {
       kind: "running",
       title:
+        status.phase === "benchmarking" ? "Server starting, please wait." :
         status.trigger === "startup" || !status.startupComplete
           ? "Tuning In…"
           : "Refreshing Your Library…",

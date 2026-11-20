@@ -2,7 +2,12 @@
 
 package main
 
-import "net/http"
+import (
+	"net"
+	"net/http"
+)
 
 // Production and agent previews require TLS, with no plaintext fallback.
-func serveListener(server *http.Server) error { return server.ListenAndServeTLS("", "") }
+func serveListener(server *http.Server, listener net.Listener) error {
+	return server.ServeTLS(listener, "", "")
+}

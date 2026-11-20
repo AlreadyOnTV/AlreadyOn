@@ -9,29 +9,7 @@ import (
 	"fmt"
 	"os"
 	"strconv"
-	"time"
 )
-
-// Hourly background jobs run at fixed minutes past the hour so they never start
-// together: schedule maintenance (every channel's schedule window is extended and
-// pruned; hourly is well inside the 48-hour look-ahead, so there is nothing to
-// tune) at :00, the parallel-conversion limit at :15 and the encoding-speed
-// measurement at :30.
-const (
-	ScheduleMaintenanceOffset = 0
-	WorkerLimitOffset         = 15 * time.Minute
-	CapacityMeasureOffset     = 30 * time.Minute
-)
-
-// NextHourlyAt is the next wall-clock time after now that is offset past the
-// hour in now's own time zone.
-func NextHourlyAt(now time.Time, offset time.Duration) time.Time {
-	next := time.Date(now.Year(), now.Month(), now.Day(), now.Hour(), 0, 0, 0, now.Location()).Add(offset)
-	for !next.After(now) {
-		next = next.Add(time.Hour)
-	}
-	return next
-}
 
 // dataDir and webDir are fixed when the binary is built rather than read
 // from the environment. The container image sets them at link time (see

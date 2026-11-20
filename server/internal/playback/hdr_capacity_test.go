@@ -45,8 +45,8 @@ func TestHDRLimitMatchesPipelineAndLeavesExplicitQualityAlone(t *testing.T) {
 		t.Fatalf("SDR %+v %v", p, err)
 	}
 	c.hdr[0].MeasuredAt = time.Now().Add(-3 * time.Hour)
-	if _, _, measured, _ := c.HDRLimit(EncoderIntelVAAPI, true, v, 2); measured {
-		t.Fatal("stale capacity used")
+	if _, _, measured, _ := c.HDRLimit(EncoderIntelVAAPI, true, v, 2); !measured {
+		t.Fatal("process-local measurement expired before the four-hour benchmark")
 	}
 }
 

@@ -16,9 +16,9 @@ import (
 	"github.com/alreadyonapp/alreadyon/server/internal/storage"
 )
 
-func TestScanWaitsForAnalysisBudgetWithoutMarkingFileCorrupt(t *testing.T) {
+func TestScanWaitsForBenchmarkBudgetWithoutMarkingFileCorrupt(t *testing.T) {
 	g := governor.Fixed(1)
-	claim, err := g.Acquire(t.Context(), governor.PriorityHigh)
+	claim, err := g.Acquire(t.Context(), governor.PriorityBenchmark)
 	if err != nil {
 		t.Fatal(err)
 	}

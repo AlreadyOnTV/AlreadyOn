@@ -256,7 +256,7 @@ func (p *PlaybackHTTP) serverActivity(w http.ResponseWriter, r *http.Request) {
 	}
 	p.activityMu.Unlock()
 	sort.Slice(sessions, func(i, j int) bool { return sessions[i].ID < sessions[j].ID })
-	tasks := activity.Default.Snapshot(now)
+	tasks := benchmarkActivity(activity.Default.Snapshot(now))
 	pipeline := status.Default.Snapshot()
 	// Counted sub-steps below have their own rows; metadata discovery has no known total yet.
 	pipelineVisible := false
@@ -265,7 +265,7 @@ func (p *PlaybackHTTP) serverActivity(w http.ResponseWriter, r *http.Request) {
 			pipelineVisible = true
 		}
 	}
-	if pipeline.Active && pipeline.StartedAt != nil && !pipelineVisible {
+	if pipeline.Active && pipeline.Phase != status.PhaseBenchmarking && pipeline.StartedAt != nil && !pipelineVisible {
 		tasks = append(tasks, activity.Task{ID: "library-pipeline", Name: "Library Maintenance", Unit: string(pipeline.Phase), StartedAt: *pipeline.StartedAt, RuntimeSeconds: max(0, now.Sub(*pipeline.StartedAt).Seconds())})
 	}
 	transcodeSlots := struct {
@@ -335,4 +335,32 @@ func deviceLabel(ua string) string {
 		os = "Linux"
 	}
 	return strings.TrimSpace(device + " · " + browser + " " + os)
+}
+
+// A benchmark group and its current step are one operation, not concurrent jobs.
+func benchmarkActivity(tasks []activity.Task) []activity.Task {
+	parent := -1
+	for i, task := range tasks {
+		if task.Name == "Performance Benchmarks" {
+			parent = i
+			break
+		}
+	}
+	if parent < 0 {
+		return tasks
+	}
+	group := tasks[parent]
+	result := make([]activity.Task, 0, len(tasks))
+	for i, task := range tasks {
+		if i == parent {
+			continue
+		}
+		switch task.Name {
+		case "Transcode Thread Measurement", "Server Capacity Measurement", "Representative Capacity Validation":
+			group.Unit = task.Name
+		default:
+			result = append(result, task)
+		}
+	}
+	return append([]activity.Task{group}, result...)
 }

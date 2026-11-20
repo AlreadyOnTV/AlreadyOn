@@ -148,7 +148,9 @@ func (m *Manager) Acquire(ctx context.Context, key, viewer string, job Job) (Man
 		if threads == 0 {
 			threads = DefaultThreads
 		}
-		job.Threads = FairThreads(threads, cpus, m.activeCost+cost)
+		if !job.ValidatedThreads {
+			job.Threads = FairThreads(threads, cpus, m.activeCost+cost)
+		}
 	}
 	if cost > 0 && m.admission != nil {
 		var active []Job

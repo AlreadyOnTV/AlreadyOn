@@ -14,6 +14,7 @@ import (
 	"time"
 
 	"github.com/alreadyonapp/alreadyon/server/internal/auth"
+	"github.com/alreadyonapp/alreadyon/server/internal/governor"
 	"github.com/alreadyonapp/alreadyon/server/internal/logging"
 	"github.com/alreadyonapp/alreadyon/server/internal/playback"
 	"github.com/alreadyonapp/alreadyon/server/internal/schedule"
@@ -23,6 +24,7 @@ import (
 // PlaybackHTTP keeps session issuance and scoped media authorization separate
 // on one HTTPS listener. Browser cookies never authorize media payloads.
 type PlaybackHTTP struct {
+	Benchmarks   *playback.Benchmarks
 	activityMu   sync.Mutex
 	activityRows map[string]viewerActivity
 	DB           *sql.DB
@@ -83,6 +85,11 @@ func (p *PlaybackHTTP) issue(w http.ResponseWriter, r *http.Request) {
 }
 func (p *PlaybackHTTP) issueProbe(w http.ResponseWriter, r *http.Request) { p.issueFor(w, r, 0) }
 func (p *PlaybackHTTP) issueFor(w http.ResponseWriter, r *http.Request, channelID int64) {
+	release, ok := p.admitPlayback(w, r)
+	if !ok {
+		return
+	}
+	defer release()
 	token, s, err := p.Sessions.Issue(auth.PrincipalID(r.Context()), channelID)
 	if errors.Is(err, playback.ErrBusy) {
 		w.Header().Set("Retry-After", "1")
@@ -209,6 +216,11 @@ func (p *PlaybackHTTP) MediaHandler() http.Handler {
 		if parts[2] == "source" || segmentName.MatchString(parts[2]) {
 			w = &mediaCounter{ResponseWriter: w, sessions: p.Sessions, token: token}
 		}
+		release, ok := p.admitPlayback(w, r)
+		if !ok {
+			return
+		}
+		defer release()
 		mux.ServeHTTP(w, r)
 	})
 }
@@ -281,12 +293,28 @@ func (p *PlaybackHTTP) testTranscoding(w http.ResponseWriter, r *http.Request) {
 		writeJSONError(w, 503, "hardware testing is not available")
 		return
 	}
-	writeJSON(w, 200, p.Hardware.TestSetting(r.Context(), body.Transcoding, body.Decoding))
+	ctx := r.Context()
+	if p.Benchmarks != nil {
+		// Explicit hardware diagnostics join benchmark priority after any group stops.
+		release, ok := p.admitPlayback(w, r)
+		if !ok {
+			return
+		}
+		defer release()
+		end := p.Benchmarks.Governor.Reserve(governor.PriorityBenchmark)
+		defer end()
+		ctx = governor.WithPriority(ctx, governor.PriorityBenchmark)
+	}
+	writeJSON(w, 200, p.Hardware.TestSetting(ctx, body.Transcoding, body.Decoding))
 }
 
 // retune re-measures the thread count and the server's capacity after the
 // encoder settings changed.
 func (p *PlaybackHTTP) retune() {
+	if p.Benchmarks != nil {
+		p.Benchmarks.Request()
+		return
+	}
 	if p.Tuner != nil {
 		p.Tuner.Start(false)
 	}
@@ -300,17 +328,21 @@ func (p *PlaybackHTTP) getCapacity(w http.ResponseWriter, r *http.Request) {
 		writeJSONError(w, 503, "server capacity measurement is not available")
 		return
 	}
-	writeJSON(w, 200, p.Capacity.Status())
+	writeJSON(w, 200, p.capacityStatus())
 }
 
-// measureCapacity starts a measurement now, even while streams play.
+// measureCapacity queues the full idle-only group; embedded test routers retain their local tuner.
 func (p *PlaybackHTTP) measureCapacity(w http.ResponseWriter, r *http.Request) {
 	if p.Capacity == nil {
 		writeJSONError(w, 503, "server capacity measurement is not available")
 		return
 	}
-	p.Capacity.Start(true)
-	writeJSON(w, 202, p.Capacity.Status())
+	if p.Benchmarks != nil {
+		p.Benchmarks.Request()
+	} else {
+		p.Capacity.Start(true)
+	}
+	writeJSON(w, 202, p.capacityStatus())
 }
 
 func (p *PlaybackHTTP) getThreads(w http.ResponseWriter, r *http.Request) {
@@ -318,17 +350,21 @@ func (p *PlaybackHTTP) getThreads(w http.ResponseWriter, r *http.Request) {
 		writeJSONError(w, 503, "thread tuning is not available")
 		return
 	}
-	writeJSON(w, 200, p.Tuner.Status())
+	writeJSON(w, 200, p.threadStatus())
 }
 
-// tuneThreads starts a measurement now, even while streams play.
+// tuneThreads queues the same full idle-only group as capacity measurement.
 func (p *PlaybackHTTP) tuneThreads(w http.ResponseWriter, r *http.Request) {
 	if p.Tuner == nil {
 		writeJSONError(w, 503, "thread tuning is not available")
 		return
 	}
-	p.Tuner.Start(true)
-	writeJSON(w, 202, p.Tuner.Status())
+	if p.Benchmarks != nil {
+		p.Benchmarks.Request()
+	} else {
+		p.Tuner.Start(true)
+	}
+	writeJSON(w, 202, p.threadStatus())
 }
 
 type mediaCounter struct {
@@ -354,4 +390,38 @@ func (w *mediaCounter) Write(b []byte) (int, error) {
 		w.sessions.AddMediaBytes(w.token, n)
 	}
 	return n, err
+}
+
+// Startup rejections are retryable and do not revoke authentication or issue tokens.
+func (p *PlaybackHTTP) admitPlayback(w http.ResponseWriter, r *http.Request) (func(), bool) {
+	if p.Benchmarks == nil {
+		return func() {}, true
+	}
+	release, err := p.Benchmarks.Admit(r.Context())
+	if err != nil {
+		w.Header().Set("Retry-After", "2")
+		w.Header().Set("Cache-Control", "no-store")
+		if errors.Is(err, playback.ErrServerStarting) {
+			writeJSON(w, 503, map[string]any{"code": "server_starting", "error": playback.ErrServerStarting.Error()})
+		} else {
+			writeJSONError(w, 503, "Playback is waiting for background work to stop; retry shortly.")
+		}
+		return func() {}, false
+	}
+	return release, true
+}
+
+func (p *PlaybackHTTP) capacityStatus() playback.CapacityStatus {
+	s := p.Capacity.Status()
+	if p.Benchmarks != nil && p.Benchmarks.Running() {
+		s.State = "running"
+	}
+	return s
+}
+func (p *PlaybackHTTP) threadStatus() playback.TuneStatus {
+	s := p.Tuner.Status()
+	if p.Benchmarks != nil && p.Benchmarks.Running() {
+		s.State = "running"
+	}
+	return s
 }

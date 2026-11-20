@@ -14,7 +14,8 @@ import (
 
 // HDRCapacity describes a measured complete HDR pipeline, not encoder throughput.
 // Results are intentionally process-local: device/driver changes across restarts
-// must not inherit a stale capability decision from the database.
+// must not inherit a stale capability decision from the database. Within this
+// process, exact-pipeline results remain valid when idle-only reruns are deferred.
 type HDRCapacity struct {
 	SourceFPS      float64      `json:"sourceFps"`
 	Encoder        string       `json:"encoder"`
@@ -37,7 +38,7 @@ func (c *Capacity) HDRLimit(encoder string, decode bool, v library.StreamInfo, t
 	defer c.mu.Unlock()
 	var selected *HDRCapacity
 	for _, r := range c.hdr {
-		if r.SourceFPS < v.FrameRate || r.Encoder != encoder || r.HardwareDecode != decode || r.Transfer != v.ColorTransfer || r.Threads != threads || time.Since(r.MeasuredAt) > 2*time.Hour {
+		if r.SourceFPS < v.FrameRate || r.Encoder != encoder || r.HardwareDecode != decode || r.Transfer != v.ColorTransfer || r.Threads != threads {
 			continue
 		}
 		if r.ToneMapper == "gpu" && c.Hardware != nil && !c.Hardware.ToneMapOnGPU(context.Background(), encoder) {
@@ -83,7 +84,9 @@ func (c *Capacity) benchmarkHDRSource(ctx context.Context, encoder string, sourc
 	// A real Main 10 decode workload, at the maximum source rate covered by results.
 	// Never substitute an 8-bit codec for a failed HEVC fixture.
 	args := []string{"-hide_banner", "-v", "error", "-nostdin", "-f", "lavfi", "-i", fmt.Sprintf("testsrc2=size=3840x2160:rate=%g:duration=3,noise=alls=6:allf=t", sourceFPS), "-pix_fmt", "yuv420p10le", "-c:v", "libx265", "-preset", "ultrafast", "-x265-params", "pools=2:frame-threads=2:log-level=error", "-color_trc", "smpte2084", "-color_primaries", "bt2020", "-colorspace", "bt2020nc", sample}
-	if out, err := governor.BackgroundOutput(ctx, lowPriority(ctx, exe, args...)); err != nil {
+	if prepared, ok := preparedInput(SourceHEVCPQ, sourceFPS); ok {
+		sample = prepared
+	} else if out, err := governor.BackgroundOutput(ctx, lowPriority(ctx, exe, args...)); err != nil {
 		return nil, fmt.Errorf("HDR fixture: %w: %s", err, out)
 	}
 	probe, err := library.Probe(ctx, sample)
@@ -101,6 +104,17 @@ func (c *Capacity) benchmarkHDRSource(ctx context.Context, encoder string, sourc
 	}
 	var results []HDRCapacity
 	for _, transfer := range []string{"smpte2084", "arib-std-b67"} {
+		class := SourceHEVCPQ
+		if transfer == "arib-std-b67" {
+			class = SourceHEVCHLG
+		}
+		if prepared, ok := preparedInput(class, sourceFPS); ok {
+			sample = prepared
+			probe, err = library.Probe(ctx, sample)
+			if err != nil {
+				return nil, err
+			}
+		}
 		for i := range probe.Streams {
 			if probe.Streams[i].Kind == library.StreamVideo {
 				probe.Streams[i].ColorTransfer = transfer

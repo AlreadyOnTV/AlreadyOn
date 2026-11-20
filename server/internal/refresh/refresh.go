@@ -15,6 +15,7 @@ import (
 	"sync"
 	"time"
 
+	"github.com/alreadyonapp/alreadyon/server/internal/governor"
 	"github.com/alreadyonapp/alreadyon/server/internal/library"
 	"github.com/alreadyonapp/alreadyon/server/internal/lineup"
 	"github.com/alreadyonapp/alreadyon/server/internal/logging"
@@ -89,6 +90,9 @@ func Run(ctx context.Context, db *sql.DB) (Result, error) {
 // RunAs is Run, reporting to status.Default as trigger (e.g.
 // status.TriggerPoll for the content-polling loop).
 func RunAs(ctx context.Context, db *sql.DB, trigger status.Trigger) (Result, error) {
+	ctx, release := governor.Library(ctx)
+	defer release()
+
 	if !running.TryLock() {
 		return Result{}, ErrBusy
 	}
@@ -101,6 +105,11 @@ func RunAs(ctx context.Context, db *sql.DB, trigger status.Trigger) (Result, err
 // leave the guide and new ones appear. It waits for any run already in
 // progress rather than failing with ErrBusy.
 func Rescan(ctx context.Context, db *sql.DB) (Result, error) {
+	ctx, release := governor.Library(ctx)
+	defer release()
+	if err := governor.Checkpoint(ctx); err != nil {
+		return Result{}, err
+	}
 	running.Lock()
 	defer running.Unlock()
 	return runLocked(ctx, db, status.TriggerRefresh, scanAlways)
@@ -109,6 +118,11 @@ func Rescan(ctx context.Context, db *sql.DB) (Result, error) {
 // TryRescan is Rescan for an explicit admin request: it returns ErrBusy
 // instead of waiting when another run is in progress.
 func TryRescan(ctx context.Context, db *sql.DB) (Result, error) {
+	ctx, release := governor.Library(ctx)
+	defer release()
+	if err := governor.Checkpoint(ctx); err != nil {
+		return Result{}, err
+	}
 	if !running.TryLock() {
 		return Result{}, ErrBusy
 	}
@@ -122,6 +136,11 @@ func TryRescan(ctx context.Context, db *sql.DB) (Result, error) {
 // ErrBusy if another run holds the lock, and does nothing (no error) when
 // no usable folder is configured.
 func PollOnce(ctx context.Context, db *sql.DB) (Result, error) {
+	ctx, release := governor.Library(ctx)
+	defer release()
+	if err := governor.Checkpoint(ctx); err != nil {
+		return Result{}, err
+	}
 	if !running.TryLock() {
 		return Result{}, ErrBusy
 	}
@@ -155,6 +174,9 @@ func runLocked(ctx context.Context, db *sql.DB, trigger status.Trigger, mode sca
 			return res, err
 		}
 		defer stop()
+	}
+	if err = governor.Checkpoint(ctx); err != nil {
+		return res, err
 	}
 	res, err = prepareLocked(ctx, db, mode)
 	if err != nil {
@@ -238,4 +260,26 @@ func prepareLocked(ctx context.Context, db *sql.DB, mode scanMode) (res Result, 
 	}
 
 	return res, nil
+}
+
+// RefreshLibrary performs the complete scheduled pipeline even with no new files:
+// metadata and rolling channel schedules still need maintenance on quiet libraries.
+func RefreshLibrary(ctx context.Context, db *sql.DB) (Result, error) {
+	ctx, release := governor.Library(ctx)
+	defer release()
+	if err := governor.Checkpoint(ctx); err != nil {
+		return Result{}, err
+	}
+	if err := lockUpdates(ctx); err != nil {
+		return Result{}, err
+	}
+	defer running.Unlock()
+	cfg, err := library.LoadScanConfig(ctx, db)
+	if err != nil {
+		return Result{}, err
+	}
+	if len(cfg.Roots) == 0 {
+		return Result{}, nil
+	}
+	return runLocked(ctx, db, status.TriggerPoll, scanAlways)
 }

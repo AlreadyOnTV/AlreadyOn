@@ -1,9 +1,6 @@
 package config
 
-import (
-	"testing"
-	"time"
-)
+import "testing"
 
 func TestLoad_UnsetListeners_UseDefaults(t *testing.T) {
 	t.Setenv("ALREADYON_WEB_PORT", "")
@@ -67,25 +64,5 @@ func TestLoad_DistinctAddrs_Succeeds(t *testing.T) {
 
 	if _, err := Load(); err != nil {
 		t.Fatalf("Load: %v", err)
-	}
-}
-
-func TestNextHourlyAtIsOffsetPastTheHour(t *testing.T) {
-	loc := time.FixedZone("test", -4*3600)
-	at := func(h, m, s int) time.Time { return time.Date(2026, 10, 1, h, m, s, 0, loc) }
-	for _, c := range []struct {
-		now    time.Time
-		offset time.Duration
-		want   time.Time
-	}{
-		{at(12, 0, 0), 15 * time.Minute, at(12, 15, 0)},
-		{at(12, 14, 59), 15 * time.Minute, at(12, 15, 0)},
-		{at(12, 15, 0), 15 * time.Minute, at(13, 15, 0)}, // never "now"
-		{at(12, 45, 0), 30 * time.Minute, at(13, 30, 0)},
-		{at(23, 50, 0), 0, time.Date(2026, 10, 2, 0, 0, 0, 0, loc)},
-	} {
-		if got := NextHourlyAt(c.now, c.offset); !got.Equal(c.want) {
-			t.Errorf("NextHourlyAt(%v, %v) = %v, want %v", c.now, c.offset, got, c.want)
-		}
 	}
 }

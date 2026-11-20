@@ -1,7 +1,9 @@
+// Startup benchmark readiness and library progress use distinct, readable labels.
 import type { StartupStatus } from '../api/client';
 
 const PHASE_LABELS: Record<string, string> = {
   pending: 'Getting ready',
+  benchmarking: 'Measuring server performance',
   scanning: 'Scanning your media folders',
   classifying: 'Looking up show and movie details',
   populating: 'Building your channels',
