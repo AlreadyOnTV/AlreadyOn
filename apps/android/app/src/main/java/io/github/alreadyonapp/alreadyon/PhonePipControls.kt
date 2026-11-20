@@ -21,9 +21,13 @@ internal class PhonePipControls(private val activity: Activity, private val mode
 
     private val receiver = object : BroadcastReceiver() {
         override fun onReceive(context: Context, intent: Intent) {
-            if (!activity.isInPictureInPictureMode || model.state.value.playback == null) return
+            val state = model.state.value
+            if (state.channel == null || !activity.isInPictureInPictureMode) return
             when (intent.action) {
-                playbackAction -> model.togglePause()
+                playbackAction -> {
+                    if (state.playback != null) model.togglePause()
+                    else if (state.error != null) model.retryPlayback()
+                }
                 audioAction -> model.toggleMute()
             }
         }
@@ -38,11 +42,17 @@ internal class PhonePipControls(private val activity: Activity, private val mode
         activity.unregisterReceiver(receiver)
     }
 
-    fun update(hasPlayback: Boolean, paused: Boolean, muted: Boolean) {
-        canEnter = hasPlayback && !paused
-        val actions = if (hasPlayback) listOf(
-            action(playbackAction, if (paused) R.drawable.pip_play else R.drawable.pip_pause, if (paused) "Play" else "Pause"),
-            action(audioAction, if (muted) R.drawable.pip_muted else R.drawable.pip_volume, if (muted) "Unmute" else "Mute"),
+    fun update(inPip: Boolean, state: PhoneState) {
+        val hasPlayback = state.playback != null
+        val showPlay = state.paused || !hasPlayback
+        canEnter = hasPlayback && !state.paused
+        // Live retunes clear the media source briefly. Keep the row visible and
+        // prevent another tune until playback is available or the attempt fails.
+        val actions = if (hasPlayback || (inPip && state.channel != null)) listOf(
+            action(playbackAction, if (showPlay) R.drawable.pip_play else R.drawable.pip_pause,
+                if (showPlay) "Play" else "Pause").apply { isEnabled = hasPlayback || state.error != null },
+            action(audioAction, if (state.muted) R.drawable.pip_muted else R.drawable.pip_volume,
+                if (state.muted) "Unmute" else "Mute"),
         ) else emptyList()
 
         // Android lays out these actions in its PiP menu and retains its system controls.

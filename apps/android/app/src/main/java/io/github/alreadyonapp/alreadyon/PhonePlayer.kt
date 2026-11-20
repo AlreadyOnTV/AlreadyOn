@@ -68,8 +68,9 @@ import java.io.IOException
 @androidx.annotation.OptIn(UnstableApi::class)
 @Composable
 private fun NativeVideo(playback: PhonePlayback, model: PhoneModel, modifier: Modifier,
-    paused: Boolean, volume: Float, onPosition: (Double) -> Unit, onTap: () -> Unit) {
+    paused: Boolean, volume: Float, pictureInPicture: Boolean, onPosition: (Double) -> Unit, onTap: () -> Unit) {
     val context = LocalContext.current
+    val inPip by rememberUpdatedState(pictureInPicture)
     val player = remember(playback.revision) {
         val authorized = playback.url.toHttpUrl()
         val mediaPrefix = authorized.encodedPath.substringBeforeLast('/') + "/"
@@ -125,7 +126,7 @@ private fun NativeVideo(playback: PhonePlayback, model: PhoneModel, modifier: Mo
                         }
                     }
                 }
-                override fun onPlayerError(error: PlaybackException) { model.playerFailed(playback.revision, error) }
+                override fun onPlayerError(error: PlaybackException) { model.playerFailed(playback.revision, error, keepChannel = inPip) }
             })
             // HLS positions are relative to its sliding window; align by date after the first timeline is ready.
             setMediaItem(MediaItem.fromUri(playback.url), if (playback.hlsTargetMs != null) C.TIME_UNSET else playback.startMs)
@@ -291,7 +292,7 @@ internal fun PhonePlayer(state: PhoneState, model: PhoneModel, modifier: Modifie
     Box(modifier.background(Color.Black).then(swipeModifier).then(if (tv && !fullscreen) Modifier.focusProperties { canFocus = false } else Modifier).then(if (tv) Modifier else Modifier.clickable { visible = !visible })) {
         state.playback?.let { playback ->
             NativeVideo(playback, model, Modifier.fillMaxSize(), state.paused,
-                if (state.muted) 0f else 1f, onPosition = { sourceTime = it }, onTap = { if (!tv || fullscreen) visible = !visible })
+                if (state.muted) 0f else 1f, pictureInPicture, onPosition = { sourceTime = it }, onTap = { if (!tv || fullscreen) visible = !visible })
         } ?: state.error?.let { Text(it, Modifier.align(Alignment.Center), color = Color.White) }
         if (!pictureInPicture && state.channel != null && !state.playbackReady && state.error == null) {
             Text("Tuning…", Modifier.align(Alignment.TopCenter).fillMaxWidth()
