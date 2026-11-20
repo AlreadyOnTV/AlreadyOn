@@ -19,6 +19,6 @@ Maintain product metadata in GitHub:
 
 API reads paginate; failures stop generation. Review descriptions during release acceptance; no handwritten draft or repository fragment is required. GitHub state is captured when the candidate is built. Exact-source reruns reuse their description after checking provenance, so later issue edits do not rewrite that snapshot. A validated same-date Nightly replacement with a new source SHA regenerates notes from that source and its baseline.
 
-Publication is manual after maintainer-approved [delivery gates](CI_CD.md); merging never publishes.
+Merging a same-repository `dev` PR into `main` automatically dispatches Nightly through the existing [delivery gates](CI_CD.md). Manual Nightly publication remains available; Stable publication remains manual.
 
 Stable consolidates its predecessor range and preserves the selected Nightly’s known issues. It rebuilds signed APKs with the Stable version and a higher code while Docker `latest` reuses the Nightly digest. Description-only backfills replace changelog content and preserve downloads, signed assets, tags and hidden provenance. Historical alpha/RC descriptions remain unchanged.

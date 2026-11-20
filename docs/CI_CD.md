@@ -10,7 +10,7 @@ Nightly dates use `America/New_York`.
 
 Work on `dev`, validate with the HTTPS preview, disposable Docker tests and phone/TV builds, then open a PR to `main`. PRs run CodeQL, dependency review, Android and full e2e/runtime checks. The merge job waits for all gates; drafts validate without auto-merging. Dependabot opens grouped weekly PRs; see [maintenance](DEPENDENCY_MAINTENANCE.md).
 
-Maintainers manually dispatch Nightly from the current `dev` or `main` tip. It validates the image, then publishes `nightly` and date aliases plus signed `YY.MM.DD-nightly` phone/TV APKs. A same-date rerun replaces assets only after all gates pass and with higher APK codes; the date tag advances to that SHA.
+Nightly is automatically dispatched from current `main` after a same-repository `dev` PR merges, either through the gated auto-merge job or a manual merge. Closed, unmerged PRs and other source branches do not trigger publication. The auto-merge job dispatches explicitly because its `GITHUB_TOKEN` merge suppresses PR events; manual merges use the PR-closed workflow. Maintainers can also dispatch Nightly from the current `dev` or `main` tip. It validates the image, then publishes `nightly` and date aliases plus signed `YY.MM.DD-nightly` phone/TV APKs. A same-date rerun replaces assets only after all gates pass and with higher APK codes; the date tag advances to that SHA.
 
 After Nightly acceptance, dispatch **Build and Publish** with `operation: stable` on `main`. It verifies Nightly provenance, reuses its image digest for `latest` and builds fresh Stable APKs from that commit.
 

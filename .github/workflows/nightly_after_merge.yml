@@ -1,0 +1,19 @@
+# Human merges emit this event; GITHUB_TOKEN auto-merges dispatch in PR validation.
+name: Nightly After Manual Merge
+on:
+  pull_request:
+    branches: [main]
+    types: [closed]
+permissions:
+  contents: read
+jobs:
+  nightly:
+    if: github.event.pull_request.merged == true && github.event.pull_request.head.ref == 'dev' && github.event.pull_request.head.repo.full_name == github.repository
+    runs-on: ubuntu-26.04
+    permissions:
+      actions: write
+    steps:
+      - name: Publish Nightly from main
+        env:
+          GH_TOKEN: ${{ github.token }}
+        run: gh workflow run build_publish.yml --repo "${{ github.repository }}" --ref main -f operation=nightly
