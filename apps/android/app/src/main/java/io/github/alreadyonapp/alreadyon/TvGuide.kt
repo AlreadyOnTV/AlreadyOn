@@ -44,12 +44,12 @@ internal fun TvGuide(state: PhoneState, palette: PhonePalette, modifier: Modifie
     var movingRow by remember { mutableStateOf(false) }
     val targets = remember(channels.map { it.id }) { channels.associate { it.id to FocusRequester() } }
     var selectedTime by remember { mutableLongStateOf(now) }
-    var origin by remember { mutableLongStateOf(guideHalfHour(now)) }
+    var origin by remember { mutableLongStateOf(guideOrigin(now)) }
     val format = remember(state.profile?.timeFormat) {
         DateTimeFormatter.ofPattern(when (state.profile?.timeFormat) { "24h" -> "HH:mm"; "12h-padded" -> "hh:mma"; else -> "h:mma" }, Locale.US).withZone(ZoneId.systemDefault())
     }
-    LaunchedEffect(guideHalfHour(now)) {
-        origin = guideHalfHour(now)
+    LaunchedEffect(guideOrigin(now)) {
+        origin = guideOrigin(now)
         if (selectedTime < origin) selectedTime = now
     }
     // Restoring the guide always restores the selected channel, independent of stream readiness.
@@ -58,7 +58,7 @@ internal fun TvGuide(state: PhoneState, palette: PhonePalette, modifier: Modifie
             val index = channels.indexOfFirst { it.id == state.channel?.id }.coerceAtLeast(0)
             val channel = channels[index]
             selectedTime = now
-            origin = guideHalfHour(now)
+            origin = guideOrigin(now)
             onChannelFocus(channel.id, true)
             onSelection(channel, channel.programs.find { selectedTime >= Instant.parse(it.startsAt).toEpochMilli() && selectedTime < Instant.parse(it.endsAt).toEpochMilli() }
                 ?: channel.programs.firstOrNull())
@@ -76,11 +76,12 @@ internal fun TvGuide(state: PhoneState, palette: PhonePalette, modifier: Modifie
             GuideClock(state.profile?.timeFormat, palette, Modifier.width(100.dp).padding(4.dp))
             Canvas(Modifier.weight(1f).height(34.dp)) {
                 val paint = Paint(Paint.ANTI_ALIAS_FLAG).apply { color = palette.muted.toArgb(); textSize = 14.dp.toPx() }
-                var x = 0f
-                var stamp = origin
-                while (x < size.width) {
-                    drawIntoCanvas { it.nativeCanvas.drawText(format.format(Instant.ofEpochMilli(stamp)), x + 4.dp.toPx(), 23.dp.toPx(), paint) }
-                    x += minuteWidth.toPx() * 30; stamp += 1_800_000
+                repeat(120 / GUIDE_SLOT_MINUTES) { column ->
+                    val stamp = origin + column * GUIDE_SLOT_MS
+                    if (guideShowsHeader(stamp)) {
+                        val x = column * GUIDE_SLOT_MINUTES * minuteWidth.toPx()
+                        drawIntoCanvas { it.nativeCanvas.drawText(format.format(Instant.ofEpochMilli(stamp)), x + 4.dp.toPx(), 23.dp.toPx(), paint) }
+                    }
                 }
             }
         }
@@ -111,7 +112,7 @@ internal fun TvGuide(state: PhoneState, palette: PhonePalette, modifier: Modifie
                         .takeIf { it >= 0 } ?: programs.indexOfFirst { it.second >= at }.takeIf { it >= 0 } ?: programs.lastIndex
                     fun reveal(start: Long, end: Long) {
                         // Scroll only when the cell is outside the viewport; headers always retain half-hour boundaries.
-                        if (end <= origin || start >= origin + windowMs) origin = guideHalfHour(start).coerceAtLeast(guideHalfHour(System.currentTimeMillis()))
+                        if (end <= origin || start >= origin + windowMs) origin = guideOrigin(start).coerceAtLeast(guideOrigin(now))
                     }
                     fun reportFocus() {
                         val chosen = programs.getOrNull(selectionIndex())

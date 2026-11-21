@@ -376,7 +376,7 @@ internal fun ChannelGuide(state: PhoneState, model: PhoneModel, palette: PhonePa
     }, Locale.US).withZone(ZoneId.systemDefault()) }
     val rows = rememberLazyListState(initialFirstVisibleItemIndex = channels.indexOfFirst { it.id == state.channel?.id }.coerceAtLeast(0))
     val scroll = rememberScrollState()
-    // Labels and program geometry share a local half-hour anchor, while Now uses the actual clock.
+    // Labels and program geometry share a quarter-hour anchor, while Now uses the actual clock.
     val textMeasurer = rememberTextMeasurer()
     val density = LocalDensity.current
     val currentProgramFocus = remember { FocusRequester() }
@@ -393,9 +393,7 @@ internal fun ChannelGuide(state: PhoneState, model: PhoneModel, palette: PhonePa
             currentProgramFocus.requestFocus()
         }
     }
-    val localNow = Instant.ofEpochMilli(now).atZone(ZoneId.systemDefault())
-    val origin = localNow.withMinute(localNow.minute / 30 * 30).withSecond(0).withNano(0)
-        .toInstant().toEpochMilli()
+    val origin = guideOrigin(now)
     LaunchedEffect(origin) { scroll.scrollTo(0) }
     val minutesToDp = 6f
     val width = (12 * 60 * minutesToDp).dp
@@ -404,9 +402,16 @@ internal fun ChannelGuide(state: PhoneState, model: PhoneModel, palette: PhonePa
     Column(modifier.guideNavigationInput(model::noteGuideNavigation, model::resetGuideNavigation)) {
         Row(Modifier.fillMaxWidth().background(palette.alternate).testTag("guide-timeline").semantics { stateDescription = origin.toString() }) {
             GuideClock(state.profile?.timeFormat, palette, Modifier.width(100.dp).padding(4.dp))
-            Row(Modifier.horizontalScroll(scroll).width(width)) {
-                repeat(24) { column -> Text(format.format(Instant.ofEpochMilli(origin + column * 30 * 60_000L)),
-                    Modifier.width((30 * minutesToDp).dp).padding(4.dp), color = palette.muted) }
+            Box(Modifier.horizontalScroll(scroll).width(width)) {
+                repeat(12 * 60 / GUIDE_SLOT_MINUTES) { column ->
+                    val stamp = origin + column * GUIDE_SLOT_MS
+                    if (guideShowsHeader(stamp)) {
+                        Text(format.format(Instant.ofEpochMilli(stamp)),
+                            Modifier.offset(x = (column * GUIDE_SLOT_MINUTES * minutesToDp).dp)
+                                .width((GUIDE_HEADER_MINUTES * minutesToDp).dp).padding(4.dp),
+                            color = palette.muted, maxLines = 1)
+                    }
+                }
             }
         }
         BoxWithConstraints(Modifier.weight(1f)) {

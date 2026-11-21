@@ -28,7 +28,7 @@ const assert = require("node:assert/strict");
       subtitleLanguage: "en",
       lastWatchedChannelId: 101,
     };
-    const programs = Array.from({ length: 40 }, (_, i) => ({
+    const programs = Array.from({ length: 80 }, (_, i) => ({
       mediaFileId: i + 1,
       kind: "program",
       mediaType: "movie",
@@ -89,6 +89,10 @@ const assert = require("node:assert/strict");
             json: lineup.map((c) => ({
               ...c,
               programs: c.programs.filter((p) => Date.parse(p.endsAt) > now),
+              previousPrograms: c.programs.filter((p) => {
+                const end = Date.parse(p.endsAt);
+                return end <= now && end > now - 1_800_000;
+              }),
             })),
           });
         }
@@ -113,7 +117,7 @@ const assert = require("node:assert/strict");
     const tuned = page.locator(".guide-slot-box-tuned");
     await tuned.waitFor();
     const currentStart = () =>
-      page.evaluate(() => Math.floor(Date.now() / 1_800_000) * 1_800_000);
+      page.evaluate(() => Math.floor(Date.now() / 900_000) * 900_000);
     const assertLive = async (number) => {
       await page.waitForFunction((n) => {
         const cell = document.querySelector(".guide-slot-box-tuned");
@@ -143,6 +147,41 @@ const assert = require("node:assert/strict");
         ),
         await currentStart(),
       );
+    };
+    const assertTimeline = async (origin) => {
+      await page.waitForFunction((stamp) =>
+        Number(document.querySelector(".guide-head-slot")?.dataset.startMs) === stamp, origin);
+      const timeline = await page.locator(".guide-head-slot").evaluateAll((slots) =>
+        slots.map((slot) => ({
+          stamp: Number(slot.dataset.startMs),
+          label: slot.textContent,
+          left: slot.getBoundingClientRect().left,
+        })),
+      );
+      assert.equal(timeline[0].stamp, origin);
+      const slotWidth = timeline[1].left - timeline[0].left;
+      assert(slotWidth > 0);
+      timeline.forEach(({ stamp, label, left }, index) => {
+        assert.equal(stamp, origin + index * 900_000);
+        const time = new Date(stamp - 4 * 3_600_000).toISOString().slice(11, 16);
+        assert.equal(label, time.endsWith(":00") || time.endsWith(":30") ? time : "");
+        assert.equal(left - timeline[0].left, index * slotWidth);
+      });
+      const airings = await page.locator(".guide-row-timeline").first().locator("[data-starts-at]").evaluateAll(
+        (cells) => cells.slice(0, 3).map((cell) => ({
+          start: Date.parse(cell.dataset.startsAt),
+          end: Date.parse(cell.dataset.endsAt),
+          left: parseFloat(cell.style.left),
+          width: parseFloat(cell.style.width),
+        })),
+      );
+      assert.equal(airings.length, 3);
+      assert(airings[0].start <= origin && airings[0].end > origin);
+      const pixelsPerMs = slotWidth / 900_000;
+      for (const airing of airings) {
+        assert.equal(airing.left, Math.round(Math.max(0, airing.start - origin) * pixelsPerMs) + 3);
+        assert.equal(airing.width, Math.max(4, Math.round((airing.end - origin) * pixelsPerMs) - airing.left - 3));
+      }
     };
     const assertRestored = async (number) => {
       await assertLive(number);
@@ -380,10 +419,20 @@ const assert = require("node:assert/strict");
       "rgb(255, 32, 32)",
       "Browsing ahead retains red live indicator",
     );
+    // Jump the suspended clock across several slots, then check each live boundary.
+    const midnight = Date.parse("2026-10-26T00:00:00-04:00");
+    const hour = midnight - 3_600_000;
+    await page.clock.fastForward(hour - await page.evaluate(() => Date.now()));
+    await page.evaluate(() => document.dispatchEvent(new Event("visibilitychange")));
+    for (let slot = 0; slot <= 4; slot++) {
+      if (slot > 0) await page.clock.fastForward(900_000);
+      await assertTimeline(hour + slot * 900_000);
+      if (slot === 2) await page.setViewportSize({ width: 390, height: 844 });
+    }
     assert.equal(errors.length, 0, errors.join("\n"));
     if (process.argv[3]) await page.screenshot({ path: process.argv[3] });
     console.log(
-      "PASS: CH101 → fullscreen → CH115 → one hour/midnight, lower channels, last-row top alignment, live overlap, cached program transition, polling and keyboard focus",
+      "PASS: CH101 → fullscreen → CH115 → quarter-hour alignment and midnight on desktop and mobile, lower channels, last-row top alignment, live overlap, cached program transition, polling and keyboard focus",
     );
     await context.close();
   } finally {

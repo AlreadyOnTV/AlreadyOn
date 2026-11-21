@@ -67,7 +67,9 @@ function GuideClock({ format }: { format: TimeFormat }) {
 // The guide always shows this many hours ahead.
 const GUIDE_HOURS = 12;
 const DEFAULT_PREVIEW_WIDTH = 360;
-const SLOT_MINUTES = 30;
+const SLOT_MINUTES = 15;
+const SLOT_MS = SLOT_MINUTES * 60_000;
+const HEADER_MINUTES = 30;
 const GUIDE_POLL_INTERVAL_MS = 60_000;
 const GUIDE_NAVIGATION_PAUSE_MS = 120_000;
 // Touch browsers use orientation below; narrow desktop windows also need
@@ -79,7 +81,7 @@ const MOBILE_PLAYER_QUERY =
 // is as wide as its runtime and a shorter show is narrower (its text is cut off).
 const CHUNK_MINUTES = 20;
 // Before the fonts are measured.
-const FALLBACK_SLOT_WIDTH = 150;
+const FALLBACK_SLOT_WIDTH = 75;
 
 // Exact geometry constants from GuidePage.css's .guide-slot-box, used to
 // translate a *measured* text height (see the hidden metrics spans
@@ -292,6 +294,13 @@ function reconcileSelection(
   };
 }
 
+function elapsedGuideSlotMs(stamp: number) {
+  // Subtract elapsed local time to keep the correct occurrence of a repeated hour.
+  const local = new Date(stamp);
+  return ((local.getMinutes() % SLOT_MINUTES) * 60 + local.getSeconds()) * 1000 +
+    local.getMilliseconds();
+}
+
 export default function GuidePage() {
   const { timeFormat } = useGuideSettings();
   const { currentUser } = useUsers();
@@ -302,13 +311,7 @@ export default function GuidePage() {
   const [channels, setChannels] = useState<GuideChannel[] | null>(null);
   const [loadError, setLoadError] = useState<string | null>(null);
   const [nowMs, setNowMs] = useState(Date.now);
-  const gridOrigin = new Date(nowMs);
-  gridOrigin.setMinutes(
-    gridOrigin.getMinutes() - (gridOrigin.getMinutes() % SLOT_MINUTES),
-    0,
-    0,
-  );
-  const gridStartMs = gridOrigin.getTime();
+  const gridStartMs = nowMs - elapsedGuideSlotMs(nowMs);
 
   const [focused, setFocused] = useState<Selected | null>(null);
   const [tunedSelection, setTuned] = useState<Selected | null>(null);
@@ -364,7 +367,7 @@ export default function GuidePage() {
           1,
           Math.min(
             GUIDE_POLL_INTERVAL_MS,
-            SLOT_MINUTES * 60_000 - (stamp % (SLOT_MINUTES * 60_000)),
+            SLOT_MS - elapsedGuideSlotMs(stamp),
             nextEnd - stamp,
           ),
         ),
@@ -482,7 +485,7 @@ export default function GuidePage() {
   // goes, not just a default zoom level: picking 6 hours shows 6 hours
   // ahead, full stop — nothing further out is reachable by scrolling or
   // arrow-keying past the last column.
-  const slotCount = GUIDE_HOURS * 2;
+  const slotCount = (GUIDE_HOURS * 60) / SLOT_MINUTES;
 
   useEffect(() => {
     const controller = new AbortController();
@@ -613,8 +616,8 @@ export default function GuidePage() {
     !guideHasContent && startupStatus !== null && isBusy(startupStatus);
 
   const slotLabels = Array.from({ length: slotCount }, (_, i) => {
-    if (gridStartMs === null) return "";
-    const d = new Date(gridStartMs + i * SLOT_MINUTES * 60_000);
+    const d = new Date(gridStartMs + i * SLOT_MS);
+    if (d.getMinutes() % HEADER_MINUTES !== 0) return null;
     return formatClock(d.getHours() * 60 + d.getMinutes(), timeFormat);
   });
 
@@ -651,17 +654,15 @@ export default function GuidePage() {
   const infoWidth = rowMinHeight * 2;
   const channelColWidth = infoWidth;
 
-  // A column is 30 minutes and a chunk (20 minutes) is twice the time line's text
-  // width, so 1 minute = chunk / 20 px. Whole pixels: fractional box positions have
-  // made Chromium on Linux garble the text inside.
+  // Keep the existing pixels per half hour and split that width evenly between slots.
   const slotPixelWidth = metrics
     ? Math.round(
         (2 *
           (measureTextWidth(metrics.timeFont, chunkReferenceText(timeFormat)) +
             TEXT_MEASURE_BUFFER) *
-          SLOT_MINUTES) /
+          HEADER_MINUTES) /
           CHUNK_MINUTES,
-      )
+      ) * (SLOT_MINUTES / HEADER_MINUTES)
     : FALLBACK_SLOT_WIDTH;
 
   // Every box sits at its true time inside a strip exactly as wide as the
@@ -1150,9 +1151,9 @@ export default function GuidePage() {
               <div
                 key={i}
                 className="guide-head-slot"
-                data-start-ms={(gridStartMs ?? 0) + i * SLOT_MINUTES * 60_000}
+                data-start-ms={gridStartMs + i * SLOT_MS}
               >
-                {label}
+                {label !== null && <span>{label}</span>}
               </div>
             ))}
           </div>
@@ -1221,7 +1222,7 @@ function layoutPrograms(
   slotPixelWidth: number,
   timelineWidthPx: number,
 ): SlotLayout[] {
-  const pxPerMs = slotPixelWidth / (SLOT_MINUTES * 60_000);
+  const pxPerMs = slotPixelWidth / SLOT_MS;
   return programs.map((program) => {
     const startPx = Math.max(
       0,

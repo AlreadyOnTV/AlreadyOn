@@ -134,13 +134,19 @@ class GuideRestorationTest {
                 .assertIsDisplayed().assert(SemanticsMatcher.expectValue(SemanticsProperties.StateDescription,
                     channels.first { it.id == channel }.liveProgram(now)!!.startsAt))
             compose.onNodeWithTag("guide-timeline", useUnmergedTree = true)
-                .assert(SemanticsMatcher.expectValue(SemanticsProperties.StateDescription, guideHalfHour(now).toString()))
+                .assert(SemanticsMatcher.expectValue(SemanticsProperties.StateDescription, guideOrigin(now).toString()))
             val top = compose.onNodeWithTag("guide-rows").getUnclippedBoundsInRoot().top.value
             val row = compose.onNodeWithTag("guide-channel-$channel", useUnmergedTree = true).getUnclippedBoundsInRoot()
             assertEquals("Watched channel is the first visible row", top, row.top.value, 1f)
             if (BuildConfig.IS_TV) compose.onNodeWithTag("guide-channel-$channel").assertIsFocused()
         }
         assertRestored(101)
+        // Exercise the same mounted guide in both APKs before testing fullscreen return.
+        val midnight = Instant.parse("2026-10-25T00:00:00Z").toEpochMilli()
+        for (boundary in listOf(midnight - 30 * 60_000L, midnight - 15 * 60_000L, midnight, midnight + 15 * 60_000L)) {
+            compose.runOnIdle { now = boundary }
+            assertRestored(101)
+        }
         compose.runOnIdle { visible = false }
         compose.runOnIdle {
             state = state.copy(channel = channels.first { it.id == 115L })

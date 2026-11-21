@@ -24,9 +24,4 @@ class PlayerMenuStatusTest {
         assertEquals("unknown", playerLanguage("English"))
         assertEquals("en", playerLanguage("en-US"))
     }
-    @Test fun halfHourBoundaryAndExtendedAbsence() {
-        assertEquals(0L, guideHalfHour(1_799_999))
-        assertEquals(1_800_000L, guideHalfHour(1_800_000))
-        assertEquals(9_000_000L, guideHalfHour(10_799_999))
-    }
 }
