@@ -1,6 +1,5 @@
 #!/usr/bin/env bash
-# Pull the published :nightly image and recreate The installation's one existing service in place.
-# the deployment host is a deployment target, not a backup, rollback, build, or test workspace.
+# Pull the published nightly image and update the existing service in place.
 set -euo pipefail
 
 # Environment overrides exist only so repository tests can use a fake Docker.
@@ -12,6 +11,14 @@ health_timeout=${HEALTH_TIMEOUT:-180}
 
 log() { printf '%s %s\n' "$(date '+%F %T')" "$*"; }
 die() { log "ERROR: $*" >&2; exit 1; }
+
+# Compare image build times, independent of when Docker pulled either image.
+image_created() {
+  local created
+  created=$(docker image inspect --format '{{.Created}}' "$1") || return 1
+  [[ $created =~ ^[0-9]{4}-[0-9]{2}-[0-9]{2}T ]] || return 1
+  date -u -d "$created" '+%s%N'
+}
 
 # Docker health plus the application's own endpoint; a started container is not a working one.
 wait_healthy() {
@@ -51,9 +58,14 @@ if [[ $candidate == "$current" ]]; then
   exit 0
 fi
 
-# Recreate the one Compose service directly from :nightly. Do not create local
-# aliases, rollback tags, database copies, recovery folders, or test containers.
-cd "$app_dir"
-docker compose up -d --no-deps --force-recreate "$service" >/dev/null
+candidate_created=$(image_created "$candidate") || die 'Cannot read candidate image creation time'
+current_created=$(image_created "$current") || die 'Cannot read running image creation time'
+if (( candidate_created <= current_created )); then
+  log "Nightly ${revision:0:12} is not newer than the running image; nothing to do"
+  exit 0
+fi
+
+# Use the image already pulled and compared above, even if Compose normally pulls.
+docker compose -f "$compose_file" up -d --no-deps --pull never --force-recreate "$service" >/dev/null
 wait_healthy "$candidate" || die "Deployed ${revision:0:12}, but $service did not become healthy"
 log "Deployed ${revision:0:12}"

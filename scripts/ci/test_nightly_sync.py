@@ -28,7 +28,10 @@ elif args[0] == 'inspect':
     elif fmt:
         out = state['running'] + '\n'
 elif args[:2] == ['image', 'inspect']:
-    out = 'new\n' if '.Id' in args[3] else 'abcdef1234567890\n'
+    if '.Created' in args[3]:
+        out = state['candidate_created' if args[-1] == 'new' else 'current_created'] + '\n'
+    else:
+        out = 'new\n' if '.Id' in args[3] else 'abcdef1234567890\n'
 elif args[0] == 'pull' and state.get('pull_fails'):
     json.dump(state, open(path, 'w')); sys.exit(1)
 json.dump(state, open(path, 'w'))
@@ -52,10 +55,14 @@ class NightlySync(unittest.TestCase):
         self.state = self.root / 'state.json'
 
     def run_sync(self, running='old', unhealthy=False, pull_fails=False,
-                 compose_image=IMAGE, args=()):
+                 compose_image=IMAGE, args=(),
+                 candidate_created='2026-11-21T05:00:00.000000002Z',
+                 current_created='2026-11-21T05:00:00.000000001Z'):
         self.state.write_text(json.dumps({'calls': [], 'running': running,
                                           'unhealthy': unhealthy, 'pull_fails': pull_fails,
-                                          'compose_image': compose_image}))
+                                          'compose_image': compose_image,
+                                          'candidate_created': candidate_created,
+                                          'current_created': current_created}))
         env = dict(os.environ, PATH=f'{self.root}/bin:{os.environ["PATH"]}',
                    FAKE_STATE=str(self.state), APP_DIR=str(self.app),
                    NIGHTLY_IMAGE=IMAGE, HEALTH_TIMEOUT='1')
@@ -77,6 +84,20 @@ class NightlySync(unittest.TestCase):
         self.assertEqual(result.returncode, 0, result.stderr)
         self.assertFalse(any(call[0] == 'compose' and 'up' in call for call in state['calls']))
         self.assertIn('nothing to do', result.stdout)
+
+    def test_different_image_with_equal_or_older_timestamp_is_left_alone(self):
+        for timestamp in ['2026-11-21T05:00:00.000000001Z', '2026-11-20T05:00:00Z']:
+            with self.subTest(timestamp=timestamp):
+                result, state = self.run_sync(candidate_created=timestamp)
+                self.assertEqual(result.returncode, 0, result.stderr)
+                self.assertEqual(state['running'], 'old')
+                self.assertFalse(any(call[0] == 'compose' and 'up' in call for call in state['calls']))
+
+    def test_missing_creation_time_fails_without_recreating(self):
+        result, state = self.run_sync(candidate_created='')
+        self.assertEqual(result.returncode, 1)
+        self.assertIn('Cannot read candidate image creation time', result.stderr)
+        self.assertEqual(state['running'], 'old')
 
     def test_unhealthy_candidate_is_reported_without_making_a_copy(self):
         result, state = self.run_sync(unhealthy=True)
