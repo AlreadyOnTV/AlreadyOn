@@ -10,8 +10,6 @@ internal fun playerLanguage(code: String?): String {
     return language.takeIf { it.matches(Regex("[a-z]{2,3}")) && it !in listOf("und", "zxx", "mul") } ?: "unknown"
 }
 
-internal fun guideHalfHour(now: Long): Long = Math.floorDiv(now, 1_800_000L) * 1_800_000L
-
 internal fun playerMenuLabel(label: String, state: PhoneState): String {
     val playback = state.playback
     val status = when (label) {

@@ -3,6 +3,7 @@ package io.github.alreadyonapp.alreadyon
 import org.junit.Assert.*
 import org.junit.Test
 import java.time.Instant
+import java.time.ZoneId
 
 // Synthetic UTC schedules exercise midnight and non-slot program boundaries.
 class GuideTimelineTest {
@@ -19,16 +20,23 @@ class GuideTimelineTest {
     }
 
     @Test fun slotsCatchUpAcrossHourAndMidnightWithoutChangingSchedule() {
-        val start = stamp("2026-10-24T23:29:59.999Z")
-        assertEquals(stamp("2026-10-24T23:00:00Z"), guideHalfHour(start))
-        val returned = start + 3_600_001L
-        assertEquals(stamp("2026-10-25T00:30:00Z"), guideHalfHour(returned))
+        val utc = ZoneId.of("UTC")
+        val midnight = stamp("2026-10-25T00:00:00Z")
+        val first = midnight - 60 * 60_000L
+        for (slot in 0..4) {
+            val boundary = first + slot * 15 * 60_000L
+            assertEquals(boundary, guideOrigin(boundary, utc))
+            assertEquals(boundary, guideOrigin(boundary + 899_999L, utc))
+            assertEquals(slot % 2 == 0, guideShowsHeader(boundary, utc))
+        }
+        val returned = first + 105 * 60_000L + 123L
+        assertEquals(stamp("2026-10-25T00:45:00Z"), guideOrigin(returned, utc))
         assertEquals(after, channel.liveProgram(returned))
         assertEquals("2026-10-24T23:20:00Z", before.startsAt)
     }
 
     @Test fun timerWakesAtExactSlotAndProgramBoundaries() {
-        assertEquals(1L, guideRefreshDelay(listOf(channel), stamp("2026-10-24T23:29:59.999Z")))
+        assertEquals(1L, guideRefreshDelay(listOf(channel), stamp("2026-10-24T23:14:59.999Z")))
         assertEquals(1L, guideRefreshDelay(listOf(channel), stamp("2026-10-25T00:04:59.999Z")))
         assertEquals(60_000L, guideRefreshDelay(listOf(channel), stamp(after.startsAt)))
         assertEquals(60_000L, guideRefreshDelay(emptyList(), stamp(after.endsAt)))

@@ -360,6 +360,11 @@
   padding: 0 0 0 3px;
 }
 
+.guide-head-slot span {
+  flex-shrink: 0;
+  white-space: nowrap;
+}
+
 .guide-head-channel {
   z-index: 4;
 }
