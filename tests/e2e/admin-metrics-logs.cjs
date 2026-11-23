@@ -361,10 +361,22 @@ module.exports = async function adminMetricsAndLogs({
   );
   assert(await atBottom(), "Updated logs should follow latest entry");
   await page.getByRole("button", { name: "Pause", exact: true }).click();
+  const pausedGeneration = generation;
+  const messages = page.locator(".log-line-message");
+  const anchor = await messages.last().textContent();
+  const lines = page.getByRole("combobox", { name: "Lines To Display" });
+  for (const count of [50, 10, 25]) {
+    await lines.selectOption(String(count));
+    const window = await messages.allTextContents();
+    assert(window.length === count && window.at(-1) === anchor,
+      "Paused resize must preserve the newest entry");
+    assert(window.every((line, i) => line.includes(`line ${100 - count + i} `)),
+      "Paused resize must keep the expected history in order");
+  }
+  assert(await atBottom(), "Paused resize should keep the anchor in view");
   await page.locator(".log-viewer").evaluate((e) => {
     e.scrollTop = 0;
   });
-  const pausedGeneration = generation;
   await delay(3500);
   assert(
     generation === pausedGeneration && !(await atBottom()),
@@ -379,6 +391,10 @@ module.exports = async function adminMetricsAndLogs({
     pausedGeneration,
   );
   assert(await atBottom(), "Resume should follow again");
+  const resumed = await messages.allTextContents();
+  assert(resumed.length === 25 && new Set(resumed).size === 25 &&
+    resumed.every((line, i) => line.includes(`line ${75 + i} `)),
+    "Resume must replace the paused entries with ordered, unique live logs");
   await page.getByRole("button", { name: "Pause", exact: true }).click();
   await page.reload();
   await page.locator(".log-line").last().waitFor();
