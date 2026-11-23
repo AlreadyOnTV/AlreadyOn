@@ -145,7 +145,8 @@ func (c *Calibration) cases(ctx context.Context, inputs *benchmarkInputs, thread
 			height = 480
 		}
 		for _, encoder := range encoders {
-			plan := Plan{Mode: "transcode", Width: height * 16 / 9 / 2 * 2, Height: height, FPS: math.Min(30, v.FrameRate), Profile: outputProfile(height), VideoBitrate: heightBitrate(height), AudioBitrate: 192000, AudioChannels: 2, Encoder: encoder}
+			outputHeight := benchmarkOutputHeight(height, v.Height, encoder, full)
+			plan := Plan{Mode: "transcode", Width: outputHeight * 16 / 9 / 2 * 2, Height: outputHeight, FPS: math.Min(30, v.FrameRate), Profile: outputProfile(outputHeight), VideoBitrate: heightBitrate(outputHeight), AudioBitrate: 192000, AudioChannels: 2, Encoder: encoder}
 			if full {
 				plan.FPS = math.Min(60, v.FrameRate)
 			}
@@ -192,6 +193,14 @@ func (c *Calibration) cases(ctx context.Context, inputs *benchmarkInputs, thread
 	}
 	return cases, nil
 }
+
+func benchmarkOutputHeight(baseHeight, sourceHeight int, encoder string, full bool) int {
+	if full && encoder != "" && sourceHeight >= UHDHeight {
+		return UHDHeight
+	}
+	return baseHeight
+}
+
 func (c *Calibration) tune(ctx context.Context, inputs *benchmarkInputs) {
 	stage, cancel := context.WithTimeout(ctx, 25*time.Second)
 	defer cancel()

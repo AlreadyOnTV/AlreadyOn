@@ -2,9 +2,9 @@
 
 [![AlreadyOn](../web/public/branding/header-doc.svg)](../README.md)
 
-The Android phone client uses Kotlin, Compose and Media3. Phone/tablet and TV apps discover local HTTPS servers for 30 seconds while offering [manual entry](SERVER_CONNECTION.md) immediately. Typing does not stop discovery; choosing a server does. After accepting the server certificate automatically, they sign in with username and the account’s 6–12 digit TV PIN configured in WebUI Admin Settings. They share account profiles, guide browsing and playback.
+The Android clients use Kotlin, Compose and Media3. Phone/tablet and TV discover local HTTPS servers for 30 seconds while offering [manual entry](SERVER_CONNECTION.md). Choosing a server stops discovery. They accept the instance certificate, sign in with username and the WebUI-configured 6–12 digit TV PIN, and share profiles, guide browsing and playback.
 
-Use [the app guide](../apps/android/README.md) to build. Keep `io.github.alreadyonapp.alreadyon` as the application identity. Signing keys and update credentials belong to the maintainer and must remain private.
+Use [the app guide](../apps/android/README.md) to build. Keep `io.github.alreadyonapp.alreadyon`; signing keys and update credentials remain private.
 
 ## Boundaries
 
@@ -14,13 +14,13 @@ Native onboarding accepts the instance certificate on first connection without a
 
 ## Validation
 
-Check sign-in, profiles/PINs, channel changes, transitions, tracks, rotation and recovery. Test picture-in-picture only on phones; TV and WebUI must omit it. Use synthetic fixtures; record device/codec limitations without personal details.
+Check sign-in, profiles/PINs, channel changes, transitions, tracks, rotation and recovery. Explicit 1080p uses the decoder-supported H.264 High profile on phone and TV; 4K is TV-only and requires both a verified TV decoder and server hardware encoder. Auto remains capped at 720p. Test picture-in-picture only on phones; TV and WebUI omit it. Use synthetic fixtures; record codec limitations without personal details.
 
 On phones, tap the picture-in-picture video to reveal Android’s menu. Use Play or Pause and Mute or Unmute in the bottom row. Resuming playback rejoins the current live airing. Controls stay visible while tuning. Tap Play to retry after errors.
 
 See [emulator setup](ANDROID_EMULATOR.md), [playback](PLAYBACK.md) and [OpenAPI](../api/openapi.yaml).
 
-See [Google TV](GOOGLE_TV.md) and [physical TV review](TV_DEVICE_REVIEW.md).
+See [Google TV](GOOGLE_TV.md) and [TV review](TV_DEVICE_REVIEW.md).
 
 ## App updates
 

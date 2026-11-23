@@ -372,8 +372,12 @@ internal fun PhonePlayer(state: PhoneState, model: PhoneModel, modifier: Modifie
                                     }
                                     "Quality" -> {
                                         PlayerMenuItem(text = { Text("‹ Quality") }, onClick = { page = null })
-                                        (listOf(0) + (listOf(1080, 720, 480, 360) + state.quality).distinct().sortedDescending().filter { it > 0 && (it <= (state.playback?.sourceHeight ?: 720) || it == state.quality) }).forEach { height ->
-                                            PlayerMenuItem(text = { Text((if (height == state.quality) "✓ " else "") + if (height == 0) "Auto" else "${height}p") },
+                                        val heights = buildList {
+                                            if (tv && state.playback?.uhd == true) add(2160)
+                                            addAll(listOf(1080, 720, 480, 360))
+                                        }
+                                        (listOf(0) + (heights + state.quality).distinct().sortedDescending().filter { it == 0 || it <= (state.playback?.sourceHeight ?: 720) || it == state.quality }).forEach { height ->
+                                            PlayerMenuItem(text = { Text((if (height == state.quality) "✓ " else "") + if (height == 0) "Auto" else if (height == 2160) "4K" else "${height}p") },
                                                 onClick = { menu = false; interact { model.setQuality(height) } }, autofocus = tv && height == state.quality)
                                         }
                                     }

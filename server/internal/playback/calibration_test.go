@@ -55,6 +55,21 @@ func TestFullCalibrationUsesShortStatisticallyUsefulWindows(t *testing.T) {
 	}
 }
 
+func TestFullCalibrationBenchmarksFourKHardwareOutput(t *testing.T) {
+	if got := benchmarkOutputHeight(1080, 2160, EncoderIntelQSV, true); got != UHDHeight {
+		t.Fatalf("full hardware output = %d", got)
+	}
+	for _, got := range []int{
+		benchmarkOutputHeight(1080, 2160, "", true),
+		benchmarkOutputHeight(1080, 2160, EncoderIntelQSV, false),
+		benchmarkOutputHeight(1080, 1080, EncoderIntelQSV, true),
+	} {
+		if got != 1080 {
+			t.Fatalf("non-4K case changed output to %d", got)
+		}
+	}
+}
+
 func TestCalibrationRejectsStarvingConcurrentStream(t *testing.T) {
 	c := &Calibration{Tuner: &Tuner{}}
 	c.measure = func(_ context.Context, _ calibrationCase, n int) ([]float64, error) {

@@ -27,4 +27,13 @@ class ChannelNavigationTest {
         assertEquals(-20f, guideVerticalRevealDistance(0, 56, 20, 200, -60f))
         assertEquals(60f, guideVerticalRevealDistance(null, 0, 20, 200, 60f))
     }
+    @Test fun videoCapabilitiesExposeHighDefinitionWithoutPretendingFourKOnPhone() {
+        val phone = androidVideoCapabilitySpecs(false)
+        val tv = androidVideoCapabilitySpecs(true)
+        assertEquals(listOf(1080, 720, 360), phone.map { it.height })
+        assertEquals(listOf(2160, 1080, 720, 360), tv.map { it.height })
+        assertEquals("High", phone.first().profile)
+        assertEquals(42, androidAvcLevel(phone.first().codecLevel))
+        assertEquals(52, androidAvcLevel(tv.first().codecLevel))
+    }
 }
