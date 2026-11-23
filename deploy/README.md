@@ -22,6 +22,8 @@ The example documents supported identity/timezone/port settings. Keep tokens, cu
 
 Verify image digest/revision, UI, mounts and relevant codec behavior. For compose-only validation, use `docker compose config --quiet` followed by `docker compose up -d --force-recreate --pull never alreadyon` to retain the installed image. Verify public and LAN HTTPS, container health and restart count before accepting the new configuration. Preserve live data during updates. Use one service per installation.
 
+The optional `alreadyon-nightly-sync` timer checks hourly for a newer Nightly image, then stages and health-checks the replacement before retaining it. Review its host paths and image target before enabling it.
+
 For development builds, `make image` builds locally and `make test-container` validates a disposable runtime. Full release checks and maintainer-controlled publication are described in [delivery](../docs/CI_CD.md). Review timing and targets before enabling automatic updates.
 
 Review [LICENSE](../LICENSE) and third-party codec/dependency obligations before redistributing images.
