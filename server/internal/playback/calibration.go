@@ -198,9 +198,11 @@ func (c *Calibration) cases(ctx context.Context, inputs *benchmarkInputs, thread
 				if p.Decoder == "hardware" {
 					n = DefaultThreads
 				}
-				heights := []int{AutoStartHeight}
+				heights := []int{AutoCapacityHeight}
 				if full {
 					heights = append(heights, AutoMinHeight, p.Height)
+				} else if v.Height >= AutoStartHeight {
+					heights = append(heights, AutoStartHeight)
 				}
 				for _, height := range heights {
 					rung := p
@@ -216,6 +218,11 @@ func (c *Calibration) cases(ctx context.Context, inputs *benchmarkInputs, thread
 				}
 			}
 		}
+	}
+	if !full {
+		// Validate baseline capacity for all fixtures before using the remaining
+		// startup budget to check the higher starting rung.
+		sort.SliceStable(cases, func(i, j int) bool { return cases[i].plan.Height < cases[j].plan.Height })
 	}
 	return cases, nil
 }
@@ -353,6 +360,9 @@ func (c *Calibration) evaluate(ctx context.Context, test calibrationCase, old []
 	p.Streams = 1
 
 	counts := []int{2, 4}
+	if test.mini && test.plan.Height != AutoCapacityHeight {
+		counts = nil
+	}
 
 	for _, cached := range old {
 		if test.full && sameProfile(p, cached) && cached.Verified && cached.Streams > 1 {
@@ -482,7 +492,7 @@ func (c *Calibration) run(ctx context.Context, full, startup bool) {
 		activity.Default.SetCurrentFile(progressID, benchmarkTestLabel(test))
 		activity.Default.Progress(progressID, completed, len(cases))
 		// The bounded pass tests each fixture once on its first stable path.
-		key := test.path
+		key := fmt.Sprintf("%s:%d", test.path, test.plan.Height)
 		if !full && fixturePath != key {
 			fixtureCancel()
 			fixturePath = key
@@ -693,7 +703,7 @@ func (c *Capacity) publishProfiles(profiles []ProfileCapacity) {
 		if !p.Verified {
 			continue
 		}
-		if p.TargetHeight == AutoStartHeight && p.Height == AutoStartHeight {
+		if p.TargetHeight == AutoCapacityHeight && p.Height == AutoCapacityHeight {
 			c.status.Processes = max(c.status.Processes, p.Streams)
 		}
 		sample := RungSample{SourceClass: p.SourceClass, Height: p.Height, FPS: p.FPS, Speed: p.SingleSpeed}

@@ -1,3 +1,4 @@
+// Verify the native Auto timing with synthetic playback samples.
 package io.github.alreadyonapp.alreadyon
 
 import org.junit.Assert.assertEquals
@@ -10,8 +11,8 @@ class NativeAutoQualityTest {
         assertNull(auto.observe(2000, false, 360, 2160))
         assertEquals(240, auto.observe(2000, false, 360, 2160))
         auto.reset()
-        repeat(5) { assertNull(auto.observe(5000, false, 360, 2160)) }
+        repeat(2) { assertNull(auto.observe(5000, false, 360, 2160)) }
         assertEquals(480, auto.observe(5000, false, 360, 2160))
-        repeat(6) { assertNull(auto.observe(5000, false, 360, 360)) }
+        repeat(3) { assertNull(auto.observe(5000, false, 360, 360)) }
     }
 }

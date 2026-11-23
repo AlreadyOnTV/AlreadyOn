@@ -235,7 +235,7 @@ func TestCalibrationStatusIncludesQuickAndFullCases(t *testing.T) {
 func TestMixedConversionsUseMeasuredDemand(t *testing.T) {
 	source := sourceInfo()
 	video, _ := Tracks(source)
-	light := ProfileCapacity{TargetHeight: AutoStartHeight, SourceClass: classifySource(video),
+	light := ProfileCapacity{TargetHeight: AutoCapacityHeight, SourceClass: classifySource(video),
 		SourceWidth: video.Width, SourceHeight: video.Height, SourceFPS: 60, Height: 360, FPS: 30,
 		Threads: 2, Streams: 4, Verified: true}
 	heavy := light

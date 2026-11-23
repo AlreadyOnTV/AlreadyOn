@@ -38,13 +38,13 @@ test('healthy windows reset a single bad window and explicit quality never adapt
   assert.equal(sample(20_000, 1, false), null);
 });
 
-test('six healthy samples permit one increase within the source ceiling', () => {
+test('three healthy samples permit one increase within the source ceiling', () => {
   const adapter = new AutoQualityAdapter();
   const sample = (nowMs: number, maxHeight: number) =>
     adapter.observe({ nowMs, bufferedSeconds: 5, outputHeight: 360, maxHeight }, true);
-  for (let i = 1; i < 6; i++) assert.equal(sample(i * 5_000, 480), null);
-  assert.equal(sample(30_000, 480), 480);
-  for (let i = 7; i < 13; i++) assert.equal(sample(i * 5_000, 360), null);
+  for (let i = 1; i < 3; i++) assert.equal(sample(i * 5_000, 480), null);
+  assert.equal(sample(15_000, 480), 480);
+  for (let i = 4; i < 7; i++) assert.equal(sample(i * 5_000, 360), null);
 });
 
 test('admission pressure lets Auto yield headroom even with a healthy local buffer', () => {

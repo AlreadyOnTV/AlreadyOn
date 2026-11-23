@@ -4,7 +4,7 @@ Server Settings has one Video Transcoding choice: CPU Only (default), Intel, AMD
 
 Startup and Quick Test measure representative 360p SDR conversions. Full Test also measures 240p and higher rungs. The server-wide slot ceiling follows validated 360p concurrency. Admission budgets mixed conversions using their measured demand and retains memory headroom.
 
-Auto conversions start at 360p SDR and can try measured 240p under pressure. WebUI, phone and TV sample playback every five seconds, targeting three to five seconds buffered. Two pressured samples lower the quality. Six healthy samples request a higher rung within source and client limits. Higher Auto rungs can yield capacity after a refused tune. The current rendition plays during preparation.
+Auto conversions try 720p SDR first and fall back to measured lower rungs when needed. WebUI, phone and TV sample playback every five seconds, targeting three to five seconds buffered. Two pressured samples lower the quality. Three healthy samples request a higher rung within source and client limits. Higher Auto rungs can yield capacity after a refused tune. The current rendition plays during preparation.
 
 Quick and Full results remain separate. See Test Results shows the default backend, FFmpeg encoder and slot ceiling. Stop Test retains completed cases. Manual Full Test asks before pausing active streams.
 

@@ -55,7 +55,7 @@ internal class PhoneModel(application: Application) : AndroidViewModel(applicati
     private var client: ServerClient? = null
     private var action: Job? = null
     private var viewing: Job? = null
-    private var autoHeight = 360
+    private var autoHeight = 720
     private var adaptiveRequest: Int? = null
     private var autoCapacityPressure = false
     private var preparedRevision: Long? = null
@@ -397,7 +397,7 @@ internal class PhoneModel(application: Application) : AndroidViewModel(applicati
             ?: channels.firstOrNull { it.programs.isNotEmpty() })?.let { watch(it, restart = true) }
     }
     fun setQuality(height: Int) {
-        if (height == 0) autoHeight = 360
+        if (height == 0) autoHeight = 720
         update { it.copy(quality = height) }
         state.value.channel?.let { watch(it, restart = true) }
     }
@@ -520,7 +520,7 @@ internal class PhoneModel(application: Application) : AndroidViewModel(applicati
         val api = client ?: return
         val profile = state.value.profile ?: return
         if (state.value.mustChangePassword || state.value.settings != null) return
-        if (state.value.channel?.id != channel.id) autoHeight = 360
+        if (state.value.channel?.id != channel.id) autoHeight = 720
         adaptiveRequest = null
         autoCapacityPressure = false
         autoQuality.reset()

@@ -329,23 +329,30 @@ func (p *PlaybackHTTP) tune(w http.ResponseWriter, r *http.Request) {
 		return
 	}
 	stream, err := p.Manager.Acquire(r.Context(), key, s.ID, job)
-	// An initial Auto tune can try 240p when its 360p conversion does not
-	// fit. Keep the same grant and require a measured fallback pipeline.
-	if errors.Is(err, playback.ErrBusy) && body.MaxHeight == 0 &&
-		body.Capabilities.AutoMaxHeight == playback.AutoStartHeight && !plan.VideoCopy && plan.Height > playback.AutoMinHeight {
+	// Keep the same grant while trying cheaper measured rungs on an initial tune.
+	initialAuto := body.MaxHeight == 0 && body.Capabilities.AutoMaxHeight == playback.AutoStartHeight &&
+		!body.Capabilities.AutoReplacement && !plan.VideoCopy
+	if errors.Is(err, playback.ErrBusy) && initialAuto {
 		caps := body.Capabilities
-		caps.AutoMaxHeight = playback.AutoMinHeight
-		low, planErr := playback.ChooseScheduled(source, caps, body.ForceEncode, jobClock.Now().Sub(e.StartsAt).Seconds()+e.SourceOffsetSeconds)
-		if planErr == nil && !low.VideoCopy && low.Height < plan.Height {
+		lastHeight := plan.Height
+		for _, height := range []int{480, playback.AutoCapacityHeight, playback.AutoMinHeight} {
+			caps.AutoMaxHeight = height
+			low, planErr := playback.ChooseScheduled(source, caps, body.ForceEncode, jobClock.Now().Sub(e.StartsAt).Seconds()+e.SourceOffsetSeconds)
+			if planErr != nil || low.VideoCopy || low.Height >= lastHeight {
+				continue
+			}
+			lastHeight = low.Height
 			candidate := job
 			candidate.Plan = low
 			candidate.ValidatedThreads = p.Capacity.ValidatedThreads(candidate)
+			if !candidate.ValidatedThreads {
+				continue
+			}
 			candidate.Details = playback.Describe(path, source, low, caps)
-			if candidate.ValidatedThreads {
-				lowKey := streamKey(id, e, low)
-				if replacement, acquireErr := p.Manager.Acquire(r.Context(), lowKey, s.ID, candidate); acquireErr == nil {
-					stream, key, err = replacement, lowKey, nil
-				}
+			lowKey := streamKey(id, e, low)
+			if replacement, acquireErr := p.Manager.Acquire(r.Context(), lowKey, s.ID, candidate); acquireErr == nil {
+				stream, key, err = replacement, lowKey, nil
+				break
 			}
 		}
 	}
@@ -357,8 +364,7 @@ func (p *PlaybackHTTP) tune(w http.ResponseWriter, r *http.Request) {
 			return
 		}
 		if errors.Is(err, playback.ErrBusy) {
-			if body.MaxHeight == 0 && body.Capabilities.AutoMaxHeight == playback.AutoStartHeight &&
-				!body.Capabilities.AutoReplacement && body.EntryStartsAt.IsZero() && !plan.VideoCopy {
+			if initialAuto && body.EntryStartsAt.IsZero() {
 				p.Manager.MarkAutoCapacityPressure()
 			}
 			w.Header().Set("Retry-After", "1")

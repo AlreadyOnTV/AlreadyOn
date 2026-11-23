@@ -3819,7 +3819,7 @@ components:
         autoMaxHeight:
           type: integer
           enum: [0, 240, 360, 480, 720, 1080, 2160]
-          description: Temporary Auto conversion ceiling. New clients request 360p initially. Direct play can retain source quality.
+          description: Temporary Auto conversion ceiling. New clients request 720p initially. Direct play can retain source quality.
         autoReplacement:
           type: boolean
           description: Identifies an Auto rendition replacement so capacity contention does not count as a new viewer.

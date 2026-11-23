@@ -1,3 +1,4 @@
+// Track consecutive pressure samples for the shared phone and TV player.
 package io.github.alreadyonapp.alreadyon
 
 /** Called every five seconds for an active Auto transcode. */
@@ -24,7 +25,7 @@ internal class NativeAutoQuality {
             struggling = 0
             return heights.lastOrNull { it < height }
         }
-        if (healthy >= 6) {
+        if (healthy >= 3) {
             healthy = 0
             return heights.firstOrNull { it > height && it <= maximum }
         }

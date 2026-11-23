@@ -1414,8 +1414,8 @@ const noWorkers = async (unreleased = () => 0) => {
       await page.getByRole("menuitem", { name: /^Quality/ }).click();
     };
     assert(
-      (await height()) === 360,
-      `Expected Auto to start at 360p, got ${await height()}p`,
+      (await height()) === 720,
+      `Expected Auto to start at 720p, got ${await height()}p`,
     );
     // The Settings menu order; Playback Details puts the live panel in the top left corner.
     await page.locator(".playback-player").hover();
@@ -1676,7 +1676,7 @@ const noWorkers = async (unreleased = () => 0) => {
     await login(page);
     await startAgain();
     assert(
-      (await height()) === 360,
+      (await height()) === 720,
       `A fresh load should start on Auto (${await height()}p)`,
     );
     // Another device (fresh storage) has its own, automatic, setting.
@@ -1689,7 +1689,7 @@ const noWorkers = async (unreleased = () => 0) => {
     assert(
       (await otherPage.evaluate(
         () => document.querySelector("video").videoHeight,
-      )) === 360,
+      )) === 720,
       "A second device did not start on its own automatic quality",
     );
     await leave(otherPage);
@@ -1699,7 +1699,7 @@ const noWorkers = async (unreleased = () => 0) => {
     await page.getByRole("menuitemradio", { name: "Auto" }).click();
     await page.waitForFunction(
       () =>
-        document.querySelector("video").videoHeight === 360 &&
+        document.querySelector("video").videoHeight === 720 &&
         !document.querySelector("video").paused &&
         document.querySelector("video").readyState >= 3,
       null,

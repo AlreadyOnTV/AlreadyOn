@@ -394,10 +394,10 @@ export function Player({
   const quality = chosen?.profileId === currentUserId ? chosen.value : stored;
   const qualityRef = useRef(quality);
   const appliedQuality = useRef(quality);
-  const autoQualityHeight = useRef(360);
+  const autoQualityHeight = useRef(720);
   const chooseQuality = (height: number) => {
-    const resetAuto = height === 0 && autoQualityHeight.current !== 360;
-    if (height === 0) autoQualityHeight.current = 360;
+    const resetAuto = height === 0 && autoQualityHeight.current !== 720;
+    if (height === 0) autoQualityHeight.current = 720;
     writeQuality(currentUserId, height);
     setChosen({ profileId: currentUserId, value: height });
     if (resetAuto && qualityRef.current === 0) void api.current?.requality();
@@ -470,7 +470,7 @@ export function Player({
     // Only the viewer's own pause counts: a paused player stays paused when new
     // data arrives or the next program starts.
     let userPaused = false;
-    autoQualityHeight.current = 360;
+    autoQualityHeight.current = 720;
     const qualityAdapter = new AutoQualityAdapter();
     const viewerId = Array.from(
       crypto.getRandomValues(new Uint8Array(16)),

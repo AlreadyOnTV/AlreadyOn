@@ -13,7 +13,7 @@ func (c *Capacity) FixtureCapacity(threads int) func() {
 	c.mu.Unlock()
 	profile := ProfileCapacity{SourceClass: SourceH264HD, SourceWidth: 1920, SourceHeight: 1080, SourceFPS: 60, Height: 720, FPS: 30, Threads: threads, Streams: 2, SingleSpeed: 4, Speeds: []float64{4, 4}, Verified: true}
 	baseline := profile
-	baseline.TargetHeight, baseline.Height = AutoStartHeight, AutoStartHeight
+	baseline.TargetHeight, baseline.Height = AutoCapacityHeight, AutoCapacityHeight
 	c.publishProfiles([]ProfileCapacity{baseline, profile})
 	return func() {
 		c.mu.Lock()

@@ -56,7 +56,7 @@ export class AutoQualityAdapter {
       this.strugglingWindows = 0;
       return [...QUALITY_HEIGHTS].reverse().find(height => height < sample.outputHeight) ?? null;
     }
-    if (this.healthyWindows >= 6) {
+    if (this.healthyWindows >= 3) {
       this.healthyWindows = 0;
       const maximum = sample.maxHeight ?? 1080;
       return QUALITY_HEIGHTS.find(height => height > sample.outputHeight && height <= maximum) ?? null;

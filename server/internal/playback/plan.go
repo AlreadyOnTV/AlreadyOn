@@ -56,7 +56,8 @@ var QualityHeights = []int{360, 480, 720, 1080, UHDHeight}
 // UHDHeight is the 4K picture height, offered with hardware encoding.
 const UHDHeight = 2160
 
-const AutoStartHeight = 360
+const AutoStartHeight = 720
+const AutoCapacityHeight = 360
 const AutoMinHeight = 240
 
 func ValidAutoHeight(height int) bool {
