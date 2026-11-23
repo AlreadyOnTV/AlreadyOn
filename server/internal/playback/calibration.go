@@ -53,6 +53,8 @@ type Calibration struct {
 	Capacity  *Capacity
 	DataDir   string
 	InputsDir string
+	// Device reads the saved device selection without probing driver availability.
+	Device func(context.Context) (string, error)
 	// Replaced only by isolated tests; production always runs real frame windows.
 	measure func(context.Context, calibrationCase, int) ([]float64, error)
 	mu      sync.Mutex
@@ -479,17 +481,6 @@ func (p ProfileCapacity) completionTime() time.Time {
 	return p.MeasuredAt // Older caches recorded sample time but not case completion.
 }
 
-func freshCalibrationProfiles(profiles []ProfileCapacity, now time.Time) []ProfileCapacity {
-	var fresh []ProfileCapacity
-	for _, profile := range profiles {
-		at := profile.completionTime()
-		if !at.After(now) && now.Sub(at) < calibrationFreshness {
-			fresh = append(fresh, profile)
-		}
-	}
-	return fresh
-}
-
 func dueFullCalibrationCases(cases []calibrationCase, profiles []ProfileCapacity, now time.Time) []calibrationCase {
 	byKey := make(map[calibrationCaseKey]time.Time, len(profiles))
 	for _, profile := range profiles {
@@ -504,7 +495,7 @@ func dueFullCalibrationCases(cases []calibrationCase, profiles []ProfileCapacity
 		return calibrationCaseKey{test.class, video.FrameRate, test.plan.Height, test.plan.Encoder, test.plan.ToneMapper, test.plan.Decoder == "hardware"}
 	}
 	for _, test := range cases {
-		if now.Sub(byKey[key(test)]) >= calibrationFreshness {
+		if now.Sub(byKey[key(test)]) >= calibrationRefreshInterval {
 			due = append(due, test)
 		}
 	}
@@ -525,32 +516,26 @@ func (c *Calibration) run(ctx context.Context, full, startup bool) {
 	stageID, finish := activity.Default.Start("Representative Capacity Validation", "pipelines", 0)
 	activity.Default.SetCurrentFile(stageID, "Checking prepared media and hardware capabilities")
 	defer finish()
-	directory := c.InputsDir
-	if directory == "" {
-		directory = BenchmarkInputsDir
-	}
-	inputs, err := loadBenchmarkInputs(directory)
+	device, err := c.Device(ctx)
 	if err != nil {
-		logging.Warn("startup calibration: prepared inputs unavailable: %v", err)
-		c.Capacity.resetCalibration()
+		logging.Warn("calibration: could not load the selected transcode device: %v", err)
 		return
 	}
-	fingerprint, err := c.fingerprint(ctx, inputs)
-	if err != nil {
-		logging.Warn("calibration identity unavailable: %v", err)
-		c.Capacity.resetCalibration()
-		return
+	load := func(mode string) (calibrationCache, bool) {
+		record, ok := readCalibrationCache(benchmarkCachePath(c.DataDir, mode), device)
+		if ok && record.Device == "" {
+			record.Device = device
+			c.save(mode, record)
+		}
+		return record, ok
 	}
-	quick, quickOK := readCalibrationCache(benchmarkCachePath(c.DataDir, "quick"), fingerprint)
-	previousFull, fullSaved := readCompatibleCalibrationCache(benchmarkCachePath(c.DataDir, "full"), fingerprint)
-	freshFull := previousFull
-	freshFull.Profiles = freshCalibrationProfiles(previousFull.Profiles, time.Now())
-	fullOK := len(freshFull.Profiles) > 0
+	quick, quickOK := load("quick")
+	previousFull, fullSaved := load("full")
 	c.mu.Lock()
 	c.quick, c.quickOK = quick, quickOK
 	c.full, c.fullOK = previousFull, fullSaved
 	c.mu.Unlock()
-	effective, effectiveOK := freshFull, fullOK
+	effective, effectiveOK := previousFull, fullSaved
 	mode := "quick"
 	if full {
 		mode = "full"
@@ -564,6 +549,8 @@ func (c *Calibration) run(ctx context.Context, full, startup bool) {
 	}
 	if effectiveOK {
 		c.apply(effective)
+	} else {
+		c.Capacity.resetCalibration()
 	}
 	if startup && effectiveOK {
 		if c.Capacity.OnChange != nil {
@@ -571,8 +558,14 @@ func (c *Calibration) run(ctx context.Context, full, startup bool) {
 		}
 		return
 	}
-	if !full && !fullOK {
-		c.Capacity.resetCalibration()
+	directory := c.InputsDir
+	if directory == "" {
+		directory = BenchmarkInputsDir
+	}
+	inputs, err := loadBenchmarkInputs(directory)
+	if err != nil {
+		logging.Warn("calibration: prepared inputs unavailable: %v", err)
+		return
 	}
 	// A manual quick check observes its own result, but must not retune settings
 	// already selected by a full analysis.
@@ -595,11 +588,8 @@ func (c *Calibration) run(ctx context.Context, full, startup bool) {
 	if full {
 		cases = dueFullCalibrationCases(cases, old, time.Now())
 	} else {
-		profiles = nil
-		// A manual quick run replaces only the prior quick record, including
-		// when it is stopped before completing every case.
-		c.save(fingerprint, "quick", profiles)
-		c.remember("quick", calibrationCache{Fingerprint: fingerprint, At: time.Now(), Threads: threads, Profiles: profiles})
+		// Keep saved results for cases a quick run does not finish.
+		profiles = append([]ProfileCapacity(nil), quick.Profiles...)
 	}
 	progressID, endProgress := activity.Default.Start("Pipeline analysis", "pipelines", len(cases))
 	defer endProgress()
@@ -678,16 +668,13 @@ func (c *Calibration) run(ctx context.Context, full, startup bool) {
 			}
 		}
 		profiles = append(filtered, result)
-		c.save(fingerprint, mode, profiles)
-		c.remember(mode, calibrationCache{Fingerprint: fingerprint, At: result.LastCompleted, Threads: c.Tuner.Threads(), Profiles: profiles})
+		record := calibrationCache{Device: device, At: result.LastCompleted, Threads: c.Tuner.Threads(), Profiles: profiles}
+		c.save(mode, record)
+		c.remember(mode, record)
 		if full {
-			fresh := freshCalibrationProfiles(profiles, result.LastCompleted)
-			if quickOK {
-				fresh = fillCalibrationGaps(fresh, freshCalibrationProfiles(quick.Profiles, result.LastCompleted))
-			}
-			c.Capacity.publishProfiles(fresh)
+			c.Capacity.publishProfiles(fillCalibrationGaps(profiles, quick.Profiles))
 		} else {
-			c.Capacity.publishProfiles(fillCalibrationGaps(freshFull.Profiles, profiles))
+			c.Capacity.publishProfiles(fillCalibrationGaps(previousFull.Profiles, profiles))
 		}
 		completed++
 		logging.Info("capacity validation: %s %s decode=%t tone=%s %dp%g: %d validated streams (slowest %.2fx, CPU %.2f cores/stream)", result.SourceClass, result.Encoder, result.HardwareDecode, result.ToneMapper, result.Height, result.FPS, result.Streams, minimumSpeed(result.Speeds), result.CPUCores)

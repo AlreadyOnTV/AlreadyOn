@@ -1,79 +1,30 @@
 package playback
 
 import (
-	"context"
-	"crypto/sha256"
-	"encoding/hex"
 	"encoding/json"
-	"fmt"
 	"math"
 	"os"
-	"os/exec"
 	"path/filepath"
-	"runtime"
-	"strings"
 	"time"
 )
 
 type calibrationCache struct {
-	Fingerprint string
-	At          time.Time
-	Threads     int
-	Status      CapacityStatus
-	HDR         []HDRCapacity
-	Profiles    []ProfileCapacity
+	Device   string
+	At       time.Time
+	Threads  int
+	Status   CapacityStatus
+	HDR      []HDRCapacity
+	Profiles []ProfileCapacity
 }
 
 func benchmarkCachePath(dataDir, mode string) string {
 	return filepath.Join(dataDir, "benchmark-cache-"+mode+".json")
 }
 
-// Bump this when changes to transcode commands, measurement or admission make
-// previous capacity results incompatible. Unrelated application builds reuse them.
-const calibrationPolicy = "calibration-policy-v13"
+// Age controls when cases are refreshed, not whether their results are usable.
+const calibrationRefreshInterval = 24 * time.Hour
 
-// Raw hardware/cgroup data stays out of the cache; only a digest is persisted.
-// Changes to the fixture recipe, runtime libraries, driver/kernel, CPU features,
-// quotas, memory limits or encoder policy invalidate previous measurements.
-func (c *Calibration) fingerprint(ctx context.Context, inputs *benchmarkInputs) (string, error) {
-	hash := sha256.New()
-	fmt.Fprintf(hash, "%s\n%s\n%d:%d\n", calibrationPolicy, inputs.fingerprint, runtime.NumCPU(), runtime.GOMAXPROCS(0))
-	for _, exe := range []string{"ffmpeg", "ffprobe"} {
-		raw, err := exec.CommandContext(ctx, exe, "-version").Output()
-		if err != nil {
-			return "", err
-		}
-		hash.Write(raw)
-	}
-	for _, path := range []string{"/var/lib/dpkg/status", "/usr/local/share/alreadyon/ffmpeg-build/packages.txt", "/proc/sys/kernel/osrelease", "/sys/fs/cgroup/cpu.max", "/sys/fs/cgroup/cpuset.cpus.effective", "/sys/fs/cgroup/memory.max", "/sys/class/drm/renderD128/device/vendor", "/sys/class/drm/renderD128/device/device", "/sys/class/drm/renderD128/device/driver/module/version", "/sys/module/i915/srcversion", "/sys/module/xe/srcversion", "/proc/driver/nvidia/version"} {
-		raw, err := os.ReadFile(path)
-		fmt.Fprintf(hash, "%s:%t\n", path, err == nil)
-		hash.Write(raw)
-	}
-	if raw, err := os.ReadFile("/proc/cpuinfo"); err == nil {
-		for _, line := range strings.Split(string(raw), "\n") {
-			if strings.HasPrefix(line, "model name") || strings.HasPrefix(line, "flags") || strings.HasPrefix(line, "vendor_id") {
-				hash.Write([]byte(line))
-			}
-		}
-	}
-	fmt.Fprintf(hash, "%s:%t:%s", c.Capacity.currentEncoder(ctx), c.Capacity.HardwareDecoding != nil && c.Capacity.HardwareDecoding(ctx), RenderNode())
-	return hex.EncodeToString(hash.Sum(nil)), nil
-}
-
-const calibrationFreshness = 24 * time.Hour
-
-func readCalibrationCache(path, fingerprint string) (calibrationCache, bool) {
-	cache, ok := readCompatibleCalibrationCache(path, fingerprint)
-	if !ok || time.Since(cache.At) >= calibrationFreshness {
-		return calibrationCache{}, false
-	}
-	return cache, true
-}
-
-// Full refreshes need their complete history to resume after the time limit,
-// even when the last write is too old to use for admission.
-func readCompatibleCalibrationCache(path, fingerprint string) (calibrationCache, bool) {
+func readCalibrationCache(path, device string) (calibrationCache, bool) {
 	var cached calibrationCache
 	info, err := os.Lstat(path)
 	if err != nil || !info.Mode().IsRegular() || info.Size() > 2<<20 {
@@ -83,7 +34,7 @@ func readCompatibleCalibrationCache(path, fingerprint string) (calibrationCache,
 	if err != nil || json.Unmarshal(raw, &cached) != nil {
 		return cached, false
 	}
-	if cached.Fingerprint != fingerprint || cached.At.After(time.Now()) || cached.Threads < 1 || cached.Threads > MaxThreads || len(cached.Profiles) == 0 || len(cached.Profiles) > 256 || len(cached.Status.Samples) > 128 || len(cached.HDR) > 128 {
+	if cached.At.After(time.Now()) || cached.Threads < 1 || cached.Threads > MaxThreads || len(cached.Profiles) == 0 || len(cached.Profiles) > 256 || len(cached.Status.Samples) > 128 || len(cached.HDR) > 128 {
 		return calibrationCache{}, false
 	}
 	for _, p := range cached.Profiles {
@@ -105,14 +56,43 @@ func readCompatibleCalibrationCache(path, fingerprint string) (calibrationCache,
 			}
 		}
 	}
+	recordedDevice := cached.Device
+	if recordedDevice == "" {
+		recordedDevice = legacyCalibrationDevice(cached.Profiles)
+	}
+	if recordedDevice == "" || recordedDevice != device {
+		return calibrationCache{}, false
+	}
 	return cached, true
 }
-func (c *Calibration) save(fingerprint, mode string, profiles []ProfileCapacity) {
+
+// Legacy records contain encoder names, including optional software fallback
+// measurements in GPU runs. Adopt them only when they identify one vendor.
+func legacyCalibrationDevice(profiles []ProfileCapacity) string {
+	device := "software"
+	for _, profile := range profiles {
+		encoder := profile.Encoder
+		switch encoder {
+		case "":
+			continue
+		case EncoderIntelQSV, EncoderIntelVAAPI:
+			encoder = SettingIntel
+		case EncoderAMDVAAPI, EncoderNvidiaNVENC:
+		default:
+			return ""
+		}
+		if device != "software" && device != encoder {
+			return ""
+		}
+		device = encoder
+	}
+	return device
+}
+
+func (c *Calibration) save(mode string, record calibrationCache) {
 	if c.DataDir == "" {
 		return
 	}
-	threads := c.Tuner.Threads()
-	record := calibrationCache{Fingerprint: fingerprint, At: time.Now(), Threads: threads, Profiles: append([]ProfileCapacity(nil), profiles...)}
 	raw, err := json.Marshal(record)
 	if err != nil {
 		return

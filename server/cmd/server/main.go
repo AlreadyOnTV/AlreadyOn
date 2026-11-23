@@ -280,7 +280,12 @@ func run() (restart bool) {
 		capacity.Load(record)
 	}
 	// The same sequential group owns startup, periodic and explicit re-benchmarking.
-	calibration := &playback.Calibration{Tuner: tuner, Capacity: capacity, DataDir: cfg.DataDir}
+	calibration := &playback.Calibration{Tuner: tuner, Capacity: capacity, DataDir: cfg.DataDir,
+		Device: func(c context.Context) (string, error) {
+			ss, err := serversettings.Get(c, db.DB)
+			return ss.Transcoding, err
+		},
+	}
 	benchmarks := &playback.Benchmarks{Context: ctx, Governor: background,
 		Busy:         func() bool { processes, _, viewers := streams.Counts(); return processes > 0 || viewers > 0 },
 		StartupSteps: []func(context.Context){calibration.Startup},

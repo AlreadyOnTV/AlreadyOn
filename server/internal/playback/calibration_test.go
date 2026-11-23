@@ -319,10 +319,6 @@ func TestFullCalibrationResumesOnlyMissingAndExpiredCases(t *testing.T) {
 	if len(due) != 2 || due[0].plan.Height != 720 || due[1].plan.Height != 480 {
 		t.Fatalf("resume repeated a finished case: %+v", due)
 	}
-	fresh := freshCalibrationProfiles(history, now)
-	if len(fresh) != 2 || fresh[0].TargetHeight != 360 || fresh[1].TargetHeight != 1080 {
-		t.Fatalf("stale measurements should not be used for admission: %+v", fresh)
-	}
 }
 
 func TestPreferredPipelineDoesNotTradeCheaperHDRForExactMeasuredHeight(t *testing.T) {
