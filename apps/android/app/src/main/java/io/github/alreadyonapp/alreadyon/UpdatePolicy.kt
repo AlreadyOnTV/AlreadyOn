@@ -10,7 +10,7 @@ internal data class AppUpdate(val release: String, val version: String, val code
     val target: String, val url: String, val hash: String, val size: Long)
 
 internal enum class ReleaseCycle(val label: String) {
-    STABLE("Stable"), NIGHTLY("Nightly");
+    STABLE("Stable"), NIGHTLY("Nightly"), OFF("Off");
 
     companion object {
         fun fromStored(value: String?): ReleaseCycle = entries.firstOrNull { it.name == value } ?: STABLE
@@ -30,6 +30,7 @@ internal fun acceptsUpdateRelease(tag: String, draft: Boolean, prerelease: Boole
     val stage = Regex("(?:\\d{2}\\.\\d{2}\\.\\d{2}|(?:20)?\\d{2}-\\d{2}-\\d{2})-(nightly|stable)", RegexOption.IGNORE_CASE)
         .matchEntire(tag)?.groupValues?.get(1)?.lowercase() ?: return false
     return when (cycle) {
+        ReleaseCycle.OFF -> false
         ReleaseCycle.STABLE -> stage == "stable" && !prerelease
         ReleaseCycle.NIGHTLY -> stage == "nightly" || (stage == "stable" && !prerelease)
     }

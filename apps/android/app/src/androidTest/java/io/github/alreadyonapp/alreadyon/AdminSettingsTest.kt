@@ -113,7 +113,8 @@ class AdminSettingsTest {
             compose.onNodeWithText(original.name).performClick()
             compose.onNodeWithText("Settings").performClick()
             settled(model)
-            for (cycle in listOf(ReleaseCycle.NIGHTLY, ReleaseCycle.STABLE)) {
+            compose.onNodeWithText("Update Cycle").assertExists()
+            for (cycle in listOf(ReleaseCycle.NIGHTLY, ReleaseCycle.OFF, ReleaseCycle.STABLE)) {
                 compose.onNodeWithText(cycle.label).performClick()
                 assertEquals(cycle, model.releaseCycle.value)
                 assertEquals(cycle, ReleaseCycle.fromStored(application.getSharedPreferences("app-updates", 0).getString("release_cycle", null)))

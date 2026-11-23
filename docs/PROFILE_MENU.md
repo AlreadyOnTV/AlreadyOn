@@ -12,7 +12,7 @@ See [profile creation](PROFILE_CREATION.md) for Admin-only Add Profile and switc
 
 ## Native Settings
 
-Native Settings uses phone tabs or a TV sidebar; Back returns from controls to categories before leaving. [Release Cycle](ANDROID_UPDATES.md) is device-local and defaults to Stable.
+Native Settings uses phone tabs or a TV sidebar; Back returns from controls to categories before leaving. [Update Cycle](ANDROID_UPDATES.md) is device-local and defaults to Stable.
 
 Profiles supports account-scoped Name/Role/Audience creation/editing, confirmed deletion and PIN reset. TV confirmations focus Cancel. Failed saves retain drafts; partial updates preserve unrelated fields. Active deletion returns to the chooser; demotion exits Settings. Server account authorization and last-Admin enforcement remain unchanged. Personal preferences remain under Profile.
 

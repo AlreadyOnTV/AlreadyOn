@@ -225,7 +225,7 @@ internal class PhoneModel(application: Application) : AndroidViewModel(applicati
     fun setReleaseCycle(cycle: ReleaseCycle) {
         if (!state.value.signedIn || state.value.profile?.role != "admin" || state.value.mustChangePassword) return
         if (!updatePreferences.edit().putString("release_cycle", cycle.name).commit()) {
-            update { it.copy(error = "Could not save the release cycle. Try again.") }
+            update { it.copy(error = "Could not save the update cycle. Try again.") }
             return
         }
         mutableReleaseCycle.value = cycle

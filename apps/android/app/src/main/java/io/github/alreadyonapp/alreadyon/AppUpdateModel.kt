@@ -46,7 +46,16 @@ internal class AppUpdateModel(application: Application) : AndroidViewModel(appli
         checkForUpdates()
     }
     private fun checkForUpdates(force: Boolean = false) {
-        if (mutable.value.phase in listOf(UpdatePhase.DOWNLOADING, UpdatePhase.PERMISSION, UpdatePhase.INSTALLING, UpdatePhase.ERROR)) return
+        if (mutable.value.phase in listOf(UpdatePhase.DOWNLOADING, UpdatePhase.PERMISSION, UpdatePhase.INSTALLING)) return
+        val cycle = ReleaseCycle.fromStored(preferences.getString("release_cycle", null))
+        if (cycle == ReleaseCycle.OFF) {
+            // Stop a lookup and withdraw its offer. An accepted installation uses the phases above.
+            work?.cancel()
+            service.cancel()
+            if (force && mutable.value.update != null) mutable.value = AppUpdateState()
+            return
+        }
+        if (!force && mutable.value.phase == UpdatePhase.ERROR) return
         val now = SystemClock.elapsedRealtime()
         if (!force && (work?.isActive == true || mutable.value.update != null ||
             !updateCheckDue(now, lastUpdateCheckElapsedMs, lastUpdateCheckSucceeded))) return
@@ -56,7 +65,6 @@ internal class AppUpdateModel(application: Application) : AndroidViewModel(appli
         service.cancel()
         dismissed = false
         mutable.value = AppUpdateState()
-        val cycle = ReleaseCycle.fromStored(preferences.getString("release_cycle", null))
         work = viewModelScope.launch {
             // Debug/test packages never offer a production APK with a different identity or signing key.
             if (context.packageName != UPDATE_PACKAGE) return@launch
