@@ -1154,7 +1154,7 @@ export function Player({
         // before our schedule alignment can run (and we must not rewind afterward).
         hls = new Hls({
           startPosition: following ? 0 : -1,
-          maxBufferLength: s.plan.videoCopy || prepared.quality !== 0 ? 12 : 5,
+          maxBufferLength: 12,
           backBufferLength: 6,
           liveSyncDurationCount: Math.max(2, Math.ceil(liveDelay() / 2)),
           startLevel: s.plan.lowHeight ? 0 : undefined,
