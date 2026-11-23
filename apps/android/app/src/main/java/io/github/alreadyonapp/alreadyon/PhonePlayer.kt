@@ -95,7 +95,7 @@ private fun NativeVideo(playback: PhonePlayback, model: PhoneModel, modifier: Mo
             }.build()
         val sources = DefaultMediaSourceFactory(context).setDataSourceFactory(OkHttpDataSource.Factory(http))
         val builder = ExoPlayer.Builder(context).setMediaSourceFactory(sources)
-        val useAutoBuffer = auto && playback.outputHeight > 0
+        val useAutoBuffer = auto && playback.outputRungHeight > 0
         if (useAutoBuffer || BuildConfig.IS_TV) builder.setLoadControl(DefaultLoadControl.Builder()
             .setBufferDurationsMs(if (useAutoBuffer) 3000 else 5000,
                 if (useAutoBuffer) 5500 else 15000, 500, 1000)

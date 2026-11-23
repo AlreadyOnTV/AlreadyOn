@@ -6,6 +6,15 @@ import org.junit.Assert.assertNull
 import org.junit.Test
 
 class NativeAutoQualityTest {
+    @Test fun wideOutputUsesItsFittedRung() {
+        val auto = NativeAutoQuality()
+        val rung = qualityRungHeight(1280, 532)
+        assertEquals(720, rung)
+        assertEquals(1080, qualityRungHeight(1920, 800))
+        repeat(2) { assertNull(auto.observe(4000, false, rung, 1080)) }
+        assertEquals(1080, auto.observe(4000, false, rung, 1080))
+    }
+
     @Test fun normalSegmentVariationAllowsAnUpgrade() {
         val auto = NativeAutoQuality()
         assertNull(auto.observe(4900, false, 720, 1080))

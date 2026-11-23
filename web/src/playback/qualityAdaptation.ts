@@ -12,6 +12,13 @@ export interface PlaybackPressure {
 const QUALITY_HEIGHTS = [240, 360, 480, 720, 1080, 2160];
 const SAMPLE_WINDOW_MS = 4_500;
 
+// The encoder fits the source inside a 16:9 quality box. A wide film can
+// fill the box horizontally while its actual height remains below the rung.
+export function qualityRungHeight(width: number, height: number): number {
+  const fittedHeight = Math.max(height, Math.round(width * 9 / 16));
+  return QUALITY_HEIGHTS.find(rung => Math.abs(rung - fittedHeight) <= 2) ?? fittedHeight;
+}
+
 export class AutoQualityAdapter {
   private lastSample?: PlaybackPressure;
   private strugglingWindows = 0;

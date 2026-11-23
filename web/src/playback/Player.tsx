@@ -5,7 +5,7 @@ import Hls from "hls.js";
 import { APP_VERSION } from "../version";
 import { apiFetch } from "../api/access";
 import { clientCapabilities } from "./capabilities";
-import { AutoQualityAdapter } from "./qualityAdaptation";
+import { AutoQualityAdapter, qualityRungHeight } from "./qualityAdaptation";
 import { BROWSER_CODEC_MESSAGE, CodecHelp } from "./CodecHelp";
 import { responsivePlaylistLoader } from "./playlistLoader";
 import { PlayerControls } from "./PlayerControls";
@@ -770,15 +770,14 @@ export function Player({
     const sampleQualityPressure = () => {
       const active = current;
       const frameQuality = video.getVideoPlaybackQuality?.();
+      const output = active?.value.details?.outputVideo;
+      const source = active?.value.details?.sourceVideo;
       const nextHeight = qualityAdapter.observe(
         {
           nowMs: performance.now(),
           bufferedSeconds: active ? bufferedAt(video.currentTime) : 0,
-          outputHeight:
-            active?.value.details?.outputVideo.height ??
-            active?.value.sourceHeight ??
-            360,
-          maxHeight: Math.min(active?.value.sourceHeight ?? 1080, active?.value.uhd ? 2160 : 1080),
+          outputHeight: output ? qualityRungHeight(output.width, output.height) : (active?.value.sourceHeight ?? 360),
+          maxHeight: Math.min(source ? qualityRungHeight(source.width, source.height) : (active?.value.sourceHeight ?? 1080), active?.value.uhd ? 2160 : 1080),
           serverPressure: active?.value.autoCapacityPressure,
           droppedVideoFrames: frameQuality?.droppedVideoFrames,
           totalVideoFrames: frameQuality?.totalVideoFrames,
@@ -1276,8 +1275,10 @@ export function Player({
         const old = current;
         if (stopped) return;
         if (adaptiveHeight !== undefined && old) {
-          const oldHeight = old.value.details?.outputVideo.height ?? oldAutoHeight;
-          const newHeight = fresh.value.details?.outputVideo.height ?? adaptiveHeight;
+          const oldOutput = old.value.details?.outputVideo;
+          const newOutput = fresh.value.details?.outputVideo;
+          const oldHeight = oldOutput ? qualityRungHeight(oldOutput.width, oldOutput.height) : oldAutoHeight;
+          const newHeight = newOutput ? qualityRungHeight(newOutput.width, newOutput.height) : adaptiveHeight;
           if (fresh.value.mediaFileId !== old.value.mediaFileId ||
               fresh.value.entryStartsAt !== old.value.entryStartsAt ||
               (adaptiveHeight - oldHeight) * (newHeight - oldHeight) <= 0) {

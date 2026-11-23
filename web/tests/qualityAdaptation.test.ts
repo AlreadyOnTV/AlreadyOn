@@ -1,7 +1,7 @@
 // Adaptation-state tests use controlled timestamps instead of browser timing.
 import assert from 'node:assert/strict';
 import { test } from 'node:test';
-import { AutoQualityAdapter } from '../src/playback/qualityAdaptation.ts';
+import { AutoQualityAdapter, qualityRungHeight } from '../src/playback/qualityAdaptation.ts';
 
 test('Auto waits for two low-buffer windows before stepping down one rung', () => {
   const adapter = new AutoQualityAdapter();
@@ -64,4 +64,17 @@ test('normal segment variation within the live buffer target permits an upgrade'
   assert.equal(sample(5_000, 4.9), null);
   assert.equal(sample(10_000, 3.2), null);
   assert.equal(sample(15_000, 4.1), 1080);
+});
+
+
+test('a wide film steps up from its fitted quality rung', () => {
+  const adapter = new AutoQualityAdapter();
+  const outputHeight = qualityRungHeight(1280, 532);
+  assert.equal(outputHeight, 720);
+  assert.equal(qualityRungHeight(1920, 800), 1080);
+  assert.equal(qualityRungHeight(854, 356), 480);
+  const sample = (nowMs: number) => adapter.observe({ nowMs, bufferedSeconds: 4, outputHeight, maxHeight: 1080 }, true);
+  assert.equal(sample(5_000), null);
+  assert.equal(sample(10_000), null);
+  assert.equal(sample(15_000), 1080);
 });

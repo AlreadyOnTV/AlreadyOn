@@ -1,9 +1,19 @@
 // Track consecutive pressure samples for the shared phone and TV player.
 package io.github.alreadyonapp.alreadyon
 
+import kotlin.math.abs
+import kotlin.math.roundToInt
+
+private val autoQualityHeights = listOf(240, 360, 480, 720, 1080, 2160)
+
+// A wide film fills the 16:9 quality box horizontally before filling its height.
+internal fun qualityRungHeight(width: Int, height: Int): Int {
+    val fittedHeight = maxOf(height, (width * 9.0 / 16).roundToInt())
+    return autoQualityHeights.firstOrNull { abs(it - fittedHeight) <= 2 } ?: fittedHeight
+}
+
 /** Called every five seconds for an active Auto transcode. */
 internal class NativeAutoQuality {
-    private val heights = listOf(240, 360, 480, 720, 1080, 2160)
     private var previousBuffer: Long? = null
     private var struggling = 0
     private var healthy = 0
@@ -23,11 +33,11 @@ internal class NativeAutoQuality {
         healthy = if (!underPressure && !serverPressure && bufferedMs >= 3000 && !draining) healthy + 1 else 0
         if (struggling >= 2) {
             struggling = 0
-            return heights.lastOrNull { it < height }
+            return autoQualityHeights.lastOrNull { it < height }
         }
         if (healthy >= 3) {
             healthy = 0
-            return heights.firstOrNull { it > height && it <= maximum }
+            return autoQualityHeights.firstOrNull { it > height && it <= maximum }
         }
         return null
     }

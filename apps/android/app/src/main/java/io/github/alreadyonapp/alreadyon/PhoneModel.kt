@@ -30,7 +30,7 @@ internal const val PLAYBACK_LOG_TAG = "AlreadyOnPlayback"
 internal data class PhonePlayback(val url: String, val title: String, val startMs: Long, val revision: Long, val hlsTargetMs: Long? = null, val capturedAt: Long = SystemClock.elapsedRealtime(), val requestedAt: Long = capturedAt,
     val seriesTitle: String = "", val episodeLabel: String = "", val mediaFileId: Long = -1, val sourceHeight: Int = 720, val uhd: Boolean = false,
     val selectedAudioIndex: Int? = null, val audioTracks: List<PhoneTrack> = emptyList(), val subtitleTracks: List<PhoneTrack> = emptyList(),
-    val outputHeight: Int = 0, val streamOffsetSeconds: Double = 0.0, val hlsOriginMs: Long? = null, val trustedCa: String? = null, val entryStartsAt: String? = null)
+    val outputRungHeight: Int = 0, val sourceRungHeight: Int = sourceHeight, val streamOffsetSeconds: Double = 0.0, val hlsOriginMs: Long? = null, val trustedCa: String? = null, val entryStartsAt: String? = null)
 internal data class PhoneState(
     val username: String = "", val role: String = "viewer", val mustChangePassword: Boolean = false,
     val passwordLocked: Boolean = true, val settings: String? = null, val notice: String? = null,
@@ -69,13 +69,13 @@ internal class PhoneModel(application: Application) : AndroidViewModel(applicati
         val current = state.value
         val media = current.playback ?: return
         if (media.revision != revision) return
-        if (current.quality != 0 || current.paused || !current.playbackReady || media.outputHeight == 0) {
+        if (current.quality != 0 || current.paused || !current.playbackReady || media.outputRungHeight == 0) {
             autoQuality.reset()
             adaptiveRequest = null
             return
         }
-        adaptiveRequest = autoQuality.observe(bufferedMs, buffering || droppedFrames, media.outputHeight,
-            minOf(media.sourceHeight, if (media.uhd) 2160 else 1080), autoCapacityPressure) ?: adaptiveRequest
+        adaptiveRequest = autoQuality.observe(bufferedMs, buffering || droppedFrames, media.outputRungHeight,
+            minOf(media.sourceRungHeight, if (media.uhd) 2160 else 1080), autoCapacityPressure) ?: adaptiveRequest
     }
     private var guideEntry: Job? = null
     private val mutableGuideNavigationDeadline = MutableStateFlow(0L)
@@ -583,7 +583,12 @@ internal class PhoneModel(application: Application) : AndroidViewModel(applicati
                             mediaFileId = tune.optLong("mediaFileId", -1), sourceHeight = tune.optInt("sourceHeight", 720), uhd = tune.optBoolean("uhd"),
                             selectedAudioIndex = tune.getJSONObject("plan").optInt("audioTrackIndex", -1).takeIf { it >= 0 },
                             audioTracks = phoneTracks(tune.optJSONArray("audioTracks")), subtitleTracks = phoneTracks(tune.optJSONArray("subtitles")),
-                            outputHeight = tune.getJSONObject("plan").takeUnless { it.optBoolean("videoCopy") }?.optInt("height") ?: 0,
+                            sourceRungHeight = tune.optJSONObject("details")?.optJSONObject("sourceVideo")?.let {
+                                qualityRungHeight(it.optInt("width"), it.optInt("height"))
+                            } ?: tune.optInt("sourceHeight", 720),
+                            outputRungHeight = tune.getJSONObject("plan").takeUnless { it.optBoolean("videoCopy") }?.let {
+                                qualityRungHeight(it.optInt("width"), it.optInt("height"))
+                            } ?: 0,
                             streamOffsetSeconds = if (direct) 0.0 else tune.optDouble("streamOffsetSeconds"),
                             entryStartsAt = tune.getString("entryStartsAt"),
                             trustedCa = state.value.trustedCa, hlsOriginMs = tune.optString("hlsOrigin").takeIf { it.isNotBlank() }?.let { Instant.parse(it).toEpochMilli() })
@@ -619,7 +624,7 @@ internal class PhoneModel(application: Application) : AndroidViewModel(applicati
                                     if (next != null) {
                                         val (nextToken, nextMedia, _) = next
                                         if (nextMedia.entryStartsAt == media.entryStartsAt && nextMedia.mediaFileId == media.mediaFileId &&
-                                            (nextHeight - media.outputHeight) * (nextMedia.outputHeight - media.outputHeight) > 0 && state.value.quality == 0) {
+                                            (nextHeight - media.outputRungHeight) * (nextMedia.outputRungHeight - media.outputRungHeight) > 0 && state.value.quality == 0) {
                                             preparedRevision = null
                                             var promoted = false
                                             try {
@@ -648,7 +653,7 @@ internal class PhoneModel(application: Application) : AndroidViewModel(applicati
                                         } else release(nextToken)
                                     }
                                 }
-                                if (elapsed - lastStatusAt >= (if (state.value.quality == 0 && media.outputHeight > 0) 5000 else 10000)) {
+                                if (elapsed - lastStatusAt >= (if (state.value.quality == 0 && media.outputRungHeight > 0) 5000 else 10000)) {
                                     autoCapacityPressure = status(api, channel.id, token).optBoolean("autoCapacityPressure")
                                     lastStatusAt = elapsed
                                 }
