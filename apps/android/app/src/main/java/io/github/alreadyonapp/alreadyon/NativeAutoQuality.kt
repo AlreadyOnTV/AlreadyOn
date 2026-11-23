@@ -17,10 +17,10 @@ internal class NativeAutoQuality {
     fun observe(bufferedMs: Long, buffering: Boolean, height: Int, maximum: Int, serverPressure: Boolean = false): Int? {
         val prior = previousBuffer ?: bufferedMs
         previousBuffer = bufferedMs
-        val draining = prior - bufferedMs > 500
+        val draining = prior - bufferedMs > 2000 // Ignore normal two-second HLS segment fluctuations.
         val underPressure = serverPressure && height > 360 || buffering || bufferedMs < 3000 || bufferedMs < 5000 && draining
         struggling = if (underPressure) struggling + 1 else 0
-        healthy = if (!underPressure && !serverPressure && bufferedMs >= 4500 && !draining) healthy + 1 else 0
+        healthy = if (!underPressure && !serverPressure && bufferedMs >= 3000 && !draining) healthy + 1 else 0
         if (struggling >= 2) {
             struggling = 0
             return heights.lastOrNull { it < height }

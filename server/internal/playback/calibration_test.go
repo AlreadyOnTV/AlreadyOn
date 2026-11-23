@@ -307,3 +307,21 @@ func TestFullCalibrationResumesOnlyMissingAndExpiredCases(t *testing.T) {
 		t.Fatalf("stale measurements should not be used for admission: %+v", fresh)
 	}
 }
+
+func TestPreferredPipelineDoesNotTradeCheaperHDRForExactMeasuredHeight(t *testing.T) {
+	source, _ := detailsFixture()
+	video := &source.Streams[0]
+	video.Width, video.Height, video.HDRStaticMetadata = 3840, 2160, true
+	cpu := ProfileCapacity{SourceClass: SourceHEVCPQ, Encoder: EncoderIntelQSV, HardwareDecode: true,
+		ToneMapper: "cpu", SourceFPS: 30, SourceWidth: 3840, SourceHeight: 2160,
+		Height: 1080, FPS: 30, Verified: true, Threads: 2, Streams: 1, SingleSpeed: 2, CPUCores: 1.2}
+	gpu := cpu
+	gpu.Height, gpu.Streams, gpu.ToneMapper, gpu.CPUCores = 2160, 2, "gpu", 0.2
+	c := &Capacity{profiles: []ProfileCapacity{cpu, gpu}}
+	for _, height := range []int{720, 1080} {
+		got, found := c.PreferredPipeline(source, EncoderIntelQSV, height)
+		if !found || got.ToneMapper != "gpu" {
+			t.Fatalf("%dp selected %+v, want GPU tone mapping", height, got)
+		}
+	}
+}

@@ -6,6 +6,13 @@ import org.junit.Assert.assertNull
 import org.junit.Test
 
 class NativeAutoQualityTest {
+    @Test fun normalSegmentVariationAllowsAnUpgrade() {
+        val auto = NativeAutoQuality()
+        assertNull(auto.observe(4900, false, 720, 1080))
+        assertNull(auto.observe(3200, false, 720, 1080))
+        assertEquals(1080, auto.observe(4100, false, 720, 1080))
+    }
+
     @Test fun bufferedSamplesStepDownFasterThanTheyStepUp() {
         val auto = NativeAutoQuality()
         assertNull(auto.observe(2000, false, 360, 2160))

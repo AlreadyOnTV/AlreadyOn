@@ -45,9 +45,9 @@ export class AutoQualityAdapter {
     const droppedRatio = hasFrameDelta && frameCount > 0
       ? (sample.droppedVideoFrames! - previous.droppedVideoFrames!) / frameCount
       : 0;
-    const draining = previous !== undefined && previous.bufferedSeconds - sample.bufferedSeconds > 0.5;
+    const draining = previous !== undefined && previous.bufferedSeconds - sample.bufferedSeconds > 2; // A normal HLS segment can change the sampled buffer by up to two seconds.
     const struggling = (sample.serverPressure && sample.outputHeight > 360) || sample.bufferedSeconds < 3 || (sample.bufferedSeconds < 5 && draining) || droppedRatio > 0.05;
-    const healthy = !sample.serverPressure && sample.bufferedSeconds >= 4.5 && !draining && droppedRatio <= 0.05;
+    const healthy = !sample.serverPressure && sample.bufferedSeconds >= 3 && !draining && droppedRatio <= 0.05;
     this.strugglingWindows = struggling ? this.strugglingWindows + 1 : 0;
     this.healthyWindows = healthy ? this.healthyWindows + 1 : 0;
     this.lastSample = sample;

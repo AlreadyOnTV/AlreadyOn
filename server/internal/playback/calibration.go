@@ -980,6 +980,16 @@ func betterPipelineAtHeight(a, b ProfileCapacity, height int) bool {
 	if aFits != bFits {
 		return aFits
 	}
+	if aFits {
+		// Prefer genuinely cheaper measured backends before using the nearest
+		// tested ceiling as a tie-breaker. The output still respects the request.
+		if math.Abs(a.CPUCores-b.CPUCores) > .05 {
+			return a.CPUCores < b.CPUCores
+		}
+		if a.GPUEngines != nil && b.GPUEngines != nil && math.Abs(*a.GPUEngines-*b.GPUEngines) > .05 {
+			return *a.GPUEngines < *b.GPUEngines
+		}
+	}
 	if a.Height != b.Height {
 		if aFits {
 			return a.Height < b.Height

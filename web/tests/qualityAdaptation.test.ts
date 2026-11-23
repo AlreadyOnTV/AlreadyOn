@@ -56,3 +56,12 @@ test('admission pressure lets Auto yield headroom even with a healthy local buff
   assert.equal(sample(10_000, 720), 480);
   for (let i = 3; i < 10; i++) assert.equal(sample(i * 5_000, 360), null);
 });
+
+test('normal segment variation within the live buffer target permits an upgrade', () => {
+  const adapter = new AutoQualityAdapter();
+  const sample = (nowMs: number, bufferedSeconds: number) =>
+    adapter.observe({ nowMs, bufferedSeconds, outputHeight: 720, maxHeight: 1080 }, true);
+  assert.equal(sample(5_000, 4.9), null);
+  assert.equal(sample(10_000, 3.2), null);
+  assert.equal(sample(15_000, 4.1), 1080);
+});
