@@ -12,7 +12,7 @@ done
 for name in h264 hevc av1 mpeg2video vc1 aac ac3 eac3 truehd dca flac opus; do
     grep -qw "$name" "$work/decoders" || { echo "Missing decoder: $name" >&2; exit 1; }
 done
-for name in zscale tonemap loudnorm volume alimiter scale_vaapi tonemap_vaapi vpp_qsv scale_cuda; do
+for name in zscale tonemap loudnorm volume alimiter scale_vaapi tonemap_vaapi vpp_qsv scale_cuda tonemap_opencl; do
     grep -qw "$name" "$work/filters" || { echo "Missing filter: $name" >&2; exit 1; }
 done
 ffmpeg -v error -f lavfi -i testsrc2=size=64x64:rate=10 -t 5 -c:v libopenh264 "$work/burst.mp4"

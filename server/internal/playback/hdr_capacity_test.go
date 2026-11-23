@@ -164,7 +164,7 @@ func TestHDRFailureCacheDoesNotDisableDecoder(t *testing.T) {
 
 // Long-lived streams must remember unsupported VPP before viewers leave.
 func TestHDRFallbackCachesFailureAtFirstSegment(t *testing.T) {
-	exe := scriptedFFmpeg(t, "tonemap_vaapi")
+	exe := scriptedFFmpeg(t, "tonemap_")
 	f, err := os.OpenFile(exe, os.O_APPEND|os.O_WRONLY, 0)
 	if err != nil {
 		t.Fatal(err)

@@ -536,6 +536,14 @@ button.admin-badge:disabled {
   margin-bottom: 0;
 }
 
+.admin-modal-actions {
+  display: flex;
+  justify-content: flex-end;
+  flex-wrap: wrap;
+  gap: 8px;
+  margin-top: 16px;
+}
+
 .folder-card-header {
   display: flex;
   align-items: center;

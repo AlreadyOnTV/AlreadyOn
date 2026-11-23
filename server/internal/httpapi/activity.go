@@ -337,7 +337,9 @@ func deviceLabel(ua string) string {
 	return strings.TrimSpace(device + " · " + browser + " " + os)
 }
 
-// A benchmark group and its current step are one operation, not concurrent jobs.
+// A benchmark reservation excludes every lower-priority background job. Its
+// tracker entries are nested progress, so expose one active operation and keep
+// paused lower-priority work out of an "Active" list.
 func benchmarkActivity(tasks []activity.Task) []activity.Task {
 	parent := -1
 	for i, task := range tasks {
@@ -350,7 +352,6 @@ func benchmarkActivity(tasks []activity.Task) []activity.Task {
 		return tasks
 	}
 	group := tasks[parent]
-	result := make([]activity.Task, 0, len(tasks))
 	for i, task := range tasks {
 		if i == parent {
 			continue
@@ -358,9 +359,13 @@ func benchmarkActivity(tasks []activity.Task) []activity.Task {
 		switch task.Name {
 		case "Transcode Thread Measurement", "Server Capacity Measurement", "Representative Capacity Validation":
 			group.Unit = task.Name
-		default:
-			result = append(result, task)
+		case "CPU fallback tuning", "Pipeline analysis":
+			group.Unit = task.Name
+			group.Completed = task.Completed
+			group.Total = task.Total
+			group.Percent = task.Percent
+			group.CurrentFile = task.CurrentFile
 		}
 	}
-	return append([]activity.Task{group}, result...)
+	return []activity.Task{group}
 }

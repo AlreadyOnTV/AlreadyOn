@@ -133,6 +133,24 @@ func (s *Sessions) Revoke(token string) Session {
 	return v
 }
 
+// PauseStreaming releases rendition bindings while retaining the scoped token.
+// The player can reclaim it after a manual transcoding test finishes.
+func (s *Sessions) PauseStreaming() int {
+	s.mu.Lock()
+	defer s.mu.Unlock()
+	paused := 0
+	for hash, session := range s.items {
+		if session.Preparing || session.StreamKey != "" {
+			session.Preparing = false
+			session.StreamKey = ""
+			session.ExpiresAt = s.clock.Now().Add(SessionTTL)
+			s.items[hash] = session
+			paused++
+		}
+	}
+	return paused
+}
+
 // Renewal is available only through an authenticated management heartbeat.
 // Possession of a media URL alone cannot prolong its authorization.
 func (s *Sessions) Renew(token string, keyID, channelID int64) (Session, error) {

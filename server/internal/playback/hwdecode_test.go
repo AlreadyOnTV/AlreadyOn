@@ -14,6 +14,7 @@ import (
 func hdrJob(t *testing.T, encoder string, hwDecode, hwToneMap bool) Job {
 	t.Helper()
 	src, caps := detailsFixture()
+	src.Streams[0].HDRStaticMetadata = true
 	caps.Encoder, caps.HWDecode, caps.HWToneMap = encoder, hwDecode, hwToneMap
 	plan, err := Choose(src, caps, false, true)
 	if err != nil {
@@ -143,7 +144,7 @@ func TestFallbackPlansStepDownOneGPUStageAtATime(t *testing.T) {
 	for _, p := range plans {
 		got = append(got, p.Encoder+"/"+p.Decoder+"/"+p.ToneMapper)
 	}
-	want := []string{"intel-vaapi/hardware/gpu", "intel-vaapi/hardware/cpu", "intel-vaapi//cpu", "//cpu"}
+	want := []string{"intel-vaapi/hardware/gpu", "intel-vaapi/hardware/opencl", "intel-vaapi/hardware/cpu", "intel-vaapi//cpu", "//cpu"}
 	if strings.Join(got, " ") != strings.Join(want, " ") {
 		t.Errorf("plans = %v, want %v", got, want)
 	}
@@ -178,7 +179,7 @@ func TestRunnerFallsBackAndBlamesOnlyWhatASimplerPlanProves(t *testing.T) {
 		fails                       bool
 	}{
 		{name: "nothing fails", failOn: "", wantDecoder: "hardware", wantTM: "gpu"},
-		{name: "GPU tone map fails", failOn: "tonemap_vaapi", wantDecoder: "hardware", wantHW: "intel-vaapi", wantTM: "cpu"},
+		{name: "GPU tone map fails", failOn: "tonemap_vaapi", wantDecoder: "hardware", wantHW: "intel-vaapi", wantTM: "opencl"},
 		{name: "GPU decode fails", failOn: "-hwaccel", wantDecoder: "", wantHW: "intel-vaapi", wantTM: "cpu", decodeBlamed: true},
 		{name: "GPU encoder fails", failOn: "h264_vaapi", wantDecoder: "", wantHW: "", wantTM: "cpu", encodeBlamed: true},
 		{name: "everything fails", failOn: "ffmpeg", fails: true},
@@ -215,5 +216,51 @@ func TestRunnerFallsBackAndBlamesOnlyWhatASimplerPlanProves(t *testing.T) {
 				}
 			}
 		})
+	}
+}
+
+func TestOpenCLPipelineKeepsFramesOnGPUAndReportsHybridDecode(t *testing.T) {
+	for _, encoder := range []string{EncoderIntelVAAPI, EncoderIntelQSV} {
+		job := hdrJob(t, encoder, true, true)
+		job.Plan.ToneMapper = "opencl"
+		args, err := Arguments(job)
+		if err != nil {
+			t.Fatal(err)
+		}
+		joined := strings.Join(args, " ")
+		for _, want := range []string{"opencl=ocl@va", "scale_vaapi=", "tonemap_opencl=", "hwmap=derive_device=vaapi:reverse=1"} {
+			if !strings.Contains(joined, want) {
+				t.Fatalf("missing %s: %s", want, joined)
+			}
+		}
+		if strings.Contains(joined, "hwdownload") {
+			t.Fatal("OpenCL playback downloads frames to CPU")
+		}
+		pipeline := DescribePipeline(job.Plan)
+		if pipeline.ToneMapper != "OpenCL (GPU)" {
+			t.Fatal(pipeline)
+		}
+		if encoder == EncoderIntelQSV && pipeline.Decoder != "Intel VAAPI (GPU)" {
+			t.Fatal(pipeline)
+		}
+	}
+}
+
+func TestQSVDoesNotClaimVPPWithoutStaticHDRMetadata(t *testing.T) {
+	src, caps := detailsFixture()
+	caps.Encoder = EncoderIntelQSV
+	caps.HWDecode = true
+	caps.HWToneMap = true
+	plan, err := Choose(src, caps, false, true)
+	if err != nil {
+		t.Fatal(err)
+	}
+	if plan.ToneMapper != "cpu" {
+		t.Fatalf("QSV VPP would silently skip tone mapping: %+v", plan)
+	}
+	caps.HWToneMapMethod = "opencl"
+	plan, err = Choose(src, caps, false, true)
+	if err != nil || plan.ToneMapper != "opencl" {
+		t.Fatalf("OpenCL fallback: %+v %v", plan, err)
 	}
 }

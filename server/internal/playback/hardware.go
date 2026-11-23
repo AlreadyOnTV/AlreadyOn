@@ -5,6 +5,7 @@ import (
 	"context"
 	"errors"
 	"fmt"
+	"os"
 	"os/exec"
 	"path/filepath"
 	"regexp"
@@ -40,7 +41,7 @@ const SettingIntel = "intel"
 // Resolve turns the Transcoding setting into the encoder to use. Intel picks
 // Quick Sync when its encode test passes (and, with hardware decoding on, its
 // whole-GPU decode test too), else VA-API, which runs on every Intel GPU the media
-// driver supports. Quick Sync only starts on Tiger Lake and newer, and its
+// driver supports. The runtime dispatcher selects modern or legacy support, and its
 // failure is expected on older GPUs, so it is not logged as a fault. Other
 // settings are returned unchanged.
 func (h *Hardware) Resolve(ctx context.Context, setting string, decoding bool) string {
@@ -310,7 +311,7 @@ func (h *Hardware) test(ctx context.Context, encoder string) HardwareStatus {
 	if encoder != EncoderNvidiaNVENC {
 		find := h.Device
 		if find == nil {
-			find = RenderNode
+			find = func() string { return RenderNodeFor(encoder) }
 		}
 		if device = find(); device == "" {
 			return HardwareStatus{Encoder: encoder, Detail: "No /dev/dri render device. Pass the GPU into the container (devices: /dev/dri:/dev/dri) or check the host driver."}
@@ -373,7 +374,7 @@ func (h *Hardware) testDecode(ctx context.Context, encoder string) HardwareStatu
 	if encoder != EncoderNvidiaNVENC {
 		find := h.Device
 		if find == nil {
-			find = RenderNode
+			find = func() string { return RenderNodeFor(encoder) }
 		}
 		if device = find(); device == "" {
 			return HardwareStatus{Encoder: encoder, Detail: "No /dev/dri render device. Pass the GPU into the container (devices: /dev/dri:/dev/dri) or check the host driver."}
@@ -434,9 +435,11 @@ func (h *Hardware) ToneMapOnGPU(ctx context.Context, encoder string) bool {
 	}
 	switch encoder {
 	case EncoderIntelVAAPI:
-		return h.hasFilter(ctx, "tonemap_vaapi")
+		return h.hasFilter(ctx, "tonemap_vaapi") || h.hasFilter(ctx, "tonemap_opencl")
 	case EncoderIntelQSV:
-		return h.hasFilter(ctx, "vpp_qsv")
+		return h.hasFilter(ctx, "vpp_qsv") || h.hasFilter(ctx, "tonemap_opencl")
+	case EncoderAMDVAAPI:
+		return h.hasFilter(ctx, "tonemap_opencl")
 	}
 	return false
 }
@@ -506,7 +509,7 @@ func hardwareHint(encoder, stderr string) (detail, raw string) {
 	lower := strings.ToLower(stderr)
 	switch {
 	case encoder == EncoderIntelQSV && strings.Contains(lower, "error creating a mfx session"):
-		detail = "Quick Sync could not start on this GPU. This image supports it on Intel 11th-generation (Tiger Lake) and newer GPUs, including Arc; older Intel GPUs (up to Jasper Lake and Ice Lake) use VA-API, which the Intel setting falls back to by itself."
+		detail = "Quick Sync could not start on this GPU. Check the compatible Intel runtime and GPU access; Intel falls back to VA-API when Quick Sync cannot initialize."
 	case strings.Contains(lower, "unknown encoder"), strings.Contains(lower, "encoder not found"):
 		detail = "This FFmpeg build has no such encoder."
 	case strings.Contains(lower, "not supported by driver"), strings.Contains(lower, "no usable encoding profile"),
@@ -537,4 +540,34 @@ func (h *Hardware) ToneMapFailed(encoder string, err error) {
 	}
 	h.toneMapFailed[encoder] = h.clock()
 	logging.Warn("hardware tone mapping: %s unavailable; using CPU for %s: %v", encoder, hardwareDecodeFailFor, err)
+}
+
+// RenderNodeFor avoids selecting an unrelated GPU on mixed-vendor servers.
+// Tests can still supply Hardware.Device explicitly. Missing vendor metadata
+// is not treated as a compatible device.
+func RenderNodeFor(encoder string) string {
+	vendor := "0x8086"
+	if encoder == EncoderAMDVAAPI {
+		vendor = "0x1002"
+	}
+	nodes, _ := filepath.Glob("/dev/dri/renderD*")
+	sort.Strings(nodes)
+	for _, node := range nodes {
+		raw, err := os.ReadFile(filepath.Join("/sys/class/drm", filepath.Base(node), "device/vendor"))
+		if err == nil && strings.TrimSpace(string(raw)) == vendor {
+			return node
+		}
+	}
+	return ""
+}
+
+// Recheck starts a new explicit calibration without retaining transient driver
+// failures from a preceding stream. The benchmark owner serializes subprocesses.
+func (h *Hardware) Recheck() {
+	h.mu.Lock()
+	defer h.mu.Unlock()
+	h.results = nil
+	h.decodeFailed = nil
+	h.toneMapFailed = nil
+	h.intelPick = ""
 }

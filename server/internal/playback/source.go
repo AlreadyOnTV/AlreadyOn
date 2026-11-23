@@ -38,7 +38,7 @@ func LoadSource(ctx context.Context, db *sql.DB, id int64) (string, library.Prob
 		_ = json.Unmarshal([]byte(raw.String), &source)
 	}
 	v, _ := Tracks(source)
-	if (source.MetadataVersion < 2 && (v.Codec == "hevc" || v.Codec == "av1" || IsHDRTransfer(v.ColorTransfer))) || v.FrameRate <= 0 || v.PixelFormat == "" || source.BitRate <= 0 {
+	if (source.MetadataVersion < 3 && (v.Codec == "hevc" || v.Codec == "av1" || IsHDRTransfer(v.ColorTransfer))) || v.FrameRate <= 0 || v.PixelFormat == "" || source.BitRate <= 0 {
 		probeCtx, cancel := context.WithTimeout(ctx, 10*time.Second)
 		defer cancel()
 		source, err = library.Probe(probeCtx, real)

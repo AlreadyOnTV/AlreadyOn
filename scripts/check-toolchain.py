@@ -42,7 +42,8 @@ assert 'FROM ci-base AS web-build' in dockerfile
 assert 'COPY --from=go-toolchain /usr/local/go /usr/local/go' in ci_dockerfile
 assert 'COPY --from=node-toolchain /usr/local/ /usr/local/' in ci_dockerfile
 assert 'FROM ${RUNTIME_BASE} AS ci-base' in ci_dockerfile
-assert base_dockerfile.count('FROM ubuntu:${UBUNTU_VERSION}') == 2, 'Ubuntu stages must share their version'
+ubuntu_stages = re.findall(r'^FROM ubuntu:(.+?)\s', base_dockerfile, re.M)
+assert len(ubuntu_stages) >= 2 and set(ubuntu_stages) == {'${UBUNTU_VERSION}'}, 'Ubuntu stages must share their version'
 if args.installed:
     actual_go = subprocess.check_output(['go', 'version'], text=True).split()[2][2:]
     actual_node = subprocess.check_output(['node', '--version'], text=True).strip().lstrip('v')

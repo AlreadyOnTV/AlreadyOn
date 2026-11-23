@@ -70,7 +70,6 @@ internal fun TvGuide(state: PhoneState, palette: PhonePalette, modifier: Modifie
     BoxWithConstraints(modifier.guideNavigationInput(onNavigation, onGuideExit)) {
     // Fit exactly two hours beside the fixed channel column at every viewport width.
     val minuteWidth = ((maxWidth.value - 100).coerceAtLeast(1f) / 120).dp
-    val bottomPadding = (maxHeight - 34.dp - 56.dp).coerceAtLeast(0.dp)
     Column(Modifier.fillMaxSize()) {
         Row(Modifier.fillMaxWidth().background(palette.alternate).testTag("guide-timeline").semantics { stateDescription = origin.toString() }) {
             GuideClock(state.profile?.timeFormat, palette, Modifier.width(100.dp).padding(4.dp))
@@ -92,8 +91,7 @@ internal fun TvGuide(state: PhoneState, palette: PhonePalette, modifier: Modifie
             }
         }) {
         LazyColumn(state = rows, verticalArrangement = Arrangement.spacedBy(4.dp),
-            modifier = Modifier.testTag("guide-rows"),
-            contentPadding = PaddingValues(bottom = bottomPadding)) {
+            modifier = Modifier.testTag("guide-rows")) {
             if (channels.isEmpty()) item { Text("No channels are available for this profile.") }
             itemsIndexed(channels, key = { _, channel -> channel.id }) { index, channel ->
                 var focused by remember { mutableStateOf(false) }
@@ -148,12 +146,17 @@ internal fun TvGuide(state: PhoneState, palette: PhonePalette, modifier: Modifie
                                                     // Reveal only the clipped distance, equally in both directions.
                                                     val layout = rows.layoutInfo
                                                     val target = layout.visibleItemsInfo.find { it.index == next }
-                                                    val distance = if (target == null) {
+                                                    val fallback = if (target == null) {
                                                         val current = layout.visibleItemsInfo.find { it.index == index }
                                                         ((current?.size ?: 0) + layout.mainAxisItemSpacing) * if (next > index) 1f else -1f
-                                                    } else if (target.offset < layout.viewportStartOffset) {
-                                                        (target.offset - layout.viewportStartOffset).toFloat()
-                                                    } else (target.offset + target.size - layout.viewportEndOffset).coerceAtLeast(0).toFloat()
+                                                    } else 0f
+                                                    val distance = guideVerticalRevealDistance(
+                                                        target?.offset,
+                                                        target?.size ?: 0,
+                                                        layout.viewportStartOffset,
+                                                        layout.viewportEndOffset,
+                                                        fallback,
+                                                    )
                                                     // Wrapped/skipped targets may not be composed; attach them before requesting focus.
                                                     if (kotlin.math.abs(next - index) > 1) rows.scrollToItem(next)
                                                     else if (distance != 0f) rows.animateScrollBy(distance, tween(140))

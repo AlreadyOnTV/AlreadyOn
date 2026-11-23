@@ -12,35 +12,55 @@ import (
 )
 
 var ErrServerStarting = errors.New("Server starting, please wait.")
+var ErrBenchmarkRunning = errors.New("Video transcoding test is running. Try playback again when it finishes.")
 
 // Benchmarks owns startup readiness and one complete measurement group. Admission
 // and start decisions share a mutex so a new viewer cannot race an idle check.
 type Benchmarks struct {
-	Context         context.Context
-	Governor        *governor.Governor
-	Busy            func() bool
-	Steps           []func(context.Context)
-	StartupSteps    []func(context.Context)
-	StartupBudget   time.Duration
-	mu              sync.Mutex
-	cancel          context.CancelFunc
-	done            chan struct{}
-	admissions      int
-	ready           atomic.Bool
-	requested       atomic.Bool
-	requestRevision atomic.Uint64
+	Context       context.Context
+	Governor      *governor.Governor
+	Busy          func() bool
+	Steps         []func(context.Context)
+	StartupSteps  []func(context.Context)
+	MiniSteps     []func(context.Context)
+	StartupBudget time.Duration
+	mode          string
+	startedAt     time.Time
+	pendingMode   string
+	pendingManual bool
+	requestWorker bool
+	generation    uint64
+	outcome       string
+	manual        bool
+	lastManual    bool
+	stopRequested bool
+	mu            sync.Mutex
+	cancel        context.CancelFunc
+	done          chan struct{}
+	admissions    int
+	ready         atomic.Bool
 }
 
 func (b *Benchmarks) Ready() bool   { return b.ready.Load() }
 func (b *Benchmarks) Running() bool { b.mu.Lock(); defer b.mu.Unlock(); return b.done != nil }
 func (b *Benchmarks) Start(startup bool) bool {
+	mode := "full"
+	if startup {
+		mode = "mini"
+	}
+	return b.start(startup, mode, false, false)
+}
+func (b *Benchmarks) start(startup bool, mode string, requested, manual bool) bool {
 	b.mu.Lock()
 	defer b.mu.Unlock()
+	if !startup && !requested && b.pendingMode != "" {
+		return false
+	}
 	if b.done != nil || (!startup && (!b.ready.Load() || b.admissions > 0 || b.Busy != nil && b.Busy())) {
 		return false
 	}
 	ctx, cancel := context.WithCancel(b.Context)
-	if startup {
+	if mode == "mini" {
 		budget := b.StartupBudget
 		if budget <= 0 {
 			budget = 120 * time.Second
@@ -50,6 +70,11 @@ func (b *Benchmarks) Start(startup bool) bool {
 	}
 	done := make(chan struct{})
 	b.done, b.cancel = done, cancel
+	b.mode, b.startedAt = mode, time.Now()
+	b.manual = manual
+	b.lastManual = manual
+	b.stopRequested = false
+	b.outcome = ""
 	// Reserve before launching so no lower-priority work can enter the startup gap.
 	release := b.Governor.Reserve(governor.PriorityBenchmark)
 	ctx = governor.WithPriority(ctx, governor.PriorityBenchmark)
@@ -57,8 +82,14 @@ func (b *Benchmarks) Start(startup bool) bool {
 		defer cancel()
 		_, finish := activity.Default.Start("Performance Benchmarks", "benchmarking", 0)
 		steps := b.Steps
-		if startup && b.StartupSteps != nil {
-			steps = b.StartupSteps
+		if mode == "mini" {
+			if startup && b.StartupSteps != nil {
+				steps = b.StartupSteps
+			} else if b.MiniSteps != nil {
+				steps = b.MiniSteps
+			} else if b.StartupSteps != nil {
+				steps = b.StartupSteps
+			}
 		}
 		for _, step := range steps {
 			if ctx.Err() != nil {
@@ -72,7 +103,18 @@ func (b *Benchmarks) Start(startup bool) bool {
 		if startup && b.Context.Err() == nil {
 			b.ready.Store(true)
 		}
+		b.outcome = "completed"
+		if errors.Is(ctx.Err(), context.DeadlineExceeded) {
+			b.outcome = "time-limit"
+		} else if ctx.Err() != nil {
+			if b.stopRequested {
+				b.outcome = "stopped"
+			} else {
+				b.outcome = "interrupted"
+			}
+		}
 		b.done, b.cancel = nil, nil
+		b.manual, b.stopRequested = false, false
 		close(done)
 		b.mu.Unlock()
 	}()
@@ -100,6 +142,10 @@ func (b *Benchmarks) Admit(ctx context.Context) (func(), error) {
 	if !b.ready.Load() {
 		b.mu.Unlock()
 		return func() {}, ErrServerStarting
+	}
+	if b.manual || b.pendingManual {
+		b.mu.Unlock()
+		return func() {}, ErrBenchmarkRunning
 	}
 	b.admissions++
 	done := b.done
@@ -160,33 +206,115 @@ func (b *Benchmarks) runPeriodic(ctx context.Context, next func(time.Time) time.
 	}
 }
 
-// Request coalesces settings/manual triggers into one pending idle-only rerun.
-func (b *Benchmarks) Request() {
-	b.requestRevision.Add(1)
-	if b.Start(false) {
+// Mini and Full replace an in-flight group. Teardown completes before the new
+// group starts; generation checks prevent a superseded request from starting.
+func (b *Benchmarks) Mini()          { b.request("mini", true, true) }
+func (b *Benchmarks) AutomaticMini() { b.request("mini", true, false) }
+func (b *Benchmarks) Full()          { b.request("full", true, true) }
+func (b *Benchmarks) request(mode string, replace, manual bool) {
+	b.mu.Lock()
+	b.generation++
+	b.pendingMode = mode
+	b.pendingManual = manual
+	if replace && b.cancel != nil {
+		b.cancel()
+	}
+	if b.requestWorker {
+		b.mu.Unlock()
 		return
 	}
-	if !b.requested.CompareAndSwap(false, true) {
-		return
-	}
+	b.requestWorker = true
+	b.mu.Unlock()
 	go func() {
-		ticker := time.NewTicker(250 * time.Millisecond)
+		ticker := time.NewTicker(100 * time.Millisecond)
 		defer ticker.Stop()
 		for {
-			select {
-			case <-b.Context.Done():
-				b.requested.Store(false)
+			b.mu.Lock()
+			if b.Context.Err() != nil {
+				b.pendingMode = ""
+				b.requestWorker = false
+				b.mu.Unlock()
 				return
-			case <-ticker.C:
-				revision := b.requestRevision.Load()
-				if b.Start(false) {
-					b.requested.Store(false)
-					if b.requestRevision.Load() != revision {
-						b.Request()
-					}
+			}
+			mode, revision := b.pendingMode, b.generation
+			manual := b.pendingManual
+			if mode == "" {
+				b.requestWorker = false
+				b.mu.Unlock()
+				return
+			}
+			b.mu.Unlock()
+			if b.start(false, mode, true, manual) {
+				b.mu.Lock()
+				if b.generation == revision {
+					b.pendingMode = ""
+					b.pendingManual = false
+					b.requestWorker = false
+					b.mu.Unlock()
 					return
 				}
+				if b.cancel != nil {
+					b.cancel()
+				}
+				b.mu.Unlock()
+			}
+			select {
+			case <-b.Context.Done():
+			case <-ticker.C:
 			}
 		}
 	}()
+}
+
+// Stop cancels an active group and any queued manual request. Completed cases
+// remain persisted by the calibration step; cancellation cleans each subprocess
+// and its temporary output directory before the group becomes idle.
+func (b *Benchmarks) Stop() {
+	b.mu.Lock()
+	b.generation++
+	b.pendingMode = ""
+	b.pendingManual = false
+	b.stopRequested = b.done != nil
+	b.outcome = "stopped"
+	if b.cancel != nil {
+		b.cancel()
+	}
+	b.mu.Unlock()
+}
+
+type BenchmarkStatus struct {
+	State         string            `json:"state"`
+	Mode          string            `json:"mode"`
+	StartedAt     time.Time         `json:"startedAt,omitempty"`
+	Outcome       string            `json:"outcome"`
+	Profiles      []ProfileCapacity `json:"profiles,omitempty"`
+	Tasks         []activity.Task   `json:"tasks"`
+	ActiveStreams int               `json:"activeStreams"`
+	QuickAt       time.Time         `json:"quickAt,omitempty"`
+	FullAt        time.Time         `json:"fullAt,omitempty"`
+	QuickProfiles int               `json:"quickProfiles"`
+	FullProfiles  int               `json:"fullProfiles"`
+	RecommendFull bool              `json:"recommendFull"`
+	Manual        bool              `json:"manual"`
+}
+
+func (b *Benchmarks) Status() BenchmarkStatus {
+	b.mu.Lock()
+	defer b.mu.Unlock()
+	state, mode := "idle", b.mode
+	if b.done != nil {
+		state = "running"
+	}
+	if b.pendingMode != "" {
+		state = "queued"
+		mode = b.pendingMode
+	}
+	tasks := []activity.Task{}
+	for _, task := range activity.Default.Snapshot(time.Now()) {
+		switch task.Name {
+		case "Performance Benchmarks", "Representative Capacity Validation", "CPU fallback tuning", "Pipeline analysis":
+			tasks = append(tasks, task)
+		}
+	}
+	return BenchmarkStatus{State: state, Mode: mode, StartedAt: b.startedAt, Outcome: b.outcome, Tasks: tasks, Manual: b.lastManual}
 }

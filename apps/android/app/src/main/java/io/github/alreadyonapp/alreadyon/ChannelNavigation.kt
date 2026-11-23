@@ -11,3 +11,17 @@ internal fun nextPlayableChannel(channels: List<GuideChannel>, currentId: Long, 
         else Math.floorMod(current + if (direction > 0) 1 else -1, available.size)
     return available[index].takeUnless { it.id == currentId }
 }
+
+/** Scroll only enough to reveal a row inside the current guide viewport. */
+internal fun guideVerticalRevealDistance(
+    targetOffset: Int?,
+    targetSize: Int,
+    viewportStart: Int,
+    viewportEnd: Int,
+    fallback: Float,
+): Float = when {
+    targetOffset == null -> fallback
+    targetOffset < viewportStart -> (targetOffset - viewportStart).toFloat()
+    targetOffset + targetSize > viewportEnd -> (targetOffset + targetSize - viewportEnd).toFloat()
+    else -> 0f
+}

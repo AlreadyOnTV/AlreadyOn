@@ -1852,61 +1852,6 @@ paths:
               schema:
                 $ref: "#/components/schemas/Error"
 
-  /api/settings/transcoding/test:
-    post:
-      x-alreadyon-roles: [owner]
-      operationId: testTranscoding
-      tags: [settings]
-      summary: Try a Transcoding choice on this host
-      description: >
-        Encodes a second of synthetic video with the named encoder and reports
-        whether it worked. With `decoding` true it instead decodes a synthetic
-        H.264 clip on that GPU (needs a hardware `transcoding` choice; nothing
-        is cached and streams do not use hardware decoding yet). A hardware choice is used for streams only while this
-        test (run automatically, then every ten minutes; a failure is retried
-        after a minute) passes; otherwise streams use software. The host drivers
-        and the device (for example `/dev/dri`) must already be in place.
-      requestBody:
-        required: true
-        content:
-          application/json:
-            schema:
-              type: object
-              additionalProperties: false
-              required: [transcoding]
-              properties:
-                transcoding:
-                  type: string
-                  enum: [software, intel, nvidia-nvenc, amd-vaapi]
-                decoding:
-                  type: boolean
-                  description: Test hardware decoding instead of encoding. Default false.
-      responses:
-        "200":
-          description: The result (a failed test is still 200, with ok false)
-          content:
-            application/json:
-              schema:
-                type: object
-                properties:
-                  encoder: { type: string }
-                  device:
-                    {
-                      type: string,
-                      description: The DRI render node used,
-                      if any.,
-                    }
-                  ok: { type: boolean }
-                  detail:
-                    {
-                      type: string,
-                      description: What happened and the likely cause.,
-                    }
-        "400":
-          description: Not one of the allowed choices
-        "503":
-          description: Hardware testing is not available
-
   /api/settings/transcoding/threads:
     get:
       x-alreadyon-roles: [owner]
@@ -1956,23 +1901,79 @@ paths:
         "503":
           description: Thread tuning is not available
 
-  /api/settings/transcoding/threads/tune:
+  /api/settings/transcoding/benchmark:
+    get:
+      x-alreadyon-roles: [owner]
+      operationId: getBenchmarkProgress
+      tags: [settings]
+      summary: Current quick or full benchmark progress
+      description: Poll every five seconds. Reports running/queued/idle, quick/full, outcome, current test progress, active streams, saved quick/full result counts and measured sample profiles. GPU telemetry and reference SSIM are optional; missing values are not zero load or perfect quality.
+      responses:
+        "200":
+          description: Benchmark progress and measured profiles
+          content:
+            application/json:
+              schema:
+                type: object
+                properties:
+                  state: { type: string, enum: [idle, queued, running] }
+                  mode: { type: string, enum: [mini, full, ""] }
+                  outcome: { type: string }
+                  startedAt: { type: string, format: date-time }
+                  activeStreams: { type: integer }
+                  quickAt: { type: string, format: date-time }
+                  fullAt: { type: string, format: date-time }
+                  quickProfiles: { type: integer }
+                  fullProfiles: { type: integer }
+                  recommendFull: { type: boolean }
+                  manual:
+                    type: boolean
+                    description: The last run was explicitly requested from Server Settings.
+                  tasks: { type: array, items: { type: object } }
+                  profiles: { type: array, items: { type: object } }
+        "503": { description: Benchmarking unavailable }
     post:
       x-alreadyon-roles: [owner]
-      operationId: tuneTranscodeThreads
+      operationId: startTranscodingBenchmark
       tags: [settings]
-      summary: Measure the CPU thread count now
+      summary: Start a quick or full video transcoding test
       description: >
-        Requests the sequential thread/capacity/HDR benchmark group. Waits until
-        no streams are active, coalescing pending requests. Answers 202; poll
-        `GET /api/settings/transcoding/threads` for status. Startup benchmarking
-        blocks playback; recurring measurements yield to new playback.
+        Quick mode pauses active streams and background jobs, then runs the
+        startup-equivalent test with a two-minute limit. Full mode pauses
+        background work and returns 409 while active streams exist unless the
+        request confirms that they may be paused. Completed cases are saved as
+        the test proceeds, separately for quick and full runs. Full tests
+        target about ten minutes while retaining every pipeline and concurrency
+        case; each throughput sample uses a two-second steady-state window and
+        borderline results retain an independent confirmation sample.
+      requestBody:
+        required: true
+        content:
+         application/json:
+           schema:
+             type: object
+             required: [mode]
+             additionalProperties: false
+             properties:
+               mode: { type: string, enum: [quick, full] }
+               allowActiveStreams:
+                 type: boolean
+                 default: false
+                 description: Required to start a full test while streams are active.
       responses:
-        "202":
-          description: Measuring
-        "503":
-          description: Thread tuning is not available
-
+        "202": { description: Test accepted }
+        "400": { description: Invalid test mode }
+        "409": { description: Active streams need confirmation }
+        "503": { description: Benchmarking unavailable or streams could not stop }
+    delete:
+      x-alreadyon-roles: [owner]
+      operationId: stopTranscodingBenchmark
+      tags: [settings]
+      summary: Stop the current video transcoding test
+      description: Cancels queued or running work and removes in-flight temporary files after subprocess teardown. Completed cases remain saved.
+      responses:
+        "202": { description: Stop accepted }
+        "503": { description: Benchmarking unavailable }
   /api/settings/transcoding/capacity:
     get:
       x-alreadyon-roles: [owner]
@@ -1980,26 +1981,15 @@ paths:
       tags: [settings]
       summary: What this server measured about its own encoding speed
       description: >
-        The server times software conversions of a 1080p60 test video at
-        1080p60, 1080p30, 720p60, 720p30, 480p30 and 360p30 (best first, stopping
-        at the first that runs at least 1.3 times real time), at startup, when the
-        encoder setting changes and every four hours at local 00:00, 04:00, 08:00,
-        12:00, 16:00 and 20:00, only while no streams are active. The result is stored, so
-        every viewer shares it: Auto quality never goes above the largest size
-        that passed. A hardware encoder is measured at 1080p30 only and has no
-        SDR size limit. Separate process-local HDR measurements use 2160p24, 2160p30 and 2160p60 Main 10
-        fixtures through decode, scale, tone map, encode and HLS mux at 1080p30,
-        720p30, 480p30 and 360p30, also trying 1080p60 and 720p60 for 60fps sources.
-        Film-rate sources use 24fps output. PQ and HLG are tested independently. HDR limits
-        apply only to Auto, matching encoder/decoder/thread settings, HEVC Main 10 source sizes
-        up to 2160p60. Results remain valid within this process while idle-only
-        remeasurement is deferred; pipeline identity must still match. Explicit quality is
-        preserved. HDR measurements run off the request path and are cancelled
-        when automatic measurement encounters playback. Fingerprint-matching representative results may be reused for up to 24 hours.
-        Representative startup calibration completes within a 120-second budget.
-        Parallel limits use simultaneous steady-state frame measurements, checked
-        per stream with a real-time safety margin and memory headroom
-        (unless an administrator picks a number in the playback settings).
+        Reports representative source-specific pipeline measurements, including
+        available CPU/GPU cost, software-reference fidelity and validated concurrent
+        streams. Startup and vendor changes use a 120-second quick check. Full
+        analysis runs on the four-hour idle schedule or an explicit Full Test request;
+        manual tests pause playback and background measurement, while periodic
+        background tests yield before playback admission. Every concurrent
+        stream must meet the real-time safety margin. Unverified paths remain
+        conservative. Cached results require matching fixture, runtime, driver,
+        hardware and resource-limit fingerprints and expire after 24 hours.
       responses:
         "200":
           description: The last measurement and the detected limits
@@ -2087,22 +2077,6 @@ paths:
         "503":
           description: Capacity measurement is not available
 
-  /api/settings/transcoding/capacity/measure:
-    post:
-      x-alreadyon-roles: [owner]
-      operationId: measureServerCapacity
-      tags: [settings]
-      summary: Measure the server's encoding speed now
-      description: >
-        Requests the coordinated thread/capacity/HDR benchmark group when idle.
-        Pending requests coalesce. Answers 202; poll
-        `GET /api/settings/transcoding/capacity` for group status.
-      responses:
-        "202":
-          description: Measuring
-        "503":
-          description: Capacity measurement is not available
-
   /api/server/restart:
     post:
       x-alreadyon-roles: [owner]
@@ -2133,8 +2107,10 @@ paths:
       tags: [settings]
       summary: Transcoding, TLS, ACME and DDNS choices
       description: >
-        The Server tab's choices. `transcoding` is in use (see
-        /api/settings/transcoding/test); TLS/ACME are activated through dedicated TLS endpoints and DDNS through its provider endpoint. Legacy preferences do not activate certificates.
+        The Server tab's choices. `transcoding` is applied to playback and
+        evaluated through `/api/settings/transcoding/benchmark`; TLS/ACME are
+        activated through dedicated TLS endpoints and DDNS through its provider
+        endpoint. Legacy preferences do not activate certificates.
       responses:
         "200":
           description: Current settings
@@ -4797,7 +4773,7 @@ components:
           description: Default none.
         hardwareDecoding:
           type: boolean
-          description: Move decoding, scaling and tone mapping to the GPU too. Default false. Needs a hardware `transcoding` choice (400 otherwise); choosing software turns it off. Used for streams whose source the GPU can decode; a failed GPU step retries on the CPU.
+          description: Compatibility field for older clients. A vendor-only transcoding update enables GPU decoding automatically; software disables it. Explicit older-client values remain accepted and require a hardware transcoding choice when true. Failed GPU stages retry with CPU fallbacks.
 
     DdnsUpdate:
       type: object

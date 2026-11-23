@@ -1437,15 +1437,15 @@ const noWorkers = async (unreleased = () => 0) => {
       "Quality",
       "Audio Tracks",
       "Subtitles",
-      "Picture In Picture",
       "Playback Details",
     ].filter((n) => items.includes(n));
     assert(
       items.join("|") === wanted.join("|") &&
         items[0] === "Quality" &&
         items.at(-1) === "Playback Details" &&
+        !items.includes("Picture In Picture") &&
         !items.includes("Playback Speed"),
-      `Menu order should be Quality, Audio Tracks, Subtitles, Picture In Picture, Playback Details: ${JSON.stringify(items)}`,
+      `Menu order should be Quality, Audio Tracks, Subtitles, Playback Details: ${JSON.stringify(items)}`,
     );
     await page
       .getByRole("menuitem", { name: "Playback Details (off)", exact: true })
@@ -3481,8 +3481,7 @@ const noWorkers = async (unreleased = () => 0) => {
       JSON.stringify(names) ===
         JSON.stringify([
           "Server Name",
-          "Hardware Encoding",
-          "Hardware Decoding",
+          "Video Transcoding",
           "Loudness Detection",
           "TMDb API Key",
           "Dynamic DNS",
@@ -3490,111 +3489,70 @@ const noWorkers = async (unreleased = () => 0) => {
         ]),
       `Settings out of order: ${JSON.stringify(names)}`,
     );
-    // More Info opens a modal for that setting, and Escape closes it.
-    await page
-      .locator(".setting-row", { hasText: "Hardware Encoding" })
-      .first()
-      .getByRole("button", { name: "More Info" })
-      .click();
-    const modal = page.getByRole("dialog", { name: "Hardware Encoding" });
-    await modal.waitFor();
+    const row = page.locator(".setting-row", {hasText: "Video Transcoding"}).first();
+    await row.getByRole("button", {name: "More Info"}).click();
+    await page.getByRole("dialog", {name: "Video Transcoding"}).waitFor();
     await page.keyboard.press("Escape");
-    await modal.waitFor({ state: "detached" });
-    // A hardware choice can be tested; the result says whether it works here, and Reset Default goes back.
-    const row = page
-      .locator(".setting-row", { hasText: "Hardware Encoding" })
-      .first();
-    const decodeRow = page
-      .locator(".setting-row", { hasText: "Hardware Decoding" })
-      .first();
+    assert((await row.locator("option").allTextContents()).join("|") === "CPU Only (Default)|Intel|AMD|NVIDIA", "Processing vendor choices");
     assert(
-      (await row.getByRole("button", { name: "Test" }).count()) === 0,
-      "Software needs no test button",
+      (await row.getByRole("button", {name: "Quick Test", exact: true}).count()) === 1 &&
+        (await row.getByRole("button", {name: "Full Test", exact: true}).count()) === 1,
+      "Video transcoding exposes separate quick and full tests",
     );
-    // Hardware Decoding needs a hardware encoder: locked with software, and software turns it back off.
+    const quickStarted = page.waitForResponse(
+      r =>
+        r.url().endsWith("/api/settings/transcoding/benchmark") &&
+        r.request().method() === "POST",
+    );
+    await row.getByRole("button", {name: "Quick Test", exact: true}).click();
+    assert((await quickStarted).status() === 202, "Quick Test endpoint is registered");
+    await row.getByRole("button", {name: "Stop Test", exact: true}).waitFor();
+    const quickStopped = page.waitForResponse(
+      r =>
+        r.url().endsWith("/api/settings/transcoding/benchmark") &&
+        r.request().method() === "DELETE",
+    );
+    await row.getByRole("button", {name: "Stop Test", exact: true}).click();
+    assert((await quickStopped).status() === 202, "Quick Test can be stopped");
+    await row.getByRole("button", {name: "Quick Test", exact: true}).waitFor();
+    const benchmarkStatus = await (await page.request.get(url + "/api/settings/transcoding/benchmark")).json();
+    await page.route("**/api/settings/transcoding/benchmark", async route => {
+      if (route.request().method() === "GET") {
+        await route.fulfill({json: {...benchmarkStatus, activeStreams: 1}});
+      } else {
+        await route.continue();
+      }
+    });
+    await row.getByRole("button", {name: "Full Test", exact: true}).click();
+    const activeStreamsDialog = page.getByRole("dialog", {name: "Active Streams Detected"});
+    await activeStreamsDialog.waitFor();
     assert(
-      (await decodeRow.locator("select").isEnabled()) === false,
-      "Hardware Decoding must wait for a hardware encoder",
+      (await activeStreamsDialog.textContent()).includes("Test Anyway"),
+      "Full Test warns before pausing active streams",
     );
-    await decodeRow.getByRole("button", { name: "More Info" }).click();
-    await page.getByRole("dialog", { name: "Hardware Decoding" }).waitFor();
-    await page.keyboard.press("Escape");
-    await decodeRow.locator("select").waitFor();
-    await row.locator("select").selectOption("intel");
-    assert(
-      await decodeRow.locator("select").isEnabled(),
-      "Hardware Decoding should unlock with a hardware encoder",
-    );
-    assert(
-      (await decodeRow.getByRole("button", { name: "Test" }).count()) === 0,
-      "Disabled decoding needs no test button",
-    );
-    assert(
-      (await decodeRow.locator("option").allTextContents()).join("|") ===
-        "Disabled (Default)|Enabled",
-      "Decoding options should be Disabled (Default) and Enabled",
-    );
-    await decodeRow.locator("select").selectOption("on");
-    await row.getByRole("button", { name: "Test" }).click();
-    await row
-      .locator(".setting-note", { hasText: /^[✓✗]/ })
-      .waitFor({ timeout: 30000 });
-    await decodeRow.getByRole("button", { name: "Test" }).click();
-    await decodeRow
-      .locator(".setting-note", { hasText: /^[✓✗]/ })
-      .waitFor({ timeout: 30000 });
-    await row.getByRole("button", { name: "Reset Default" }).click();
-    assert(
-      (await row.locator("select").inputValue()) === "software",
-      "Reset Default should choose software",
-    );
-    assert(
-      (await decodeRow.locator("select").inputValue()) === "off" &&
-        (await decodeRow.locator("select").isEnabled()) === false,
-      "Software should turn Hardware Decoding off",
-    );
-    // Changes enable Save Changes, and Save persists them across a reload.
+    await activeStreamsDialog.getByRole("button", {name: "Cancel", exact: true}).click();
+    await page.unroute("**/api/settings/transcoding/benchmark");
+    const put = page.waitForResponse(r => r.url().endsWith("/api/settings/server") && r.request().method() === "PUT");
+    await row.locator("select").selectOption("intel"); await put;
+    let settings = await (await page.request.get(url + "/api/settings/server")).json();
+    assert(settings.transcoding === "intel" && settings.hardwareDecoding, "Vendor selection immediately enables automatic GPU processing");
+    await row.getByRole("button", {name: "Stop Test", exact: true}).waitFor();
+    const stopped = page.waitForResponse(r => r.url().endsWith("/api/settings/transcoding/benchmark") && r.request().method() === "DELETE");
+    await row.getByRole("button", {name: "Stop Test", exact: true}).click();
+    await stopped;
+    await row.getByRole("button", {name: "Quick Test", exact: true}).waitFor();
+    await page.reload(); await row.locator("select").waitFor();
+    assert(await row.locator("select").inputValue() === "intel", "Vendor survives reload");
+    assert((await row.getByRole("button", {name: "Reset Default", exact: true}).count()) === 0, "Video transcoding no longer exposes Reset Default");
+    const reset = page.waitForResponse(r => r.url().endsWith("/api/settings/server") && r.request().method() === "PUT");
+    await row.locator("select").selectOption("software"); await reset;
+    settings = await (await page.request.get(url + "/api/settings/server")).json();
+    assert(settings.transcoding === "software" && !settings.hardwareDecoding, "CPU reset disables GPU stages");
     const save = page.getByRole("button", { name: "Save Changes" });
-    assert(await save.isDisabled(), "Save Changes should wait for a change");
-    await row.locator("select").selectOption("intel");
-    await decodeRow.locator("select").selectOption("on");
-    await page
-      .getByLabel("Server Name", { exact: true })
-      .fill("Family E2E Library");
-    assert(await save.isEnabled(), "Save Changes should enable after a change");
+    await page.getByLabel("Server Name", {exact:true}).fill("Family E2E Library");
     await Promise.all([page.waitForNavigation(), save.click()]);
     await page.locator(".settings-grid").waitFor();
-    assert(
-      (await row.locator("select").inputValue()) === "intel" &&
-        (await decodeRow.locator("select").inputValue()) === "on",
-      "Saved Hardware Encoding/Decoding should survive a reload",
-    );
-    assert(
-      (await page.getByLabel("Server Name", { exact: true }).inputValue()) ===
-        "Family E2E Library",
-      "Friendly server name survives a reload",
-    );
-    // Browser fixtures run through a proxy; LAN pairing metadata deliberately rejects proxy headers.
-    // Direct HTTPS name propagation is covered by server_name_test.go instead.
-    const namedSettings = await (
-      await page.request.get(url + "/api/settings/server")
-    ).json();
-    assert(
-      namedSettings.serverName === "Family E2E Library",
-      "Settings API immediately uses the renamed server",
-    );
-    assert(
-      await save.isDisabled(),
-      "Save Changes should be off again after saving",
-    );
-    await row.getByRole("button", { name: "Reset Default" }).click();
-    await Promise.all([page.waitForNavigation(), save.click()]);
-    await page.locator(".settings-grid").waitFor();
-    assert(
-      (await row.locator("select").inputValue()) === "software" &&
-        (await decodeRow.locator("select").inputValue()) === "off",
-      "Resetting and saving should persist software",
-    );
+    assert(await page.getByLabel("Server Name", {exact:true}).inputValue() === "Family E2E Library", "Friendly name survives reload");
     if (process.env.SETTINGS_SCREENSHOT_DIR) {
       fs.mkdirSync(process.env.SETTINGS_SCREENSHOT_DIR, { recursive: true });
       for (const tab of [

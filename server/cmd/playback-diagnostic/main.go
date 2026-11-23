@@ -32,12 +32,12 @@ func run() {
 	encoder := flag.String("encoder", "", "intel-qsv, intel-vaapi, or empty for software")
 	threads := flag.Int("threads", 2, "CPU decode/filter budget (1 to 32)")
 	height := flag.Int("height", 1080, "output height (720 or 1080)")
-	tone := flag.String("tone-map", "cpu", "cpu or gpu")
+	tone := flag.String("tone-map", "cpu", "cpu, gpu (fixed-function), or opencl")
 	seconds := flag.Int("seconds", 20, "bounded excerpt duration (2 to 60 seconds)")
 	offset := flag.Int("offset", 0, "source offset seconds")
 	capacity := flag.Bool("capacity", false, "measure synthetic HDR capacity instead of a file")
 	flag.Parse()
-	if *threads < 1 || *threads > 32 || (*encoder != "" && !playback.IsHardwareEncoder(*encoder)) || (*tone != "cpu" && *tone != "gpu") || (*height != 720 && *height != 1080) || *seconds < 2 || *seconds > 60 || *offset < 0 {
+	if *threads < 1 || *threads > 32 || (*encoder != "" && !playback.IsHardwareEncoder(*encoder)) || (*tone != "cpu" && *tone != "gpu" && *tone != "opencl") || (*height != 720 && *height != 1080) || *seconds < 2 || *seconds > 60 || *offset < 0 {
 		panic("invalid diagnostic options")
 	}
 	ctx, cancel := context.WithTimeout(context.Background(), 10*time.Minute)
@@ -56,7 +56,7 @@ func run() {
 	}
 	probe, err := library.Probe(ctx, *file)
 	must(err)
-	caps := playback.Capabilities{HLS: true, Mbps: 100, Encoder: *encoder, HWDecode: *encoder != "", HWToneMap: *tone == "gpu", MaxHeight: *height,
+	caps := playback.Capabilities{HLS: true, Mbps: 100, Encoder: *encoder, HWDecode: *encoder != "", HWToneMap: *tone == "gpu" || *tone == "opencl", HWToneMapMethod: *tone, MaxHeight: *height,
 		Video: []playback.VideoCapability{{Codec: "h264", Profile: "High", Level: 42, Width: 1920, Height: 1080, FPS: 60, Bitrate: 20000000, PixelFormat: "yuv420p"}},
 		Audio: []playback.AudioCapability{{Codec: "aac", Channels: 2, SampleRate: 48000, Bitrate: 320000}}}
 	plan, err := playback.Choose(probe, caps, false, true)
@@ -64,7 +64,7 @@ func run() {
 	dir, err := os.MkdirTemp("", "alreadyon-hdr-diagnostic-")
 	must(err)
 	defer os.RemoveAll(dir)
-	job := playback.Job{Path: *file, Source: probe, Plan: plan, Offset: time.Duration(*offset) * time.Second, Duration: time.Duration(*seconds) * time.Second, OutputDir: dir, Threads: *threads, Device: playback.RenderNode()}
+	job := playback.Job{Path: *file, Source: probe, Plan: plan, Offset: time.Duration(*offset) * time.Second, Duration: time.Duration(*seconds) * time.Second, OutputDir: dir, Threads: *threads, Device: playback.RenderNodeFor(*encoder)}
 	args, err := playback.Arguments(job)
 	must(err)
 	var fast []string

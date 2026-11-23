@@ -283,13 +283,11 @@ func run() (restart bool) {
 	benchmarks := &playback.Benchmarks{Context: ctx, Governor: background,
 		Busy:         func() bool { processes, _, viewers := streams.Counts(); return processes > 0 || viewers > 0 },
 		StartupSteps: []func(context.Context){calibration.Startup},
-		Steps: []func(context.Context){
-			func(c context.Context) { tuner.Measure(c) },
-			func(c context.Context) { capacity.Measure(c) },
-			calibration.Full,
-		},
+		MiniSteps:    []func(context.Context){calibration.Quick},
+		Steps:        []func(context.Context){calibration.Full},
 	}
 	playbackHTTP.Benchmarks = benchmarks
+	playbackHTTP.Calibration = calibration
 
 	logging.StartHeartbeat(ctx, 15*time.Minute, 30*time.Second)
 

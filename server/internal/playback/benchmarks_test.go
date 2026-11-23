@@ -164,3 +164,119 @@ func TestStartupDeadlineReleasesPlaybackAfterTeardown(t *testing.T) {
 		t.Fatal("readiness preceded teardown")
 	}
 }
+
+func TestFullRequestCancelsMiniAndWaitsForTeardown(t *testing.T) {
+	ctx, cancel := context.WithCancel(t.Context())
+	defer cancel()
+	miniEntered, miniStopped, allowStop, fullEntered := make(chan struct{}), make(chan struct{}), make(chan struct{}), make(chan struct{})
+	b := &Benchmarks{Context: ctx, Governor: governor.Fixed(4), StartupSteps: []func(context.Context){func(c context.Context) { close(miniEntered); <-c.Done(); close(miniStopped); <-allowStop }}, Steps: []func(context.Context){func(c context.Context) { close(fullEntered); <-c.Done() }}}
+	b.ready.Store(true)
+	b.Mini()
+	<-miniEntered
+	b.Full()
+	<-miniStopped
+	select {
+	case <-fullEntered:
+		t.Fatal("full benchmark overlapped mini teardown")
+	case <-time.After(20 * time.Millisecond):
+	}
+	close(allowStop)
+	select {
+	case <-fullEntered:
+	case <-time.After(time.Second):
+		t.Fatal("full benchmark did not replace mini")
+	}
+	if s := b.Status(); s.Mode != "full" || s.State != "running" {
+		t.Fatal(s)
+	}
+	cancel()
+	if err := b.Wait(t.Context()); err != nil {
+		t.Fatal(err)
+	}
+}
+
+func TestSettingMiniNeverRunsFullSteps(t *testing.T) {
+	var mini, full atomic.Int32
+	b := &Benchmarks{Context: t.Context(), Governor: governor.Fixed(1), StartupSteps: []func(context.Context){func(context.Context) { mini.Add(1) }}, Steps: []func(context.Context){func(context.Context) { full.Add(1) }}}
+	b.ready.Store(true)
+	b.Mini()
+	deadline := time.After(time.Second)
+	for mini.Load() == 0 {
+		select {
+		case <-deadline:
+			t.Fatal("mini not started")
+		default:
+			time.Sleep(time.Millisecond)
+		}
+	}
+	if err := b.Wait(t.Context()); err != nil {
+		t.Fatal(err)
+	}
+	if full.Load() != 0 {
+		t.Fatal("settings launched full benchmark")
+	}
+}
+
+func TestScheduledGroupCannotOvertakePendingMini(t *testing.T) {
+	b := &Benchmarks{Context: t.Context(), Governor: governor.Fixed(1), pendingMode: "mini"}
+	b.ready.Store(true)
+	if b.Start(false) {
+		t.Fatal("scheduled full run overtook the pending mini")
+	}
+	if !b.start(false, "mini", true, true) {
+		t.Fatal("requested mini was blocked by itself")
+	}
+	if err := b.Wait(t.Context()); err != nil {
+		t.Fatal(err)
+	}
+}
+
+func TestManualBenchmarkBlocksPlaybackUntilStopped(t *testing.T) {
+	entered := make(chan struct{})
+	b := &Benchmarks{Context: t.Context(), Governor: governor.Fixed(1), MiniSteps: []func(context.Context){func(ctx context.Context) {
+		close(entered)
+		<-ctx.Done()
+	}}}
+	b.ready.Store(true)
+	b.Mini()
+	<-entered
+	if _, err := b.Admit(t.Context()); !errors.Is(err, ErrBenchmarkRunning) {
+		t.Fatalf("manual test admitted playback: %v", err)
+	}
+
+	b.Stop()
+	if err := b.Wait(t.Context()); err != nil {
+		t.Fatal(err)
+	}
+	if status := b.Status(); status.State != "idle" || status.Outcome != "stopped" {
+		t.Fatal(status)
+	}
+	release, err := b.Admit(t.Context())
+	if err != nil {
+		t.Fatal(err)
+	}
+	release()
+}
+
+func TestBenchmarkStatusIdentifiesManualQuickRun(t *testing.T) {
+	entered, stopped := make(chan struct{}), make(chan struct{})
+	b := &Benchmarks{Context: t.Context(), Governor: governor.Fixed(1), MiniSteps: []func(context.Context){func(ctx context.Context) {
+		close(entered)
+		<-ctx.Done()
+		close(stopped)
+	}}}
+	b.ready.Store(true)
+	b.Mini()
+	<-entered
+	if status := b.Status(); !status.Manual || status.Mode != "mini" {
+		t.Fatalf("running status: %+v", status)
+	}
+	b.Stop()
+	<-stopped
+	if err := b.Wait(t.Context()); err != nil {
+		t.Fatal(err)
+	}
+	if status := b.Status(); !status.Manual || status.Mode != "mini" {
+		t.Fatalf("completed status: %+v", status)
+	}
+}

@@ -24,12 +24,16 @@ type calibrationCache struct {
 	Profiles    []ProfileCapacity
 }
 
+func benchmarkCachePath(dataDir, mode string) string {
+	return filepath.Join(dataDir, "benchmark-cache-"+mode+".json")
+}
+
 // Raw hardware/cgroup data stays out of the cache; only a digest is persisted.
 // Changes to the fixture recipe, runtime libraries, driver/kernel, CPU features,
 // quotas, memory limits or encoder policy invalidate previous measurements.
 func (c *Calibration) fingerprint(ctx context.Context, inputs *benchmarkInputs) (string, error) {
 	hash := sha256.New()
-	fmt.Fprintf(hash, "calibration-policy-v2\n%s\n%d:%d\n", inputs.fingerprint, runtime.NumCPU(), runtime.GOMAXPROCS(0))
+	fmt.Fprintf(hash, "calibration-policy-v8\n%s\n%d:%d\n", inputs.fingerprint, runtime.NumCPU(), runtime.GOMAXPROCS(0))
 	for _, exe := range []string{"ffmpeg", "ffprobe"} {
 		raw, err := exec.CommandContext(ctx, exe, "-version").Output()
 		if err != nil {
@@ -37,7 +41,7 @@ func (c *Calibration) fingerprint(ctx context.Context, inputs *benchmarkInputs) 
 		}
 		hash.Write(raw)
 	}
-	for _, path := range []string{"/proc/sys/kernel/osrelease", "/sys/fs/cgroup/cpu.max", "/sys/fs/cgroup/cpuset.cpus.effective", "/sys/fs/cgroup/memory.max", "/sys/class/drm/renderD128/device/vendor", "/sys/class/drm/renderD128/device/device", "/sys/class/drm/renderD128/device/driver/module/version", "/sys/module/i915/srcversion", "/sys/module/xe/srcversion", "/proc/driver/nvidia/version"} {
+	for _, path := range []string{"/var/lib/dpkg/status", "/usr/local/share/alreadyon/build-version", "/usr/local/share/alreadyon/ffmpeg-build/packages.txt", "/proc/sys/kernel/osrelease", "/sys/fs/cgroup/cpu.max", "/sys/fs/cgroup/cpuset.cpus.effective", "/sys/fs/cgroup/memory.max", "/sys/class/drm/renderD128/device/vendor", "/sys/class/drm/renderD128/device/device", "/sys/class/drm/renderD128/device/driver/module/version", "/sys/module/i915/srcversion", "/sys/module/xe/srcversion", "/proc/driver/nvidia/version"} {
 		raw, err := os.ReadFile(path)
 		fmt.Fprintf(hash, "%s:%t\n", path, err == nil)
 		hash.Write(raw)
@@ -62,11 +66,20 @@ func readCalibrationCache(path, fingerprint string) (calibrationCache, bool) {
 	if err != nil || json.Unmarshal(raw, &cached) != nil {
 		return cached, false
 	}
-	if cached.Fingerprint != fingerprint || cached.At.After(time.Now()) || time.Since(cached.At) > 24*time.Hour || cached.Threads < 1 || cached.Threads > MaxThreads || len(cached.Profiles) > 32 || len(cached.Status.Samples) > 128 || len(cached.HDR) > 32 {
+	if cached.Fingerprint != fingerprint || cached.At.After(time.Now()) || time.Since(cached.At) > 24*time.Hour || cached.Threads < 1 || cached.Threads > MaxThreads || len(cached.Profiles) == 0 || len(cached.Profiles) > 256 || len(cached.Status.Samples) > 128 || len(cached.HDR) > 128 {
 		return calibrationCache{}, false
 	}
 	for _, p := range cached.Profiles {
 		if p.Threads < 1 || p.Threads > MaxThreads || p.Streams < 0 || p.Streams > MaxParallel || p.Height < 1 || p.Height > 2160 || p.FPS <= 0 || p.FPS > 60 || p.SourceFPS <= 0 || p.SourceFPS > 60 || p.SourceWidth < 1 || p.SourceWidth > 3840 || p.SourceHeight < 1 || p.SourceHeight > 2160 || len(p.Speeds) > MaxParallel || math.IsNaN(p.SingleSpeed) || math.IsInf(p.SingleSpeed, 0) || p.SingleSpeed < 0 || p.SingleSpeed > 100000 {
+			return calibrationCache{}, false
+		}
+		if p.SingleStreamSpeed < 0 || p.SingleStreamSpeed > 100000 || math.IsNaN(p.SingleStreamSpeed) || math.IsInf(p.SingleStreamSpeed, 0) || p.CPUCores < 0 || p.CPUCores > 1024 || math.IsNaN(p.CPUCores) || math.IsInf(p.CPUCores, 0) {
+			return calibrationCache{}, false
+		}
+		if p.GPUEngines != nil && (*p.GPUEngines < 0 || *p.GPUEngines > 128) {
+			return calibrationCache{}, false
+		}
+		if p.ReferenceSSIM != nil && (*p.ReferenceSSIM < 0 || *p.ReferenceSSIM > 1) {
 			return calibrationCache{}, false
 		}
 		for _, speed := range p.Speeds {
@@ -77,14 +90,12 @@ func readCalibrationCache(path, fingerprint string) (calibrationCache, bool) {
 	}
 	return cached, true
 }
-func (c *Calibration) save(ctx context.Context, fingerprint string) {
-	if c.DataDir == "" || ctx.Err() != nil {
+func (c *Calibration) save(fingerprint, mode string, profiles []ProfileCapacity) {
+	if c.DataDir == "" {
 		return
 	}
 	threads := c.Tuner.Threads()
-	c.Capacity.mu.Lock()
-	record := calibrationCache{Fingerprint: fingerprint, At: time.Now(), Threads: threads, Status: c.Capacity.status, HDR: append([]HDRCapacity(nil), c.Capacity.hdr...), Profiles: append([]ProfileCapacity(nil), c.Capacity.profiles...)}
-	c.Capacity.mu.Unlock()
+	record := calibrationCache{Fingerprint: fingerprint, At: time.Now(), Threads: threads, Profiles: append([]ProfileCapacity(nil), profiles...)}
 	raw, err := json.Marshal(record)
 	if err != nil {
 		return
@@ -102,5 +113,5 @@ func (c *Calibration) save(ctx context.Context, fingerprint string) {
 	if err = file.Close(); err != nil {
 		return
 	}
-	_ = os.Rename(name, filepath.Join(c.DataDir, "benchmark-cache.json"))
+	_ = os.Rename(name, benchmarkCachePath(c.DataDir, mode))
 }

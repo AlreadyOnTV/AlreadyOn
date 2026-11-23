@@ -664,10 +664,10 @@ export function Player({
     };
     const fail = (reason: RequestError) => {
       if (stopped) return;
-      if (reason.code === "server_starting") {
-        // Startup is a retryable readiness state, not a failed airing or sign-in.
+      if (reason.code === "server_starting" || reason.code === "benchmark_running") {
+        // Startup and manual transcoding tests pause playback, not the airing.
         setError(false);
-        setStatus("Server starting, please wait.");
+        setStatus(reason.code === "server_starting" ? "Server starting, please wait." : "Video transcoding test is running. Playback will resume.");
         unload();
         recovery = setTimeout(() => { if (!stopped) setGeneration((n) => n + 1); }, 2000);
         return;
@@ -1427,12 +1427,6 @@ export function Player({
     if (paused) api.current?.resume();
     else api.current?.pause();
   };
-  const pictureInPicture = () => {
-    const video = videoRef.current;
-    if (!video) return;
-    if (document.pictureInPictureElement) void document.exitPictureInPicture();
-    else void video.requestPictureInPicture?.().catch(() => {});
-  };
   const fullscreen = () => {
     if (toggleFullscreen()) setMuted(false);
   };
@@ -1595,7 +1589,6 @@ export function Player({
           onSubtitleLanguage={(language) =>
             setSubtitleChoice(language ?? false)
           }
-          onPictureInPicture={pictureInPicture}
           detailsOn={showDetails}
           onToggleDetails={() => setShowDetails((on) => !on)}
           onFullscreen={fullscreen}

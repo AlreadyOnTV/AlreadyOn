@@ -2,6 +2,21 @@
 # PR builds add only the current binaries, web assets and runtime metadata.
 ARG UBUNTU_VERSION=26.04
 
+# Older Intel GPUs use the Media SDK implementation behind the same oneVPL
+# dispatcher. Build only its runtime, leaving modern dispatch/libraries intact.
+FROM ubuntu:${UBUNTU_VERSION} AS intel-legacy-build
+RUN apt-get update && apt-get install -y --no-install-recommends \
+    ca-certificates curl build-essential cmake pkg-config libva-dev libdrm-dev \
+    && rm -rf /var/lib/apt/lists/*
+WORKDIR /src
+RUN curl -fsSL https://codeload.github.com/Intel-Media-SDK/MediaSDK/tar.gz/869b60a6c3d7b5e9f7c3b3b914986322dca4bbae -o sdk.tar.gz \
+    && echo '2f86df90777d6239781a635446498d880cedfbacf5ef3d40d30140fb4e6d59f6  sdk.tar.gz' | sha256sum -c - \
+    && tar -xf sdk.tar.gz --strip-components=1 \
+    && cmake -S . -B build -DCMAKE_POLICY_VERSION_MINIMUM=3.5 \
+       -DCMAKE_INSTALL_PREFIX=/opt/intel-legacy -DBUILD_DISPATCHER=OFF \
+       -DBUILD_SAMPLES=OFF -DBUILD_TUTORIALS=OFF -DENABLE_OPENCL=OFF \
+    && cmake --build build -j2 && cmake --install build
+
 # Compile Ubuntu's security-maintained FFmpeg source with the software encoder
 # required by AlreadyOn and all three hardware APIs. No host-specific CPU flags.
 FROM ubuntu:${UBUNTU_VERSION} AS ffmpeg-build
@@ -12,7 +27,7 @@ RUN sed -i 's/^Types: deb$/Types: deb deb-src/' /etc/apt/sources.list.d/ubuntu.s
     libopenh264-dev libx264-dev libx265-dev libvpl-dev libva-dev libass-dev \
     libopus-dev libvpx-dev libmp3lame-dev libzimg-dev libgnutls28-dev zlib1g-dev libdrm-dev \
     libdav1d-dev libaom-dev libsvtav1enc-dev libvorbis-dev libwebp-dev libsoxr-dev \
-    libffmpeg-nvenc-dev \
+    libffmpeg-nvenc-dev ocl-icd-opencl-dev \
     && rm -rf /var/lib/apt/lists/*
 WORKDIR /src
 COPY deploy/patches/ffmpeg-readrate-initial-burst.patch /patches/
@@ -26,7 +41,7 @@ RUN apt-get update && apt-get source ffmpeg \
     --enable-libzimg --enable-gnutls --enable-zlib --enable-libdav1d --enable-libaom \
     --enable-libsvtav1 --enable-libvorbis --enable-libwebp --enable-libsoxr \
     --enable-ffnvcodec --enable-nvenc --enable-nvdec --enable-cuvid \
-    --enable-cuda-llvm --nvcc=clang \
+    --enable-cuda-llvm --nvcc=clang --enable-opencl \
     && make -j"$FFMPEG_BUILD_JOBS" && make install \
     && strip /opt/ffmpeg/bin/ffmpeg /opt/ffmpeg/bin/ffprobe \
     && mkdir -p /opt/ffmpeg/share/build \
@@ -45,8 +60,15 @@ RUN apt-get update \
     && apt-get upgrade -y \
     && apt-get install -y --no-install-recommends ca-certificates tzdata util-linux \
     intel-media-va-driver-non-free i965-va-driver-shaders libmfx-gen1.2 libvpl2 \
+    intel-opencl-icd intel-opencl-icd-legacy ocl-icd-libopencl1 \
     mesa-libgallium $(cat /tmp/runtime-packages.txt) \
     && rm -rf /var/lib/apt/lists/* /tmp/runtime-packages.txt
+COPY --from=intel-legacy-build /opt/intel-legacy/ /opt/intel-legacy/
+COPY --from=intel-legacy-build /src/LICENSE /usr/local/share/alreadyon/intel-legacy/LICENSE
+# oneVPL's legacy search excludes ld.so.cache: expose its standard filename
+# in the Debian runtime directory while retaining the SDK's plugin prefix.
+RUN ln -s /opt/intel-legacy/lib/libmfxhw64.so.1 /usr/lib/x86_64-linux-gnu/libmfxhw64.so.1 \
+    && printf '/opt/intel-legacy/lib\n' > /etc/ld.so.conf.d/alreadyon-intel-legacy.conf && ldconfig
 COPY --from=ffmpeg-build /opt/ffmpeg/bin/ffmpeg /opt/ffmpeg/bin/ffprobe /usr/local/bin/
 COPY --from=ffmpeg-build /opt/ffmpeg/share/build /usr/local/share/alreadyon/ffmpeg-build
 COPY deploy/check-media-stack.sh /usr/local/bin/alreadyon-check-media-stack

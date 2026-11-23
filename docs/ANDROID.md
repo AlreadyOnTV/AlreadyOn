@@ -14,7 +14,7 @@ Native onboarding accepts the instance certificate on first connection without a
 
 ## Validation
 
-Check sign-in, profile selection/PIN behavior, channel changes, transitions, tracks, rotation, picture-in-picture and background recovery. Use synthetic fixtures; actual device validation is distinct from emulator or browser testing. Record device/codec limitations without publishing personal host or device details.
+Check sign-in, profiles/PINs, channel changes, transitions, tracks, rotation and recovery. Test picture-in-picture only on phones; TV and WebUI must omit it. Use synthetic fixtures; record device/codec limitations without personal details.
 
 On phones, tap the picture-in-picture video to reveal Android’s menu. Use Play or Pause and Mute or Unmute in the bottom row. Resuming playback rejoins the current live airing. Controls stay visible while tuning. Tap Play to retry after errors.
 

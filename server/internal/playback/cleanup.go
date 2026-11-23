@@ -338,6 +338,29 @@ func (m *Manager) Counts() (processes, renditions, viewers int) {
 	return m.active, len(m.streams), m.viewerCount()
 }
 
+// PauseAll stops every active rendition while keeping the manager available for
+// playback after the higher-priority work completes.
+func (m *Manager) PauseAll(ctx context.Context) error {
+	m.mu.Lock()
+	for _, stream := range m.streams {
+		m.stop(stream)
+	}
+	m.mu.Unlock()
+	ticker := time.NewTicker(10 * time.Millisecond)
+	defer ticker.Stop()
+	for {
+		_, renditions, _ := m.Counts()
+		if renditions == 0 {
+			return nil
+		}
+		select {
+		case <-ctx.Done():
+			return ctx.Err()
+		case <-ticker.C:
+		}
+	}
+}
+
 // TranscodeSlots reports active encode resource slots and the manager's current
 // allowed slot limit. Rendition ladders count as two slots; copy-only streams do not.
 func (m *Manager) TranscodeSlots() (active, limit int) {

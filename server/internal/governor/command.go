@@ -18,7 +18,11 @@ func ProcessCPUTime(pid int) (time.Duration, error) { return processCPU(pid) }
 func RunCommand(ctx context.Context, cmd *exec.Cmd) error {
 	t := TicketFrom(ctx)
 	if t == nil {
-		return cmd.Run()
+		if err := cmd.Start(); err != nil {
+			return err
+		}
+		observeCommand(ctx, cmd.Process.Pid)
+		return cmd.Wait()
 	}
 	// Probes reached through library analysis need the same scheduling policy
 	// as loudness/keyframes. Existing nice/ionice wrappers are not duplicated.
@@ -34,6 +38,7 @@ func RunCommand(ctx context.Context, cmd *exec.Cmd) error {
 	if err := cmd.Start(); err != nil {
 		return err
 	}
+	observeCommand(ctx, cmd.Process.Pid)
 	detach := t.Attach(cmd.Process.Pid)
 	defer detach()
 	err := cmd.Wait()
@@ -48,4 +53,17 @@ func RunCommand(ctx context.Context, cmd *exec.Cmd) error {
 		t.g.mu.Unlock()
 	}
 	return err
+}
+
+// WithCommandObserver exposes only the PID after successful process creation.
+// Benchmark telemetry uses it without racing exec.Cmd.Start or bypassing pacing.
+type commandObserverKey struct{}
+
+func WithCommandObserver(ctx context.Context, f func(int)) context.Context {
+	return context.WithValue(ctx, commandObserverKey{}, f)
+}
+func observeCommand(ctx context.Context, pid int) {
+	if f, ok := ctx.Value(commandObserverKey{}).(func(int)); ok {
+		f(pid)
+	}
 }

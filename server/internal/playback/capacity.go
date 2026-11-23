@@ -342,10 +342,6 @@ func (c *Capacity) Start(force bool) bool {
 	return c.start(c.Context, force, true)
 }
 
-// Measure runs synchronously inside the coordinated benchmark group.
-func (c *Capacity) Measure(ctx context.Context) bool {
-	return c.start(ctx, false, false)
-}
 func (c *Capacity) start(base context.Context, force, asynchronous bool) bool {
 	c.mu.Lock()
 	if c.started {

@@ -724,19 +724,6 @@ export function updateServerSettings(update: Partial<ServerSettings>): Promise<S
   return apiRequest('/api/settings/server', jsonInit('PUT', update), 'failed to save server settings');
 }
 
-export interface TranscodingTest {
-  encoder: string;
-  device?: string;
-  ok: boolean;
-  detail: string;
-}
-
-// Tries a Transcoding choice on the server: a one-second test encode, or with
-// decoding set a test decode on that GPU.
-export function testTranscoding(transcoding: string, decoding = false): Promise<TranscodingTest> {
-  return apiRequest('/api/settings/transcoding/test', jsonInit('POST', { transcoding, decoding }), 'failed to test transcoding');
-}
-
 export interface BrowserSession {
 	deviceName: string;
 	deviceType: string;
@@ -1068,3 +1055,24 @@ export const retryLibraryUpdates = (): Promise<LibraryUpdateStatus> =>
 // Counts show the saved path checkboxes, including selections awaiting background application.
 export const getLibraryPathCounts = (kind: 'movies' | 'tv' | 'commercials', path: string, signal?: AbortSignal): Promise<{ movies: number; tv: number; custom: number }> =>
   apiRequest('/api/settings/folders/customize?' + new URLSearchParams({ kind, path }), { signal, cache: 'no-store' }, 'Could not load channel counts');
+
+// Ephemeral benchmark progress; polling does not start or modify a test.
+export type BenchmarkStatus = {
+ state: 'idle' | 'queued' | 'running'; mode: 'mini' | 'full' | ''; startedAt: string;
+ outcome: string; profiles?: { sourceClass: string; encoder: string; toneMapper?: string; validatedStreams: number; verified: boolean }[];
+ tasks: { name: string; completed: number; total: number; currentFile?: string }[];
+ activeStreams: number; quickAt?: string; fullAt?: string; quickProfiles: number; fullProfiles: number; recommendFull: boolean;
+ manual: boolean;
+};
+export function getBenchmarkStatus(): Promise<BenchmarkStatus> {
+ return apiRequest('/api/settings/transcoding/benchmark', { cache: 'no-store' }, 'failed to load benchmark status');
+}
+export function runQuickBenchmark(): Promise<BenchmarkStatus> {
+ return apiRequest('/api/settings/transcoding/benchmark', jsonInit('POST', { mode: 'quick' }), 'failed to start quick test');
+}
+export function runFullBenchmark(allowActiveStreams = false): Promise<BenchmarkStatus> {
+ return apiRequest('/api/settings/transcoding/benchmark', jsonInit('POST', { mode: 'full', allowActiveStreams }), 'failed to start full test');
+}
+export function stopBenchmark(): Promise<BenchmarkStatus> {
+ return apiRequest('/api/settings/transcoding/benchmark', { method: 'DELETE' }, 'failed to stop test');
+}

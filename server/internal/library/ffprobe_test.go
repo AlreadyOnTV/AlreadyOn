@@ -2,6 +2,7 @@ package library
 
 import (
 	"context"
+	"encoding/json"
 	"os"
 	"os/exec"
 	"path/filepath"
@@ -139,11 +140,21 @@ func TestProbe_MissingFile_ReturnsErrorWithoutCrashing(t *testing.T) {
 func TestProbeHDRMetadata(t *testing.T) {
 	raw := rawProbe{Streams: []rawStream{{Index: 0, CodecType: "video", CodecName: "hevc", CodecTag: "dvh1", SideData: []rawSideData{{Type: "DOVI configuration record", DVProfile: 5, DVLevel: 9}}}}}
 	result := raw.toProbeResult()
-	if result.MetadataVersion != 2 || result.Streams[0].DolbyVisionProfile != 5 || result.Streams[0].DolbyVisionLevel != 9 || result.Streams[0].CodecTag != "dvh1" {
+	if result.MetadataVersion != 3 || result.Streams[0].DolbyVisionProfile != 5 || result.Streams[0].DolbyVisionLevel != 9 || result.Streams[0].CodecTag != "dvh1" {
 		t.Fatalf("%+v", result)
 	}
 	raw.Streams[0].SideData = []rawSideData{{Type: "HDR Dynamic Metadata SMPTE2094-40 (HDR10+)"}}
 	if !raw.toProbeResult().Streams[0].HDR10Plus {
 		t.Fatal("HDR10+ metadata lost")
+	}
+}
+
+func TestProbeRecognizesStaticHDRFrameMetadata(t *testing.T) {
+	var raw rawProbe
+	if err := json.Unmarshal([]byte(`{"streams":[{"index":0,"codec_type":"video","codec_name":"hevc"}],"frames":[{"stream_index":0,"side_data_list":[{"side_data_type":"Mastering display metadata"}]}]}`), &raw); err != nil {
+		t.Fatal(err)
+	}
+	if !raw.toProbeResult().Streams[0].HDRStaticMetadata {
+		t.Fatal("static HDR frame metadata lost")
 	}
 }
