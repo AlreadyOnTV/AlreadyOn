@@ -28,12 +28,16 @@ func benchmarkCachePath(dataDir, mode string) string {
 	return filepath.Join(dataDir, "benchmark-cache-"+mode+".json")
 }
 
+// Bump this when changes to transcode commands, measurement or admission make
+// previous capacity results incompatible. Unrelated application builds reuse them.
+const calibrationPolicy = "calibration-policy-v13"
+
 // Raw hardware/cgroup data stays out of the cache; only a digest is persisted.
 // Changes to the fixture recipe, runtime libraries, driver/kernel, CPU features,
 // quotas, memory limits or encoder policy invalidate previous measurements.
 func (c *Calibration) fingerprint(ctx context.Context, inputs *benchmarkInputs) (string, error) {
 	hash := sha256.New()
-	fmt.Fprintf(hash, "calibration-policy-v12\n%s\n%d:%d\n", inputs.fingerprint, runtime.NumCPU(), runtime.GOMAXPROCS(0))
+	fmt.Fprintf(hash, "%s\n%s\n%d:%d\n", calibrationPolicy, inputs.fingerprint, runtime.NumCPU(), runtime.GOMAXPROCS(0))
 	for _, exe := range []string{"ffmpeg", "ffprobe"} {
 		raw, err := exec.CommandContext(ctx, exe, "-version").Output()
 		if err != nil {
@@ -41,7 +45,7 @@ func (c *Calibration) fingerprint(ctx context.Context, inputs *benchmarkInputs) 
 		}
 		hash.Write(raw)
 	}
-	for _, path := range []string{"/var/lib/dpkg/status", "/usr/local/share/alreadyon/build-version", "/usr/local/share/alreadyon/ffmpeg-build/packages.txt", "/proc/sys/kernel/osrelease", "/sys/fs/cgroup/cpu.max", "/sys/fs/cgroup/cpuset.cpus.effective", "/sys/fs/cgroup/memory.max", "/sys/class/drm/renderD128/device/vendor", "/sys/class/drm/renderD128/device/device", "/sys/class/drm/renderD128/device/driver/module/version", "/sys/module/i915/srcversion", "/sys/module/xe/srcversion", "/proc/driver/nvidia/version"} {
+	for _, path := range []string{"/var/lib/dpkg/status", "/usr/local/share/alreadyon/ffmpeg-build/packages.txt", "/proc/sys/kernel/osrelease", "/sys/fs/cgroup/cpu.max", "/sys/fs/cgroup/cpuset.cpus.effective", "/sys/fs/cgroup/memory.max", "/sys/class/drm/renderD128/device/vendor", "/sys/class/drm/renderD128/device/device", "/sys/class/drm/renderD128/device/driver/module/version", "/sys/module/i915/srcversion", "/sys/module/xe/srcversion", "/proc/driver/nvidia/version"} {
 		raw, err := os.ReadFile(path)
 		fmt.Fprintf(hash, "%s:%t\n", path, err == nil)
 		hash.Write(raw)
