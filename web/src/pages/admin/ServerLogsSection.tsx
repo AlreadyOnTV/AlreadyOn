@@ -11,6 +11,7 @@ import "./ServerLogsSection.css";
 const ALL_LEVELS: LogLevel[] = ["debug", "info", "warn", "error", "critical"];
 const LINE_LIMIT_OPTIONS = [10, 25, 50, 100, 150, 200, 250];
 const DEFAULT_LIMIT = 25;
+const HISTORY_LIMIT = LINE_LIMIT_OPTIONS[LINE_LIMIT_OPTIONS.length - 1];
 // Fast while the server is working through the library so its progress
 // is visible as it happens; slow when idle, where a change is rare.
 const BUSY_POLL_INTERVAL_MS = 1000;
@@ -35,11 +36,13 @@ function formatTime(iso: string, timeZone: string): { date: string; time: string
 
 export default function ServerLogsSection() {
   const viewer = useRef<HTMLDivElement>(null);
+  const resizePausedWindow = useRef(false);
   const [entries, setEntries] = useState<LogEntry[]>([]);
   const [timeZone, setTimeZone] = useState("America/New_York");
   const [levels, setLevels] = useState<Set<LogLevel>>(new Set(ALL_LEVELS));
   const [limit, setLimit] = useState(DEFAULT_LIMIT);
-  const [paused, setPaused] = useState(false);
+  const [pausedEntries, setPausedEntries] = useState<LogEntry[] | null>(null);
+  const paused = pausedEntries !== null;
   const [error, setError] = useState<string | null>(null);
   const [copied, setCopied] = useState(false);
   // Entries at or before this time (ms) are hidden. Only this page forgets
@@ -54,17 +57,24 @@ export default function ServerLogsSection() {
     if (paused) return;
 
     const controller = new AbortController();
+    let request = 0;
+    let applied = 0;
     const poll = () => {
-      getLogs(levelsKey ? (levelsKey.split(",") as LogLevel[]) : [], limit)
+      const sequence = ++request;
+      getLogs(levelsKey ? (levelsKey.split(",") as LogLevel[]) : [], HISTORY_LIMIT, controller.signal)
         .then((data) => {
-          if (!controller.signal.aborted) {
+          if (!controller.signal.aborted && sequence > applied) {
+            applied = sequence;
             setEntries(data.entries);
             if (data.timeZone) setTimeZone(data.timeZone);
             setError(null);
           }
         })
         .catch((err: Error) => {
-          if (!controller.signal.aborted) setError(err.message);
+          if (!controller.signal.aborted && sequence > applied) {
+            applied = sequence;
+            setError(err.message);
+          }
         });
       // While idle this is how a later refresh gets noticed and sped up.
       if (!busy) recheck();
@@ -76,7 +86,7 @@ export default function ServerLogsSection() {
       controller.abort();
       window.clearInterval(id);
     };
-  }, [paused, limit, levelsKey, busy, recheck]);
+  }, [paused, levelsKey, busy, recheck]);
 
   const toggleLevel = (level: LogLevel) => {
     setLevels((prev) => {
@@ -90,7 +100,10 @@ export default function ServerLogsSection() {
     });
   };
 
-  const visibleEntries = clearedThrough === null ? entries : entries.filter((e) => !(Date.parse(e.time) <= clearedThrough));
+  // Keep the entire fetched window so a resize can reveal older lines
+  // without requesting a new window whose last entry has moved.
+  const history = pausedEntries ?? entries;
+  const visibleEntries = (clearedThrough === null ? history : history.filter((e) => !(Date.parse(e.time) <= clearedThrough))).slice(-limit);
 
   useLayoutEffect(() => {
     const element = viewer.current;
@@ -104,6 +117,13 @@ export default function ServerLogsSection() {
     if (element.firstElementChild) observer.observe(element.firstElementChild);
     return () => observer.disconnect();
   }, [entries, paused, clearedThrough, limit, levelsKey]);
+
+  useLayoutEffect(() => {
+    if (!resizePausedWindow.current) return;
+    resizePausedWindow.current = false;
+    const element = viewer.current;
+    if (element) element.scrollTop = element.scrollHeight;
+  }, [limit]);
 
   const handleClear = () => {
     const newest = Date.parse(visibleEntries[visibleEntries.length - 1].time);
@@ -139,14 +159,17 @@ export default function ServerLogsSection() {
           ))}
         </div>
         <div className="log-viewer-actions">
-          <select value={limit} onChange={(e) => setLimit(Number(e.target.value))} aria-label="Lines To Display">
+          <select value={limit} onChange={(e) => {
+            resizePausedWindow.current = paused;
+            setLimit(Number(e.target.value));
+          }} aria-label="Lines To Display">
             {LINE_LIMIT_OPTIONS.map((n) => (
               <option key={n} value={n}>
                 {n} lines
               </option>
             ))}
           </select>
-          <button className="admin-btn admin-btn-secondary" onClick={() => setPaused((p) => !p)}>
+          <button className="admin-btn admin-btn-secondary" onClick={() => setPausedEntries(paused ? null : entries)}>
             {paused ? "Resume" : "Pause"}
           </button>
           <button className="admin-btn admin-btn-secondary" onClick={handleCopy} disabled={visibleEntries.length === 0}>

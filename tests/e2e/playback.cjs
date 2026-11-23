@@ -1222,7 +1222,7 @@ const noWorkers = async (unreleased = () => 0) => {
     await captions();
     assert(
       (await page.getByRole("menuitemradio").allTextContents()).join() ===
-        "Off,English,German,French,Spanish,Italian,Portuguese",
+        "Off,English,German,French,Spanish,Italian,Portuguese,English · Forced",
       "Subtitle menu lacks the file's languages",
     );
     await page
@@ -1236,8 +1236,20 @@ const noWorkers = async (unreleased = () => 0) => {
         text,
         { timeout: 25000 },
       );
-    await page.getByRole("menuitemradio", { name: "English" }).click();
+    await page.getByRole("menuitemradio", { name: "English", exact: true }).click();
     await caption("E2E SUBTITLE ONE");
+    const videoBeforeSidecar = await page.locator("video").evaluate((video) => ({
+      src: video.currentSrc, time: video.currentTime,
+    }));
+    await captions();
+    await page.getByRole("menuitemradio", { name: "English · Forced" }).click();
+    await caption("E2E EXTERNAL SUBTITLE");
+    const videoAfterSidecar = await page.locator("video").evaluate((video) => ({
+      src: video.currentSrc, time: video.currentTime,
+    }));
+    assert(videoAfterSidecar.src === videoBeforeSidecar.src &&
+      videoAfterSidecar.time >= videoBeforeSidecar.time,
+      "Switching to a sidecar should keep the existing rendition and timeline");
     await captions();
     await page.getByRole("menuitemradio", { name: "German" }).click();
     await caption("E2E UNTERTITEL");

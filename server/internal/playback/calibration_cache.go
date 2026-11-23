@@ -33,7 +33,7 @@ func benchmarkCachePath(dataDir, mode string) string {
 // quotas, memory limits or encoder policy invalidate previous measurements.
 func (c *Calibration) fingerprint(ctx context.Context, inputs *benchmarkInputs) (string, error) {
 	hash := sha256.New()
-	fmt.Fprintf(hash, "calibration-policy-v8\n%s\n%d:%d\n", inputs.fingerprint, runtime.NumCPU(), runtime.GOMAXPROCS(0))
+	fmt.Fprintf(hash, "calibration-policy-v9\n%s\n%d:%d\n", inputs.fingerprint, runtime.NumCPU(), runtime.GOMAXPROCS(0))
 	for _, exe := range []string{"ffmpeg", "ffprobe"} {
 		raw, err := exec.CommandContext(ctx, exe, "-version").Output()
 		if err != nil {

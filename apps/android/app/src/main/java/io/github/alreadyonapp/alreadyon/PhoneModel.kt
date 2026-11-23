@@ -28,7 +28,7 @@ internal const val PLAYBACK_LOG_TAG = "AlreadyOnPlayback"
 
 /** Authorized media metadata is ephemeral and never saved in Android instance state. */
 internal data class PhonePlayback(val url: String, val title: String, val startMs: Long, val revision: Long, val hlsTargetMs: Long? = null, val capturedAt: Long = SystemClock.elapsedRealtime(), val requestedAt: Long = capturedAt,
-    val seriesTitle: String = "", val episodeLabel: String = "", val mediaFileId: Long = -1, val sourceHeight: Int = 720,
+    val seriesTitle: String = "", val episodeLabel: String = "", val mediaFileId: Long = -1, val sourceHeight: Int = 720, val uhd: Boolean = false,
     val selectedAudioIndex: Int? = null, val audioTracks: List<PhoneTrack> = emptyList(), val subtitleTracks: List<PhoneTrack> = emptyList(),
     val streamOffsetSeconds: Double = 0.0, val hlsOriginMs: Long? = null, val trustedCa: String? = null, val entryStartsAt: String? = null)
 internal data class PhoneState(
@@ -547,7 +547,7 @@ internal class PhoneModel(application: Application) : AndroidViewModel(applicati
                             episodeLabel = tune.optJSONObject("program")?.takeIf { it.optString("mediaType") == "episode" && it.has("episodeNumber") }?.let {
                                 "S${it.optInt("seasonNumber").toString().padStart(2, '0')}E${it.optInt("episodeNumber").toString().padStart(2, '0')} - "
                             }.orEmpty(),
-                            mediaFileId = tune.optLong("mediaFileId", -1), sourceHeight = tune.optInt("sourceHeight", 720),
+                            mediaFileId = tune.optLong("mediaFileId", -1), sourceHeight = tune.optInt("sourceHeight", 720), uhd = tune.optBoolean("uhd"),
                             selectedAudioIndex = tune.getJSONObject("plan").optInt("audioTrackIndex", -1).takeIf { it >= 0 },
                             audioTracks = phoneTracks(tune.optJSONArray("audioTracks")), subtitleTracks = phoneTracks(tune.optJSONArray("subtitles")),
                             streamOffsetSeconds = if (direct) 0.0 else tune.optDouble("streamOffsetSeconds"),
@@ -676,19 +676,17 @@ internal class PhoneModel(application: Application) : AndroidViewModel(applicati
         val codecs = MediaCodecList(MediaCodecList.REGULAR_CODECS)
         val video = JSONArray()
         val audio = JSONArray()
-        for ((width, height, level, bitrate) in listOf(
-            intArrayOf(1280, 720, MediaCodecInfo.CodecProfileLevel.AVCLevel31, 5_000_000),
-            intArrayOf(640, 360, MediaCodecInfo.CodecProfileLevel.AVCLevel3, 1_500_000),
-        )) {
+        for (candidate in androidVideoCapabilitySpecs(BuildConfig.IS_TV)) {
+            val (width, height, level, profile, profileName, fps, bitrate) = candidate
             val format = MediaFormat.createVideoFormat("video/avc", width, height).apply {
-                setInteger(MediaFormat.KEY_FRAME_RATE, 30)
-                setInteger(MediaFormat.KEY_PROFILE, MediaCodecInfo.CodecProfileLevel.AVCProfileConstrainedBaseline)
+                setInteger(MediaFormat.KEY_FRAME_RATE, fps)
+                setInteger(MediaFormat.KEY_PROFILE, profile)
                 setInteger(MediaFormat.KEY_LEVEL, level)
                 setInteger(MediaFormat.KEY_BIT_RATE, bitrate)
             }
             if (codecs.findDecoderForFormat(format) != null) video.put(JSONObject().put("codec", "h264")
-                .put("profile", "Constrained Baseline").put("level", if (height == 360) 30 else 31)
-                .put("width", width).put("height", height).put("fps", 30).put("bitrate", bitrate)
+                .put("profile", profileName).put("level", androidAvcLevel(level))
+                .put("width", width).put("height", height).put("fps", fps).put("bitrate", bitrate)
                 .put("pixelFormat", "yuv420p"))
         }
         if (codecs.findDecoderForFormat(MediaFormat.createAudioFormat("audio/mp4a-latm", 48000, 2).apply { setInteger(MediaFormat.KEY_AAC_PROFILE, MediaCodecInfo.CodecProfileLevel.AACObjectLC); setInteger(MediaFormat.KEY_BIT_RATE, 192000) }) != null) {
@@ -699,6 +697,35 @@ internal class PhoneModel(application: Application) : AndroidViewModel(applicati
         capabilityTime = SystemClock.elapsedRealtime()
         return capabilities!!
     }
+}
+
+internal data class AndroidVideoCapabilitySpec(
+    val width: Int,
+    val height: Int,
+    val codecLevel: Int,
+    val codecProfile: Int,
+    val profile: String,
+    val fps: Int,
+    val bitrate: Int,
+)
+
+internal fun androidVideoCapabilitySpecs(tv: Boolean): List<AndroidVideoCapabilitySpec> = buildList {
+    if (tv) add(AndroidVideoCapabilitySpec(3840, 2160, MediaCodecInfo.CodecProfileLevel.AVCLevel52,
+        MediaCodecInfo.CodecProfileLevel.AVCProfileHigh, "High", 30, 25_000_000))
+    add(AndroidVideoCapabilitySpec(1920, 1080, MediaCodecInfo.CodecProfileLevel.AVCLevel42,
+        MediaCodecInfo.CodecProfileLevel.AVCProfileHigh, "High", 60, 12_000_000))
+    add(AndroidVideoCapabilitySpec(1280, 720, MediaCodecInfo.CodecProfileLevel.AVCLevel31,
+        MediaCodecInfo.CodecProfileLevel.AVCProfileConstrainedBaseline, "Constrained Baseline", 30, 5_000_000))
+    add(AndroidVideoCapabilitySpec(640, 360, MediaCodecInfo.CodecProfileLevel.AVCLevel3,
+        MediaCodecInfo.CodecProfileLevel.AVCProfileConstrainedBaseline, "Constrained Baseline", 30, 1_500_000))
+}
+
+internal fun androidAvcLevel(level: Int): Int = when (level) {
+    MediaCodecInfo.CodecProfileLevel.AVCLevel52 -> 52
+    MediaCodecInfo.CodecProfileLevel.AVCLevel42 -> 42
+    MediaCodecInfo.CodecProfileLevel.AVCLevel31 -> 31
+    MediaCodecInfo.CodecProfileLevel.AVCLevel3 -> 30
+    else -> 31
 }
 
 /** Avoid reflecting TLS exceptions or request URLs, which can contain scoped media tokens. */

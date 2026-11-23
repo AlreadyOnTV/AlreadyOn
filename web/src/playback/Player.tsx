@@ -23,6 +23,7 @@ import {
   pickTrack,
   preferredSubtitleLanguage,
   trackKey,
+  subtitleVariant,
   type Cue,
 } from "./subtitles";
 import {
@@ -31,7 +32,7 @@ import {
   writeQuality,
 } from "../users/deviceStorage";
 import { useUsers } from "../users/UsersContext";
-import type { AudioTrack, PlaybackSession } from "./types";
+import type { AudioTrack, PlaybackSession, SubtitleTrack } from "./types";
 import "./Player.css";
 
 type Authorization = Pick<PlaybackSession, "token" | "channelId">;
@@ -315,9 +316,9 @@ export function Player({
     const timer = setTimeout(() => setChannelOverlay(false), CONTROLS_IDLE_MS);
     return () => clearTimeout(timer);
   }, [overlayChannelId]);
-  // The viewer's own choice (a language, or false for off) stays across programs and channels,
-  // not across reloads; until they choose, the profile's default applies.
-  const [subtitleChoice, setSubtitleChoice] = useState<string | false | null>(
+  // Keep an explicit track for this source, then prefer its variant or
+  // language when the program changes. Null follows the profile.
+  const [subtitleChoice, setSubtitleChoice] = useState<string | { track: SubtitleTrack; mediaFileId: number } | false | null>(
     null,
   );
   const [notice, setNotice] = useState("");
@@ -361,13 +362,15 @@ export function Player({
     session?.subtitles ?? [],
     profileLanguage,
   );
-  const wantedLanguage =
-    subtitleChoice === false ? null : (subtitleChoice ?? defaultLanguage);
-  const activeTrack =
-    session && wantedLanguage
-      ? pickTrack(session.subtitles ?? [], wantedLanguage)
-      : undefined;
-  const subtitleLanguage = activeTrack ? trackKey(activeTrack) : null;
+  const tracks = session?.subtitles ?? [];
+  const explicit = subtitleChoice && typeof subtitleChoice === "object" ? subtitleChoice : null;
+  const wantedLanguage = explicit ? trackKey(explicit.track)
+    : typeof subtitleChoice === "string" ? subtitleChoice : defaultLanguage;
+  const selectedTrack = explicit && (explicit.mediaFileId === session?.mediaFileId
+    ? tracks.find((track) => track.index === explicit.track.index)
+    : tracks.find((track) => subtitleVariant(track) === subtitleVariant(explicit.track)));
+  const activeTrack = subtitleChoice === false ? undefined
+    : selectedTrack || (wantedLanguage ? pickTrack(tracks, wantedLanguage) : undefined);
   const showNotice = (message: string) => {
     setNotice(message);
     clearTimeout(noticeTimer.current);
@@ -1581,13 +1584,13 @@ export function Player({
           audioTracks={session.audioTracks ?? []}
           audioTrackIndex={session.plan.audioTrackIndex}
           onAudioTrack={chooseAudio}
-          subtitleLanguage={subtitleLanguage}
+          subtitleIndex={activeTrack?.index ?? null}
           onTogglePlay={togglePlay}
           onVolume={chooseVolume}
           onToggleMute={toggleMute}
           onQuality={chooseQuality}
-          onSubtitleLanguage={(language) =>
-            setSubtitleChoice(language ?? false)
+          onSubtitleTrack={(track) =>
+            setSubtitleChoice(track ? { track, mediaFileId: session.mediaFileId } : false)
           }
           detailsOn={showDetails}
           onToggleDetails={() => setShowDetails((on) => !on)}

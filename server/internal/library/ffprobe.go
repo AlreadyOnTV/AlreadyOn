@@ -39,7 +39,8 @@ type StreamInfo struct {
 	Language                 string // from stream tags, when present
 	Title                    string // from stream tags, when present
 	Default                  bool   // flagged as the default track
-	Forced                   bool   // flagged as forced (for example signs-only subtitles)
+	HearingImpaired          bool
+	Forced                   bool // flagged as forced (for example signs-only subtitles)
 	Profile                  string
 	Level                    int
 	PixelFormat              string
@@ -218,7 +219,7 @@ func (r rawProbe) toProbeResult() ProbeResult {
 			Height:   s.Height,
 			Channels: s.Channels,
 			Language: s.Tags["language"], Title: s.Tags["title"],
-			Default: s.Disposition["default"] == 1, Forced: s.Disposition["forced"] == 1,
+			Default: s.Disposition["default"] == 1, Forced: s.Disposition["forced"] == 1, HearingImpaired: s.Disposition["hearing_impaired"] == 1,
 			Profile: s.Profile, Level: s.Level, PixelFormat: s.PixelFormat,
 			FrameRate: parseRate(s.FrameRate), BitRate: parseInt(s.BitRate),
 			SampleRate: parseSampleRate(s.SampleRate), ChannelLayout: s.ChannelLayout,

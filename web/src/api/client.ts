@@ -38,14 +38,14 @@ export interface LogsResponse {
   entries: LogEntry[];
 }
 
-export async function getLogs(levels: LogLevel[], limit: number): Promise<LogsResponse> {
+export async function getLogs(levels: LogLevel[], limit: number, signal?: AbortSignal): Promise<LogsResponse> {
   const params = new URLSearchParams();
   if (levels.length > 0) {
     params.set('levels', levels.join(','));
   }
   params.set('limit', String(limit));
 
-  const res = await fetch(`${API_BASE}/api/logs?${params.toString()}`);
+  const res = await fetch(`${API_BASE}/api/logs?${params.toString()}`, { signal });
   if (!res.ok) {
     throw new Error(`failed to load logs: ${res.status}`);
   }

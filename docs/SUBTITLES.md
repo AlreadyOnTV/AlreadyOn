@@ -14,6 +14,12 @@ Audio and subtitle language selectors always list English first, then other lang
 
 Settings are saved per profile, shared across devices and retained across sessions. Save Changes commits the selected language/mode; Cancel discards the draft.
 
+## External SRT files
+
+Place a UTF-8 SRT next to the video using the exact video basename, for example `Movie.en.srt`, `Movie.en.forced.srt` or `Movie.en.sdh.srt`. A language suffix is optional. The optional `.default` suffix gives a sidecar precedence over other sidecars of the same language and flags. Embedded text tracks take precedence for the same language, forced and SDH flags. Otherwise matching sidecars are selected in filename order. Sidecars stay out of the media library.
+
+On Linux and macOS, the server reads regular sidecars from configured library roots and serves their cues separately to WebUI, Android phone and Google TV. Cue changes keep the video rendition and timeline. A missing or invalid SRT leaves the video playing. WebUI and Android support separate cues across direct, remux and transcoded playback.
+
 ## API compatibility
 
 Profiles expose nullable `subtitleMode`: `always`, `other_audio` or `off`. Null preserves the existing `subtitlesEnabled` preference. Setting a mode updates that legacy field (true only for always); a legacy on/off patch clears the mode. Older apps retain their binary subtitle behavior, without gaining automatic mode. Unrelated profile patches preserve the saved mode. See [OpenAPI](../api/openapi.yaml).

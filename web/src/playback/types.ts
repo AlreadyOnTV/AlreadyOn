@@ -20,4 +20,4 @@ export interface AudioDetails { codec: string; profile?: string; channels: numbe
 export interface StreamDetails { fileName: string; container: string; sourceVideo: VideoDetails; sourceAudio?: AudioDetails; outputVideo: VideoDetails; outputAudio?: AudioDetails; videoReason: string; audioReason?: string; pipeline: PipelineDetails }
 export interface PipelineDetails { decoder: string; scaler: string; toneMapper?: string; encoder?: string }
 export interface AudioTrack { index: number; language?: string; title?: string; codec: string; channels: number; default?: boolean }
-export interface SubtitleTrack { index: number; language?: string; title?: string; codec: string; default?: boolean; forced?: boolean }
+export interface SubtitleTrack { index: number; language?: string; title?: string; codec: string; default?: boolean; forced?: boolean; sdh?: boolean }
