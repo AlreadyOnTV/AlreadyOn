@@ -176,6 +176,10 @@ func (m *Manager) acquire(ctx context.Context, key, viewer, oldKey, oldViewer st
 		}
 	}
 	if renditions >= m.settings.MaxRenditions || viewers >= m.settings.MaxViewers || (cost > 0 && occupiedCost+cost > m.settings.MaxProcesses) {
+		if job.AutoQualityMax > 0 && oldViewer != "" {
+			logging.Info("auto quality admission: session=%s reason=manager_limit slots=%d+%d/%d viewers=%d/%d renditions=%d/%d replacement_credit=%t",
+				viewer[:min(8, len(viewer))], occupiedCost, cost, m.settings.MaxProcesses, viewers, m.settings.MaxViewers, renditions, m.settings.MaxRenditions, replaced != nil)
+		}
 		return ManagedStream{}, ErrBusy
 	}
 	if cost > 0 {
@@ -196,6 +200,10 @@ func (m *Manager) acquire(ctx context.Context, key, viewer, oldKey, oldViewer st
 			}
 		}
 		if err := m.admission(active, job); err != nil {
+			if job.AutoQualityMax > 0 && oldViewer != "" {
+				logging.Info("auto quality admission: session=%s reason=capacity_model active_workers=%d replacement_credit=%t",
+					viewer[:min(8, len(viewer))], len(active), replaced != nil)
+			}
 			return ManagedStream{}, err
 		}
 	}
@@ -424,6 +432,7 @@ func (m *Manager) MarkAutoCapacityPressure(requested, floor int) {
 		// A staged replacement temporarily uses resources from both jobs.
 		// Clients retry against the settled workload after the old job exits.
 		if stream.replaces != nil && !stream.closing && !stream.Done && !stream.replaces.closing && !stream.replaces.Done {
+			logging.Info("auto quality ceiling: unchanged=%d reason=replacement_overlap requested=%d", ceiling, requested)
 			return
 		}
 		if stream.closing || stream.Job.Plan.VideoCopy {
@@ -450,7 +459,7 @@ func (m *Manager) MarkAutoCapacityPressure(requested, floor int) {
 	for i := len(QualityHeights) - 1; i >= 0; i-- {
 		h := QualityHeights[i]
 		if h < highest && h >= floor {
-			m.setAutoQualityCeiling(h)
+			m.setAutoQualityCeiling(h, "admission_pressure")
 			return
 		}
 	}
@@ -481,17 +490,19 @@ func (m *Manager) ObserveAutoDownshift(oldKey, oldViewer, key, viewer string) {
 		}
 		for id, lease := range stream.leases {
 			if id != oldViewer && id != viewer && lease.autoMax > 0 {
-				m.setAutoQualityCeiling(height)
+				m.setAutoQualityCeiling(height, "client_downshift")
 				return
 			}
 		}
 	}
 }
 
-func (m *Manager) setAutoQualityCeiling(height int) {
+func (m *Manager) setAutoQualityCeiling(height int, reason string) {
+	previous := m.autoCeiling
 	m.autoCeiling = height
 	m.autoPressureViewers = m.settledViewerCount()
 	m.autoPressureUntil = m.clock.Now().Add(time.Minute)
+	logging.Info("auto quality ceiling: from=%d to=%d reason=%s viewers=%d", previous, height, reason, m.autoPressureViewers)
 }
 
 func (m *Manager) settledViewerCount() int {
@@ -509,7 +520,17 @@ func (m *Manager) settledViewerCount() int {
 }
 
 func (m *Manager) autoQualityCeilingLocked() int {
-	if m.autoCeiling != 0 && (!m.clock.Now().Before(m.autoPressureUntil) || m.settledViewerCount() < m.autoPressureViewers) {
+	if m.autoCeiling == 0 {
+		return 0
+	}
+	reason := ""
+	if m.settledViewerCount() < m.autoPressureViewers {
+		reason = "viewer_left"
+	} else if !m.clock.Now().Before(m.autoPressureUntil) {
+		reason = "settling_elapsed"
+	}
+	if reason != "" {
+		logging.Info("auto quality ceiling: from=%d to=0 reason=%s", m.autoCeiling, reason)
 		m.autoCeiling = 0
 	}
 	return m.autoCeiling

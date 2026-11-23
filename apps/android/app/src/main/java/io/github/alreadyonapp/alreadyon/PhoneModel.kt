@@ -60,7 +60,7 @@ internal class PhoneModel(application: Application) : AndroidViewModel(applicati
     private val autoStartHeight = if (BuildConfig.IS_TV) 720 else 480
     private val autoMinimumHeight = if (BuildConfig.IS_TV) 360 else 240
     private var autoHeight = autoStartHeight
-    private var adaptiveRequest: Int? = null
+    private var adaptiveRequest: Pair<Int, NativeAutoDecision>? = null
     private var autoCapacityPressure = false
     private var autoQualityCeiling = 0
     private var preparedRevision: Long? = null
@@ -70,7 +70,7 @@ internal class PhoneModel(application: Application) : AndroidViewModel(applicati
     }
     private val autoQuality = NativeAutoQuality()
 
-    fun sampleAutoQuality(revision: Long, bufferedMs: Long, buffering: Boolean, droppedFrames: Boolean) {
+    fun sampleAutoQuality(revision: Long, bufferedMs: Long, buffering: Boolean, droppedFrames: Int) {
         val current = state.value
         val media = current.playback ?: return
         if (media.revision != revision) return
@@ -79,8 +79,10 @@ internal class PhoneModel(application: Application) : AndroidViewModel(applicati
             adaptiveRequest = null
             return
         }
-        adaptiveRequest = autoQuality.observe(bufferedMs, buffering || droppedFrames, media.outputRungHeight,
-            minOf(media.sourceRungHeight, maximumQuality(media.uhd)), autoCapacityPressure, autoMinimumHeight, autoQualityCeiling) ?: adaptiveRequest
+        val height = autoQuality.observe(bufferedMs, buffering, media.outputRungHeight,
+            minOf(media.sourceRungHeight, maximumQuality(media.uhd)), autoCapacityPressure, autoMinimumHeight, autoQualityCeiling, droppedFrames)
+        val decision = autoQuality.decision
+        if (height != null && decision != null) adaptiveRequest = height to decision
     }
     private var guideEntry: Job? = null
     private val mutableGuideNavigationDeadline = MutableStateFlow(0L)
@@ -557,7 +559,7 @@ internal class PhoneModel(application: Application) : AndroidViewModel(applicati
                     try { withTimeout(5000) { api.request("/api/playback/sessions", "DELETE", JSONObject().put("channelId", channel.id).put("token", token)) } }
                     catch (_: Exception) { /* Failed releases expire with the viewer lease. */ }
                 }
-                suspend fun prepare(ceiling: Int, timeoutMs: Long, replacement: Boolean = false, replacementToken: String? = null): Triple<String, PhonePlayback, Long>? {
+                suspend fun prepare(ceiling: Int, timeoutMs: Long, replacement: Boolean = false, replacementToken: String? = null, decision: NativeAutoDecision? = null): Triple<String, PhonePlayback, Long>? {
                     var token: String? = null
                     var ready = false
                     try {
@@ -572,6 +574,7 @@ internal class PhoneModel(application: Application) : AndroidViewModel(applicati
                             .put("maxHeight", state.value.quality)
                             .put("capabilities", caps)
                         if (replacement && replacementToken != null) body.put("replacementToken", replacementToken)
+                        if (decision != null) body.put("autoDecision", decision.toJson())
                         if (state.value.audioIndex != null && state.value.audioFileId != null) body
                             .put("audioTrackIndex", state.value.audioIndex).put("audioMediaFileId", state.value.audioFileId)
                         var tune = JSONObject(api.request("/api/channels/${channel.id}/tune", "POST", body))
@@ -638,10 +641,11 @@ internal class PhoneModel(application: Application) : AndroidViewModel(applicati
                             val elapsed = SystemClock.elapsedRealtime()
                             if (elapsed < boundary) {
                                 reportActivity(api, viewerId, channel.id, token, profile.id, state.value.paused)
-                                val nextHeight = adaptiveRequest
+                                val adaptive = adaptiveRequest
                                 adaptiveRequest = null
-                                if (nextHeight != null && state.value.quality == 0 && !state.value.paused) {
-                                    val next = try { prepare(nextHeight, 8_000, replacement = true, replacementToken = token) }
+                                if (adaptive != null && state.value.quality == 0 && !state.value.paused) {
+                                    val (nextHeight, decision) = adaptive
+                                    val next = try { prepare(nextHeight, 8_000, replacement = true, replacementToken = token, decision = decision) }
                                     catch (error: CancellationException) { throw error }
                                     catch (_: Exception) { null } // Keep the working rendition if the candidate cannot start.
                                     if (next != null) {

@@ -2924,6 +2924,19 @@ paths:
                 replacementToken:
                   type: string
                   description: Existing playback token replaced by an autoReplacement tune. The token must belong to the caller and be bound to this channel's active rendition.
+                autoDecision:
+                  type: object
+                  additionalProperties: false
+                  description: Optional client diagnostics sent with an Auto replacement. Used for logging.
+                  properties:
+                    reason:
+                      type: string
+                      enum: [healthy, server_ceiling, low_buffer, draining_buffer, dropped_frames, buffering]
+                    bufferMs: { type: integer }
+                    bufferDropMs: { type: integer }
+                    droppedFrames: { type: integer }
+                    totalFrames: { type: integer }
+                    serverCeiling: { type: integer }
                 audioLanguage:
                   type: string
                   default: en

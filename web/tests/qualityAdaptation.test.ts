@@ -10,6 +10,8 @@ test('Auto waits for two low-buffer windows before stepping down one rung', () =
   assert.equal(sample(0, 5), null);
   assert.equal(sample(5_000, 1), null);
   assert.equal(sample(10_000, 1), 720);
+  assert.equal(adapter.decision?.reason, "low_buffer");
+  assert.equal(adapter.decision?.bufferMs, 1000);
 });
 
 test('dropped frames trigger the same hysteresis', () => {
@@ -24,6 +26,8 @@ test('dropped frames trigger the same hysteresis', () => {
   assert.equal(sample(0, 0), null);
   assert.equal(sample(5_000, 20), null);
   assert.equal(sample(10_000, 40), 480);
+  assert.equal(adapter.decision?.reason, "dropped_frames");
+  assert.equal(adapter.decision?.droppedFrames, 20);
   assert.equal(sample(15_000, 60), null);
 });
 
@@ -87,6 +91,8 @@ test('the shared ceiling lets a lower viewer climb and holds both at the same ru
     adapter.observe({ nowMs, outputHeight, serverCeiling, bufferedSeconds }, true);
   assert.equal(sample(5_000, 1080, 720), null);
   assert.equal(sample(10_000, 1080, 720), 720);
+  assert.equal(adapter.decision?.reason, "server_ceiling");
+  assert.equal(adapter.decision?.serverCeiling, 720);
   adapter.reset();
   for (let i = 3; i < 14; i++) assert.equal(sample(i * 5_000, 480, 720), null);
   assert.equal(sample(70_000, 480, 720), 720);

@@ -5,7 +5,7 @@ import Hls from "hls.js";
 import { APP_VERSION } from "../version";
 import { apiFetch } from "../api/access";
 import { clientCapabilities } from "./capabilities";
-import { AutoQualityAdapter, qualityRungHeight } from "./qualityAdaptation";
+import { AutoQualityAdapter, qualityRungHeight, type AutoDecision } from "./qualityAdaptation";
 import { BROWSER_CODEC_MESSAGE, CodecHelp } from "./CodecHelp";
 import { responsivePlaylistLoader } from "./playlistLoader";
 import { PlayerControls } from "./PlayerControls";
@@ -792,7 +792,7 @@ export function Player({
           !swapping,
       );
       if (nextHeight !== null) {
-        void requality(nextHeight);
+        void requality(nextHeight, qualityAdapter.decision);
       }
     };
     // A browser that refuses sound autoplay still allows muted, so retry muted once.
@@ -1014,6 +1014,7 @@ export function Player({
       stopOnCapacity = false,
       autoReplacement = false,
       replacementToken?: string,
+      autoDecision?: AutoDecision,
     ): Promise<Prepared | null> {
       const requestedAt = performance.now();
       const capabilities = await clientCapabilities();
@@ -1050,6 +1051,7 @@ export function Player({
               capabilities: tunedCapabilities,
               token: grant.token,
               replacementToken,
+              autoDecision,
               forceEncode: forced(entryStartsAt),
               entryStartsAt,
               maxHeight,
@@ -1246,7 +1248,7 @@ export function Player({
     // Switches the airing entry to the newly chosen quality. The new stream is
     // prepared while the old one keeps playing; only then is the picture
     // swapped, holding the last frame for the moment the new stream needs.
-    async function requality(adaptiveHeight?: number) {
+    async function requality(adaptiveHeight?: number, decision?: AutoDecision) {
       if (stopped || moving || swapping || !current) return;
       swapping = true;
       const oldAutoHeight = autoQualityHeight.current;
@@ -1260,6 +1262,7 @@ export function Player({
             true,
             adaptiveHeight !== undefined,
             adaptiveHeight !== undefined ? current.value.token : undefined,
+            decision,
           );
         } catch (e) {
           if (

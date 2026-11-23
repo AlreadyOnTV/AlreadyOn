@@ -71,6 +71,37 @@ type tuneResponse struct {
 	Runtime playback.RuntimeStats `json:"runtime"`
 }
 
+type autoDecision struct {
+	Reason        string `json:"reason"`
+	BufferMS      int    `json:"bufferMs"`
+	BufferDropMS  int    `json:"bufferDropMs"`
+	DroppedFrames int    `json:"droppedFrames"`
+	TotalFrames   *int   `json:"totalFrames"`
+	ServerCeiling int    `json:"serverCeiling"`
+}
+
+func (d *autoDecision) logFields() string {
+	if d == nil {
+		return "trigger=unreported"
+	}
+	reason := d.Reason
+	switch reason {
+	case "healthy", "server_ceiling", "low_buffer", "draining_buffer", "dropped_frames", "buffering":
+	default:
+		reason = "unreported"
+	}
+	ceiling := d.ServerCeiling
+	if !playback.ValidAutoHeight(ceiling) {
+		ceiling = 0
+	}
+	fields := fmt.Sprintf("trigger=%s buffer_ms=%d buffer_drop_ms=%d dropped_frames=%d client_ceiling=%d",
+		reason, min(120000, max(0, d.BufferMS)), min(120000, max(-120000, d.BufferDropMS)), min(10000, max(0, d.DroppedFrames)), ceiling)
+	if d.TotalFrames != nil {
+		fields += fmt.Sprintf(" total_frames=%d", min(10000, max(0, *d.TotalFrames)))
+	}
+	return fields
+}
+
 func (p *PlaybackHTTP) tune(w http.ResponseWriter, r *http.Request) {
 	release, ok := p.admitPlayback(w, r)
 	if !ok {
@@ -99,6 +130,7 @@ func (p *PlaybackHTTP) tune(w http.ResponseWriter, r *http.Request) {
 		ForceEncode      bool                  `json:"forceEncode"`
 		Token            string                `json:"token"`
 		ReplacementToken string                `json:"replacementToken"`
+		AutoDecision     *autoDecision         `json:"autoDecision"`
 		EntryStartsAt    time.Time             `json:"entryStartsAt"`
 		// MaxHeight is the viewer's quality ceiling: 0 for automatic, else one of playback.QualityHeights.
 		MaxHeight        int    `json:"maxHeight"`
@@ -141,6 +173,7 @@ func (p *PlaybackHTTP) tune(w http.ResponseWriter, r *http.Request) {
 		}
 	}
 	adaptive := body.MaxHeight == 0 && body.Capabilities.AutoMaxHeight > 0
+	requestedAutoHeight := body.Capabilities.AutoMaxHeight
 	if len(body.AudioLanguage) > 32 {
 		writeJSONError(w, 400, "audioLanguage is too long")
 		return
@@ -362,6 +395,26 @@ func (p *PlaybackHTTP) tune(w http.ResponseWriter, r *http.Request) {
 		writeJSON(w, http.StatusConflict, map[string]string{"error": "playback replacement is no longer available", "code": "playback_replacement_invalid"})
 		return
 	}
+	logAuto := func(result string, output int) {
+		if !adaptive || replace == nil && plan.VideoCopy {
+			return
+		}
+		fromHeight := 0
+		previous := "-"
+		if replace != nil {
+			previous = replace.ID[:min(8, len(replace.ID))]
+			if previousStream, inspectErr := p.Manager.Inspect(replace.StreamKey, replace.ID); inspectErr == nil {
+				fromHeight = playback.PlanQualityHeight(previousStream.Job.Plan)
+			}
+		}
+		kind := client
+		if kind == "" {
+			kind = "legacy"
+		}
+		logging.Info("auto quality tune: channel=%d client=%s previous_session=%s session=%s from=%d requested=%d effective=%d planned=%d output=%d result=%s %s",
+			id, kind, previous, s.ID[:min(8, len(s.ID))], fromHeight, requestedAutoHeight, body.Capabilities.AutoMaxHeight,
+			playback.PlanQualityHeight(plan), output, result, body.AutoDecision.logFields())
+	}
 	var stream playback.ManagedStream
 	if replace != nil {
 		stream, err = p.Manager.AcquireReplacement(r.Context(), key, s.ID, replace.StreamKey, replace.ID, job)
@@ -403,6 +456,11 @@ func (p *PlaybackHTTP) tune(w http.ResponseWriter, r *http.Request) {
 		p.Manager.MarkAutoCapacityPressure(body.Capabilities.AutoMaxHeight, floor)
 	}
 	if err != nil {
+		result := "failed"
+		if errors.Is(err, playback.ErrBusy) {
+			result = "capacity"
+		}
+		logAuto(result, 0)
 		p.Sessions.Revoke(token)
 		// Capacity is expected under rapid channel changes and retried by the client.
 		logging.Warn("stream failed: %s: %s: %v", label, filepath.Base(path), err)
@@ -435,6 +493,7 @@ func (p *PlaybackHTTP) tune(w http.ResponseWriter, r *http.Request) {
 		writeJSONError(w, 503, "tune cancelled")
 		return
 	}
+	logAuto("admitted", playback.PlanQualityHeight(stream.Job.Plan))
 	// Save before acknowledging the tune: leaving the page immediately must
 	// not depend on a later browser request or activity heartbeat.
 	if body.ProfileID != nil {

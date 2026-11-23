@@ -35,6 +35,18 @@ class NativeAutoQualityTest {
         repeat(6) { assertNull(auto.observe(5000, false, 360, 360)) }
     }
 
+    @Test fun distinguishesBufferingFromDroppedFrames() {
+        val auto = NativeAutoQuality()
+        assertNull(auto.observe(4000, false, 720, 1080, droppedFrames = 8))
+        assertEquals(480, auto.observe(4000, false, 720, 1080, droppedFrames = 9))
+        assertEquals("dropped_frames", auto.decision?.reason)
+        assertEquals(9, auto.decision?.droppedFrames)
+        auto.reset(newWatch = true)
+        assertNull(auto.observe(0, true, 720, 1080))
+        assertEquals(480, auto.observe(0, true, 720, 1080))
+        assertEquals("buffering", auto.decision?.reason)
+    }
+
     @Test fun sharedCeilingLetsLowerViewersClimbThenStopsUpgrades() {
         val auto = NativeAutoQuality()
         assertNull(auto.observe(5000, false, 1080, 1080, serverCeiling = 720))

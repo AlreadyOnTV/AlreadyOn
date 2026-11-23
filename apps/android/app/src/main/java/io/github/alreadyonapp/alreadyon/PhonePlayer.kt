@@ -154,7 +154,7 @@ private fun NativeVideo(playback: PhonePlayback, model: PhoneModel, modifier: Mo
         while (true) {
             delay(5000)
             if (!isStaged) {
-                model.sampleAutoQuality(playback.revision, player.totalBufferedDuration, player.playbackState == Player.STATE_BUFFERING, dropped[0] >= 6)
+                model.sampleAutoQuality(playback.revision, player.totalBufferedDuration, player.playbackState == Player.STATE_BUFFERING, dropped[0])
             }
             dropped[0] = 0
         }

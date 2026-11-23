@@ -11,6 +11,15 @@ export interface PlaybackPressure {
   totalVideoFrames?: number;
 }
 
+export interface AutoDecision {
+  reason: "healthy" | "server_ceiling" | "low_buffer" | "draining_buffer" | "dropped_frames" | "buffering";
+  bufferMs: number;
+  bufferDropMs: number;
+  droppedFrames: number;
+  totalFrames?: number;
+  serverCeiling: number;
+}
+
 const QUALITY_HEIGHTS = [240, 360, 480, 720, 1080, 2160];
 const SAMPLE_WINDOW_MS = 4_500;
 const HEALTHY_WINDOWS_FOR_UPGRADE = 6;
@@ -28,9 +37,11 @@ export class AutoQualityAdapter {
   private strugglingWindows = 0;
   private healthyWindows = 0;
   private recovering = false;
+  decision?: AutoDecision;
 
   reset() {
     this.lastSample = undefined;
+    this.decision = undefined;
     this.strugglingWindows = 0;
     this.healthyWindows = 0;
   }
@@ -61,16 +72,32 @@ export class AutoQualityAdapter {
     const minimum = sample.minHeight ?? 360;
     const serverCeiling = sample.serverCeiling ? Math.max(minimum, sample.serverCeiling) : Infinity;
     const serverPressure = sample.serverCeiling ? sample.outputHeight > serverCeiling : sample.serverPressure;
-    const struggling = (serverPressure && sample.outputHeight > minimum) || sample.bufferedSeconds < 2 || (sample.bufferedSeconds < 3 && draining) || droppedRatio > 0.05;
+    const reason = serverPressure && sample.outputHeight > minimum ? "server_ceiling"
+      : sample.bufferedSeconds < 2 ? "low_buffer"
+      : sample.bufferedSeconds < 3 && draining ? "draining_buffer"
+      : droppedRatio > 0.05 ? "dropped_frames" : undefined;
     const healthy = !serverPressure && sample.bufferedSeconds >= 3 && !draining && droppedRatio <= 0.05;
-    this.strugglingWindows = struggling ? this.strugglingWindows + 1 : 0;
+    this.strugglingWindows = reason ? this.strugglingWindows + 1 : 0;
     this.healthyWindows = healthy ? this.healthyWindows + 1 : 0;
     this.lastSample = sample;
+    const recordDecision = (cause: AutoDecision["reason"]) => {
+      this.decision = {
+        reason: cause,
+        bufferMs: Math.round(sample.bufferedSeconds * 1000),
+        bufferDropMs: Math.round(((previous?.bufferedSeconds ?? sample.bufferedSeconds) - sample.bufferedSeconds) * 1000),
+        droppedFrames: hasFrameDelta ? sample.droppedVideoFrames! - previous.droppedVideoFrames! : 0,
+        totalFrames: frameCount,
+        serverCeiling: sample.serverCeiling ?? 0,
+      };
+    };
 
-    if (this.strugglingWindows >= 2) {
+    if (reason && this.strugglingWindows >= 2) {
       this.strugglingWindows = 0;
       const next = [...QUALITY_HEIGHTS].reverse().find(height => height < sample.outputHeight && height >= minimum);
-      if (next !== undefined) this.recovering = true;
+      if (next !== undefined) {
+        this.recovering = true;
+        recordDecision(reason);
+      }
       return next ?? null;
     }
     const required = this.recovering ? HEALTHY_WINDOWS_AFTER_DOWNSHIFT : HEALTHY_WINDOWS_FOR_UPGRADE;
@@ -80,6 +107,7 @@ export class AutoQualityAdapter {
       if (next !== undefined) {
         this.healthyWindows = 0;
         this.recovering = false;
+        recordDecision("healthy");
       }
       return next ?? null;
     }

@@ -36,6 +36,8 @@ Schedule times are UTC. Presentation delays four seconds; transition preparation
 
 Auto video conversions share a quality ceiling. When admission runs out of room or a player needs a lower rung after repeated buffering or frame drops, existing and new viewers step toward a lower common rung. Players below it can move up after roughly 30 seconds of healthy playback, or a minute after a downshift. Brief dips in the live buffer do not trigger a downshift. A viewer leaving clears the temporary ceiling so the remaining viewers can probe upward. They also retry after a one-minute settling window. Source, device, connection and measured pipeline limits still bound each stream. A connection below the minimum can still buffer.
 
+Server logs record Auto tune outcomes and shared-ceiling changes. Updated players report the reason for a quality change and the buffer and frame sample that prompted it.
+
 Quick calibration checks two workers at the starting rung. Full calibration also measures intermediate SD or HD output alongside the lowest and highest rungs.
 
 ## Processing
