@@ -1925,6 +1925,14 @@ paths:
                   fullAt: { type: string, format: date-time }
                   quickProfiles: { type: integer }
                   fullProfiles: { type: integer }
+                  selection:
+                    type: object
+                    description: Healthy default backend and manager slot limit. Measured source-specific pipelines may use another backend or a lower limit.
+                    required: [driver, library, concurrentLimit]
+                    properties:
+                      driver: { type: string }
+                      library: { type: string }
+                      concurrentLimit: { type: integer }
                   results:
                     type: array
                     description: Recorded cases from the most recent compatible Quick and Full results.

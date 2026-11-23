@@ -1061,6 +1061,7 @@ export type BenchmarkStatus = {
  state: 'idle' | 'queued' | 'running'; mode: 'mini' | 'full' | ''; startedAt: string;
  outcome: string; profiles?: { sourceClass: string; encoder: string; toneMapper?: string; validatedStreams: number; verified: boolean }[];
  results?: { name: string; multiplier: number; passed: boolean }[];
+ selection?: { driver: string; library: string; concurrentLimit: number };
  tasks: { name: string; completed: number; total: number; currentFile?: string }[];
  activeStreams: number; quickAt?: string; fullAt?: string; quickProfiles: number; fullProfiles: number; recommendFull: boolean;
  manual: boolean;

@@ -336,16 +336,16 @@ func (p *PlaybackHTTP) startBenchmark(w http.ResponseWriter, r *http.Request) {
 		writeJSONError(w, 503, "could not pause active streams for the test")
 		return
 	}
-	writeJSON(w, 202, p.benchmarkStatus())
+	writeJSON(w, 202, p.benchmarkStatus(r.Context()))
 }
 
-func (p *PlaybackHTTP) stopBenchmark(w http.ResponseWriter, _ *http.Request) {
+func (p *PlaybackHTTP) stopBenchmark(w http.ResponseWriter, r *http.Request) {
 	if p.Benchmarks == nil {
 		writeJSONError(w, 503, "benchmarking is not available")
 		return
 	}
 	p.Benchmarks.Stop()
-	writeJSON(w, 202, p.benchmarkStatus())
+	writeJSON(w, 202, p.benchmarkStatus(r.Context()))
 }
 
 func (p *PlaybackHTTP) pauseStreams() error {
@@ -444,10 +444,10 @@ func (p *PlaybackHTTP) getBenchmark(w http.ResponseWriter, r *http.Request) {
 		writeJSONError(w, 503, "benchmarking is not available")
 		return
 	}
-	writeJSON(w, 200, p.benchmarkStatus())
+	writeJSON(w, 200, p.benchmarkStatus(r.Context()))
 }
 
-func (p *PlaybackHTTP) benchmarkStatus() playback.BenchmarkStatus {
+func (p *PlaybackHTTP) benchmarkStatus(ctx context.Context) playback.BenchmarkStatus {
 	s := p.Benchmarks.Status()
 	if p.Capacity != nil {
 		s.Profiles = p.Capacity.Status().Profiles
@@ -459,6 +459,13 @@ func (p *PlaybackHTTP) benchmarkStatus() playback.BenchmarkStatus {
 		s.QuickProfiles, s.FullProfiles = calibration.QuickProfiles, calibration.FullProfiles
 		s.RecommendFull = calibration.RecommendFull
 		s.Results = calibration.Results
+		if len(s.Results) > 0 && p.Manager != nil {
+			encoder, _, _ := p.defaultHardwareEncoder(ctx)
+			_, limit := p.Manager.TranscodeSlots()
+			s.Selection = &playback.BenchmarkSelection{
+				Driver: playback.EncoderLabel(encoder), Library: playback.EncoderLibrary(encoder), ConcurrentLimit: limit,
+			}
+		}
 	}
 	return s
 }

@@ -286,6 +286,7 @@ export default function ServerPage() {
     finally { setRequesting(false); }
   };
   const testRunning = benchmark?.state === 'queued' || benchmark?.state === 'running';
+  const selection = benchmark?.selection;
   const testResults = benchmark?.results ?? [];
   const recommendationKey = benchmark?.quickAt ?? '';
   const progress = (() => {
@@ -401,6 +402,7 @@ export default function ServerPage() {
 
       <InfoModal open={info === 'benchmark-results'} title="Video Transcoding Test Results"
         className="benchmark-results-dialog" onClose={() => setInfo(null)}>
+        {selection && <p>Default backend: {selection.driver} (FFmpeg {selection.library}) · Concurrent transcode limit: {selection.concurrentLimit}</p>}
         <div className="modal-table-scroll" tabIndex={0} role="region" aria-label="Test results">
           <table className="admin-table benchmark-results-table">
             <thead><tr><th scope="col">Test Name</th><th scope="col">Multiplier</th><th scope="col">Result</th></tr></thead>

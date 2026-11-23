@@ -307,21 +307,28 @@ func (b *Benchmarks) Stop() {
 	b.mu.Unlock()
 }
 
+type BenchmarkSelection struct {
+	Driver          string `json:"driver"`
+	Library         string `json:"library"`
+	ConcurrentLimit int    `json:"concurrentLimit"`
+}
+
 type BenchmarkStatus struct {
-	State         string            `json:"state"`
-	Mode          string            `json:"mode"`
-	StartedAt     time.Time         `json:"startedAt,omitempty"`
-	Outcome       string            `json:"outcome"`
-	Profiles      []ProfileCapacity `json:"profiles,omitempty"`
-	Tasks         []activity.Task   `json:"tasks"`
-	ActiveStreams int               `json:"activeStreams"`
-	QuickAt       time.Time         `json:"quickAt,omitempty"`
-	FullAt        time.Time         `json:"fullAt,omitempty"`
-	QuickProfiles int               `json:"quickProfiles"`
-	FullProfiles  int               `json:"fullProfiles"`
-	Results       []BenchmarkResult `json:"results,omitempty"`
-	RecommendFull bool              `json:"recommendFull"`
-	Manual        bool              `json:"manual"`
+	State         string              `json:"state"`
+	Mode          string              `json:"mode"`
+	StartedAt     time.Time           `json:"startedAt,omitempty"`
+	Outcome       string              `json:"outcome"`
+	Profiles      []ProfileCapacity   `json:"profiles,omitempty"`
+	Tasks         []activity.Task     `json:"tasks"`
+	ActiveStreams int                 `json:"activeStreams"`
+	QuickAt       time.Time           `json:"quickAt,omitempty"`
+	FullAt        time.Time           `json:"fullAt,omitempty"`
+	QuickProfiles int                 `json:"quickProfiles"`
+	FullProfiles  int                 `json:"fullProfiles"`
+	Results       []BenchmarkResult   `json:"results,omitempty"`
+	Selection     *BenchmarkSelection `json:"selection,omitempty"`
+	RecommendFull bool                `json:"recommendFull"`
+	Manual        bool                `json:"manual"`
 }
 
 func (b *Benchmarks) Status() BenchmarkStatus {

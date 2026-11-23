@@ -69,6 +69,20 @@ func EncoderLabel(encoder string) string {
 	return "Software (CPU)"
 }
 
+// EncoderLibrary names the FFmpeg encoder used by the selected backend.
+func EncoderLibrary(encoder string) string {
+	switch encoder {
+	case EncoderIntelQSV:
+		return "h264_qsv"
+	case EncoderIntelVAAPI, EncoderAMDVAAPI:
+		return "h264_vaapi"
+	case EncoderNvidiaNVENC:
+		return "h264_nvenc"
+	default:
+		return softwareEncoder()
+	}
+}
+
 func dynamicRange(transfer string) string {
 	switch transfer {
 	case "smpte2084":

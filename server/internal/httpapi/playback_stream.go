@@ -134,17 +134,8 @@ func (p *PlaybackHTTP) tune(w http.ResponseWriter, r *http.Request) {
 	}
 	body.Capabilities.Ladder = settings.Ladder
 	// A hardware encoder is used only while its self-test passes.
-	device, hardwareDecoding := "", false
-	if p.Hardware != nil {
-		if ss, err := serversettings.Get(r.Context(), p.DB); err == nil {
-			if encoder := p.Hardware.Resolve(r.Context(), ss.Transcoding, ss.HardwareDecoding); playback.IsHardwareEncoder(encoder) {
-				if status := p.Hardware.Check(r.Context(), encoder, false); status.OK {
-					body.Capabilities.Encoder, device = encoder, status.Device
-					hardwareDecoding = ss.HardwareDecoding
-				}
-			}
-		}
-	}
+	encoder, device, hardwareDecoding := p.defaultHardwareEncoder(r.Context())
+	body.Capabilities.Encoder = encoder
 	label := channelLabel(r.Context(), p.DB, id)
 	e, jobClock, err := playback.TuneEntry(r.Context(), p.DB, p.Clock, id, body.EntryStartsAt)
 	if err != nil {
@@ -651,16 +642,24 @@ func (p *PlaybackHTTP) mediaSubtitles(w http.ResponseWriter, r *http.Request) {
 	}
 }
 
-// hardwareEncoderWorks reports whether a hardware encoder is chosen and passing
-// its self-test, which is when the Quality menu may offer 4K.
+// defaultHardwareEncoder is the healthy starting backend before playback
+// selects a measured pipeline for the particular source.
+func (p *PlaybackHTTP) defaultHardwareEncoder(ctx context.Context) (encoder, device string, decode bool) {
+	if p.Hardware != nil && p.DB != nil {
+		if settings, err := serversettings.Get(ctx, p.DB); err == nil {
+			encoder := p.Hardware.Resolve(ctx, settings.Transcoding, settings.HardwareDecoding)
+			if playback.IsHardwareEncoder(encoder) {
+				if status := p.Hardware.Check(ctx, encoder, false); status.OK {
+					return encoder, status.Device, settings.HardwareDecoding
+				}
+			}
+		}
+	}
+	return "", "", false
+}
+
+// hardwareEncoderWorks reports whether hardware output can offer 4K.
 func (p *PlaybackHTTP) hardwareEncoderWorks(ctx context.Context) bool {
-	if p.Hardware == nil {
-		return false
-	}
-	ss, err := serversettings.Get(ctx, p.DB)
-	if err != nil {
-		return false
-	}
-	encoder := p.Hardware.Resolve(ctx, ss.Transcoding, ss.HardwareDecoding)
-	return playback.IsHardwareEncoder(encoder) && p.Hardware.Check(ctx, encoder, false).OK
+	encoder, _, _ := p.defaultHardwareEncoder(ctx)
+	return encoder != ""
 }

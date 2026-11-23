@@ -3438,6 +3438,7 @@ const noWorkers = async (unreleased = () => 0) => {
       response.url().endsWith("/api/settings/transcoding/benchmark") && response.request().method() === "GET");
     await page.route(benchmarkPath, route => route.fulfill({json: {
       state: "idle", mode: "", tasks: [], results: displayResults,
+      selection: {driver: "Intel Quick Sync (QSV)", library: "h264_qsv", concurrentLimit: 4},
     }}));
     await page.goto(url + "/admin/server");
     await page.locator(".settings-grid").waitFor();
@@ -3519,6 +3520,13 @@ const noWorkers = async (unreleased = () => 0) => {
     await showResults.click();
     const resultsDialog = page.getByRole("dialog", {name: "Video Transcoding Test Results"});
     await resultsDialog.waitFor();
+    const selection = resultsDialog.getByText(
+      "Default backend: Intel Quick Sync (QSV) (FFmpeg h264_qsv) · Concurrent transcode limit: 4", {exact: true},
+    );
+    await selection.waitFor();
+    assert(await selection.evaluate(element =>
+      element.compareDocumentPosition(element.closest(".admin-modal-body").querySelector("table")) &
+      Node.DOCUMENT_POSITION_FOLLOWING), "Backend summary appears above the table");
     assert((await resultsDialog.getByRole("columnheader").allTextContents()).join("|") ===
       "Test Name|Multiplier|Result", "Results have the requested columns");
     assert((await resultsDialog.getByRole("row").allTextContents()).slice(1).join("|") ===
