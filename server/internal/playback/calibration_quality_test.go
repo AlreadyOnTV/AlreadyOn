@@ -1,3 +1,5 @@
+// Quality calibration tests use synthetic fixtures to verify reference
+// generation and pixel comparison without external media.
 package playback
 
 import (
