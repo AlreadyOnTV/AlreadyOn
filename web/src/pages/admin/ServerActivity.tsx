@@ -164,7 +164,7 @@ export default function ServerActivity() {
   const slots = activity?.transcodeSlots;
   const activeTitle =
     slots && slots.limit > 0
-      ? `Active Streaming Sessions (${slots.active}/${slots.limit})`
+      ? `Active Streaming Sessions (${activity.sessions.length}/${slots.limit})`
       : "Active Streaming Sessions";
   return (
     <>
@@ -174,7 +174,7 @@ export default function ServerActivity() {
       >
         <h2
           id="active-streams-title"
-          title="Active transcode resource slots / allowed limit"
+          title="Active player sessions / server transcode slot limit. Devices sharing one rendition count as separate sessions."
         >
           {activeTitle}
         </h2>
