@@ -1,6 +1,6 @@
 # Background work
 
-Database migrations complete before HTTPS, authentication and the WebUI start. Existing configuration, TLS identity and stored sessions are retained.
+Database migrations finish before HTTPS starts. Configuration, TLS and stored sessions persist.
 
 ## Startup and priority
 
@@ -20,7 +20,7 @@ Performance benchmarks run at local **00:00, 04:00, 08:00, 12:00, 16:00 and 20:0
 
 Vendor changes request a two-minute check. Manual Quick and Full Tests replace only their own results, pause background work and block playback. Quick pauses streams immediately; Full requires confirmation. Stop Test retains completed cases. Settings polls every five seconds and recommends Full only when a newer manual quick result differs materially. Saved HDR results apply to the measured conversion pipeline for the selected transcoding device.
 
-**Refresh Library** controls the full recurring library pipeline, even when discovery finds no new files. Its interval starts after the preceding run finishes. A due refresh waits for benchmarking or another library update. Settings-triggered work remains durable and serialized with library refresh. There are no separate hourly schedule-regeneration or conversion-limit jobs bypassing coordination.
+**Refresh Library** controls the full recurring library pipeline, even when discovery finds no new files. Its interval starts after the preceding run finishes. A due refresh waits for benchmarking or another library update. Settings-triggered work remains durable and serialized with library refresh.
 
 ## Validation
 
