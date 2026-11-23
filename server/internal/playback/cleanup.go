@@ -42,18 +42,19 @@ type managed struct {
 // Manager owns private output, workers and viewer leases. Its clock and worker
 // are injectable; Sweep can be called deterministically without timer sleeps.
 type Manager struct {
-	mu         sync.Mutex
-	root       string
-	unlock     func() error
-	clock      schedule.Clock
-	worker     Worker
-	admission  AdmissionPolicy
-	settings   Settings
-	streams    map[string]*managed
-	active     int
-	activeCost int
-	closed     bool
-	wg         sync.WaitGroup
+	mu                sync.Mutex
+	root              string
+	unlock            func() error
+	clock             schedule.Clock
+	worker            Worker
+	admission         AdmissionPolicy
+	settings          Settings
+	streams           map[string]*managed
+	active            int
+	activeCost        int
+	autoPressureUntil time.Time
+	closed            bool
+	wg                sync.WaitGroup
 }
 
 func NewManager(root string, clock schedule.Clock, worker Worker, settings Settings) (*Manager, error) {
@@ -359,6 +360,20 @@ func (m *Manager) PauseAll(ctx context.Context) error {
 		case <-ticker.C:
 		}
 	}
+}
+
+// MarkAutoCapacityPressure gives Auto viewers above the starting rung a
+// bounded opportunity to leave headroom for a refused conversion.
+func (m *Manager) MarkAutoCapacityPressure() {
+	m.mu.Lock()
+	defer m.mu.Unlock()
+	m.autoPressureUntil = m.clock.Now().Add(15 * time.Second)
+}
+
+func (m *Manager) AutoCapacityPressure() bool {
+	m.mu.Lock()
+	defer m.mu.Unlock()
+	return m.clock.Now().Before(m.autoPressureUntil)
 }
 
 // TranscodeSlots reports active encode resource slots and the manager's current

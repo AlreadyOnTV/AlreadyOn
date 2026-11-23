@@ -2,18 +2,18 @@
 
 Server Settings has one Video Transcoding choice: CPU Only (default), Intel, AMD or NVIDIA. Vendor changes save immediately and request a quick capacity check with a two-minute deadline; they do not start full analysis. The legacy `hardwareDecoding` API field remains compatible, but a vendor-only update enables decoding automatically. CPU Only disables GPU processing.
 
-Images contain checksummed synthetic H.264/HEVC SDR and HEVC PQ/HLG fixtures at representative frame rates. Startup runs a quick check only when no compatible quick or full result exists. Full analysis on the existing four-hour idle schedule compares compatible decode/scale/tone-map/encode pipelines and concurrent streams.
+Startup and Quick Test measure representative 360p SDR conversions. Full Test also measures 240p and higher rungs. The server-wide slot ceiling follows validated 360p concurrency. Admission budgets mixed conversions using their measured demand and retains memory headroom.
 
-Quick Test replaces only prior quick results. Full Test replaces only prior full results; full results remain authoritative for playback while a newer quick result is retained separately. A materially different manually requested quick result recommends another Full Test; startup, vendor-change, and completed full runs never show that prompt. Stop Test retains completed cases and clears incomplete output. Manual tests pause background work and playback; Full Test asks before pausing streams. See Test Results summarizes the default backend, FFmpeg encoder and concurrent slot limit. Source-specific limits may be lower.
+Auto conversions start at 360p SDR and can try measured 240p under pressure. WebUI, phone and TV sample playback every five seconds, targeting three to five seconds buffered. Two pressured samples lower the quality. Six healthy samples request a higher rung within source and client limits. Higher Auto rungs can yield capacity after a refused tune. The current rendition plays during preparation.
+
+Quick and Full results remain separate. See Test Results shows the default backend, FFmpeg encoder and slot ceiling. Stop Test retains completed cases. Manual Full Test asks before pausing active streams.
 
 Recommendation comparison uses only matching source/encoder/decode/tone-map
-pipelines and ignores the expected 1-stream Quick Test versus 2/4-stream Full
-Test concurrency difference. It recommends Full Test only when a newer quick
+pipelines and ignores concurrency differences. It recommends Full Test only when a newer quick
 result is verified differently, selects a different output height/frame rate, or
 its one-stream speed differs from the full result by at least 25 percent.
 
-A full run targets about ten minutes. Every case retains the same source, output,
-driver, decode, tone-map and simultaneous-stream coverage. Each steady-state
+Full Test covers source, output, driver, decode, tone-map and concurrent workloads. Each steady-state
 sample uses a half-second warmup and a two-second frame window (48 frames at
 24 fps or 120 frames at 60 fps); borderline concurrent results retain the
 independent confirmation sample and the same 1.3x real-time safety threshold.

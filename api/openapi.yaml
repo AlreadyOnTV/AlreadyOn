@@ -3816,6 +3816,13 @@ components:
           type: array
           items:
             type: string
+        autoMaxHeight:
+          type: integer
+          enum: [0, 240, 360, 480, 720, 1080, 2160]
+          description: Temporary Auto conversion ceiling. New clients request 360p initially. Direct play can retain source quality.
+        autoReplacement:
+          type: boolean
+          description: Identifies an Auto rendition replacement so capacity contention does not count as a new viewer.
         mbps:
           type: number
           minimum: 0
@@ -3901,6 +3908,9 @@ components:
             durationSeconds:
               type: number
               description: Length of the whole source file, for a total-time display that does not depend on how much has been converted.
+            autoCapacityPressure:
+              type: boolean
+              description: A new Auto conversion was recently refused. Existing Auto viewers can reduce demand.
             sourceHeight:
               type: integer
             details:

@@ -27,7 +27,8 @@ type Capabilities struct {
 	MaxHeight int `json:"-"`
 	// AutoMaxHeight is a temporary player pressure ceiling and applies only when
 	// MaxHeight is zero; it does not become an explicit user quality selection.
-	AutoMaxHeight int `json:"autoMaxHeight,omitempty"`
+	AutoMaxHeight   int  `json:"autoMaxHeight,omitempty"`
+	AutoReplacement bool `json:"autoReplacement,omitempty"`
 	// Ladder is the server's opt-in for a low rung on large conversions.
 	Ladder bool `json:"-"`
 	// ServerMaxHeight and ServerMaxFPS describe the measured sustainable pipeline.
@@ -55,6 +56,13 @@ var QualityHeights = []int{360, 480, 720, 1080, UHDHeight}
 // UHDHeight is the 4K picture height, offered with hardware encoding.
 const UHDHeight = 2160
 
+const AutoStartHeight = 360
+const AutoMinHeight = 240
+
+func ValidAutoHeight(height int) bool {
+	return height == AutoMinHeight || slices.Contains(QualityHeights, height)
+}
+
 // OutputRungs define the supported H.264 output ceilings shared by planning
 // and capacity measurements. Video bitrate excludes AAC audio.
 type OutputRung struct {
@@ -74,6 +82,9 @@ var OutputRungs = []OutputRung{
 
 // heightBitrate is the video bitrate ceiling for a chosen output height.
 func heightBitrate(h int) int64 {
+	if h <= AutoMinHeight {
+		return 750000
+	}
 	for i := len(OutputRungs) - 1; i >= 0; i-- {
 		rung := OutputRungs[i]
 		if h <= rung.Height {
@@ -267,7 +278,7 @@ func choose(source library.ProbeResult, caps Capabilities, allowDirect, forceEnc
 	}
 	requestedHeight := caps.MaxHeight
 	if requestedHeight == 0 && caps.AutoMaxHeight > 0 {
-		if caps.AutoMaxHeight == UHDHeight || !slices.Contains(QualityHeights, caps.AutoMaxHeight) {
+		if !ValidAutoHeight(caps.AutoMaxHeight) {
 			return Plan{}, ErrUnsupported
 		}
 		requestedHeight = caps.AutoMaxHeight
@@ -415,7 +426,7 @@ func choose(source library.ProbeResult, caps Capabilities, allowDirect, forceEnc
 		}
 		// 4K only on request and only with a hardware encoder.
 		maxW, maxH, rateCap := 1920, 1080, int64(12000000)
-		if caps.Encoder != "" && caps.MaxHeight >= UHDHeight && c.Level >= 50 {
+		if caps.Encoder != "" && requestedHeight >= UHDHeight && c.Level >= 50 {
 			maxW, maxH, rateCap = 3840, UHDHeight, 25000000
 		}
 		w, h := min(c.Width, maxW), min(c.Height, maxH)

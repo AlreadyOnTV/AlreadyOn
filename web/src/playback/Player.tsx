@@ -394,10 +394,10 @@ export function Player({
   const quality = chosen?.profileId === currentUserId ? chosen.value : stored;
   const qualityRef = useRef(quality);
   const appliedQuality = useRef(quality);
-  const autoQualityHeight = useRef(1080);
+  const autoQualityHeight = useRef(360);
   const chooseQuality = (height: number) => {
-    const resetAuto = height === 0 && autoQualityHeight.current !== 1080;
-    if (height === 0) autoQualityHeight.current = 1080;
+    const resetAuto = height === 0 && autoQualityHeight.current !== 360;
+    if (height === 0) autoQualityHeight.current = 360;
     writeQuality(currentUserId, height);
     setChosen({ profileId: currentUserId, value: height });
     if (resetAuto && qualityRef.current === 0) void api.current?.requality();
@@ -470,6 +470,7 @@ export function Player({
     // Only the viewer's own pause counts: a paused player stays paused when new
     // data arrives or the next program starts.
     let userPaused = false;
+    autoQualityHeight.current = 360;
     const qualityAdapter = new AutoQualityAdapter();
     const viewerId = Array.from(
       crypto.getRandomValues(new Uint8Array(16)),
@@ -777,6 +778,8 @@ export function Player({
             active?.value.details?.outputVideo.height ??
             active?.value.sourceHeight ??
             360,
+          maxHeight: Math.min(active?.value.sourceHeight ?? 1080, active?.value.uhd ? 2160 : 1080),
+          serverPressure: active?.value.autoCapacityPressure,
           droppedVideoFrames: frameQuality?.droppedVideoFrames,
           totalVideoFrames: frameQuality?.totalVideoFrames,
         },
@@ -784,13 +787,13 @@ export function Player({
           qualityRef.current === 0 &&
           !userPaused &&
           !video.paused &&
-          video.readyState >= 2 &&
+          !active.value.plan.videoCopy &&
+          started &&
           !moving &&
           !swapping,
       );
-      if (nextHeight !== null && nextHeight < autoQualityHeight.current) {
-        autoQualityHeight.current = nextHeight;
-        void requality();
+      if (nextHeight !== null && nextHeight !== autoQualityHeight.current) {
+        void requality(nextHeight);
       }
     };
     // A browser that refuses sound autoplay still allows muted, so retry muted once.
@@ -1002,6 +1005,7 @@ export function Player({
     async function prepare(
       entryStartsAt?: string,
       stopOnCapacity = false,
+      autoReplacement = false,
     ): Promise<Prepared | null> {
       const requestedAt = performance.now();
       const capabilities = await clientCapabilities();
@@ -1011,7 +1015,7 @@ export function Player({
         const autoMaxHeight = maxHeight === 0 ? autoQualityHeight.current : 0;
         const audio = { ...audioRef.current };
         const tunedCapabilities =
-          autoMaxHeight > 0 ? { ...capabilities, autoMaxHeight } : capabilities;
+          autoMaxHeight > 0 ? { ...capabilities, autoMaxHeight, autoReplacement } : capabilities;
         const grant = await request<Authorization>(
           "/api/playback/sessions",
           { channelId },
@@ -1100,7 +1104,7 @@ export function Player({
         };
         setSession(value);
         if (!userPaused) seek();
-        heartbeat = setTimeout(() => void update(), 10000);
+        heartbeat = setTimeout(() => void update(), active.quality === 0 && !value.plan.videoCopy ? 5000 : 10000);
       } catch (e) {
         if (stopped || current !== active) return;
         if (userPaused) resumeFresh = true;
@@ -1116,7 +1120,7 @@ export function Player({
       moving = false;
       qualityAdapter.reset();
       clearInterval(qualityTimer);
-      qualityTimer = setInterval(sampleQualityPressure, 10000);
+      qualityTimer = setInterval(sampleQualityPressure, 5000);
       next = null;
       started = false;
       seekedToStart = false;
@@ -1149,7 +1153,7 @@ export function Player({
         // before our schedule alignment can run (and we must not rewind afterward).
         hls = new Hls({
           startPosition: following ? 0 : -1,
-          maxBufferLength: 12,
+          maxBufferLength: s.plan.videoCopy || prepared.quality !== 0 ? 12 : 5,
           backBufferLength: 6,
           liveSyncDurationCount: Math.max(2, Math.ceil(liveDelay() / 2)),
           startLevel: s.plan.lowHeight ? 0 : undefined,
@@ -1227,16 +1231,19 @@ export function Player({
     // Switches the airing entry to the newly chosen quality. The new stream is
     // prepared while the old one keeps playing; only then is the picture
     // swapped, holding the last frame for the moment the new stream needs.
-    async function requality() {
+    async function requality(adaptiveHeight?: number) {
       if (stopped || moving || swapping || !current) return;
       swapping = true;
+      const oldAutoHeight = autoQualityHeight.current;
+      if (adaptiveHeight !== undefined) autoQualityHeight.current = adaptiveHeight;
       let released = false;
       try {
         let fresh: Prepared | null;
         try {
-          fresh = await prepare(undefined, true);
+          fresh = await prepare(undefined, true, adaptiveHeight !== undefined);
         } catch (e) {
           if (
+            adaptiveHeight !== undefined ||
             (e as RequestError).code !== "stream_capacity" ||
             stopped ||
             moving
@@ -1262,9 +1269,23 @@ export function Player({
           // Bounded retries allow the cancelled worker to exit before admission.
           fresh = await prepare();
         }
-        if (!fresh) return;
+        if (!fresh) {
+          if (adaptiveHeight !== undefined) autoQualityHeight.current = oldAutoHeight;
+          return;
+        }
         const old = current;
         if (stopped) return;
+        if (adaptiveHeight !== undefined && old) {
+          const oldHeight = old.value.details?.outputVideo.height ?? oldAutoHeight;
+          const newHeight = fresh.value.details?.outputVideo.height ?? adaptiveHeight;
+          if (fresh.value.mediaFileId !== old.value.mediaFileId ||
+              fresh.value.entryStartsAt !== old.value.entryStartsAt ||
+              (adaptiveHeight - oldHeight) * (newHeight - oldHeight) <= 0) {
+            autoQualityHeight.current = oldAutoHeight;
+            await drop(fresh.value.token);
+            return;
+          }
+        }
         if (
           !released &&
           old &&
@@ -1287,6 +1308,10 @@ export function Player({
           if (old) void drop(old.value.token);
         }
       } catch (e) {
+        if (adaptiveHeight !== undefined) {
+          if (qualityRef.current === 0) autoQualityHeight.current = oldAutoHeight;
+          return;
+        }
         if (released) {
           if (!stopped)
             fail(

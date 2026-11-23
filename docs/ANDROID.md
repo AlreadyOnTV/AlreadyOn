@@ -14,7 +14,7 @@ Native onboarding accepts the instance certificate on first connection without a
 
 ## Validation
 
-Check sign-in, profiles/PINs, channel changes, transitions, tracks, rotation and recovery. Explicit 1080p uses the decoder-supported H.264 High profile on phone and TV; 4K is TV-only and requires both a verified TV decoder and server hardware encoder. Auto remains capped at 720p. Test picture-in-picture only on phones; TV and WebUI omit it. Use synthetic fixtures; record codec limitations without personal details.
+Check sign-in, profiles/PINs, channel changes, transitions, tracks, rotation and recovery. Explicit 1080p uses the decoder-supported H.264 High profile on phone and TV; 4K is TV-only and requires both a verified TV decoder and server hardware encoder. Auto transcodes start at 360p SDR. Test picture-in-picture only on phones; TV and WebUI omit it. Use synthetic fixtures; record codec limitations without personal details.
 
 On phones, tap the picture-in-picture video to reveal Android’s menu. Use Play or Pause and Mute or Unmute in the bottom row. Resuming playback rejoins the current live airing. Controls stay visible while tuning. Tap Play to retry after errors.
 

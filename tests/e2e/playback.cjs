@@ -1403,6 +1403,7 @@ const noWorkers = async (unreleased = () => 0) => {
     page.on("pageerror", (e) => errors.push(e.message));
     trackGrants(page);
     await login(page);
+    assert((await context.request.put(url + "/api/test/capacity")).ok(), "Install isolated quality capacity");
     await page.locator(".guide-slot-box").first().click();
     await playing(page);
     const height = () =>
@@ -1413,8 +1414,8 @@ const noWorkers = async (unreleased = () => 0) => {
       await page.getByRole("menuitem", { name: /^Quality/ }).click();
     };
     assert(
-      (await height()) === 720,
-      `Expected the 720p source to play as-is, got ${await height()}p`,
+      (await height()) === 360,
+      `Expected Auto to start at 360p, got ${await height()}p`,
     );
     // The Settings menu order; Playback Details puts the live panel in the top left corner.
     await page.locator(".playback-player").hover();
@@ -1526,10 +1527,10 @@ const noWorkers = async (unreleased = () => 0) => {
     const before = await page.evaluate(() =>
       Number(document.querySelector("video").dataset.scheduleTime),
     );
-    await page.getByRole("menuitemradio", { name: "360p" }).click();
+    await page.getByRole("menuitemradio", { name: "480p" }).click();
     await page.waitForFunction(
       () =>
-        document.querySelector("video").videoHeight === 360 &&
+        document.querySelector("video").videoHeight === 480 &&
         !document.querySelector("video").paused &&
         document.querySelector("video").readyState >= 3,
       null,
@@ -1567,7 +1568,7 @@ const noWorkers = async (unreleased = () => 0) => {
     await goTo("/");
     await startAgain();
     assert(
-      (await height()) === 360,
+      (await height()) === 480,
       `Moving around the app lost the quality choice (${await height()}p)`,
     );
     // ...and saving settings, which reloads the page on the app's behalf.
@@ -1654,7 +1655,7 @@ const noWorkers = async (unreleased = () => 0) => {
     await page.getByRole("button", { name: /Back To Guide/ }).click();
     await startAgain();
     assert(
-      (await height()) === 360,
+      (await height()) === 480,
       `Saving settings lost the quality choice (${await height()}p)`,
     );
     await leave(page);
@@ -1675,7 +1676,7 @@ const noWorkers = async (unreleased = () => 0) => {
     await login(page);
     await startAgain();
     assert(
-      (await height()) === 720,
+      (await height()) === 360,
       `A fresh load should start on Auto (${await height()}p)`,
     );
     // Another device (fresh storage) has its own, automatic, setting.
@@ -1688,7 +1689,7 @@ const noWorkers = async (unreleased = () => 0) => {
     assert(
       (await otherPage.evaluate(
         () => document.querySelector("video").videoHeight,
-      )) === 720,
+      )) === 360,
       "A second device did not start on its own automatic quality",
     );
     await leave(otherPage);
@@ -1698,7 +1699,7 @@ const noWorkers = async (unreleased = () => 0) => {
     await page.getByRole("menuitemradio", { name: "Auto" }).click();
     await page.waitForFunction(
       () =>
-        document.querySelector("video").videoHeight === 720 &&
+        document.querySelector("video").videoHeight === 360 &&
         !document.querySelector("video").paused &&
         document.querySelector("video").readyState >= 3,
       null,
@@ -1706,6 +1707,7 @@ const noWorkers = async (unreleased = () => 0) => {
     );
     await leave(page);
     await noWorkers(unreleased);
+    assert((await context.request.delete(url + "/api/test/capacity")).ok(), "Restore real playback capacity");
     await context.close();
     console.log(
       "PASS: quality menu offers rungs, swaps in place, is kept while the app is open (not across a fresh load), other devices stay automatic",

@@ -231,3 +231,27 @@ func TestCalibrationStatusIncludesQuickAndFullCases(t *testing.T) {
 		t.Fatalf("unexpected test results: %+v", rows)
 	}
 }
+
+func TestMixedConversionsUseMeasuredDemand(t *testing.T) {
+	source := sourceInfo()
+	video, _ := Tracks(source)
+	light := ProfileCapacity{TargetHeight: AutoStartHeight, SourceClass: classifySource(video),
+		SourceWidth: video.Width, SourceHeight: video.Height, SourceFPS: 60, Height: 360, FPS: 30,
+		Threads: 2, Streams: 4, Verified: true}
+	heavy := light
+	heavy.TargetHeight, heavy.Height, heavy.Streams = 720, 720, 2
+	c := &Capacity{memory: func() uint64 { return 16 << 30 }}
+	c.publishProfiles([]ProfileCapacity{light, heavy})
+	small := Job{Source: source, Plan: Plan{Mode: "transcode", Height: 360, FPS: 30}, Threads: 2}
+	large := small
+	large.Plan.Height = 720
+	if c.Processes() != 4 {
+		t.Fatalf("expected four verified baseline slots, got %d", c.Processes())
+	}
+	if err := c.AdmissionError([]Job{large, small}, small); err != nil {
+		t.Fatalf("mixed load should fit: %v", err)
+	}
+	if err := c.AdmissionError([]Job{large, small, small}, small); !errors.Is(err, ErrBusy) {
+		t.Fatalf("mixed load should reject overcommit: %v", err)
+	}
+}

@@ -21,6 +21,9 @@ import androidx.compose.foundation.clickable
 import androidx.compose.foundation.layout.*
 import androidx.compose.material3.*
 import androidx.compose.ui.Alignment
+import androidx.compose.ui.draw.alpha
+import androidx.compose.ui.zIndex
+import androidx.media3.exoplayer.analytics.AnalyticsListener
 import androidx.compose.ui.graphics.Color
 import androidx.compose.ui.graphics.Brush
 import androidx.compose.ui.graphics.vector.ImageVector
@@ -68,9 +71,12 @@ import java.io.IOException
 @androidx.annotation.OptIn(UnstableApi::class)
 @Composable
 private fun NativeVideo(playback: PhonePlayback, model: PhoneModel, modifier: Modifier,
-    paused: Boolean, volume: Float, pictureInPicture: Boolean, onPosition: (Double) -> Unit, onTap: () -> Unit) {
+    paused: Boolean, volume: Float, pictureInPicture: Boolean, staged: Boolean, auto: Boolean, onPosition: (Double) -> Unit, onTap: () -> Unit) {
     val context = LocalContext.current
     val inPip by rememberUpdatedState(pictureInPicture)
+    val isStaged by rememberUpdatedState(staged)
+    var rendered by remember(playback.revision) { mutableStateOf(false) }
+    val dropped = remember(playback.revision) { intArrayOf(0) }
     val player = remember(playback.revision) {
         val authorized = playback.url.toHttpUrl()
         val mediaPrefix = authorized.encodedPath.substringBeforeLast('/') + "/"
@@ -89,20 +95,29 @@ private fun NativeVideo(playback: PhonePlayback, model: PhoneModel, modifier: Mo
             }.build()
         val sources = DefaultMediaSourceFactory(context).setDataSourceFactory(OkHttpDataSource.Factory(http))
         val builder = ExoPlayer.Builder(context).setMediaSourceFactory(sources)
-        if (BuildConfig.IS_TV) builder.setLoadControl(DefaultLoadControl.Builder()
-            .setBufferDurationsMs(5000, 15000, 500, 1000).setTargetBufferBytes(16 * 1024 * 1024).build())
+        val useAutoBuffer = auto && playback.outputHeight > 0
+        if (useAutoBuffer || BuildConfig.IS_TV) builder.setLoadControl(DefaultLoadControl.Builder()
+            .setBufferDurationsMs(if (useAutoBuffer) 3000 else 5000,
+                if (useAutoBuffer) 5500 else 15000, 500, 1000)
+            .setTargetBufferBytes(16 * 1024 * 1024).build())
         builder.build().apply {
             val preparedAt = SystemClock.elapsedRealtime()
+            addAnalyticsListener(object : AnalyticsListener {
+                override fun onDroppedVideoFrames(eventTime: AnalyticsListener.EventTime, droppedFrames: Int, elapsedMs: Long) {
+                    dropped[0] += droppedFrames
+                }
+            })
             addListener(object : Player.Listener {
                 private var firstFrame = false
                 override fun onRenderedFirstFrame() {
                     if (firstFrame) return
                     firstFrame = true
-                    if (isPlaying) model.playbackStarted(playback.revision)
+                    rendered = true
+                    if (isPlaying && !isStaged) model.playbackStarted(playback.revision)
                     if (android.util.Log.isLoggable(PLAYBACK_LOG_TAG, android.util.Log.DEBUG)) android.util.Log.d(PLAYBACK_LOG_TAG, "First frame revision=${playback.revision} playerMs=${SystemClock.elapsedRealtime()-preparedAt} tuneMs=${SystemClock.elapsedRealtime()-playback.requestedAt}")
                 }
                 override fun onIsPlayingChanged(isPlaying: Boolean) {
-                    if (firstFrame && isPlaying) model.playbackStarted(playback.revision)
+                    if (firstFrame && isPlaying && !isStaged) model.playbackStarted(playback.revision)
                 }
                 private var aligned = false
                 private var bufferingAt: Long? = null
@@ -126,7 +141,7 @@ private fun NativeVideo(playback: PhonePlayback, model: PhoneModel, modifier: Mo
                         }
                     }
                 }
-                override fun onPlayerError(error: PlaybackException) { model.playerFailed(playback.revision, error, keepChannel = inPip) }
+                override fun onPlayerError(error: PlaybackException) { if (!isStaged) model.playerFailed(playback.revision, error, keepChannel = inPip) }
             })
             // HLS positions are relative to its sliding window; align by date after the first timeline is ready.
             setMediaItem(MediaItem.fromUri(playback.url), if (playback.hlsTargetMs != null) C.TIME_UNSET else playback.startMs)
@@ -134,6 +149,20 @@ private fun NativeVideo(playback: PhonePlayback, model: PhoneModel, modifier: Mo
             playWhenReady = !paused
             this.volume = volume
         }
+    }
+    LaunchedEffect(player) {
+        while (true) {
+            delay(5000)
+            if (!isStaged) {
+                model.sampleAutoQuality(playback.revision, player.totalBufferedDuration, player.playbackState == Player.STATE_BUFFERING, dropped[0] >= 6)
+            }
+            dropped[0] = 0
+        }
+    }
+    LaunchedEffect(player, staged, rendered) {
+        if (!staged || !rendered) return@LaunchedEffect
+        while (player.playbackState != Player.STATE_READY || player.totalBufferedDuration < 1800) delay(100)
+        model.adaptivePrepared(playback.revision)
     }
     val positionCallback by rememberUpdatedState(onPosition)
     LaunchedEffect(player, playback.subtitleTracks.isNotEmpty()) {
@@ -145,7 +174,7 @@ private fun NativeVideo(playback: PhonePlayback, model: PhoneModel, modifier: Mo
                 player.currentTimeline.getWindow(player.currentMediaItemIndex, window)
                 if (window.windowStartTimeMs != C.TIME_UNSET) shift = (window.windowStartTimeMs - playback.hlsOriginMs) / 1000.0
             }
-            positionCallback(player.currentPosition / 1000.0 + playback.streamOffsetSeconds + shift)
+            if (!isStaged) positionCallback(player.currentPosition / 1000.0 + playback.streamOffsetSeconds + shift)
             delay(200)
         }
     }
@@ -290,10 +319,14 @@ internal fun PhonePlayer(state: PhoneState, model: PhoneModel, modifier: Modifie
         )
     } else Modifier
     Box(modifier.background(Color.Black).then(swipeModifier).then(if (tv && !fullscreen) Modifier.focusProperties { canFocus = false } else Modifier).then(if (tv) Modifier else Modifier.clickable { visible = !visible })) {
-        state.playback?.let { playback ->
-            NativeVideo(playback, model, Modifier.fillMaxSize(), state.paused,
-                if (state.muted) 0f else 1f, pictureInPicture, onPosition = { sourceTime = it }, onTap = { if (!tv || fullscreen) visible = !visible })
-        } ?: state.error?.let { Text(it, Modifier.align(Alignment.Center), color = Color.White) }
+        for (playback in listOfNotNull(state.playback, state.pendingPlayback)) key(playback.revision) {
+            val staged = playback.revision == state.pendingPlayback?.revision
+            val surface = if (staged) Modifier.fillMaxSize().zIndex(-1f).alpha(0f) else Modifier.fillMaxSize()
+            NativeVideo(playback, model, surface, state.paused || staged,
+                if (state.muted || staged) 0f else 1f, pictureInPicture, staged, state.quality == 0,
+                onPosition = { sourceTime = it }, onTap = { if (!tv || fullscreen) visible = !visible })
+        }
+        if (state.playback == null) state.error?.let { Text(it, Modifier.align(Alignment.Center), color = Color.White) }
         if (!pictureInPicture && state.channel != null && !state.playbackReady && state.error == null) {
             Text("Tuning…", Modifier.align(Alignment.TopCenter).fillMaxWidth()
                 .padding(if (fullscreen) WindowInsets.safeDrawing.asPaddingValues() else PaddingValues(0.dp))
