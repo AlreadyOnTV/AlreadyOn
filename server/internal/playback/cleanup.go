@@ -421,6 +421,11 @@ func (m *Manager) MarkAutoCapacityPressure(requested, floor int) {
 	ceiling := m.autoQualityCeilingLocked()
 	highest := 0
 	for _, stream := range m.streams {
+		// A staged replacement temporarily uses resources from both jobs.
+		// Clients retry against the settled workload after the old job exits.
+		if stream.replaces != nil && !stream.closing && !stream.Done && !stream.replaces.closing && !stream.replaces.Done {
+			return
+		}
 		if stream.closing || stream.Job.Plan.VideoCopy {
 			continue
 		}

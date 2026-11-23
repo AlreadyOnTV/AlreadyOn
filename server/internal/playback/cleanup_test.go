@@ -521,3 +521,26 @@ func TestAutoQualityCeilingUsesEachViewersDeviceLimit(t *testing.T) {
 		t.Fatalf("web viewer can recover when the phone leaves, got %d", got)
 	}
 }
+
+func TestAutoCapacityPressureIgnoresStagedReplacementOverlap(t *testing.T) {
+	m, err := NewManager(t.TempDir(), &testClock{now: time.Now()}, workerFunc(func(ctx context.Context, _ Job) error {
+		<-ctx.Done()
+		return ctx.Err()
+	}), DefaultSettings())
+	if err != nil {
+		t.Fatal(err)
+	}
+	defer m.Close()
+	first := Job{Plan: Plan{Mode: "transcode", Width: 1920, Height: 1080}, AutoQualityMax: 1080}
+	if _, err := m.Acquire(context.Background(), "playing", "viewer", first); err != nil {
+		t.Fatal(err)
+	}
+	lower := Job{Plan: Plan{Mode: "transcode", Width: 1280, Height: 720}, AutoQualityMax: 1080}
+	if _, err := m.AcquireReplacement(context.Background(), "staged", "replacement", "playing", "viewer", lower); err != nil {
+		t.Fatal(err)
+	}
+	m.MarkAutoCapacityPressure(720, 360)
+	if got := m.AutoQualityCeiling(); got != 1080 {
+		t.Fatalf("a rejected third worker during the handoff should keep the device ceiling, got %d", got)
+	}
+}

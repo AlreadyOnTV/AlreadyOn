@@ -706,25 +706,24 @@ export function Player({
           Math.min(retryAt - now + liveDelay() * 1000, 2147483647),
         );
     };
+    // Hold the displayed program moment while the replacement buffers.
+    let qualityPosition: { at: number; resumedAt?: number } | undefined;
     const desired = () => {
       if (!current) return 0;
       const s = current.value;
+      const targetTime = qualityPosition
+        ? qualityPosition.at + (qualityPosition.resumedAt === undefined ? 0 : performance.now() - qualityPosition.resumedAt)
+        : wallTime() - liveDelay() * 1000;
       const playing = playingTime();
       if (playing != null)
-        return Math.max(
-          0,
-          video.currentTime +
-            (wallTime() - liveDelay() * 1000 - playing) / 1000,
-        );
+        return Math.max(0, video.currentTime + (targetTime - playing) / 1000);
       if (hlsAnchor)
         return Math.max(
           0,
-          hlsAnchor.start + (wallTime() - hlsAnchor.date) / 1000 - liveDelay(),
+          hlsAnchor.start + (targetTime - hlsAnchor.date) / 1000,
         );
       const source =
-        (wallTime() - Date.parse(s.entryStartsAt)) / 1000 +
-        s.sourceOffsetSeconds -
-        liveDelay();
+        (targetTime - Date.parse(s.entryStartsAt)) / 1000 + s.sourceOffsetSeconds;
       return Math.max(
         0,
         s.plan.mode === "direct" ? source : source - s.streamOffsetSeconds,
@@ -814,7 +813,15 @@ export function Player({
       setPaused(true);
     };
     const startPlayback = () => {
+      const previousTime = video.currentTime;
+      const previousPosition = qualityPosition ? scheduleTime() : null;
       seek();
+      if (qualityPosition) {
+        if (previousPosition != null && Number.isFinite(previousPosition)) {
+          qualityPosition.at = previousPosition + (video.currentTime - previousTime) * 1000;
+        }
+        qualityPosition.resumedAt = performance.now();
+      }
       started = true;
       clearInterval(startTimer);
       clearTimeout(bufferTimer);
@@ -1116,12 +1123,15 @@ export function Player({
         else fail(e as RequestError);
       }
     }
-    function attach(prepared: Prepared, following = false) {
+    function attach(prepared: Prepared, following = false, resumePosition?: number) {
       if (stopped) return;
       initialBufferWait = current === null && !following;
       moving = true;
       detach();
       current = prepared;
+      qualityPosition = resumePosition !== undefined && Number.isFinite(resumePosition)
+        ? { at: resumePosition }
+        : undefined;
       moving = false;
       qualityAdapter.reset();
       clearInterval(qualityTimer);
@@ -1315,8 +1325,9 @@ export function Player({
           const pending = next;
           next = null;
           void pending?.then((p) => (p ? drop(p.value.token) : undefined));
+          const resumePosition = adaptiveHeight === undefined ? undefined : (scheduleTime() ?? undefined);
           freeze();
-          attach(fresh, true);
+          attach(fresh, true, resumePosition);
           if (old) void drop(old.value.token);
         }
       } catch (e) {

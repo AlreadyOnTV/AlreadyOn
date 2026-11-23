@@ -13,6 +13,8 @@ export interface PlaybackPressure {
 
 const QUALITY_HEIGHTS = [240, 360, 480, 720, 1080, 2160];
 const SAMPLE_WINDOW_MS = 4_500;
+const HEALTHY_WINDOWS_FOR_UPGRADE = 6;
+const HEALTHY_WINDOWS_AFTER_DOWNSHIFT = 12;
 
 // The encoder fits the source inside a 16:9 quality box. A wide film can
 // fill the box horizontally while its actual height remains below the rung.
@@ -25,6 +27,7 @@ export class AutoQualityAdapter {
   private lastSample?: PlaybackPressure;
   private strugglingWindows = 0;
   private healthyWindows = 0;
+  private recovering = false;
 
   reset() {
     this.lastSample = undefined;
@@ -58,7 +61,7 @@ export class AutoQualityAdapter {
     const minimum = sample.minHeight ?? 360;
     const serverCeiling = sample.serverCeiling ? Math.max(minimum, sample.serverCeiling) : Infinity;
     const serverPressure = sample.serverCeiling ? sample.outputHeight > serverCeiling : sample.serverPressure;
-    const struggling = (serverPressure && sample.outputHeight > minimum) || sample.bufferedSeconds < 3 || (sample.bufferedSeconds < 5 && draining) || droppedRatio > 0.05;
+    const struggling = (serverPressure && sample.outputHeight > minimum) || sample.bufferedSeconds < 2 || (sample.bufferedSeconds < 3 && draining) || droppedRatio > 0.05;
     const healthy = !serverPressure && sample.bufferedSeconds >= 3 && !draining && droppedRatio <= 0.05;
     this.strugglingWindows = struggling ? this.strugglingWindows + 1 : 0;
     this.healthyWindows = healthy ? this.healthyWindows + 1 : 0;
@@ -66,12 +69,19 @@ export class AutoQualityAdapter {
 
     if (this.strugglingWindows >= 2) {
       this.strugglingWindows = 0;
-      return [...QUALITY_HEIGHTS].reverse().find(height => height < sample.outputHeight && height >= minimum) ?? null;
+      const next = [...QUALITY_HEIGHTS].reverse().find(height => height < sample.outputHeight && height >= minimum);
+      if (next !== undefined) this.recovering = true;
+      return next ?? null;
     }
-    if (this.healthyWindows >= 3) {
-      this.healthyWindows = 0;
+    const required = this.recovering ? HEALTHY_WINDOWS_AFTER_DOWNSHIFT : HEALTHY_WINDOWS_FOR_UPGRADE;
+    if (this.healthyWindows >= required) {
       const maximum = Math.min(sample.maxHeight ?? 1080, serverCeiling);
-      return QUALITY_HEIGHTS.find(height => height > sample.outputHeight && height <= maximum) ?? null;
+      const next = QUALITY_HEIGHTS.find(height => height > sample.outputHeight && height <= maximum);
+      if (next !== undefined) {
+        this.healthyWindows = 0;
+        this.recovering = false;
+      }
+      return next ?? null;
     }
     return null;
   }

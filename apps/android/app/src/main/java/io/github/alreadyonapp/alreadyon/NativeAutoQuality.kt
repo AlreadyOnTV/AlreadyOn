@@ -17,8 +17,10 @@ internal class NativeAutoQuality {
     private var previousBuffer: Long? = null
     private var struggling = 0
     private var healthy = 0
+    private var recovering = false
 
-    fun reset() {
+    fun reset(newWatch: Boolean = false) {
+        if (newWatch) recovering = false
         previousBuffer = null
         struggling = 0
         healthy = 0
@@ -30,16 +32,22 @@ internal class NativeAutoQuality {
         val draining = prior - bufferedMs > 2000 // Ignore normal two-second HLS segment fluctuations.
         val ceiling = if (serverCeiling > 0) maxOf(minimum, serverCeiling) else Int.MAX_VALUE
         val constrained = if (serverCeiling > 0) height > ceiling else serverPressure
-        val underPressure = constrained && height > minimum || buffering || bufferedMs < 3000 || bufferedMs < 5000 && draining
+        val underPressure = constrained && height > minimum || buffering || bufferedMs < 2000 || bufferedMs < 3000 && draining
         struggling = if (underPressure) struggling + 1 else 0
         healthy = if (!underPressure && !constrained && bufferedMs >= 3000 && !draining) healthy + 1 else 0
         if (struggling >= 2) {
             struggling = 0
-            return autoQualityHeights.lastOrNull { it < height && it >= minimum }
+            val next = autoQualityHeights.lastOrNull { it < height && it >= minimum }
+            if (next != null) recovering = true
+            return next
         }
-        if (healthy >= 3) {
-            healthy = 0
-            return autoQualityHeights.firstOrNull { it > height && it <= minOf(maximum, ceiling) }
+        if (healthy >= (if (recovering) 12 else 6)) {
+            val next = autoQualityHeights.firstOrNull { it > height && it <= minOf(maximum, ceiling) }
+            if (next != null) {
+                healthy = 0
+                recovering = false
+            }
+            return next
         }
         return null
     }

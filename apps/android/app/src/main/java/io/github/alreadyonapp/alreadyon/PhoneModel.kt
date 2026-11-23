@@ -543,7 +543,7 @@ internal class PhoneModel(application: Application) : AndroidViewModel(applicati
         adaptiveRequest = null
         autoCapacityPressure = false
         autoQualityCeiling = 0
-        autoQuality.reset()
+        autoQuality.reset(newWatch = true)
         val requestedAt = SystemClock.elapsedRealtime()
         val viewerId = UUID.randomUUID().toString()
         val previous = viewing
