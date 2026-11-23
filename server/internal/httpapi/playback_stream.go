@@ -94,10 +94,11 @@ func (p *PlaybackHTTP) tune(w http.ResponseWriter, r *http.Request) {
 		return
 	}
 	var body struct {
-		Capabilities  playback.Capabilities `json:"capabilities"`
-		ForceEncode   bool                  `json:"forceEncode"`
-		Token         string                `json:"token"`
-		EntryStartsAt time.Time             `json:"entryStartsAt"`
+		Capabilities     playback.Capabilities `json:"capabilities"`
+		ForceEncode      bool                  `json:"forceEncode"`
+		Token            string                `json:"token"`
+		ReplacementToken string                `json:"replacementToken"`
+		EntryStartsAt    time.Time             `json:"entryStartsAt"`
 		// MaxHeight is the viewer's quality ceiling: 0 for automatic, else one of playback.QualityHeights.
 		MaxHeight        int    `json:"maxHeight"`
 		AudioLanguage    string `json:"audioLanguage"`
@@ -328,7 +329,18 @@ func (p *PlaybackHTTP) tune(w http.ResponseWriter, r *http.Request) {
 		writeJSONError(w, 409, "playback authorization was cancelled or already used")
 		return
 	}
-	stream, err := p.Manager.Acquire(r.Context(), key, s.ID, job)
+	replace, replaceErr := p.replacementSession(body.Capabilities, body.ReplacementToken, auth.PrincipalID(r.Context()), id)
+	if replaceErr != nil {
+		p.Sessions.Revoke(token)
+		writeJSON(w, http.StatusConflict, map[string]string{"error": "playback replacement is no longer available", "code": "playback_replacement_invalid"})
+		return
+	}
+	var stream playback.ManagedStream
+	if replace != nil {
+		stream, err = p.Manager.AcquireReplacement(r.Context(), key, s.ID, replace.StreamKey, replace.ID, job)
+	} else {
+		stream, err = p.Manager.Acquire(r.Context(), key, s.ID, job)
+	}
 	// Keep the same grant while trying cheaper measured rungs on an initial tune.
 	initialAuto := body.MaxHeight == 0 && body.Capabilities.AutoMaxHeight == playback.AutoStartHeight &&
 		!body.Capabilities.AutoReplacement && !plan.VideoCopy
@@ -417,6 +429,17 @@ func writeCapacityFailure(w http.ResponseWriter, err error) bool {
 	}
 	writeJSON(w, http.StatusUnprocessableEntity, map[string]string{"error": message, "code": code})
 	return true
+}
+
+func (p *PlaybackHTTP) replacementSession(capabilities playback.Capabilities, token string, principalID, channelID int64) (*playback.Session, error) {
+	if !capabilities.AutoReplacement {
+		return nil, nil
+	}
+	session, err := p.Sessions.Validate(token, channelID)
+	if err != nil || session.KeyID != principalID || session.StreamKey == "" {
+		return nil, playback.ErrUnauthorized
+	}
+	return &session, nil
 }
 
 func channelLabel(ctx context.Context, db *sql.DB, id int64) string {

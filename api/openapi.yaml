@@ -2921,6 +2921,9 @@ paths:
                 token:
                   type: string
                   description: Optional unused channel authorization issued before tuning, allowing cancellation while startup is pending. One tune per token.
+                replacementToken:
+                  type: string
+                  description: Existing playback token replaced by an autoReplacement tune. The token must belong to the caller and be bound to this channel's active rendition.
                 audioLanguage:
                   type: string
                   default: en
@@ -2953,7 +2956,7 @@ paths:
         "404":
           description: Unknown profile or no scheduled content
         "409":
-          description: Schedule changed while preparing playback; retry
+          description: Schedule changed while preparing playback or an auto replacement token is no longer bound to this channel (`playback_replacement_invalid`); retry without reusing the replacement.
         "429":
           description: >
             The account is already watching on as many other devices as its
@@ -3823,7 +3826,7 @@ components:
           description: Temporary Auto conversion ceiling. New clients request 720p initially. Direct play can retain source quality.
         autoReplacement:
           type: boolean
-          description: Identifies an Auto rendition replacement so capacity contention does not count as a new viewer.
+          description: Identifies an Auto rendition replacement. Provide replacementToken so the active rendition's lease can be substituted during admission while it continues playing.
         mbps:
           type: number
           minimum: 0

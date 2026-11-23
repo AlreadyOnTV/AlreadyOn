@@ -239,6 +239,76 @@ func TestManagerAppliesTheMeasuredAdmissionPolicyToNewEncodes(t *testing.T) {
 	}
 }
 
+func TestManagerSubstitutesExclusiveRenditionDuringAutoReplacement(t *testing.T) {
+	settings := DefaultSettings()
+	settings.MaxProcesses = 1
+	settings.MaxRenditions = 1
+	settings.MaxViewers = 1
+	m, err := NewManager(t.TempDir(), &testClock{now: time.Now()}, workerFunc(func(ctx context.Context, _ Job) error {
+		<-ctx.Done()
+		return ctx.Err()
+	}), settings)
+	if err != nil {
+		t.Fatal(err)
+	}
+	defer m.Close()
+	high := Job{Plan: Plan{Mode: "transcode", Height: 720}}
+	if _, err := m.Acquire(t.Context(), "high", "viewer-1", high); err != nil {
+		t.Fatal(err)
+	}
+	if _, err := m.Acquire(t.Context(), "other", "viewer-2", Job{Plan: Plan{Mode: "transcode", Height: 480}}); !errors.Is(err, ErrBusy) {
+		t.Fatalf("normal admission ignored the occupied slot: %v", err)
+	}
+	m.SetAdmissionPolicy(func(active []Job, candidate Job) error {
+		if len(active) != 0 || candidate.Plan.Height != 480 {
+			return ErrBusy
+		}
+		return nil
+	})
+	low := Job{Plan: Plan{Mode: "transcode", Height: 480}}
+	if _, err := m.AcquireReplacement(t.Context(), "low", "viewer-2", "high", "viewer-1", low); err != nil {
+		t.Fatal("exclusive replacement was refused:", err)
+	}
+	processes, renditions, viewers := m.Counts()
+	if processes != 2 || renditions != 2 || viewers != 2 {
+		t.Fatalf("replacement overlap = %d/%d/%d, want 2/2/2 while the client switches", processes, renditions, viewers)
+	}
+	if _, err := m.AcquireReplacement(t.Context(), "duplicate", "viewer-3", "high", "viewer-1", low); !errors.Is(err, ErrBusy) {
+		t.Fatalf("reserved rendition accepted another replacement: %v", err)
+	}
+	if _, err := m.Acquire(t.Context(), "high", "late-viewer", high); !errors.Is(err, ErrBusy) {
+		t.Fatalf("reserved rendition became shared during preparation: %v", err)
+	}
+	if _, err := m.Acquire(t.Context(), "third", "viewer-4", low); !errors.Is(err, ErrBusy) {
+		t.Fatal("replacement overlap escaped normal admission limits")
+	}
+}
+
+func TestManagerDoesNotSubstituteSharedRendition(t *testing.T) {
+	settings := DefaultSettings()
+	settings.MaxProcesses = 1
+	settings.MaxRenditions = 1
+	m, err := NewManager(t.TempDir(), &testClock{now: time.Now()}, workerFunc(func(ctx context.Context, _ Job) error {
+		<-ctx.Done()
+		return ctx.Err()
+	}), settings)
+	if err != nil {
+		t.Fatal(err)
+	}
+	defer m.Close()
+	high := Job{Plan: Plan{Mode: "transcode", Height: 720}}
+	if _, err := m.Acquire(t.Context(), "high", "viewer-1", high); err != nil {
+		t.Fatal(err)
+	}
+	if _, err := m.Acquire(t.Context(), "high", "viewer-2", high); err != nil {
+		t.Fatal(err)
+	}
+	low := Job{Plan: Plan{Mode: "transcode", Height: 480}}
+	if _, err := m.AcquireReplacement(t.Context(), "low", "viewer-3", "high", "viewer-1", low); !errors.Is(err, ErrBusy) {
+		t.Fatalf("shared rendition admitted replacement: %v", err)
+	}
+}
+
 func TestManagerPublishesWorkerRuntimeStats(t *testing.T) {
 	clock := &testClock{now: time.Now()}
 	reported := make(chan struct{})

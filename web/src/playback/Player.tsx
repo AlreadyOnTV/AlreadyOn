@@ -1005,6 +1005,7 @@ export function Player({
       entryStartsAt?: string,
       stopOnCapacity = false,
       autoReplacement = false,
+      replacementToken?: string,
     ): Promise<Prepared | null> {
       const requestedAt = performance.now();
       const capabilities = await clientCapabilities();
@@ -1037,6 +1038,7 @@ export function Player({
               profileId: currentUserId,
               capabilities: tunedCapabilities,
               token: grant.token,
+              replacementToken,
               forceEncode: forced(entryStartsAt),
               entryStartsAt,
               maxHeight,
@@ -1239,7 +1241,12 @@ export function Player({
       try {
         let fresh: Prepared | null;
         try {
-          fresh = await prepare(undefined, true, adaptiveHeight !== undefined);
+          fresh = await prepare(
+            undefined,
+            true,
+            adaptiveHeight !== undefined,
+            adaptiveHeight !== undefined ? current.value.token : undefined,
+          );
         } catch (e) {
           if (
             adaptiveHeight !== undefined ||

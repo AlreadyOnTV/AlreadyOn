@@ -537,7 +537,7 @@ internal class PhoneModel(application: Application) : AndroidViewModel(applicati
                     try { withTimeout(5000) { api.request("/api/playback/sessions", "DELETE", JSONObject().put("channelId", channel.id).put("token", token)) } }
                     catch (_: Exception) { /* Failed releases expire with the viewer lease. */ }
                 }
-                suspend fun prepare(ceiling: Int, timeoutMs: Long, replacement: Boolean = false): Triple<String, PhonePlayback, Long>? {
+                suspend fun prepare(ceiling: Int, timeoutMs: Long, replacement: Boolean = false, replacementToken: String? = null): Triple<String, PhonePlayback, Long>? {
                     var token: String? = null
                     var ready = false
                     try {
@@ -551,6 +551,7 @@ internal class PhoneModel(application: Application) : AndroidViewModel(applicati
                             .put("audioLanguage", profile.language)
                             .put("maxHeight", state.value.quality)
                             .put("capabilities", caps)
+                        if (replacement && replacementToken != null) body.put("replacementToken", replacementToken)
                         if (state.value.audioIndex != null && state.value.audioFileId != null) body
                             .put("audioTrackIndex", state.value.audioIndex).put("audioMediaFileId", state.value.audioFileId)
                         var tune = JSONObject(api.request("/api/channels/${channel.id}/tune", "POST", body))
@@ -618,7 +619,7 @@ internal class PhoneModel(application: Application) : AndroidViewModel(applicati
                                 val nextHeight = adaptiveRequest
                                 adaptiveRequest = null
                                 if (nextHeight != null && state.value.quality == 0 && !state.value.paused) {
-                                    val next = try { prepare(nextHeight, 8_000, replacement = true) }
+                                    val next = try { prepare(nextHeight, 8_000, replacement = true, replacementToken = token) }
                                     catch (error: CancellationException) { throw error }
                                     catch (_: Exception) { null } // Keep the working rendition if the candidate cannot start.
                                     if (next != null) {
