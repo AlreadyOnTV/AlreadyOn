@@ -259,6 +259,13 @@ func fullCalibrationHeights(primary bool, variant int, plan Plan) []int {
 	}
 	heights := []int{AutoCapacityHeight}
 	if primary {
+		if variant == 0 {
+			for _, height := range []int{480, 720, 1080} {
+				if height < plan.Height {
+					heights = append(heights, height)
+				}
+			}
+		}
 		heights = append(heights, plan.Height)
 		if variant == 0 && plan.ToneMap {
 			heights = append(heights, AutoMinHeight)
@@ -402,16 +409,17 @@ func (c *Calibration) evaluate(ctx context.Context, test calibrationCase, old []
 	}
 	p.Streams = 1
 
-	counts := []int{2, 4}
+	// Try three if four is too expensive while retaining the fast path for four.
+	counts := []int{2, 4, 3}
 	if test.mini && test.plan.Height != AutoCapacityHeight {
-		counts = nil
+		counts = []int{2}
 	}
 
 	for _, cached := range old {
 		if test.full && sameProfile(p, cached) && cached.Verified && cached.Streams > 1 {
-			counts = []int{2}
-			if cached.Streams > 2 {
-				counts = append(counts, cached.Streams)
+			counts = []int{2, cached.Streams}
+			if cached.Streams == 4 {
+				counts = append(counts, 3)
 			}
 			break
 		}
@@ -420,13 +428,22 @@ func (c *Calibration) evaluate(ctx context.Context, test calibrationCase, old []
 		if ctx.Err() != nil {
 			break
 		}
+		if count <= p.Streams {
+			continue
+		}
 		speeds, err = c.sample(ctx, test, count)
 		if err != nil || minimumSpeed(speeds) < CapacityRealTime {
+			if count == 4 {
+				continue
+			}
 			break
 		}
 		if minimumSpeed(speeds) < 1.5 {
 			confirmation, confirmErr := c.sample(ctx, test, count)
 			if confirmErr != nil || minimumSpeed(confirmation) < CapacityRealTime {
+				if count == 4 {
+					continue
+				}
 				break
 			}
 			if minimumSpeed(confirmation) < minimumSpeed(speeds) {
@@ -538,9 +555,12 @@ func (c *Calibration) run(ctx context.Context, full, startup bool) {
 	if full {
 		mode = "full"
 	}
-	if !effectiveOK && quickOK {
-		effective = quick
-		effectiveOK = true
+	if quickOK {
+		if effectiveOK {
+			effective.Profiles = fillCalibrationGaps(effective.Profiles, quick.Profiles)
+		} else {
+			effective, effectiveOK = quick, true
+		}
 	}
 	if effectiveOK {
 		c.apply(effective)
@@ -661,9 +681,13 @@ func (c *Calibration) run(ctx context.Context, full, startup bool) {
 		c.save(fingerprint, mode, profiles)
 		c.remember(mode, calibrationCache{Fingerprint: fingerprint, At: result.LastCompleted, Threads: c.Tuner.Threads(), Profiles: profiles})
 		if full {
-			c.Capacity.publishProfiles(freshCalibrationProfiles(profiles, result.LastCompleted))
-		} else if !fullOK {
-			c.Capacity.publishProfiles(profiles)
+			fresh := freshCalibrationProfiles(profiles, result.LastCompleted)
+			if quickOK {
+				fresh = fillCalibrationGaps(fresh, freshCalibrationProfiles(quick.Profiles, result.LastCompleted))
+			}
+			c.Capacity.publishProfiles(fresh)
+		} else {
+			c.Capacity.publishProfiles(fillCalibrationGaps(freshFull.Profiles, profiles))
 		}
 		completed++
 		logging.Info("capacity validation: %s %s decode=%t tone=%s %dp%g: %d validated streams (slowest %.2fx, CPU %.2f cores/stream)", result.SourceClass, result.Encoder, result.HardwareDecode, result.ToneMapper, result.Height, result.FPS, result.Streams, minimumSpeed(result.Speeds), result.CPUCores)
@@ -673,6 +697,21 @@ func (c *Calibration) run(ctx context.Context, full, startup bool) {
 	if c.Capacity.OnChange != nil {
 		c.Capacity.OnChange()
 	}
+}
+
+// A partial full pass supersedes the quick result for the same test case.
+func fillCalibrationGaps(full, quick []ProfileCapacity) []ProfileCapacity {
+	covered := make(map[calibrationCaseKey]bool, len(full))
+	for _, profile := range full {
+		covered[profile.caseKey()] = true
+	}
+	profiles := append([]ProfileCapacity(nil), full...)
+	for _, profile := range quick {
+		if !covered[profile.caseKey()] {
+			profiles = append(profiles, profile)
+		}
+	}
+	return profiles
 }
 
 func (c *Calibration) apply(cache calibrationCache) {

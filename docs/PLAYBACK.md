@@ -26,6 +26,18 @@ Dashboard time shows `HH:MM/HH:MM` position/duration through commercials, or `Un
 
 Schedule times are UTC. Presentation delays four seconds; transition preparation may start up to eight seconds before a boundary. Clients must respect server timing and retry hints, cancel obsolete work after channel changes and handle expired sessions without retry storms.
 
+## Auto quality
+
+| Device | Minimum rung | Starting rung | Maximum rung |
+| --- | ---: | ---: | ---: |
+| Android phone or tablet | 240p | 480p | 720p |
+| Web browser | 360p | 720p | 1080p |
+| Android TV | 360p | 720p | 1080p, or 2160p with compatible display, decoder and server |
+
+Auto video conversions share a quality ceiling. When admission runs out of room or a player needs a lower rung after repeated buffering or frame drops, existing and new viewers step toward a lower common rung. Healthy players below it can still move up. A viewer leaving clears the temporary ceiling so the remaining viewers can probe upward. They also retry after a one-minute settling window. Source, device, connection and measured pipeline limits still bound each stream. A connection below the minimum can still buffer.
+
+Quick calibration checks two workers at the starting rung. Full calibration also measures intermediate SD or HD output alongside the lowest and highest rungs.
+
 ## Processing
 
 FFmpeg work has bounded lifetimes and cooperative resource controls. Foreground reservations can pause governed background work for the specific high-cost HDR conversion path. Preserve cancellation, stream limits and process cleanup when changing delivery.

@@ -24,9 +24,9 @@ type Capabilities struct {
 	Mbps           float64               `json:"mbps"` // zero means unmeasured: assume 25 Mbps
 	// MaxHeight is the viewer's chosen quality ceiling (0 = automatic). It is set
 	// per tune from the request, never from the cached snapshot.
-	MaxHeight int `json:"-"`
-	// AutoMaxHeight is a temporary player pressure ceiling and applies only when
-	// MaxHeight is zero; it does not become an explicit user quality selection.
+	MaxHeight  int    `json:"-"`
+	ClientKind string `json:"clientKind,omitempty"`
+	// AutoMaxHeight is a temporary player pressure ceiling used only in Auto mode.
 	AutoMaxHeight   int  `json:"autoMaxHeight,omitempty"`
 	AutoReplacement bool `json:"autoReplacement,omitempty"`
 	// Ladder is the server's opt-in for a low rung on large conversions.
@@ -51,7 +51,7 @@ type Capabilities struct {
 
 // QualityHeights are the quality ceilings a viewer can choose. 2160 (4K) is
 // honored only while a hardware encoder is in use; otherwise streams stay at 1080.
-var QualityHeights = []int{360, 480, 720, 1080, UHDHeight}
+var QualityHeights = []int{240, 360, 480, 720, 1080, UHDHeight}
 
 // UHDHeight is the 4K picture height, offered with hardware encoding.
 const UHDHeight = 2160
@@ -61,7 +61,37 @@ const AutoCapacityHeight = 360
 const AutoMinHeight = 240
 
 func ValidAutoHeight(height int) bool {
-	return height == AutoMinHeight || slices.Contains(QualityHeights, height)
+	return slices.Contains(QualityHeights, height)
+}
+
+// ClientQuality returns the requested rung range for an adaptive client.
+func (c Capabilities) ClientQuality() (floor, start, ceiling int) {
+	switch c.ClientKind {
+	case "phone":
+		return 240, 480, 720
+	case "web":
+		return 360, 720, 1080
+	case "tv":
+		for _, video := range c.Video {
+			if video.Codec == "h264" && video.Width >= 3840 && video.Height >= UHDHeight && video.Level >= 50 {
+				return 360, 720, UHDHeight
+			}
+		}
+		return 360, 720, 1080
+	default:
+		return AutoMinHeight, AutoStartHeight, UHDHeight
+	}
+}
+
+// PlanQualityHeight identifies the 16:9 box a wide source fills.
+func PlanQualityHeight(p Plan) int {
+	height := max(p.Height, (p.Width*9+8)/16)
+	for _, rung := range QualityHeights {
+		if height >= rung-2 && height <= rung+2 {
+			return rung
+		}
+	}
+	return height
 }
 
 // OutputRungs define the supported H.264 output ceilings shared by planning
@@ -303,8 +333,8 @@ func choose(source library.ProbeResult, caps Capabilities, allowDirect, forceEnc
 	if (caps.Normalization != nil || caps.VolumeOffsetDB != 0) && a.Index >= 0 {
 		audioOK = false
 	}
-	// Anything taller than the chosen ceiling must be converted, never copied.
-	if requestedHeight > 0 && v.Height > requestedHeight {
+	// Apply both edges of the requested output box to wide sources as well.
+	if requestedHeight > 0 && (v.Height > requestedHeight || v.Width > (requestedHeight*16+8)/9) {
 		videoOK = false
 	}
 	// Average bitrate is not a peak guarantee: reserve a further 50% for VBR

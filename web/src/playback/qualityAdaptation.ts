@@ -5,6 +5,8 @@ export interface PlaybackPressure {
   outputHeight: number;
   maxHeight?: number;
   serverPressure?: boolean;
+  serverCeiling?: number;
+  minHeight?: number;
   droppedVideoFrames?: number;
   totalVideoFrames?: number;
 }
@@ -53,19 +55,22 @@ export class AutoQualityAdapter {
       ? (sample.droppedVideoFrames! - previous.droppedVideoFrames!) / frameCount
       : 0;
     const draining = previous !== undefined && previous.bufferedSeconds - sample.bufferedSeconds > 2; // A normal HLS segment can change the sampled buffer by up to two seconds.
-    const struggling = (sample.serverPressure && sample.outputHeight > 360) || sample.bufferedSeconds < 3 || (sample.bufferedSeconds < 5 && draining) || droppedRatio > 0.05;
-    const healthy = !sample.serverPressure && sample.bufferedSeconds >= 3 && !draining && droppedRatio <= 0.05;
+    const minimum = sample.minHeight ?? 360;
+    const serverCeiling = sample.serverCeiling ? Math.max(minimum, sample.serverCeiling) : Infinity;
+    const serverPressure = sample.serverCeiling ? sample.outputHeight > serverCeiling : sample.serverPressure;
+    const struggling = (serverPressure && sample.outputHeight > minimum) || sample.bufferedSeconds < 3 || (sample.bufferedSeconds < 5 && draining) || droppedRatio > 0.05;
+    const healthy = !serverPressure && sample.bufferedSeconds >= 3 && !draining && droppedRatio <= 0.05;
     this.strugglingWindows = struggling ? this.strugglingWindows + 1 : 0;
     this.healthyWindows = healthy ? this.healthyWindows + 1 : 0;
     this.lastSample = sample;
 
     if (this.strugglingWindows >= 2) {
       this.strugglingWindows = 0;
-      return [...QUALITY_HEIGHTS].reverse().find(height => height < sample.outputHeight) ?? null;
+      return [...QUALITY_HEIGHTS].reverse().find(height => height < sample.outputHeight && height >= minimum) ?? null;
     }
     if (this.healthyWindows >= 3) {
       this.healthyWindows = 0;
-      const maximum = sample.maxHeight ?? 1080;
+      const maximum = Math.min(sample.maxHeight ?? 1080, serverCeiling);
       return QUALITY_HEIGHTS.find(height => height > sample.outputHeight && height <= maximum) ?? null;
     }
     return null;

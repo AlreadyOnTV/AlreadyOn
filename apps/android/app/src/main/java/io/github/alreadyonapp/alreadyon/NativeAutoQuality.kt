@@ -24,20 +24,22 @@ internal class NativeAutoQuality {
         healthy = 0
     }
 
-    fun observe(bufferedMs: Long, buffering: Boolean, height: Int, maximum: Int, serverPressure: Boolean = false): Int? {
+    fun observe(bufferedMs: Long, buffering: Boolean, height: Int, maximum: Int, serverPressure: Boolean = false, minimum: Int = 360, serverCeiling: Int = 0): Int? {
         val prior = previousBuffer ?: bufferedMs
         previousBuffer = bufferedMs
         val draining = prior - bufferedMs > 2000 // Ignore normal two-second HLS segment fluctuations.
-        val underPressure = serverPressure && height > 360 || buffering || bufferedMs < 3000 || bufferedMs < 5000 && draining
+        val ceiling = if (serverCeiling > 0) maxOf(minimum, serverCeiling) else Int.MAX_VALUE
+        val constrained = if (serverCeiling > 0) height > ceiling else serverPressure
+        val underPressure = constrained && height > minimum || buffering || bufferedMs < 3000 || bufferedMs < 5000 && draining
         struggling = if (underPressure) struggling + 1 else 0
-        healthy = if (!underPressure && !serverPressure && bufferedMs >= 3000 && !draining) healthy + 1 else 0
+        healthy = if (!underPressure && !constrained && bufferedMs >= 3000 && !draining) healthy + 1 else 0
         if (struggling >= 2) {
             struggling = 0
-            return autoQualityHeights.lastOrNull { it < height }
+            return autoQualityHeights.lastOrNull { it < height && it >= minimum }
         }
         if (healthy >= 3) {
             healthy = 0
-            return autoQualityHeights.firstOrNull { it > height && it <= maximum }
+            return autoQualityHeights.firstOrNull { it > height && it <= minOf(maximum, ceiling) }
         }
         return null
     }

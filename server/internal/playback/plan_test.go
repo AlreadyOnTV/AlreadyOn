@@ -465,3 +465,25 @@ func TestSoftwareEncoderProfiles(t *testing.T) {
 		t.Fatal(args)
 	}
 }
+
+func TestClientQualityRanges(t *testing.T) {
+	for _, tc := range []struct {
+		name                  string
+		caps                  Capabilities
+		floor, start, ceiling int
+	}{
+		{"phone", Capabilities{ClientKind: "phone"}, 240, 480, 720},
+		{"web", Capabilities{ClientKind: "web"}, 360, 720, 1080},
+		{"HD TV", Capabilities{ClientKind: "tv"}, 360, 720, 1080},
+		{"UHD TV", Capabilities{ClientKind: "tv", Video: []VideoCapability{
+			{Codec: "h264", Width: 3840, Height: UHDHeight, Level: 52},
+		}}, 360, 720, UHDHeight},
+	} {
+		t.Run(tc.name, func(t *testing.T) {
+			floor, start, ceiling := tc.caps.ClientQuality()
+			if floor != tc.floor || start != tc.start || ceiling != tc.ceiling {
+				t.Fatalf("got min/start/max %d/%d/%d", floor, start, ceiling)
+			}
+		})
+	}
+}

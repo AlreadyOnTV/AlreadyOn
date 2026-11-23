@@ -24,11 +24,23 @@ class NativeAutoQualityTest {
 
     @Test fun bufferedSamplesStepDownFasterThanTheyStepUp() {
         val auto = NativeAutoQuality()
-        assertNull(auto.observe(2000, false, 360, 2160))
-        assertEquals(240, auto.observe(2000, false, 360, 2160))
+        assertNull(auto.observe(2000, false, 360, 720, minimum = 240))
+        assertEquals(240, auto.observe(2000, false, 360, 720, minimum = 240))
         auto.reset()
         repeat(2) { assertNull(auto.observe(5000, false, 360, 2160)) }
         assertEquals(480, auto.observe(5000, false, 360, 2160))
         repeat(3) { assertNull(auto.observe(5000, false, 360, 360)) }
+    }
+
+    @Test fun sharedCeilingLetsLowerViewersClimbThenStopsUpgrades() {
+        val auto = NativeAutoQuality()
+        assertNull(auto.observe(5000, false, 1080, 1080, serverCeiling = 720))
+        assertEquals(720, auto.observe(5000, false, 1080, 1080, serverCeiling = 720))
+        auto.reset()
+        repeat(2) { assertNull(auto.observe(5000, false, 480, 1080, serverCeiling = 720)) }
+        assertEquals(720, auto.observe(5000, false, 480, 1080, serverCeiling = 720))
+        repeat(3) { assertNull(auto.observe(5000, false, 720, 1080, serverCeiling = 720)) }
+        repeat(2) { assertNull(auto.observe(5000, false, 720, 1080, serverCeiling = 1080)) }
+        assertEquals(1080, auto.observe(5000, false, 720, 1080, serverCeiling = 1080))
     }
 }

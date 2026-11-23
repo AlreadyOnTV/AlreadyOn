@@ -61,6 +61,7 @@ type tuneResponse struct {
 	// UHD is true while a hardware encoder is in use, so the Quality menu may offer 4K.
 	UHD                  bool `json:"uhd"`
 	AutoCapacityPressure bool `json:"autoCapacityPressure,omitempty"`
+	AutoQualityCeiling   int  `json:"autoQualityCeiling,omitempty"`
 	// Subtitles are the text tracks that can be fetched from the media listener.
 	AudioTracks []playback.AudioTrack    `json:"audioTracks"`
 	Subtitles   []playback.SubtitleTrack `json:"subtitles"`
@@ -117,13 +118,29 @@ func (p *PlaybackHTTP) tune(w http.ResponseWriter, r *http.Request) {
 		}
 	}
 	if body.MaxHeight != 0 && !slices.Contains(playback.QualityHeights, body.MaxHeight) {
-		writeJSONError(w, 400, "maxHeight must be 0, 360, 480, 720, 1080 or 2160")
+		writeJSONError(w, 400, "maxHeight must be 0, 240, 360, 480, 720, 1080 or 2160")
 		return
 	}
 	if body.Capabilities.AutoMaxHeight != 0 && !playback.ValidAutoHeight(body.Capabilities.AutoMaxHeight) {
 		writeJSONError(w, 400, "invalid Auto quality ceiling")
 		return
 	}
+	client := body.Capabilities.ClientKind
+	if client != "" && client != "phone" && client != "tv" && client != "web" {
+		writeJSONError(w, 400, "invalid playback client kind")
+		return
+	}
+	floor, start, maximum := body.Capabilities.ClientQuality()
+	if client != "" {
+		if body.MaxHeight > 0 {
+			body.MaxHeight = min(maximum, max(floor, body.MaxHeight))
+		} else if body.Capabilities.AutoMaxHeight == 0 {
+			body.Capabilities.AutoMaxHeight = start
+		} else {
+			body.Capabilities.AutoMaxHeight = min(maximum, max(floor, body.Capabilities.AutoMaxHeight))
+		}
+	}
+	adaptive := body.MaxHeight == 0 && body.Capabilities.AutoMaxHeight > 0
 	if len(body.AudioLanguage) > 32 {
 		writeJSONError(w, 400, "audioLanguage is too long")
 		return
@@ -250,7 +267,14 @@ func (p *PlaybackHTTP) tune(w http.ResponseWriter, r *http.Request) {
 		return
 	}
 	body.Capabilities.Normalization = normalization
-	plan, err := playback.ChooseScheduled(source, body.Capabilities, body.ForceEncode, jobClock.Now().Sub(e.StartsAt).Seconds()+e.SourceOffsetSeconds)
+	offset := jobClock.Now().Sub(e.StartsAt).Seconds() + e.SourceOffsetSeconds
+	plan, err := playback.ChooseScheduled(source, body.Capabilities, body.ForceEncode, offset)
+	if err == nil && adaptive && !plan.VideoCopy {
+		if ceiling := p.Manager.AutoQualityCeiling(); ceiling > 0 && ceiling < body.Capabilities.AutoMaxHeight {
+			body.Capabilities.AutoMaxHeight = max(floor, ceiling)
+			plan, err = playback.ChooseScheduled(source, body.Capabilities, body.ForceEncode, offset)
+		}
+	}
 	if err != nil {
 		logging.Warn("stream failed: %s: %s: %v", label, filepath.Base(path), err)
 		if writeCapacityFailure(w, err) {
@@ -286,6 +310,9 @@ func (p *PlaybackHTTP) tune(w http.ResponseWriter, r *http.Request) {
 		logging.Warn("stream failed: %s: schedule changed while tuning: %v", label, err)
 		writeJSONError(w, 409, "schedule changed; tune again")
 		return
+	}
+	if adaptive {
+		job.AutoQualityMax = maximum
 	}
 	job.Burst = playback.ReadBurst(p.Clock.Now(), jobClock.Now())
 	job.Device = device
@@ -342,18 +369,22 @@ func (p *PlaybackHTTP) tune(w http.ResponseWriter, r *http.Request) {
 		stream, err = p.Manager.Acquire(r.Context(), key, s.ID, job)
 	}
 	// Keep the same grant while trying cheaper measured rungs on an initial tune.
-	initialAuto := body.MaxHeight == 0 && body.Capabilities.AutoMaxHeight == playback.AutoStartHeight &&
-		!body.Capabilities.AutoReplacement && !plan.VideoCopy
+	initialAuto := adaptive && !body.Capabilities.AutoReplacement && !plan.VideoCopy
+	capacityDenied := adaptive && !plan.VideoCopy && errors.Is(err, playback.ErrBusy)
 	if errors.Is(err, playback.ErrBusy) && initialAuto {
 		caps := body.Capabilities
-		lastHeight := plan.Height
-		for _, height := range []int{480, playback.AutoCapacityHeight, playback.AutoMinHeight} {
-			caps.AutoMaxHeight = height
-			low, planErr := playback.ChooseScheduled(source, caps, body.ForceEncode, jobClock.Now().Sub(e.StartsAt).Seconds()+e.SourceOffsetSeconds)
-			if planErr != nil || low.VideoCopy || low.Height >= lastHeight {
+		lastHeight := playback.PlanQualityHeight(plan)
+		for i := len(playback.QualityHeights) - 1; i >= 0; i-- {
+			height := playback.QualityHeights[i]
+			if height < floor || height >= lastHeight {
 				continue
 			}
-			lastHeight = low.Height
+			caps.AutoMaxHeight = height
+			low, planErr := playback.ChooseScheduled(source, caps, body.ForceEncode, offset)
+			if planErr != nil || low.VideoCopy || playback.PlanQualityHeight(low) >= lastHeight {
+				continue
+			}
+			lastHeight = playback.PlanQualityHeight(low)
 			candidate := job
 			candidate.Plan = low
 			candidate.ValidatedThreads = p.Capacity.ValidatedThreads(candidate)
@@ -368,6 +399,9 @@ func (p *PlaybackHTTP) tune(w http.ResponseWriter, r *http.Request) {
 			}
 		}
 	}
+	if capacityDenied && (body.EntryStartsAt.IsZero() || replace != nil) {
+		p.Manager.MarkAutoCapacityPressure(body.Capabilities.AutoMaxHeight, floor)
+	}
 	if err != nil {
 		p.Sessions.Revoke(token)
 		// Capacity is expected under rapid channel changes and retried by the client.
@@ -376,9 +410,6 @@ func (p *PlaybackHTTP) tune(w http.ResponseWriter, r *http.Request) {
 			return
 		}
 		if errors.Is(err, playback.ErrBusy) {
-			if initialAuto && body.EntryStartsAt.IsZero() {
-				p.Manager.MarkAutoCapacityPressure()
-			}
 			w.Header().Set("Retry-After", "1")
 			writeJSON(w, 503, map[string]string{"error": "stream capacity reached; retry shortly", "code": "stream_capacity"})
 		} else {
@@ -394,6 +425,9 @@ func (p *PlaybackHTTP) tune(w http.ResponseWriter, r *http.Request) {
 		return
 	}
 	s.StreamKey = key
+	if adaptive && replace != nil {
+		p.Manager.ObserveAutoDownshift(replace.StreamKey, replace.ID, key, s.ID)
+	}
 	response, err := p.tuneResult(r, s, token, stream)
 	if err != nil || r.Context().Err() != nil {
 		p.Manager.Release(key, s.ID)
@@ -485,7 +519,11 @@ func (p *PlaybackHTTP) tuneResult(r *http.Request, s playback.Session, token str
 		value := toProgramResponse(resolved)
 		program = &value
 	}
-	return tuneResponse{ChannelNumber: c.Number, ChannelName: c.Name, Program: program, Session: s, Token: token, MediaURL: fmt.Sprintf("%s/media/%d", base, s.ChannelID), URL: fmt.Sprintf("%s/media/%d/%s?token=%s", base, s.ChannelID, name, url.QueryEscape(token)), HLSOrigin: origin, Plan: j.Plan, Ready: ready, ServerTime: p.Clock.Now(), EntryStartsAt: j.Entry.StartsAt, EntryEndsAt: j.Entry.EndsAt, SourceOffsetSeconds: j.Entry.SourceOffsetSeconds, StreamOffsetSeconds: j.Offset.Seconds(), MediaFileID: j.Entry.MediaFileID, Kind: string(j.Entry.Kind), PresentationDelaySeconds: playback.PresentationDelay.Seconds(), DurationSeconds: j.Source.DurationSeconds, SourceHeight: sourceHeight(j.Source), UHD: p.hardwareEncoderWorks(r.Context()), AudioTracks: playback.AudioTracks(j.Source), Subtitles: playback.SourceSubtitles(r.Context(), p.DB, j.Path, j.Source), Details: j.Details, Runtime: stream.Runtime, AutoCapacityPressure: !j.Plan.VideoCopy && p.Manager.AutoCapacityPressure()}, nil
+	ceiling := 0
+	if !j.Plan.VideoCopy {
+		ceiling = p.Manager.AutoQualityCeiling()
+	}
+	return tuneResponse{ChannelNumber: c.Number, ChannelName: c.Name, Program: program, Session: s, Token: token, MediaURL: fmt.Sprintf("%s/media/%d", base, s.ChannelID), URL: fmt.Sprintf("%s/media/%d/%s?token=%s", base, s.ChannelID, name, url.QueryEscape(token)), HLSOrigin: origin, Plan: j.Plan, Ready: ready, ServerTime: p.Clock.Now(), EntryStartsAt: j.Entry.StartsAt, EntryEndsAt: j.Entry.EndsAt, SourceOffsetSeconds: j.Entry.SourceOffsetSeconds, StreamOffsetSeconds: j.Offset.Seconds(), MediaFileID: j.Entry.MediaFileID, Kind: string(j.Entry.Kind), PresentationDelaySeconds: playback.PresentationDelay.Seconds(), DurationSeconds: j.Source.DurationSeconds, SourceHeight: sourceHeight(j.Source), UHD: p.hardwareEncoderWorks(r.Context()), AudioTracks: playback.AudioTracks(j.Source), Subtitles: playback.SourceSubtitles(r.Context(), p.DB, j.Path, j.Source), Details: j.Details, Runtime: stream.Runtime, AutoCapacityPressure: ceiling > 0 && playback.PlanQualityHeight(j.Plan) > ceiling, AutoQualityCeiling: ceiling}, nil
 }
 
 func sourceHeight(src library.ProbeResult) int {

@@ -15,6 +15,7 @@ export interface PlaybackSession {
   details?: StreamDetails;
   runtime?: { cpuUtil?: number };
   autoCapacityPressure?: boolean;
+  autoQualityCeiling?: number;
 }
 export interface VideoDetails { codec: string; profile?: string; width: number; height: number; fps: number; bitrate: number; pixelFormat?: string; dynamicRange: string; method: string }
 export interface AudioDetails { codec: string; profile?: string; channels: number; layout?: string; sampleRate: number; bitrate: number; language?: string; method: string }

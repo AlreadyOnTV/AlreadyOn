@@ -437,3 +437,87 @@ func TestCloseIsBoundedWhenAWorkerIgnoresCancellation(t *testing.T) {
 	}
 	close(release)
 }
+
+func TestAutoQualityCeilingSettlesConcurrentViewersAndRecovers(t *testing.T) {
+	clock := &testClock{now: time.Now()}
+	settings := DefaultSettings()
+	settings.LeaseSeconds = 60
+	m, err := NewManager(t.TempDir(), clock, workerFunc(func(ctx context.Context, _ Job) error {
+		<-ctx.Done()
+		return ctx.Err()
+	}), settings)
+	if err != nil {
+		t.Fatal(err)
+	}
+	defer m.Close()
+	job := func(height, maximum int) Job {
+		return Job{Plan: Plan{Mode: "transcode", Width: height * 16 / 9, Height: height}, AutoQualityMax: maximum}
+	}
+	ctx := context.Background()
+	if _, err := m.Acquire(ctx, "news-hd", "web-one", job(1080, 1080)); err != nil {
+		t.Fatal(err)
+	}
+	if _, err := m.Acquire(ctx, "sports-low", "web-two", job(360, 1080)); err != nil {
+		t.Fatal(err)
+	}
+	m.MarkAutoCapacityPressure(720, 360)
+	if got := m.AutoQualityCeiling(); got != 720 {
+		t.Fatalf("1080p plus 360p should converge toward 720p, got %d", got)
+	}
+	m.MarkAutoCapacityPressure(720, 360)
+	if got := m.AutoQualityCeiling(); got != 720 {
+		t.Fatalf("retries while switching must not reduce the ceiling again, got %d", got)
+	}
+	if _, err := m.AcquireReplacement(ctx, "news-medium", "web-replacement", "news-hd", "web-one", job(720, 1080)); err != nil {
+		t.Fatal(err)
+	}
+	m.Release("news-hd", "web-one")
+	if got := m.AutoQualityCeiling(); got != 720 {
+		t.Fatalf("a quality replacement is the same viewer, got %d", got)
+	}
+	clock.advance(15 * time.Second)
+	m.MarkAutoCapacityPressure(720, 360)
+	if got := m.AutoQualityCeiling(); got != 480 {
+		t.Fatalf("another capacity refusal should lower the target one rung, got %d", got)
+	}
+	m.Release("sports-low", "web-two")
+	if got := m.AutoQualityCeiling(); got != 1080 {
+		t.Fatalf("remaining web viewer should recover to its device ceiling, got %d", got)
+	}
+}
+
+func TestAutoQualityCeilingUsesEachViewersDeviceLimit(t *testing.T) {
+	m, err := NewManager(t.TempDir(), &testClock{now: time.Now()}, workerFunc(func(ctx context.Context, _ Job) error {
+		<-ctx.Done()
+		return ctx.Err()
+	}), DefaultSettings())
+	if err != nil {
+		t.Fatal(err)
+	}
+	defer m.Close()
+	job := Job{Plan: Plan{Mode: "transcode", Height: 720}, AutoQualityMax: 1080}
+	if _, err := m.Acquire(context.Background(), "shared", "web", job); err != nil {
+		t.Fatal(err)
+	}
+	job.AutoQualityMax = 720
+	if _, err := m.Acquire(context.Background(), "shared", "phone", job); err != nil {
+		t.Fatal(err)
+	}
+	if got := m.AutoQualityCeiling(); got != 720 {
+		t.Fatalf("phone must limit the shared Auto target, got %d", got)
+	}
+	if _, err := m.AcquireReplacement(context.Background(), "phone-lower", "phone-next", "shared", "phone",
+		Job{Plan: Plan{Mode: "transcode", Height: 480}, AutoQualityMax: 720}); err != nil {
+		t.Fatal(err)
+	}
+	m.ObserveAutoDownshift("shared", "phone", "phone-lower", "phone-next")
+	if got := m.AutoQualityCeiling(); got != 480 {
+		t.Fatalf("sustained buffer pressure should lower the shared target, got %d", got)
+	}
+	m.Release("phone-lower", "phone-next")
+
+	m.Release("shared", "phone")
+	if got := m.AutoQualityCeiling(); got != 1080 {
+		t.Fatalf("web viewer can recover when the phone leaves, got %d", got)
+	}
+}

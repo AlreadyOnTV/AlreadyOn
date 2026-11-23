@@ -391,7 +391,7 @@ export function Player({
     profileId: number;
     value: number;
   } | null>(null);
-  const quality = chosen?.profileId === currentUserId ? chosen.value : stored;
+  const quality = Math.min(1080, chosen?.profileId === currentUserId ? chosen.value : stored);
   const qualityRef = useRef(quality);
   const appliedQuality = useRef(quality);
   const autoQualityHeight = useRef(720);
@@ -777,8 +777,9 @@ export function Player({
           nowMs: performance.now(),
           bufferedSeconds: active ? bufferedAt(video.currentTime) : 0,
           outputHeight: output ? qualityRungHeight(output.width, output.height) : (active?.value.sourceHeight ?? 360),
-          maxHeight: Math.min(source ? qualityRungHeight(source.width, source.height) : (active?.value.sourceHeight ?? 1080), active?.value.uhd ? 2160 : 1080),
+          maxHeight: Math.min(source ? qualityRungHeight(source.width, source.height) : (active?.value.sourceHeight ?? 1080), 1080),
           serverPressure: active?.value.autoCapacityPressure,
+          serverCeiling: active?.value.autoQualityCeiling,
           droppedVideoFrames: frameQuality?.droppedVideoFrames,
           totalVideoFrames: frameQuality?.totalVideoFrames,
         },
@@ -791,7 +792,7 @@ export function Player({
           !moving &&
           !swapping,
       );
-      if (nextHeight !== null && nextHeight !== autoQualityHeight.current) {
+      if (nextHeight !== null) {
         void requality(nextHeight);
       }
     };
@@ -1009,13 +1010,16 @@ export function Player({
     ): Promise<Prepared | null> {
       const requestedAt = performance.now();
       const capabilities = await clientCapabilities();
-      for (let attempt = 0; attempt < (entryStartsAt ? 1 : 20); attempt++) {
+      for (let attempt = 0; attempt < (entryStartsAt ? 1 : 45); attempt++) {
         if (stopped) return null;
         const maxHeight = qualityRef.current;
         const autoMaxHeight = maxHeight === 0 ? autoQualityHeight.current : 0;
         const audio = { ...audioRef.current };
-        const tunedCapabilities =
-          autoMaxHeight > 0 ? { ...capabilities, autoMaxHeight, autoReplacement } : capabilities;
+        const tunedCapabilities = {
+          ...capabilities,
+          clientKind: "web",
+          ...(autoMaxHeight > 0 ? { autoMaxHeight, autoReplacement } : {}),
+        };
         const grant = await request<Authorization>(
           "/api/playback/sessions",
           { channelId },
@@ -1078,10 +1082,10 @@ export function Player({
               (e as RequestError).code === "stream_capacity") ||
             entryStartsAt ||
             ![409, 503].includes((e as RequestError).status ?? 0) ||
-            attempt === 19
+            attempt === 44
           )
             throw e;
-          await sleep(300);
+          await sleep((e as RequestError).code === "stream_capacity" ? 1_000 : 300);
         }
       }
       return null;
@@ -1610,7 +1614,7 @@ export function Player({
           quality={quality}
           qualities={QUALITY_HEIGHTS.filter(
             (h) =>
-              (h !== 2160 || session.uhd) &&
+              (h >= 360 && h <= 1080) &&
               (!session.sourceHeight || h <= session.sourceHeight),
           )}
           tracks={session.subtitles ?? []}

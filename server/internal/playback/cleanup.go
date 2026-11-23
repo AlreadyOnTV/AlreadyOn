@@ -30,11 +30,17 @@ type ManagedStream struct {
 	Err     error
 }
 
+type streamLease struct {
+	expires           time.Time
+	autoMax           int
+	oldKey, oldViewer string
+}
+
 type managed struct {
 	ManagedStream
 	key         string
 	cost        int
-	leases      map[string]time.Time
+	leases      map[string]streamLease
 	cancel      context.CancelFunc
 	closing     bool
 	replaces    *managed
@@ -44,19 +50,21 @@ type managed struct {
 // Manager owns private output, workers and viewer leases. Its clock and worker
 // are injectable; Sweep can be called deterministically without timer sleeps.
 type Manager struct {
-	mu                sync.Mutex
-	root              string
-	unlock            func() error
-	clock             schedule.Clock
-	worker            Worker
-	admission         AdmissionPolicy
-	settings          Settings
-	streams           map[string]*managed
-	active            int
-	activeCost        int
-	autoPressureUntil time.Time
-	closed            bool
-	wg                sync.WaitGroup
+	mu                  sync.Mutex
+	root                string
+	unlock              func() error
+	clock               schedule.Clock
+	worker              Worker
+	admission           AdmissionPolicy
+	settings            Settings
+	streams             map[string]*managed
+	active              int
+	activeCost          int
+	autoPressureUntil   time.Time
+	autoCeiling         int
+	autoPressureViewers int
+	closed              bool
+	wg                  sync.WaitGroup
 }
 
 func NewManager(root string, clock schedule.Clock, worker Worker, settings Settings) (*Manager, error) {
@@ -141,6 +149,7 @@ func (m *Manager) acquire(ctx context.Context, key, viewer, oldKey, oldViewer st
 	if key == "" || viewer == "" {
 		return ManagedStream{}, errors.New("playback: empty stream/session key")
 	}
+	lease := streamLease{expires: m.clock.Now().Add(m.settings.Lease()), autoMax: job.AutoQualityMax, oldKey: oldKey, oldViewer: oldViewer}
 	if s := m.streams[key]; s != nil {
 		if s.closing || s.Err != nil {
 			return ManagedStream{}, ErrBusy
@@ -151,15 +160,15 @@ func (m *Manager) acquire(ctx context.Context, key, viewer, oldKey, oldViewer st
 		if _, exists := s.leases[viewer]; !exists && m.viewerCount() >= m.settings.MaxViewers {
 			return ManagedStream{}, ErrBusy
 		}
-		s.leases[viewer] = m.clock.Now().Add(m.settings.Lease())
+		s.leases[viewer] = lease
 		return s.ManagedStream, nil
 	}
 	cost := jobResourceCost(job)
 	renditions, viewers, occupiedCost := len(m.streams), m.viewerCount(), m.activeCost
 	var replaced *managed
 	if old := m.streams[oldKey]; old != nil && oldKey != key && !old.closing && old.Err == nil && old.replacement == nil && len(old.leases) == 1 {
-		expires, owned := old.leases[oldViewer]
-		if owned && m.clock.Now().Before(expires) {
+		lease, owned := old.leases[oldViewer]
+		if owned && m.clock.Now().Before(lease.expires) {
 			replaced = old
 			renditions--
 			viewers--
@@ -198,7 +207,11 @@ func (m *Manager) acquire(ctx context.Context, key, viewer, oldKey, oldViewer st
 		job.OutputDir = dir
 	}
 	workerCtx, cancel := context.WithCancel(context.Background())
-	s := &managed{ManagedStream: ManagedStream{Job: job}, key: key, cost: cost, leases: map[string]time.Time{viewer: m.clock.Now().Add(m.settings.Lease())}, cancel: cancel}
+	s := &managed{
+		ManagedStream: ManagedStream{Job: job},
+		key:           key, cost: cost, cancel: cancel,
+		leases: map[string]streamLease{viewer: lease},
+	}
 	m.streams[key] = s
 	if replaced != nil {
 		replaced.replacement = s
@@ -268,11 +281,12 @@ func (m *Manager) Touch(key, viewer string) (ManagedStream, error) {
 	if s == nil || s.closing {
 		return ManagedStream{}, os.ErrNotExist
 	}
-	expires, ok := s.leases[viewer]
-	if !ok || !m.clock.Now().Before(expires) {
+	lease, ok := s.leases[viewer]
+	if !ok || !m.clock.Now().Before(lease.expires) {
 		return ManagedStream{}, os.ErrNotExist
 	}
-	s.leases[viewer] = m.clock.Now().Add(m.settings.Lease())
+	lease.expires = m.clock.Now().Add(m.settings.Lease())
+	s.leases[viewer] = lease
 	return s.ManagedStream, nil
 }
 
@@ -292,8 +306,8 @@ func (m *Manager) Sweep() {
 	defer m.mu.Unlock()
 	now := m.clock.Now()
 	for _, s := range m.streams {
-		for viewer, expires := range s.leases {
-			if !now.Before(expires) {
+		for viewer, lease := range s.leases {
+			if !now.Before(lease.expires) {
 				delete(s.leases, viewer)
 				logging.Info("stream stopped: viewer lease expired for %s", filepath.Base(s.Job.Path))
 			}
@@ -398,18 +412,119 @@ func (m *Manager) PauseAll(ctx context.Context) error {
 	}
 }
 
-// MarkAutoCapacityPressure gives Auto viewers above the starting rung a
-// bounded opportunity to leave headroom for a refused conversion.
-func (m *Manager) MarkAutoCapacityPressure() {
+// MarkAutoCapacityPressure asks higher Auto renditions to give up one rung
+// when a lower request cannot fit alongside them. The cohort can probe upward
+// again after a viewer leaves or the settling window ends.
+func (m *Manager) MarkAutoCapacityPressure(requested, floor int) {
 	m.mu.Lock()
 	defer m.mu.Unlock()
-	m.autoPressureUntil = m.clock.Now().Add(15 * time.Second)
+	ceiling := m.autoQualityCeilingLocked()
+	highest := 0
+	for _, stream := range m.streams {
+		if stream.closing || stream.Job.Plan.VideoCopy {
+			continue
+		}
+		for _, lease := range stream.leases {
+			if lease.autoMax > 0 {
+				highest = max(highest, PlanQualityHeight(stream.Job.Plan))
+				break
+			}
+		}
+	}
+	if ceiling > 0 {
+		// Give clients time to poll and stage the current downshift before
+		// retries can request another one.
+		if m.clock.Now().Before(m.autoPressureUntil.Add(-45 * time.Second)) {
+			return
+		}
+		highest = min(ceiling, highest)
+	}
+	if highest < requested {
+		return // An unsuccessful probe above the cohort needs no downgrade.
+	}
+	for i := len(QualityHeights) - 1; i >= 0; i-- {
+		h := QualityHeights[i]
+		if h < highest && h >= floor {
+			m.setAutoQualityCeiling(h)
+			return
+		}
+	}
 }
 
-func (m *Manager) AutoCapacityPressure() bool {
+// ObserveAutoDownshift shares a player's sustained buffer or decode pressure
+// with the other Auto viewers after a lower replacement has been admitted.
+func (m *Manager) ObserveAutoDownshift(oldKey, oldViewer, key, viewer string) {
 	m.mu.Lock()
 	defer m.mu.Unlock()
-	return m.clock.Now().Before(m.autoPressureUntil)
+	old, next := m.streams[oldKey], m.streams[key]
+	if old == nil || next == nil || old.closing || next.closing ||
+		old.leases[oldViewer].autoMax == 0 || next.leases[viewer].autoMax == 0 ||
+		old.Job.Plan.VideoCopy || next.Job.Plan.VideoCopy ||
+		old.Job.Entry.MediaFileID != next.Job.Entry.MediaFileID || !old.Job.Entry.StartsAt.Equal(next.Job.Entry.StartsAt) {
+		return
+	}
+	height := PlanQualityHeight(next.Job.Plan)
+	if !ValidAutoHeight(height) || height >= PlanQualityHeight(old.Job.Plan) {
+		return
+	}
+	if ceiling := m.autoQualityCeilingLocked(); ceiling > 0 && height >= ceiling {
+		return
+	}
+	for _, stream := range m.streams {
+		if stream.closing || stream.Job.Plan.VideoCopy {
+			continue
+		}
+		for id, lease := range stream.leases {
+			if id != oldViewer && id != viewer && lease.autoMax > 0 {
+				m.setAutoQualityCeiling(height)
+				return
+			}
+		}
+	}
+}
+
+func (m *Manager) setAutoQualityCeiling(height int) {
+	m.autoCeiling = height
+	m.autoPressureViewers = m.settledViewerCount()
+	m.autoPressureUntil = m.clock.Now().Add(time.Minute)
+}
+
+func (m *Manager) settledViewerCount() int {
+	count := m.viewerCount()
+	for _, stream := range m.streams {
+		for _, lease := range stream.leases {
+			if previous := m.streams[lease.oldKey]; previous != nil {
+				if _, stillPlaying := previous.leases[lease.oldViewer]; stillPlaying {
+					count--
+				}
+			}
+		}
+	}
+	return count
+}
+
+func (m *Manager) autoQualityCeilingLocked() int {
+	if m.autoCeiling != 0 && (!m.clock.Now().Before(m.autoPressureUntil) || m.settledViewerCount() < m.autoPressureViewers) {
+		m.autoCeiling = 0
+	}
+	return m.autoCeiling
+}
+
+func (m *Manager) AutoQualityCeiling() int {
+	m.mu.Lock()
+	defer m.mu.Unlock()
+	ceiling := m.autoQualityCeilingLocked()
+	for _, stream := range m.streams {
+		if stream.closing || stream.Job.Plan.VideoCopy {
+			continue
+		}
+		for _, lease := range stream.leases {
+			if lease.autoMax > 0 && (ceiling == 0 || lease.autoMax < ceiling) {
+				ceiling = lease.autoMax
+			}
+		}
+	}
+	return ceiling
 }
 
 // TranscodeSlots reports active encode resource slots and the manager's current
@@ -425,7 +540,7 @@ func (m *Manager) Inspect(key, viewer string) (ManagedStream, error) {
 	m.mu.Lock()
 	defer m.mu.Unlock()
 	s := m.streams[key]
-	if s == nil || s.closing || !m.clock.Now().Before(s.leases[viewer]) || s.Err != nil {
+	if s == nil || s.closing || !m.clock.Now().Before(s.leases[viewer].expires) || s.Err != nil {
 		return ManagedStream{}, os.ErrNotExist
 	}
 	return s.ManagedStream, nil

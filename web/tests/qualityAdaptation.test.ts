@@ -78,3 +78,23 @@ test('a wide film steps up from its fitted quality rung', () => {
   assert.equal(sample(10_000), null);
   assert.equal(sample(15_000), 1080);
 });
+
+test('the shared ceiling lets a lower viewer climb and holds both at the same rung', () => {
+  const adapter = new AutoQualityAdapter();
+  const sample = (nowMs: number, outputHeight: number, serverCeiling: number, bufferedSeconds = 5) =>
+    adapter.observe({ nowMs, outputHeight, serverCeiling, bufferedSeconds }, true);
+  assert.equal(sample(5_000, 1080, 720), null);
+  assert.equal(sample(10_000, 1080, 720), 720);
+  adapter.reset();
+  assert.equal(sample(15_000, 480, 720), null);
+  assert.equal(sample(20_000, 480, 720), null);
+  assert.equal(sample(25_000, 480, 720), 720);
+  assert.equal(sample(30_000, 720, 720), null);
+  assert.equal(sample(35_000, 720, 720), null);
+  assert.equal(sample(40_000, 720, 720), null);
+  assert.equal(sample(45_000, 720, 1080), null);
+  assert.equal(sample(50_000, 720, 1080), null);
+  assert.equal(sample(55_000, 720, 1080), 1080);
+  assert.equal(sample(60_000, 360, 240, 1), null);
+  assert.equal(sample(65_000, 360, 240, 1), null);
+});
