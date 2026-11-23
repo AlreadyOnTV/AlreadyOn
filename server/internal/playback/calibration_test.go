@@ -198,3 +198,130 @@ func TestAdmissionUsesClosestMeasuredSourceRate(t *testing.T) {
 		t.Fatalf("60fps failure overrode working film-rate profile: %v", err)
 	}
 }
+
+func TestUnmeasuredCalibrationAllowsTwoConversionSlots(t *testing.T) {
+	c := &Capacity{memory: func() uint64 { return 16 << 30 }}
+	c.resetCalibration()
+	job := Job{Source: sourceInfo(), Plan: Plan{Mode: "transcode", Height: 1080, FPS: 30}, Threads: 2}
+	settings := DefaultSettings()
+	settings.AutoProcesses = true
+	if got := EffectiveSettings(settings, c).MaxProcesses; got != 2 {
+		t.Fatalf("effective process limit = %d, want 2", got)
+	}
+	if err := c.AdmissionError([]Job{job}, job); err != nil {
+		t.Fatalf("second conversion: %v", err)
+	}
+	if err := c.AdmissionError([]Job{job, job}, job); !errors.Is(err, ErrBusy) {
+		t.Fatalf("third conversion: %v", err)
+	}
+}
+
+func TestCalibrationStatusIncludesQuickAndFullCases(t *testing.T) {
+	c := &Calibration{}
+	c.remember("quick", calibrationCache{Profiles: []ProfileCapacity{{
+		SourceClass: SourceH264HD, SingleSpeed: 0.8, Verified: true,
+	}}})
+	c.remember("full", calibrationCache{Profiles: []ProfileCapacity{{
+		SourceClass: SourceHEVCPQ, Encoder: EncoderIntelQSV, Streams: 2,
+		SingleSpeed: 3, Speeds: []float64{2.1, 1.67}, Verified: true,
+	}}})
+	rows := c.Status().Results
+	if len(rows) != 2 || rows[0].Passed || rows[0].Multiplier != 0.8 ||
+		!rows[1].Passed || rows[1].Multiplier != 1.67 {
+		t.Fatalf("unexpected test results: %+v", rows)
+	}
+}
+
+func TestMixedConversionsUseMeasuredDemand(t *testing.T) {
+	source := sourceInfo()
+	video, _ := Tracks(source)
+	light := ProfileCapacity{TargetHeight: AutoCapacityHeight, SourceClass: classifySource(video),
+		SourceWidth: video.Width, SourceHeight: video.Height, SourceFPS: 60, Height: 360, FPS: 30,
+		Threads: 2, Streams: 4, Verified: true}
+	heavy := light
+	heavy.TargetHeight, heavy.Height, heavy.Streams = 720, 720, 2
+	c := &Capacity{memory: func() uint64 { return 16 << 30 }}
+	c.publishProfiles([]ProfileCapacity{light, heavy})
+	small := Job{Source: source, Plan: Plan{Mode: "transcode", Height: 360, FPS: 30}, Threads: 2}
+	large := small
+	large.Plan.Height = 720
+	if c.Processes() != 4 {
+		t.Fatalf("expected four verified baseline slots, got %d", c.Processes())
+	}
+	if err := c.AdmissionError([]Job{large, small}, small); err != nil {
+		t.Fatalf("mixed load should fit: %v", err)
+	}
+	if err := c.AdmissionError([]Job{large, small, small}, small); !errors.Is(err, ErrBusy) {
+		t.Fatalf("mixed load should reject overcommit: %v", err)
+	}
+}
+
+func TestFullCalibrationLimitsAlternateBackendCoverage(t *testing.T) {
+	primary := Plan{Height: UHDHeight, Decoder: "hardware", ToneMap: true, ToneMapper: "gpu"}
+	if got := fullCalibrationHeights(true, 0, primary); len(got) != 3 ||
+		got[0] != AutoCapacityHeight || got[1] != UHDHeight || got[2] != AutoMinHeight {
+		t.Fatalf("primary HDR rungs: %v", got)
+	}
+	if got := fullCalibrationHeights(false, 0, primary); len(got) != 1 || got[0] != AutoCapacityHeight {
+		t.Fatalf("alternate backend rungs: %v", got)
+	}
+	primary.ToneMapper = "cpu"
+	if got := fullCalibrationHeights(true, 1, primary); len(got) != 2 || got[1] != UHDHeight {
+		t.Fatalf("CPU tone-map fallback: %v", got)
+	}
+	if representativeComparison(SourceHEVCPQ, 60) || representativeComparison(SourceHEVCHLG, 24) ||
+		!representativeComparison(SourceHEVCPQ, 30) || !representativeComparison(SourceHEVCSDR, 30) {
+		t.Fatal("alternate backends should compare SDR and 30 fps HDR")
+	}
+}
+
+func TestFullCalibrationResumesOnlyMissingAndExpiredCases(t *testing.T) {
+	now := time.Date(2026, 11, 23, 14, 0, 0, 0, time.UTC)
+	source := sourceInfo()
+	video, _ := Tracks(source)
+	cases := func() []calibrationCase {
+		var result []calibrationCase
+		for _, height := range []int{360, 480, 720, 1080} {
+			result = append(result, calibrationCase{class: SourceH264HD, source: source, plan: Plan{Height: height}})
+		}
+		return result
+	}
+	profile := func(height int, age time.Duration) ProfileCapacity {
+		return ProfileCapacity{SourceClass: SourceH264HD, TargetHeight: height, SourceFPS: video.FrameRate,
+			LastCompleted: now.Add(-age)}
+	}
+	history := []ProfileCapacity{profile(360, time.Hour), profile(480, 24*time.Hour), profile(720, 48*time.Hour)}
+	due := dueFullCalibrationCases(cases(), history, now)
+	if len(due) != 3 || due[0].plan.Height != 1080 || due[1].plan.Height != 720 || due[2].plan.Height != 480 {
+		t.Fatalf("expected missing then oldest cases, got %+v", due)
+	}
+	// A completed failure also counts as completed. Interrupted 720p/480p
+	// cases keep their old timestamps and are retried.
+	history = append(history, profile(1080, 0))
+	due = dueFullCalibrationCases(cases(), history, now)
+	if len(due) != 2 || due[0].plan.Height != 720 || due[1].plan.Height != 480 {
+		t.Fatalf("resume repeated a finished case: %+v", due)
+	}
+	fresh := freshCalibrationProfiles(history, now)
+	if len(fresh) != 2 || fresh[0].TargetHeight != 360 || fresh[1].TargetHeight != 1080 {
+		t.Fatalf("stale measurements should not be used for admission: %+v", fresh)
+	}
+}
+
+func TestPreferredPipelineDoesNotTradeCheaperHDRForExactMeasuredHeight(t *testing.T) {
+	source, _ := detailsFixture()
+	video := &source.Streams[0]
+	video.Width, video.Height, video.HDRStaticMetadata = 3840, 2160, true
+	cpu := ProfileCapacity{SourceClass: SourceHEVCPQ, Encoder: EncoderIntelQSV, HardwareDecode: true,
+		ToneMapper: "cpu", SourceFPS: 30, SourceWidth: 3840, SourceHeight: 2160,
+		Height: 1080, FPS: 30, Verified: true, Threads: 2, Streams: 1, SingleSpeed: 2, CPUCores: 1.2}
+	gpu := cpu
+	gpu.Height, gpu.Streams, gpu.ToneMapper, gpu.CPUCores = 2160, 2, "gpu", 0.2
+	c := &Capacity{profiles: []ProfileCapacity{cpu, gpu}}
+	for _, height := range []int{720, 1080} {
+		got, found := c.PreferredPipeline(source, EncoderIntelQSV, height)
+		if !found || got.ToneMapper != "gpu" {
+			t.Fatalf("%dp selected %+v, want GPU tone mapping", height, got)
+		}
+	}
+}

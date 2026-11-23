@@ -128,7 +128,7 @@ func TestChooseAppliesAutoAdaptiveCeilingWithoutChangingExplicitQuality(t *testi
 	if err != nil || plan.Height != 1080 {
 		t.Fatalf("explicit quality was changed by Auto adaptation: %+v, %v", plan, err)
 	}
-	caps.MaxHeight, caps.AutoMaxHeight = 0, UHDHeight
+	caps.MaxHeight, caps.AutoMaxHeight = 0, 123
 	if _, err := Choose(source, caps, false, true); !errors.Is(err, ErrUnsupported) {
 		t.Fatalf("invalid adaptive ceiling error = %v", err)
 	}

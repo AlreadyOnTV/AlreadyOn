@@ -657,6 +657,31 @@ button.admin-badge:disabled {
   color: var(--text-muted);
 }
 
+.benchmark-results-link {
+  background: none;
+  border: 0;
+  color: var(--accent);
+  cursor: pointer;
+  font: inherit;
+  padding: 0;
+  text-decoration: underline;
+}
+
+.admin-modal.benchmark-results-dialog {
+  max-width: 760px;
+}
+
+.benchmark-results-table :is(th, td) {
+  text-align: left;
+  vertical-align: top;
+  text-transform: none;
+}
+
+.benchmark-results-table tbody th {
+  color: inherit;
+  font-weight: normal;
+}
+
 .setting-note.setting-ok {
   color: var(--accent);
 }

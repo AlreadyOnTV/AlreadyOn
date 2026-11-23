@@ -34,6 +34,9 @@ func TestCalibrationCacheIdentityAndExpiry(t *testing.T) {
 	if _, ok := readCalibrationCache(path, record.Fingerprint); ok {
 		t.Fatal("expired cache accepted")
 	}
+	if _, ok := readCompatibleCalibrationCache(path, record.Fingerprint); !ok {
+		t.Fatal("expired history could not be resumed")
+	}
 	record.At = time.Now().Add(time.Hour)
 	write()
 	if _, ok := readCalibrationCache(path, record.Fingerprint); ok {

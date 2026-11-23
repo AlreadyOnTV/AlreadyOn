@@ -30,7 +30,7 @@ internal const val PLAYBACK_LOG_TAG = "AlreadyOnPlayback"
 internal data class PhonePlayback(val url: String, val title: String, val startMs: Long, val revision: Long, val hlsTargetMs: Long? = null, val capturedAt: Long = SystemClock.elapsedRealtime(), val requestedAt: Long = capturedAt,
     val seriesTitle: String = "", val episodeLabel: String = "", val mediaFileId: Long = -1, val sourceHeight: Int = 720, val uhd: Boolean = false,
     val selectedAudioIndex: Int? = null, val audioTracks: List<PhoneTrack> = emptyList(), val subtitleTracks: List<PhoneTrack> = emptyList(),
-    val streamOffsetSeconds: Double = 0.0, val hlsOriginMs: Long? = null, val trustedCa: String? = null, val entryStartsAt: String? = null)
+    val outputRungHeight: Int = 0, val sourceRungHeight: Int = sourceHeight, val streamOffsetSeconds: Double = 0.0, val hlsOriginMs: Long? = null, val trustedCa: String? = null, val entryStartsAt: String? = null)
 internal data class PhoneState(
     val username: String = "", val role: String = "viewer", val mustChangePassword: Boolean = false,
     val passwordLocked: Boolean = true, val settings: String? = null, val notice: String? = null,
@@ -38,7 +38,7 @@ internal data class PhoneState(
     val error: String? = null, val trustIssue: Boolean = false, val profiles: List<ViewerProfile> = emptyList(),
     val restoringConnection: Boolean = false, val playbackReady: Boolean = false,
     val profile: ViewerProfile? = null, val channels: List<GuideChannel> = emptyList(),
-    val channel: GuideChannel? = null, val playback: PhonePlayback? = null,
+    val channel: GuideChannel? = null, val playback: PhonePlayback? = null, val pendingPlayback: PhonePlayback? = null,
     val quality: Int = 0, val subtitleIndex: Int? = null, val subtitleFileId: Long? = null, val audioIndex: Int? = null, val audioFileId: Long? = null,
     val paused: Boolean = false, val muted: Boolean = false,
 )
@@ -55,6 +55,28 @@ internal class PhoneModel(application: Application) : AndroidViewModel(applicati
     private var client: ServerClient? = null
     private var action: Job? = null
     private var viewing: Job? = null
+    private var autoHeight = 720
+    private var adaptiveRequest: Int? = null
+    private var autoCapacityPressure = false
+    private var preparedRevision: Long? = null
+
+    fun adaptivePrepared(revision: Long) {
+        if (state.value.pendingPlayback?.revision == revision) preparedRevision = revision
+    }
+    private val autoQuality = NativeAutoQuality()
+
+    fun sampleAutoQuality(revision: Long, bufferedMs: Long, buffering: Boolean, droppedFrames: Boolean) {
+        val current = state.value
+        val media = current.playback ?: return
+        if (media.revision != revision) return
+        if (current.quality != 0 || current.paused || !current.playbackReady || media.outputRungHeight == 0) {
+            autoQuality.reset()
+            adaptiveRequest = null
+            return
+        }
+        adaptiveRequest = autoQuality.observe(bufferedMs, buffering || droppedFrames, media.outputRungHeight,
+            minOf(media.sourceRungHeight, if (media.uhd) 2160 else 1080), autoCapacityPressure) ?: adaptiveRequest
+    }
     private var guideEntry: Job? = null
     private val mutableGuideNavigationDeadline = MutableStateFlow(0L)
     val guideNavigationDeadline = mutableGuideNavigationDeadline.asStateFlow()
@@ -225,7 +247,7 @@ internal class PhoneModel(application: Application) : AndroidViewModel(applicati
     fun setReleaseCycle(cycle: ReleaseCycle) {
         if (!state.value.signedIn || state.value.profile?.role != "admin" || state.value.mustChangePassword) return
         if (!updatePreferences.edit().putString("release_cycle", cycle.name).commit()) {
-            update { it.copy(error = "Could not save the release cycle. Try again.") }
+            update { it.copy(error = "Could not save the update cycle. Try again.") }
             return
         }
         mutableReleaseCycle.value = cycle
@@ -375,6 +397,7 @@ internal class PhoneModel(application: Application) : AndroidViewModel(applicati
             ?: channels.firstOrNull { it.programs.isNotEmpty() })?.let { watch(it, restart = true) }
     }
     fun setQuality(height: Int) {
+        if (height == 0) autoHeight = 720
         update { it.copy(quality = height) }
         state.value.channel?.let { watch(it, restart = true) }
     }
@@ -497,33 +520,44 @@ internal class PhoneModel(application: Application) : AndroidViewModel(applicati
         val api = client ?: return
         val profile = state.value.profile ?: return
         if (state.value.mustChangePassword || state.value.settings != null) return
+        if (state.value.channel?.id != channel.id) autoHeight = 720
+        adaptiveRequest = null
+        autoCapacityPressure = false
+        autoQuality.reset()
         val requestedAt = SystemClock.elapsedRealtime()
         val viewerId = UUID.randomUUID().toString()
         val previous = viewing
         previous?.cancel()
-        update { it.copy(channel = channel, playback = null, playbackReady = false, error = null) }
+        update { it.copy(channel = channel, playback = null, pendingPlayback = null, playbackReady = false, error = null) }
         viewing = viewModelScope.launch {
             previous?.join()
             var activityStarted = false
             try {
-                while (true) {
+                suspend fun release(token: String) = withContext(NonCancellable) {
+                    try { withTimeout(5000) { api.request("/api/playback/sessions", "DELETE", JSONObject().put("channelId", channel.id).put("token", token)) } }
+                    catch (_: Exception) { /* Failed releases expire with the viewer lease. */ }
+                }
+                suspend fun prepare(ceiling: Int, timeoutMs: Long, replacement: Boolean = false, replacementToken: String? = null): Triple<String, PhonePlayback, Long>? {
                     var token: String? = null
+                    var ready = false
                     try {
                         // Finish issuance before cancellation so every issued token is known and revocable.
                         token = withContext(NonCancellable) {
                             JSONObject(api.request("/api/playback/sessions", "POST", JSONObject().put("channelId", channel.id))).getString("token")
                         }
+                        val caps = decoderCapabilities()
+                        if (state.value.quality == 0) caps.put("autoMaxHeight", ceiling).put("autoReplacement", replacement)
                         val body = JSONObject().put("token", token).put("profileId", profile.id)
                             .put("audioLanguage", profile.language)
-                            // Auto stays within this client's tested 720p ceiling, including remembered-channel starts.
-                            .put("maxHeight", state.value.quality.takeIf { it > 0 } ?: 720)
-                            .put("capabilities", decoderCapabilities())
+                            .put("maxHeight", state.value.quality)
+                            .put("capabilities", caps)
+                        if (replacement && replacementToken != null) body.put("replacementToken", replacementToken)
                         if (state.value.audioIndex != null && state.value.audioFileId != null) body
                             .put("audioTrackIndex", state.value.audioIndex).put("audioMediaFileId", state.value.audioFileId)
                         var tune = JSONObject(api.request("/api/channels/${channel.id}/tune", "POST", body))
                         val started = SystemClock.elapsedRealtime()
                         while (!tune.getBoolean("ready")) {
-                            if (SystemClock.elapsedRealtime() - started > 90_000) throw IOException("Playback did not become ready. Try again.")
+                            if (SystemClock.elapsedRealtime() - started > timeoutMs) throw IOException("Playback did not become ready. Try again.")
                             delay(if (BuildConfig.IS_TV) 200 else 1000)
                             tune = status(api, channel.id, token)
                         }
@@ -532,7 +566,7 @@ internal class PhoneModel(application: Application) : AndroidViewModel(applicati
                         val end = Instant.parse(tune.getString("entryEndsAt"))
                         val delaySeconds = tune.optDouble("presentationDelaySeconds", 3.0)
                         val remainingMs = (end.toEpochMilli() - now.toEpochMilli() + delaySeconds * 1000).toLong()
-                        if (remainingMs <= 0) continue
+                        if (remainingMs <= 0) return null
                         val direct = tune.getJSONObject("plan").getString("mode") == "direct"
                         val sourcePosition = (now.toEpochMilli() - Instant.parse(tune.getString("entryStartsAt")).toEpochMilli()) / 1000.0 +
                             tune.optDouble("sourceOffsetSeconds") - delaySeconds
@@ -550,9 +584,26 @@ internal class PhoneModel(application: Application) : AndroidViewModel(applicati
                             mediaFileId = tune.optLong("mediaFileId", -1), sourceHeight = tune.optInt("sourceHeight", 720), uhd = tune.optBoolean("uhd"),
                             selectedAudioIndex = tune.getJSONObject("plan").optInt("audioTrackIndex", -1).takeIf { it >= 0 },
                             audioTracks = phoneTracks(tune.optJSONArray("audioTracks")), subtitleTracks = phoneTracks(tune.optJSONArray("subtitles")),
+                            sourceRungHeight = tune.optJSONObject("details")?.optJSONObject("sourceVideo")?.let {
+                                qualityRungHeight(it.optInt("width"), it.optInt("height"))
+                            } ?: tune.optInt("sourceHeight", 720),
+                            outputRungHeight = tune.getJSONObject("plan").takeUnless { it.optBoolean("videoCopy") }?.let {
+                                qualityRungHeight(it.optInt("width"), it.optInt("height"))
+                            } ?: 0,
                             streamOffsetSeconds = if (direct) 0.0 else tune.optDouble("streamOffsetSeconds"),
                             entryStartsAt = tune.getString("entryStartsAt"),
                             trustedCa = state.value.trustedCa, hlsOriginMs = tune.optString("hlsOrigin").takeIf { it.isNotBlank() }?.let { Instant.parse(it).toEpochMilli() })
+                        ready = true
+                        return Triple(token, media, remainingMs)
+                    } finally {
+                        if (!ready) token?.let { release(it) }
+                    }
+                }
+                while (true) {
+                    val (initialToken, initialMedia, remainingMs) = prepare(autoHeight, 90_000) ?: continue
+                    var token = initialToken
+                    var media = initialMedia
+                    try {
                         update { it.copy(playback = media, playbackReady = false, profile = it.profile?.copy(lastChannel = channel.id),
                             subtitleIndex = selectedSubtitle(media, state.value.profile ?: profile),
                             subtitleFileId = media.mediaFileId) }
@@ -565,19 +616,53 @@ internal class PhoneModel(application: Application) : AndroidViewModel(applicati
                             val elapsed = SystemClock.elapsedRealtime()
                             if (elapsed < boundary) {
                                 reportActivity(api, viewerId, channel.id, token, profile.id, state.value.paused)
-                                if (elapsed - lastStatusAt >= 10_000) {
-                                    status(api, channel.id, token)
+                                val nextHeight = adaptiveRequest
+                                adaptiveRequest = null
+                                if (nextHeight != null && state.value.quality == 0 && !state.value.paused) {
+                                    val next = try { prepare(nextHeight, 8_000, replacement = true, replacementToken = token) }
+                                    catch (error: CancellationException) { throw error }
+                                    catch (_: Exception) { null } // Keep the working rendition if the candidate cannot start.
+                                    if (next != null) {
+                                        val (nextToken, nextMedia, _) = next
+                                        if (nextMedia.entryStartsAt == media.entryStartsAt && nextMedia.mediaFileId == media.mediaFileId &&
+                                            (nextHeight - media.outputRungHeight) * (nextMedia.outputRungHeight - media.outputRungHeight) > 0 && state.value.quality == 0) {
+                                            preparedRevision = null
+                                            var promoted = false
+                                            try {
+                                                update { it.copy(pendingPlayback = nextMedia) }
+                                                val prepared = withTimeoutOrNull(4000) {
+                                                    while (preparedRevision != nextMedia.revision) delay(50)
+                                                    true
+                                                } == true
+                                                if (prepared && !state.value.paused && state.value.quality == 0) {
+                                                    val oldToken = token
+                                                    token = nextToken
+                                                    media = nextMedia
+                                                    autoHeight = nextHeight
+                                                    autoQuality.reset()
+                                                    adaptiveRequest = null
+                                                    update { it.copy(playback = nextMedia, pendingPlayback = null, playbackReady = true) }
+                                                    promoted = true
+                                                    release(oldToken)
+                                                }
+                                            } finally {
+                                                if (!promoted) {
+                                                    update { if (it.pendingPlayback?.revision == nextMedia.revision) it.copy(pendingPlayback = null) else it }
+                                                    release(nextToken)
+                                                }
+                                            }
+                                        } else release(nextToken)
+                                    }
+                                }
+                                if (elapsed - lastStatusAt >= (if (state.value.quality == 0 && media.outputRungHeight > 0) 5000 else 10000)) {
+                                    autoCapacityPressure = status(api, channel.id, token).optBoolean("autoCapacityPressure")
                                     lastStatusAt = elapsed
                                 }
                             }
                         }
                         update { it.copy(playback = null, playbackReady = false) }
                     } finally {
-                        // Best-effort remote release runs even when channel switching cancels preparation.
-                        if (token != null) withContext(NonCancellable) {
-                            try { withTimeout(5000) { api.request("/api/playback/sessions", "DELETE", JSONObject().put("channelId", channel.id).put("token", token)) } }
-                            catch (_: Exception) { /* Offline servers expire the bounded viewer lease themselves. */ }
-                        }
+                        release(token)
                     }
                 }
             } catch (e: CancellationException) { throw e }
@@ -597,7 +682,7 @@ internal class PhoneModel(application: Application) : AndroidViewModel(applicati
     // Backgrounding releases the lease but retains channel choice for a fresh live tune on return.
     fun suspendWatching() {
         viewing?.cancel()
-        update { it.copy(playback = null) }
+        update { it.copy(playback = null, pendingPlayback = null) }
     }
     fun resumeWatching() {
         if (viewing?.isActive != true && state.value.profile != null && state.value.settings == null) enterGuide()
@@ -605,7 +690,7 @@ internal class PhoneModel(application: Application) : AndroidViewModel(applicati
 
     fun stopWatching() {
         viewing?.cancel()
-        update { it.copy(channel = null, playback = null, paused = false) }
+        update { it.copy(channel = null, playback = null, pendingPlayback = null, paused = false) }
     }
 
     fun togglePause() {

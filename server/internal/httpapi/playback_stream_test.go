@@ -111,7 +111,7 @@ func TestTuneDirectOffsetScopeAndRange(t *testing.T) {
 		{"/api/channels/999/tune", strings.Replace(body, `"profileId":1`, `"profileId":99999`, 1), 404},
 		{"/api/channels/998/tune", strings.Replace(body, `"profileId":1`, `"profileId":2`, 1), 404},
 		{"/api/channels/999/tune", strings.Replace(body, `"profileId":1`, `"profileId":2,"maxHeight":500`, 1), 400},
-		{"/api/channels/999/tune", strings.Replace(body, `"hls":true`, `"hls":true,"autoMaxHeight":2160`, 1), 400},
+		{"/api/channels/999/tune", strings.Replace(body, `"hls":true`, `"hls":true,"autoMaxHeight":123`, 1), 400},
 		{"/api/channels/999/tune", strings.Replace(body, `"profileId":1,`, "", 1), 201},
 	} {
 		if rec := client.do("POST", attempt.path, attempt.body); rec.Code != attempt.status {

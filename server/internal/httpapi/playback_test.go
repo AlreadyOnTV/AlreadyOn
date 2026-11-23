@@ -181,6 +181,7 @@ func TestFailedTuneCleanupKeepsManagementAuthorization(t *testing.T) {
 			t.Fatalf("cleanup invalidated sign-in: %d %s", response.Code, response.Body.String())
 		}
 	}
+
 	request := httptest.NewRequest("GET", "/api/profiles", nil)
 	request.Header.Set("Authorization", "Bearer "+raw)
 	response := httptest.NewRecorder()
@@ -193,5 +194,43 @@ func TestFailedTuneCleanupKeepsManagementAuthorization(t *testing.T) {
 	handler.ServeHTTP(response, request)
 	if response.Code != 401 || response.Header().Get("WWW-Authenticate") != "Bearer" {
 		t.Fatalf("anonymous cleanup bypassed management auth: %d", response.Code)
+	}
+}
+
+func TestPlaybackReplacementRequiresOwnedBoundSession(t *testing.T) {
+	db := openTestDB(t)
+	_, key, err := auth.GenerateAPIKey(t.Context(), db, testOwnerID(t, db), "Replacement owner")
+	if err != nil {
+		t.Fatal(err)
+	}
+	_, other, err := auth.GenerateAPIKey(t.Context(), db, testOwnerID(t, db), "Other owner")
+	if err != nil {
+		t.Fatal(err)
+	}
+	sessions := playback.NewSessions(&httpClock{now: time.Now()})
+	token, _, err := sessions.Issue(key.ID, 107)
+	if err != nil {
+		t.Fatal(err)
+	}
+	if _, err := sessions.Claim(token, key.ID, 107); err != nil {
+		t.Fatal(err)
+	}
+	if err := sessions.Bind(token, "old-rendition"); err != nil {
+		t.Fatal(err)
+	}
+	p := NewPlaybackHTTP(db, sessions, nil)
+	session, err := p.replacementSession(playback.Capabilities{AutoReplacement: true}, token, key.ID, 107)
+	if err != nil || session == nil || session.StreamKey != "old-rendition" {
+		t.Fatalf("owned replacement was rejected: %+v %v", session, err)
+	}
+	if _, err := p.replacementSession(playback.Capabilities{AutoReplacement: true}, token, other.ID, 107); err == nil {
+		t.Fatal("another principal replaced a bound session")
+	}
+	otherToken, _, err := sessions.Issue(other.ID, 107)
+	if err != nil {
+		t.Fatal(err)
+	}
+	if _, err := p.replacementSession(playback.Capabilities{AutoReplacement: true}, otherToken, key.ID, 107); err == nil {
+		t.Fatal("unbound or foreign replacement token was accepted")
 	}
 }

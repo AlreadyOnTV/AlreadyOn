@@ -32,28 +32,31 @@ type ManagedStream struct {
 
 type managed struct {
 	ManagedStream
-	key     string
-	cost    int
-	leases  map[string]time.Time
-	cancel  context.CancelFunc
-	closing bool
+	key         string
+	cost        int
+	leases      map[string]time.Time
+	cancel      context.CancelFunc
+	closing     bool
+	replaces    *managed
+	replacement *managed
 }
 
 // Manager owns private output, workers and viewer leases. Its clock and worker
 // are injectable; Sweep can be called deterministically without timer sleeps.
 type Manager struct {
-	mu         sync.Mutex
-	root       string
-	unlock     func() error
-	clock      schedule.Clock
-	worker     Worker
-	admission  AdmissionPolicy
-	settings   Settings
-	streams    map[string]*managed
-	active     int
-	activeCost int
-	closed     bool
-	wg         sync.WaitGroup
+	mu                sync.Mutex
+	root              string
+	unlock            func() error
+	clock             schedule.Clock
+	worker            Worker
+	admission         AdmissionPolicy
+	settings          Settings
+	streams           map[string]*managed
+	active            int
+	activeCost        int
+	autoPressureUntil time.Time
+	closed            bool
+	wg                sync.WaitGroup
 }
 
 func NewManager(root string, clock schedule.Clock, worker Worker, settings Settings) (*Manager, error) {
@@ -117,6 +120,16 @@ func (m *Manager) SetAdmissionPolicy(policy AdmissionPolicy) {
 // viewer is the opaque session ID, never a user-chosen channel name or path.
 // A successful acquisition persists beyond its HTTP request via a lease.
 func (m *Manager) Acquire(ctx context.Context, key, viewer string, job Job) (ManagedStream, error) {
+	return m.acquire(ctx, key, viewer, "", "", job)
+}
+
+// AcquireReplacement substitutes an exclusively leased rendition during
+// admission while leaving it running until the client switches over.
+func (m *Manager) AcquireReplacement(ctx context.Context, key, viewer, oldKey, oldViewer string, job Job) (ManagedStream, error) {
+	return m.acquire(ctx, key, viewer, oldKey, oldViewer, job)
+}
+
+func (m *Manager) acquire(ctx context.Context, key, viewer, oldKey, oldViewer string, job Job) (ManagedStream, error) {
 	m.mu.Lock()
 	defer m.mu.Unlock()
 	if m.closed {
@@ -132,6 +145,9 @@ func (m *Manager) Acquire(ctx context.Context, key, viewer string, job Job) (Man
 		if s.closing || s.Err != nil {
 			return ManagedStream{}, ErrBusy
 		}
+		if _, exists := s.leases[viewer]; !exists && s.replacement != nil {
+			return ManagedStream{}, ErrBusy
+		}
 		if _, exists := s.leases[viewer]; !exists && m.viewerCount() >= m.settings.MaxViewers {
 			return ManagedStream{}, ErrBusy
 		}
@@ -139,7 +155,18 @@ func (m *Manager) Acquire(ctx context.Context, key, viewer string, job Job) (Man
 		return s.ManagedStream, nil
 	}
 	cost := jobResourceCost(job)
-	if len(m.streams) >= m.settings.MaxRenditions || m.viewerCount() >= m.settings.MaxViewers || (cost > 0 && m.activeCost+cost > m.settings.MaxProcesses) {
+	renditions, viewers, occupiedCost := len(m.streams), m.viewerCount(), m.activeCost
+	var replaced *managed
+	if old := m.streams[oldKey]; old != nil && oldKey != key && !old.closing && old.Err == nil && old.replacement == nil && len(old.leases) == 1 {
+		expires, owned := old.leases[oldViewer]
+		if owned && m.clock.Now().Before(expires) {
+			replaced = old
+			renditions--
+			viewers--
+			occupiedCost -= old.cost
+		}
+	}
+	if renditions >= m.settings.MaxRenditions || viewers >= m.settings.MaxViewers || (cost > 0 && occupiedCost+cost > m.settings.MaxProcesses) {
 		return ManagedStream{}, ErrBusy
 	}
 	if cost > 0 {
@@ -149,13 +176,13 @@ func (m *Manager) Acquire(ctx context.Context, key, viewer string, job Job) (Man
 			threads = DefaultThreads
 		}
 		if !job.ValidatedThreads {
-			job.Threads = FairThreads(threads, cpus, m.activeCost+cost)
+			job.Threads = FairThreads(threads, cpus, occupiedCost+cost)
 		}
 	}
 	if cost > 0 && m.admission != nil {
 		var active []Job
 		for _, stream := range m.streams {
-			if stream.cost > 0 && !stream.Done {
+			if stream != replaced && stream.cost > 0 && !stream.Done {
 				active = append(active, stream.Job)
 			}
 		}
@@ -173,6 +200,10 @@ func (m *Manager) Acquire(ctx context.Context, key, viewer string, job Job) (Man
 	workerCtx, cancel := context.WithCancel(context.Background())
 	s := &managed{ManagedStream: ManagedStream{Job: job}, key: key, cost: cost, leases: map[string]time.Time{viewer: m.clock.Now().Add(m.settings.Lease())}, cancel: cancel}
 	m.streams[key] = s
+	if replaced != nil {
+		replaced.replacement = s
+		s.replaces = replaced
+	}
 	if job.Plan.Mode == "direct" {
 		s.Done = true
 		return s.ManagedStream, nil
@@ -296,6 +327,12 @@ func (m *Manager) stop(s *managed) {
 	}
 }
 func (m *Manager) remove(s *managed) {
+	if s.replaces != nil && s.replaces.replacement == s {
+		s.replaces.replacement = nil
+	}
+	if s.replacement != nil && s.replacement.replaces == s {
+		s.replacement.replaces = nil
+	}
 	if s.Job.Plan.Mode != "direct" {
 		_ = os.RemoveAll(s.Job.OutputDir)
 	}
@@ -359,6 +396,20 @@ func (m *Manager) PauseAll(ctx context.Context) error {
 		case <-ticker.C:
 		}
 	}
+}
+
+// MarkAutoCapacityPressure gives Auto viewers above the starting rung a
+// bounded opportunity to leave headroom for a refused conversion.
+func (m *Manager) MarkAutoCapacityPressure() {
+	m.mu.Lock()
+	defer m.mu.Unlock()
+	m.autoPressureUntil = m.clock.Now().Add(15 * time.Second)
+}
+
+func (m *Manager) AutoCapacityPressure() bool {
+	m.mu.Lock()
+	defer m.mu.Unlock()
+	return m.clock.Now().Before(m.autoPressureUntil)
 }
 
 // TranscodeSlots reports active encode resource slots and the manager's current

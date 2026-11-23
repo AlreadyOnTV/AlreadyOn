@@ -71,6 +71,7 @@ func main() {
 
 // run serves until stopped and reports whether an administrator asked for a restart.
 func run() (restart bool) {
+	startedAt := time.Now()
 	zone, zoneWarning := config.ApplyTimeZone()
 	cfg, err := config.Load()
 	if err != nil {
@@ -335,6 +336,9 @@ func run() (restart bool) {
 	benchmarks.Start(true)
 	if periodicJobsEnabled {
 		go benchmarks.RunPeriodic(ctx)
+		go benchmarks.RunInitialFull(ctx, startedAt, func() bool {
+			return calibration.Status().FullProfiles > 0
+		})
 	}
 
 	// The library pipeline can take minutes on a real library, so it runs

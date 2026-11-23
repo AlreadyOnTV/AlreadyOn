@@ -11,6 +11,9 @@ import (
 	"github.com/alreadyonapp/alreadyon/server/internal/governor"
 )
 
+const initialFullDelay = 30 * time.Minute
+const fullBenchmarkBudget = 9*time.Minute + 40*time.Second
+
 var ErrServerStarting = errors.New("Server starting, please wait.")
 var ErrBenchmarkRunning = errors.New("Video transcoding test is running. Try playback again when it finishes.")
 
@@ -51,6 +54,10 @@ func (b *Benchmarks) Start(startup bool) bool {
 	return b.start(startup, mode, false, false)
 }
 func (b *Benchmarks) start(startup bool, mode string, requested, manual bool) bool {
+	return b.startIf(startup, mode, requested, manual, nil)
+}
+
+func (b *Benchmarks) startIf(startup bool, mode string, requested, manual bool, eligible func() bool) bool {
 	b.mu.Lock()
 	defer b.mu.Unlock()
 	if !startup && !requested && b.pendingMode != "" {
@@ -59,15 +66,17 @@ func (b *Benchmarks) start(startup bool, mode string, requested, manual bool) bo
 	if b.done != nil || (!startup && (!b.ready.Load() || b.admissions > 0 || b.Busy != nil && b.Busy())) {
 		return false
 	}
-	ctx, cancel := context.WithCancel(b.Context)
+	if b.Context.Err() != nil || eligible != nil && !eligible() {
+		return false
+	}
+	budget := fullBenchmarkBudget
 	if mode == "mini" {
-		budget := b.StartupBudget
+		budget = b.StartupBudget
 		if budget <= 0 {
 			budget = 120 * time.Second
 		}
-		cancel()
-		ctx, cancel = context.WithTimeout(b.Context, budget)
 	}
+	ctx, cancel := context.WithTimeout(b.Context, budget)
 	done := make(chan struct{})
 	b.done, b.cancel = done, cancel
 	b.mode, b.startedAt = mode, time.Now()
@@ -175,6 +184,22 @@ func NextBenchmark(now time.Time) time.Time {
 	}
 	return next
 }
+
+// RunInitialFull makes one idle-only attempt per server start. A busy server
+// skips this attempt and continues on the regular schedule.
+func (b *Benchmarks) RunInitialFull(ctx context.Context, startedAt time.Time, hasFullResults func() bool) {
+	timer := time.NewTimer(time.Until(startedAt.Add(initialFullDelay)))
+	defer timer.Stop()
+	select {
+	case <-ctx.Done():
+		return
+	case <-timer.C:
+		if ctx.Err() == nil {
+			b.startIf(false, "full", false, false, func() bool { return !hasFullResults() })
+		}
+	}
+}
+
 func (b *Benchmarks) RunPeriodic(ctx context.Context) {
 	b.runPeriodic(ctx, NextBenchmark, 30*time.Second)
 }
@@ -282,20 +307,28 @@ func (b *Benchmarks) Stop() {
 	b.mu.Unlock()
 }
 
+type BenchmarkSelection struct {
+	Driver          string `json:"driver"`
+	Library         string `json:"library"`
+	ConcurrentLimit int    `json:"concurrentLimit"`
+}
+
 type BenchmarkStatus struct {
-	State         string            `json:"state"`
-	Mode          string            `json:"mode"`
-	StartedAt     time.Time         `json:"startedAt,omitempty"`
-	Outcome       string            `json:"outcome"`
-	Profiles      []ProfileCapacity `json:"profiles,omitempty"`
-	Tasks         []activity.Task   `json:"tasks"`
-	ActiveStreams int               `json:"activeStreams"`
-	QuickAt       time.Time         `json:"quickAt,omitempty"`
-	FullAt        time.Time         `json:"fullAt,omitempty"`
-	QuickProfiles int               `json:"quickProfiles"`
-	FullProfiles  int               `json:"fullProfiles"`
-	RecommendFull bool              `json:"recommendFull"`
-	Manual        bool              `json:"manual"`
+	State         string              `json:"state"`
+	Mode          string              `json:"mode"`
+	StartedAt     time.Time           `json:"startedAt,omitempty"`
+	Outcome       string              `json:"outcome"`
+	Profiles      []ProfileCapacity   `json:"profiles,omitempty"`
+	Tasks         []activity.Task     `json:"tasks"`
+	ActiveStreams int                 `json:"activeStreams"`
+	QuickAt       time.Time           `json:"quickAt,omitempty"`
+	FullAt        time.Time           `json:"fullAt,omitempty"`
+	QuickProfiles int                 `json:"quickProfiles"`
+	FullProfiles  int                 `json:"fullProfiles"`
+	Results       []BenchmarkResult   `json:"results,omitempty"`
+	Selection     *BenchmarkSelection `json:"selection,omitempty"`
+	RecommendFull bool                `json:"recommendFull"`
+	Manual        bool                `json:"manual"`
 }
 
 func (b *Benchmarks) Status() BenchmarkStatus {

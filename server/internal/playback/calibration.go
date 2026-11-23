@@ -16,6 +16,7 @@ import (
 // ProfileCapacity describes an actual homogeneous concurrent experiment, not a
 // CPU-count extrapolation. Unverified paths retain conservative admission.
 type ProfileCapacity struct {
+	TargetHeight      int         `json:"targetHeight,omitempty"`
 	SourceClass       SourceClass `json:"sourceClass"`
 	Encoder           string      `json:"encoder"`
 	HardwareDecode    bool        `json:"hardwareDecode"`
@@ -32,6 +33,7 @@ type ProfileCapacity struct {
 	Speeds            []float64   `json:"perStreamSpeeds"`
 	Verified          bool        `json:"verified"`
 	MeasuredAt        time.Time   `json:"measuredAt"`
+	LastCompleted     time.Time   `json:"lastCompleted,omitzero"`
 	CPUCores          float64     `json:"cpuCores"`
 	GPUEngines        *float64    `json:"gpuEngines,omitempty"`
 	ReferenceSSIM     *float64    `json:"referenceSsim,omitempty"`
@@ -67,12 +69,21 @@ const (
 	miniSampleWindow = time.Second
 )
 
+// BenchmarkResult summarizes one recorded pipeline case for Server Settings.
+type BenchmarkResult struct {
+	Name          string    `json:"name"`
+	Multiplier    float64   `json:"multiplier"`
+	Passed        bool      `json:"passed"`
+	LastCompleted time.Time `json:"lastCompleted,omitzero"`
+}
+
 type CalibrationStatus struct {
-	QuickAt       time.Time `json:"quickAt,omitempty"`
-	FullAt        time.Time `json:"fullAt,omitempty"`
-	RecommendFull bool      `json:"recommendFull"`
-	QuickProfiles int       `json:"quickProfiles"`
-	FullProfiles  int       `json:"fullProfiles"`
+	QuickAt       time.Time         `json:"quickAt,omitempty"`
+	FullAt        time.Time         `json:"fullAt,omitempty"`
+	RecommendFull bool              `json:"recommendFull"`
+	QuickProfiles int               `json:"quickProfiles"`
+	FullProfiles  int               `json:"fullProfiles"`
+	Results       []BenchmarkResult `json:"results,omitempty"`
 }
 
 func (c *Calibration) Status() CalibrationStatus {
@@ -82,10 +93,12 @@ func (c *Calibration) Status() CalibrationStatus {
 	if c.quickOK {
 		status.QuickAt = c.quick.At
 		status.QuickProfiles = len(c.quick.Profiles)
+		status.Results = appendBenchmarkResults(status.Results, "Quick", c.quick.Profiles)
 	}
 	if c.fullOK {
 		status.FullAt = c.full.At
 		status.FullProfiles = len(c.full.Profiles)
+		status.Results = appendBenchmarkResults(status.Results, "Full", c.full.Profiles)
 	}
 	return status
 }
@@ -108,9 +121,9 @@ func (c *Calibration) sample(ctx context.Context, test calibrationCase, count in
 	return measureStreams(trial, test.path, test.source, test.plan, test.threads, count, warmup, window)
 }
 
-// Cases cover every immutable fixture, including PQ/HLG at 24/30/60fps.
-// The mini pass starts with the preferred working encoder; full analysis adds
-// alternate APIs and CPU stages without assuming an API name proves performance.
+// Each source fixture keeps a baseline and a quality ceiling on the preferred
+// pipeline. Alternate backends are compared on representative inputs so their
+// costs do not multiply across every frame rate and output rung.
 func (c *Calibration) cases(ctx context.Context, inputs *benchmarkInputs, threads int, full bool) ([]calibrationCase, error) {
 	encoder := c.Capacity.currentEncoder(ctx)
 	encoders := []string{encoder}
@@ -144,7 +157,11 @@ func (c *Calibration) cases(ctx context.Context, inputs *benchmarkInputs, thread
 		if class == SourceSDRSmall {
 			height = 480
 		}
-		for _, encoder := range encoders {
+		for index, encoder := range encoders {
+			primary := index == 0
+			if full && !primary && !representativeComparison(class, v.FrameRate) {
+				continue
+			}
 			outputHeight := benchmarkOutputHeight(height, v.Height, encoder, full)
 			plan := Plan{Mode: "transcode", Width: outputHeight * 16 / 9 / 2 * 2, Height: outputHeight, FPS: math.Min(30, v.FrameRate), Profile: outputProfile(outputHeight), VideoBitrate: heightBitrate(outputHeight), AudioBitrate: 192000, AudioChannels: 2, Encoder: encoder}
 			if full {
@@ -182,16 +199,72 @@ func (c *Calibration) cases(ctx context.Context, inputs *benchmarkInputs, thread
 				}
 				variants = append(variants, p)
 			}
-			for _, p := range variants {
+			for variant, p := range variants {
+				heights := []int{AutoCapacityHeight}
+				if full {
+					heights = fullCalibrationHeights(primary, variant, p)
+					if len(heights) == 0 {
+						continue
+					}
+				} else if v.Height >= AutoStartHeight {
+					heights = append(heights, AutoStartHeight)
+				}
 				n := threads
 				if p.Decoder == "hardware" {
 					n = DefaultThreads
 				}
-				cases = append(cases, calibrationCase{class: class, path: inputs.files[name], source: probe, plan: p, threads: n, full: full, mini: !full})
+				for _, height := range heights {
+					rung := p
+					rung.Height = height
+					rung.Width = height * 16 / 9 / 2 * 2
+					rung.FPS = math.Min(rung.FPS, 30)
+					if height == p.Height {
+						rung.FPS = p.FPS
+					}
+					rung.VideoBitrate = heightBitrate(height)
+					rung.Profile = outputProfile(height)
+					cases = append(cases, calibrationCase{class: class, path: inputs.files[name], source: probe, plan: rung, threads: n, full: full, mini: !full})
+				}
 			}
 		}
 	}
+	// A deadline should leave a representative result for as many sources as
+	// possible. Stable sorting keeps the preferred backend first within a rung.
+	sort.SliceStable(cases, func(i, j int) bool {
+		priority := func(height int) int {
+			switch height {
+			case AutoCapacityHeight:
+				return 0
+			case AutoMinHeight:
+				return 2
+			default:
+				return 1
+			}
+		}
+		return priority(cases[i].plan.Height) < priority(cases[j].plan.Height)
+	})
 	return cases, nil
+}
+
+func representativeComparison(class SourceClass, fps float64) bool {
+	if class == SourceHEVCPQ || class == SourceHEVCHLG {
+		return fps >= 29 && fps <= 31
+	}
+	return true
+}
+
+func fullCalibrationHeights(primary bool, variant int, plan Plan) []int {
+	if variant != 0 && (!primary || !plan.ToneMap || plan.Decoder != "hardware" || plan.ToneMapper != "cpu") {
+		return nil
+	}
+	heights := []int{AutoCapacityHeight}
+	if primary {
+		heights = append(heights, plan.Height)
+		if variant == 0 && plan.ToneMap {
+			heights = append(heights, AutoMinHeight)
+		}
+	}
+	return heights
 }
 
 func benchmarkOutputHeight(baseHeight, sourceHeight int, encoder string, full bool) int {
@@ -257,7 +330,7 @@ func minimumSpeed(speeds []float64) float64 {
 }
 func (c *Calibration) evaluate(ctx context.Context, test calibrationCase, old []ProfileCapacity) ProfileCapacity {
 	video, _ := Tracks(test.source)
-	p := ProfileCapacity{SourceClass: test.class, Encoder: test.plan.Encoder, HardwareDecode: test.plan.Decoder == "hardware", ToneMapper: test.plan.ToneMapper, SourceWidth: video.Width, SourceHeight: video.Height, SourceFPS: video.FrameRate, Height: test.plan.Height, FPS: test.plan.FPS, Threads: test.threads}
+	p := ProfileCapacity{TargetHeight: test.plan.Height, SourceClass: test.class, Encoder: test.plan.Encoder, HardwareDecode: test.plan.Decoder == "hardware", ToneMapper: test.plan.ToneMapper, SourceWidth: video.Width, SourceHeight: video.Height, SourceFPS: video.FrameRate, Height: test.plan.Height, FPS: test.plan.FPS, Threads: test.threads}
 	resources := &resourceMeasurement{}
 	test.resources = resources
 	speeds, err := c.sample(ctx, test, 1)
@@ -265,7 +338,8 @@ func (c *Calibration) evaluate(ctx context.Context, test calibrationCase, old []
 		logging.Warn("calibration %s: %v", test.class, err)
 		return p
 	}
-	if !test.mini && test.plan.Decoder == "hardware" && len(old) == 0 && c.Tuner.cpuCount() >= 4 {
+	if test.full && test.plan.Height == AutoCapacityHeight && representativeComparison(test.class, video.FrameRate) &&
+		test.plan.Decoder == "hardware" && len(old) == 0 && c.Tuner.cpuCount() >= 4 {
 		alternate := test
 		alternate.threads = 4
 		alternate.resources = &resourceMeasurement{}
@@ -308,7 +382,7 @@ func (c *Calibration) evaluate(ctx context.Context, test calibrationCase, old []
 		v := *resources.GPU / math.Max(minimumSpeed(speeds), .01)
 		p.GPUEngines = &v
 	}
-	if test.full {
+	if test.full && minimumSpeed(speeds) >= CapacityRealTime && minimumSpeed(speeds) < 1.5 {
 		confirmation, e := c.sample(ctx, test, 1)
 		if e != nil || minimumSpeed(confirmation) <= 0 {
 			return p
@@ -316,6 +390,8 @@ func (c *Calibration) evaluate(ctx context.Context, test calibrationCase, old []
 		if minimumSpeed(confirmation) < minimumSpeed(speeds) {
 			speeds = confirmation
 		}
+	}
+	if test.full && p.TargetHeight > AutoCapacityHeight && minimumSpeed(speeds) >= CapacityRealTime && representativeComparison(test.class, video.FrameRate) {
 		p.ReferenceSSIM = c.referenceQuality(ctx, test)
 	}
 	p.SingleSpeed = minimumSpeed(speeds)
@@ -327,9 +403,10 @@ func (c *Calibration) evaluate(ctx context.Context, test calibrationCase, old []
 	p.Streams = 1
 
 	counts := []int{2, 4}
-	if test.mini {
+	if test.mini && test.plan.Height != AutoCapacityHeight {
 		counts = nil
 	}
+
 	for _, cached := range old {
 		if test.full && sameProfile(p, cached) && cached.Verified && cached.Streams > 1 {
 			counts = []int{2}
@@ -366,6 +443,59 @@ func sameProfile(a, b ProfileCapacity) bool {
 	return a.SourceClass == b.SourceClass && a.SourceFPS == b.SourceFPS && a.Encoder == b.Encoder && a.HardwareDecode == b.HardwareDecode && a.ToneMapper == b.ToneMapper && a.Height == b.Height && a.FPS == b.FPS && a.Threads == b.Threads
 }
 
+type calibrationCaseKey struct {
+	class               SourceClass
+	sourceFPS           float64
+	height              int
+	encoder, toneMapper string
+	hardwareDecode      bool
+}
+
+func (p ProfileCapacity) caseKey() calibrationCaseKey {
+	return calibrationCaseKey{p.SourceClass, p.SourceFPS, p.TargetHeight, p.Encoder, p.ToneMapper, p.HardwareDecode}
+}
+
+func (p ProfileCapacity) completionTime() time.Time {
+	if !p.LastCompleted.IsZero() {
+		return p.LastCompleted
+	}
+	return p.MeasuredAt // Older caches recorded sample time but not case completion.
+}
+
+func freshCalibrationProfiles(profiles []ProfileCapacity, now time.Time) []ProfileCapacity {
+	var fresh []ProfileCapacity
+	for _, profile := range profiles {
+		at := profile.completionTime()
+		if !at.After(now) && now.Sub(at) < calibrationFreshness {
+			fresh = append(fresh, profile)
+		}
+	}
+	return fresh
+}
+
+func dueFullCalibrationCases(cases []calibrationCase, profiles []ProfileCapacity, now time.Time) []calibrationCase {
+	byKey := make(map[calibrationCaseKey]time.Time, len(profiles))
+	for _, profile := range profiles {
+		at := profile.completionTime()
+		if !at.After(now) && at.After(byKey[profile.caseKey()]) {
+			byKey[profile.caseKey()] = at
+		}
+	}
+	due := cases[:0]
+	key := func(test calibrationCase) calibrationCaseKey {
+		video, _ := Tracks(test.source)
+		return calibrationCaseKey{test.class, video.FrameRate, test.plan.Height, test.plan.Encoder, test.plan.ToneMapper, test.plan.Decoder == "hardware"}
+	}
+	for _, test := range cases {
+		if now.Sub(byKey[key(test)]) >= calibrationFreshness {
+			due = append(due, test)
+		}
+	}
+	// Preserve the normal order among untested cases, then refresh oldest first.
+	sort.SliceStable(due, func(i, j int) bool { return byKey[key(due[i])].Before(byKey[key(due[j])]) })
+	return due
+}
+
 // Startup is deliberately bounded by the owning Benchmarks group's deadline.
 // A valid quick or full cache satisfies startup without repeating a test.
 func (c *Calibration) Startup(ctx context.Context) { c.run(ctx, false, true) }
@@ -395,12 +525,15 @@ func (c *Calibration) run(ctx context.Context, full, startup bool) {
 		return
 	}
 	quick, quickOK := readCalibrationCache(benchmarkCachePath(c.DataDir, "quick"), fingerprint)
-	previousFull, fullOK := readCalibrationCache(benchmarkCachePath(c.DataDir, "full"), fingerprint)
+	previousFull, fullSaved := readCompatibleCalibrationCache(benchmarkCachePath(c.DataDir, "full"), fingerprint)
+	freshFull := previousFull
+	freshFull.Profiles = freshCalibrationProfiles(previousFull.Profiles, time.Now())
+	fullOK := len(freshFull.Profiles) > 0
 	c.mu.Lock()
 	c.quick, c.quickOK = quick, quickOK
-	c.full, c.fullOK = previousFull, fullOK
+	c.full, c.fullOK = previousFull, fullSaved
 	c.mu.Unlock()
-	effective, effectiveOK := previousFull, fullOK
+	effective, effectiveOK := freshFull, fullOK
 	mode := "quick"
 	if full {
 		mode = "full"
@@ -424,11 +557,11 @@ func (c *Calibration) run(ctx context.Context, full, startup bool) {
 	// A manual quick check observes its own result, but must not retune settings
 	// already selected by a full analysis.
 	threads := c.Tuner.Threads()
-	if fullOK && !full {
+	if fullSaved {
 		threads = previousFull.Threads
 		c.Tuner.Load(threads, previousFull.At)
 	}
-	if full || !fullOK {
+	if !fullSaved {
 		c.tune(ctx, inputs)
 	}
 	threads = c.Tuner.Threads()
@@ -439,8 +572,9 @@ func (c *Calibration) run(ctx context.Context, full, startup bool) {
 	}
 	old := previousFull.Profiles
 	profiles := append([]ProfileCapacity(nil), old...)
-	if !full {
-		old = previousFull.Profiles
+	if full {
+		cases = dueFullCalibrationCases(cases, old, time.Now())
+	} else {
 		profiles = nil
 		// A manual quick run replaces only the prior quick record, including
 		// when it is stopped before completing every case.
@@ -458,7 +592,7 @@ func (c *Calibration) run(ctx context.Context, full, startup bool) {
 		activity.Default.SetCurrentFile(progressID, benchmarkTestLabel(test))
 		activity.Default.Progress(progressID, completed, len(cases))
 		// The bounded pass tests each fixture once on its first stable path.
-		key := test.path
+		key := fmt.Sprintf("%s:%d", test.path, test.plan.Height)
 		if !full && fixturePath != key {
 			fixtureCancel()
 			fixturePath = key
@@ -476,7 +610,7 @@ func (c *Calibration) run(ctx context.Context, full, startup bool) {
 		if effectiveOK && !full {
 			video, _ := Tracks(test.source)
 			for _, prior := range effective.Profiles {
-				if prior.SourceClass == test.class && prior.SourceFPS == video.FrameRate && prior.HardwareDecode == (test.plan.Decoder == "hardware") && prior.Encoder == test.plan.Encoder && prior.ToneMapper == test.plan.ToneMapper {
+				if prior.TargetHeight == test.plan.Height && prior.SourceClass == test.class && prior.SourceFPS == video.FrameRate && prior.HardwareDecode == (test.plan.Decoder == "hardware") && prior.Encoder == test.plan.Encoder && prior.ToneMapper == test.plan.ToneMapper {
 					test.threads = prior.Threads
 					if prior.Verified && prior.Streams > 0 {
 						test.plan.Height = prior.Height
@@ -499,7 +633,11 @@ func (c *Calibration) run(ctx context.Context, full, startup bool) {
 			measureCtx = fixtureCtx
 		}
 		result := c.evaluate(measureCtx, test, old)
-		if measureCtx.Err() != nil {
+		if full && ctx.Err() != nil {
+			break // An interrupted case does not replace its previous result.
+		}
+		// Keep a proven smaller count if the bounded concurrent trial timed out.
+		if measureCtx.Err() != nil && (!result.Verified || result.Streams == 0) {
 			if ctx.Err() != nil {
 				break
 			}
@@ -512,18 +650,19 @@ func (c *Calibration) run(ctx context.Context, full, startup bool) {
 		if !result.Verified && ctx.Err() != nil {
 			break
 		}
+		result.LastCompleted = time.Now()
 		filtered := profiles[:0]
 		for _, prior := range profiles {
-			if prior.SourceClass != result.SourceClass || prior.SourceFPS != result.SourceFPS || prior.HardwareDecode != result.HardwareDecode || prior.Encoder != result.Encoder || prior.ToneMapper != result.ToneMapper {
+			if prior.caseKey() != result.caseKey() {
 				filtered = append(filtered, prior)
 			}
 		}
 		profiles = append(filtered, result)
-		if len(profiles) > 0 || fullOK && full {
-			c.save(fingerprint, mode, profiles)
-			c.remember(mode, calibrationCache{Fingerprint: fingerprint, At: time.Now(), Threads: c.Tuner.Threads(), Profiles: profiles})
-		}
-		if full && (len(profiles) > 0 || fullOK) || !full && !fullOK {
+		c.save(fingerprint, mode, profiles)
+		c.remember(mode, calibrationCache{Fingerprint: fingerprint, At: result.LastCompleted, Threads: c.Tuner.Threads(), Profiles: profiles})
+		if full {
+			c.Capacity.publishProfiles(freshCalibrationProfiles(profiles, result.LastCompleted))
+		} else if !fullOK {
 			c.Capacity.publishProfiles(profiles)
 		}
 		completed++
@@ -531,13 +670,6 @@ func (c *Calibration) run(ctx context.Context, full, startup bool) {
 	}
 	fixtureCancel()
 	activity.Default.Progress(progressID, completed, len(cases))
-	if len(profiles) > 0 {
-		c.save(fingerprint, mode, profiles)
-		c.remember(mode, calibrationCache{Fingerprint: fingerprint, At: time.Now(), Threads: c.Tuner.Threads(), Profiles: profiles})
-	}
-	if len(profiles) > 0 && (full || !fullOK) {
-		c.Capacity.publishProfiles(profiles)
-	}
 	if c.Capacity.OnChange != nil {
 		c.Capacity.OnChange()
 	}
@@ -549,6 +681,7 @@ func (c *Calibration) apply(cache calibrationCache) {
 }
 
 func (c *Calibration) remember(mode string, cache calibrationCache) {
+	cache.Profiles = append([]ProfileCapacity(nil), cache.Profiles...)
 	c.mu.Lock()
 	defer c.mu.Unlock()
 	if mode == "full" {
@@ -558,9 +691,28 @@ func (c *Calibration) remember(mode string, cache calibrationCache) {
 	c.quick, c.quickOK = cache, len(cache.Profiles) > 0
 }
 
+func appendBenchmarkResults(results []BenchmarkResult, mode string, profiles []ProfileCapacity) []BenchmarkResult {
+	for _, p := range profiles {
+		name := mode + " Test · " + benchmarkPipelineLabel(p.SourceClass, p.Encoder, p.HardwareDecode, p.ToneMapper, p.Height, p.FPS)
+		multiplier := p.SingleSpeed
+		if len(p.Speeds) > 0 {
+			multiplier = minimumSpeed(p.Speeds)
+		}
+		if p.Streams > 1 {
+			name += fmt.Sprintf(", %d streams", p.Streams)
+		}
+		results = append(results, BenchmarkResult{Name: name, Multiplier: multiplier, Passed: p.Verified && p.Streams > 0, LastCompleted: p.completionTime()})
+	}
+	return results
+}
+
 func benchmarkTestLabel(test calibrationCase) string {
+	return benchmarkPipelineLabel(test.class, test.plan.Encoder, test.plan.Decoder == "hardware", test.plan.ToneMapper, test.plan.Height, test.plan.FPS)
+}
+
+func benchmarkPipelineLabel(class SourceClass, encoder string, hardwareDecode bool, toneMapper string, height int, fps float64) string {
 	device, driver := "CPU", "FFmpeg software"
-	switch test.plan.Encoder {
+	switch encoder {
 	case EncoderIntelQSV:
 		device, driver = "Intel GPU", "Quick Sync"
 	case EncoderIntelVAAPI:
@@ -571,14 +723,14 @@ func benchmarkTestLabel(test calibrationCase) string {
 		device, driver = "NVIDIA GPU", "NVENC"
 	}
 	decode := "CPU decode"
-	if test.plan.Decoder == "hardware" {
+	if hardwareDecode {
 		decode = "hardware decode"
 	}
 	tone := "no tone map"
-	if test.plan.ToneMapper != "" {
-		tone = test.plan.ToneMapper + " tone map"
+	if toneMapper != "" {
+		tone = toneMapper + " tone map"
 	}
-	return fmt.Sprintf("%s/%s - %s, %s, %s, %dp at %.0ffps", device, driver, test.class, decode, tone, test.plan.Height, test.plan.FPS)
+	return fmt.Sprintf("%s/%s - %s, %s, %s, %dp at %.0ffps", device, driver, class, decode, tone, height, fps)
 }
 
 func (c *Calibration) recommendFullLocked() bool {
@@ -591,7 +743,7 @@ func (c *Calibration) recommendFullLocked() bool {
 	for _, quick := range c.quick.Profiles {
 		matched := false
 		for _, full := range c.full.Profiles {
-			if !samePipeline(quick, full) {
+			if quick.TargetHeight != full.TargetHeight || !samePipeline(quick, full) {
 				continue
 			}
 			matched = true
@@ -623,6 +775,9 @@ func samePipeline(a, b ProfileCapacity) bool {
 		a.Encoder == b.Encoder && a.HardwareDecode == b.HardwareDecode &&
 		a.ToneMapper == b.ToneMapper && a.Threads == b.Threads
 }
+
+const unmeasuredProcessLimit = 2
+
 func (c *Capacity) resetCalibration() {
 	c.mu.Lock()
 	defer c.mu.Unlock()
@@ -630,7 +785,7 @@ func (c *Capacity) resetCalibration() {
 	c.profiles = nil
 	c.hdr = nil
 	c.status.Samples = nil
-	c.status.Processes = 1
+	c.status.Processes = unmeasuredProcessLimit
 	c.status.Calibration = "unverified"
 	c.status.MaxHeight = 0
 	c.status.MaxFPS = 0
@@ -646,7 +801,9 @@ func (c *Capacity) publishProfiles(profiles []ProfileCapacity) {
 		if !p.Verified {
 			continue
 		}
-		c.status.Processes = max(c.status.Processes, p.Streams)
+		if p.TargetHeight == AutoCapacityHeight && p.Height == AutoCapacityHeight {
+			c.status.Processes = max(c.status.Processes, p.Streams)
+		}
 		sample := RungSample{SourceClass: p.SourceClass, Height: p.Height, FPS: p.FPS, Speed: p.SingleSpeed}
 		if p.HardwareDecode && p.ToneMapper != "" {
 			record := HDRCapacity{SourceFPS: p.SourceFPS, Encoder: p.Encoder, HardwareDecode: true, Transfer: "smpte2084", ToneMapper: p.ToneMapper, Threads: p.Threads, Samples: []RungSample{sample}, MeasuredAt: p.MeasuredAt}
@@ -711,7 +868,12 @@ func (c *Capacity) calibratedAdmission(active []Job, job Job) (bool, error) {
 	if !enabled {
 		return false, nil
 	}
-	limit, total := MaxParallel, 0
+	total := 0
+	demand := 0.0
+	unmatchedLimit := 1
+	if len(profiles) == 0 {
+		unmatchedLimit = unmeasuredProcessLimit
+	}
 	for _, current := range append(append([]Job(nil), active...), job) {
 		cost := jobResourceCost(current)
 		if cost == 0 {
@@ -720,22 +882,22 @@ func (c *Capacity) calibratedAdmission(active []Job, job Job) (bool, error) {
 		total += cost
 		var selected *ProfileCapacity
 		for _, p := range profiles {
-			if profileMatches(p, current) && (selected == nil || p.SourceFPS < selected.SourceFPS) {
+			if profileMatches(p, current) && (selected == nil || (p.Height < selected.Height || p.Height == selected.Height && p.SourceFPS < selected.SourceFPS)) {
 				copy := p
 				selected = &copy
 			}
 		}
 		if selected == nil {
-			limit = 1
+			demand += float64(cost) / float64(unmatchedLimit)
 		} else {
 			if selected.Streams == 0 {
 				return true, ErrCapacityUnsustainable
 			}
-			limit = min(limit, selected.Streams)
+			demand += float64(cost) / float64(selected.Streams)
 		}
 
 	}
-	if total > limit {
+	if total > MaxParallel || demand > 1.000001 {
 		return true, ErrBusy
 	}
 	free := memoryAvailable()
@@ -778,7 +940,7 @@ func (c *Capacity) ValidatedThreads(job Job) bool {
 // PreferredPipeline ranks only stable, real-time profiles for a matching source.
 // CPU and GPU figures are normalized to one real-time stream. Missing GPU/SSIM
 // telemetry is never treated as zero load or perfect fidelity.
-func (c *Capacity) PreferredPipeline(source library.ProbeResult, encoder string) (ProfileCapacity, bool) {
+func (c *Capacity) PreferredPipeline(source library.ProbeResult, encoder string, height int) (ProfileCapacity, bool) {
 	if c == nil {
 		return ProfileCapacity{}, false
 	}
@@ -786,6 +948,10 @@ func (c *Capacity) PreferredPipeline(source library.ProbeResult, encoder string)
 	c.mu.Lock()
 	profiles := append([]ProfileCapacity(nil), c.profiles...)
 	c.mu.Unlock()
+	if height <= 0 {
+		height = 1080
+	}
+	height = min(height, v.Height)
 	var best ProfileCapacity
 	found := false
 	for _, p := range profiles {
@@ -802,13 +968,37 @@ func (c *Capacity) PreferredPipeline(source library.ProbeResult, encoder string)
 		if !sameVendor || !p.Verified || p.Streams < 1 || p.SingleSpeed < CapacityRealTime || p.SourceClass != classifySource(v) || p.SourceFPS+.01 < v.FrameRate || v.Width > p.SourceWidth || v.Height > p.SourceHeight {
 			continue
 		}
-		if !found || betterPipeline(p, best) {
+		if !found || betterPipelineAtHeight(p, best, height) {
 			best = p
 			found = true
 		}
 	}
 	return best, found
 }
+func betterPipelineAtHeight(a, b ProfileCapacity, height int) bool {
+	aFits, bFits := a.Height >= height, b.Height >= height
+	if aFits != bFits {
+		return aFits
+	}
+	if aFits {
+		// Prefer genuinely cheaper measured backends before using the nearest
+		// tested ceiling as a tie-breaker. The output still respects the request.
+		if math.Abs(a.CPUCores-b.CPUCores) > .05 {
+			return a.CPUCores < b.CPUCores
+		}
+		if a.GPUEngines != nil && b.GPUEngines != nil && math.Abs(*a.GPUEngines-*b.GPUEngines) > .05 {
+			return *a.GPUEngines < *b.GPUEngines
+		}
+	}
+	if a.Height != b.Height {
+		if aFits {
+			return a.Height < b.Height
+		}
+		return a.Height > b.Height
+	}
+	return betterPipeline(a, b)
+}
+
 func betterPipeline(a, b ProfileCapacity) bool {
 	// Small measurement variations should not cause pipeline flapping.
 	if math.Abs(a.CPUCores-b.CPUCores) > .05 {

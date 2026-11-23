@@ -1403,6 +1403,7 @@ const noWorkers = async (unreleased = () => 0) => {
     page.on("pageerror", (e) => errors.push(e.message));
     trackGrants(page);
     await login(page);
+    assert((await context.request.put(url + "/api/test/capacity")).ok(), "Install isolated quality capacity");
     await page.locator(".guide-slot-box").first().click();
     await playing(page);
     const height = () =>
@@ -1414,7 +1415,7 @@ const noWorkers = async (unreleased = () => 0) => {
     };
     assert(
       (await height()) === 720,
-      `Expected the 720p source to play as-is, got ${await height()}p`,
+      `Expected Auto to start at 720p, got ${await height()}p`,
     );
     // The Settings menu order; Playback Details puts the live panel in the top left corner.
     await page.locator(".playback-player").hover();
@@ -1526,10 +1527,10 @@ const noWorkers = async (unreleased = () => 0) => {
     const before = await page.evaluate(() =>
       Number(document.querySelector("video").dataset.scheduleTime),
     );
-    await page.getByRole("menuitemradio", { name: "360p" }).click();
+    await page.getByRole("menuitemradio", { name: "480p" }).click();
     await page.waitForFunction(
       () =>
-        document.querySelector("video").videoHeight === 360 &&
+        document.querySelector("video").videoHeight === 480 &&
         !document.querySelector("video").paused &&
         document.querySelector("video").readyState >= 3,
       null,
@@ -1567,7 +1568,7 @@ const noWorkers = async (unreleased = () => 0) => {
     await goTo("/");
     await startAgain();
     assert(
-      (await height()) === 360,
+      (await height()) === 480,
       `Moving around the app lost the quality choice (${await height()}p)`,
     );
     // ...and saving settings, which reloads the page on the app's behalf.
@@ -1654,7 +1655,7 @@ const noWorkers = async (unreleased = () => 0) => {
     await page.getByRole("button", { name: /Back To Guide/ }).click();
     await startAgain();
     assert(
-      (await height()) === 360,
+      (await height()) === 480,
       `Saving settings lost the quality choice (${await height()}p)`,
     );
     await leave(page);
@@ -1706,6 +1707,7 @@ const noWorkers = async (unreleased = () => 0) => {
     );
     await leave(page);
     await noWorkers(unreleased);
+    assert((await context.request.delete(url + "/api/test/capacity")).ok(), "Restore real playback capacity");
     await context.close();
     console.log(
       "PASS: quality menu offers rungs, swaps in place, is kept while the app is open (not across a fresh load), other devices stay automatic",
@@ -3432,6 +3434,14 @@ const noWorkers = async (unreleased = () => 0) => {
     );
     // Superseded scans stop early, so wait for the durable latest revision rather than matching log counts.
     await require("./wait-library-updates.cjs")(page.request, url);
+    const benchmarkPath = "**/api/settings/transcoding/benchmark";
+    let displayResults = [];
+    const benchmarkResponse = page.waitForResponse(response =>
+      response.url().endsWith("/api/settings/transcoding/benchmark") && response.request().method() === "GET");
+    await page.route(benchmarkPath, route => route.fulfill({json: {
+      state: "idle", mode: "", tasks: [], results: displayResults,
+      selection: {driver: "Intel Quick Sync (QSV)", library: "h264_qsv", concurrentLimit: 4},
+    }}));
     await page.goto(url + "/admin/server");
     await page.locator(".settings-grid").waitFor();
     assert(
@@ -3502,6 +3512,37 @@ const noWorkers = async (unreleased = () => 0) => {
       `Settings out of order: ${JSON.stringify(names)}`,
     );
     const row = page.locator(".setting-row", {hasText: "Video Transcoding"}).first();
+    await benchmarkResponse;
+    const showResults = row.getByRole("button", {name: "See Test Results"});
+    assert(await showResults.count() === 0, "Results link is hidden before measurements");
+    displayResults = [
+      {name: "Full Test · Intel Quick Sync 4K HDR", multiplier: 1.67, passed: true, lastCompleted: "2026-11-23T14:00:00Z"},
+      {name: "Quick Test · CPU 1080p", multiplier: 0, passed: false},
+    ];
+    await showResults.click();
+    const resultsDialog = page.getByRole("dialog", {name: "Video Transcoding Test Results"});
+    await resultsDialog.waitFor();
+    const selection = resultsDialog.getByText(
+      "Default backend: Intel Quick Sync (QSV) (FFmpeg h264_qsv) · Concurrent transcode limit: 4", {exact: true},
+    );
+    await selection.waitFor();
+    assert(await selection.evaluate(element =>
+      element.compareDocumentPosition(element.closest(".admin-modal-body").querySelector("table")) &
+      Node.DOCUMENT_POSITION_FOLLOWING), "Backend summary appears above the table");
+    assert((await resultsDialog.getByRole("columnheader").allTextContents()).join("|") ===
+      "Test Name|Multiplier|Result|Last Completed", "Results have the requested columns");
+    const resultRows = resultsDialog.getByRole("row");
+    assert(await resultRows.count() === 3 &&
+      (await resultRows.nth(1).getByRole("cell").allTextContents()).slice(0, 2).join("|") === "x1.67|Pass" &&
+      (await resultRows.nth(2).getByRole("cell").allTextContents()).join("|") === "—|Fail|—",
+      "Each recorded case has its multiplier, outcome, and completion time when known");
+    assert(await resultRows.nth(1).locator("time").getAttribute("datetime") === "2026-11-23T14:00:00Z",
+      "Last Completed displays the recorded case timestamp");
+    await page.keyboard.press("Escape");
+    await resultsDialog.waitFor({state: "hidden"});
+    assert(await showResults.evaluate(element => element === document.activeElement), "Focus returns to results link");
+    await page.unroute(benchmarkPath);
+
     await row.getByRole("button", {name: "More Info"}).click();
     await page.getByRole("dialog", {name: "Video Transcoding"}).waitFor();
     await page.keyboard.press("Escape");

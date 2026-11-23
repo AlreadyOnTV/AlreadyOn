@@ -51,6 +51,7 @@ internal class GitHubUpdates(private val client: OkHttpClient = updateHttpClient
     }
 
     suspend fun check(code: Long, tv: Boolean, cycle: ReleaseCycle = ReleaseCycle.STABLE): AppUpdate? {
+        if (cycle == ReleaseCycle.OFF) return null
         val releases = mutableListOf<JSONObject>()
         // Bound startup work while including prereleases and multiple pages of published history.
         for (page in 1..10) {

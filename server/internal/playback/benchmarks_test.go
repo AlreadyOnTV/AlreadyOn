@@ -6,6 +6,7 @@ import (
 	"github.com/alreadyonapp/alreadyon/server/internal/governor"
 	"sync/atomic"
 	"testing"
+	"testing/synctest"
 	"time"
 )
 
@@ -279,4 +280,79 @@ func TestBenchmarkStatusIdentifiesManualQuickRun(t *testing.T) {
 	if status := b.Status(); !status.Manual || status.Mode != "mini" {
 		t.Fatalf("completed status: %+v", status)
 	}
+}
+
+func TestInitialFullBenchmark(t *testing.T) {
+	for _, tc := range []struct {
+		name   string
+		saved  bool
+		busy   bool
+		active bool
+		want   int
+	}{
+		{name: "idle without full results", want: 1},
+		{name: "saved full results", saved: true},
+		{name: "active playback", busy: true},
+		{name: "active benchmark", active: true},
+	} {
+		t.Run(tc.name, func(t *testing.T) {
+			synctest.Test(t, func(t *testing.T) {
+				ctx, cancel := context.WithCancel(context.Background())
+				defer cancel()
+				release := make(chan struct{})
+				var runs atomic.Int32
+				var busy atomic.Bool
+				busy.Store(tc.busy)
+				b := &Benchmarks{
+					Context: ctx, Governor: governor.Fixed(1),
+					Busy:      func() bool { return busy.Load() },
+					Steps:     []func(context.Context){func(context.Context) { runs.Add(1) }},
+					MiniSteps: []func(context.Context){func(context.Context) { <-release }},
+				}
+				b.ready.Store(true)
+				started := time.Now()
+				go b.RunInitialFull(ctx, started, func() bool { return tc.saved })
+				time.Sleep(30*time.Minute - time.Second)
+				synctest.Wait()
+				if runs.Load() != 0 {
+					t.Fatal("full benchmark started early")
+				}
+				if tc.active && !b.start(false, "mini", false, false) {
+					t.Error("could not start overlapping mini benchmark")
+				}
+				time.Sleep(2 * time.Second)
+				synctest.Wait()
+				close(release)
+				busy.Store(false)
+				time.Sleep(time.Minute)
+				synctest.Wait()
+				if got := int(runs.Load()); got != tc.want {
+					t.Fatalf("full benchmark ran %d times, want %d", got, tc.want)
+				}
+			})
+		})
+	}
+}
+
+func TestFullBenchmarkHasTimeForTeardownBeforeTenMinutes(t *testing.T) {
+	synctest.Test(t, func(t *testing.T) {
+		ctx, cancel := context.WithCancel(context.Background())
+		defer cancel()
+		b := &Benchmarks{Context: ctx, Governor: governor.Fixed(1), Steps: []func(context.Context){
+			func(ctx context.Context) { <-ctx.Done() },
+		}}
+		b.ready.Store(true)
+		if !b.Start(false) {
+			t.Fatal("could not start the full benchmark")
+		}
+		time.Sleep(9*time.Minute + 39*time.Second)
+		if !b.Running() {
+			t.Fatal("full benchmark ended before its deadline")
+		}
+		time.Sleep(time.Second)
+		synctest.Wait()
+		if b.Running() || b.Status().Outcome != "time-limit" {
+			t.Fatalf("expected the full benchmark to time out: %+v", b.Status())
+		}
+	})
 }

@@ -24,6 +24,16 @@ class UpdatePolicyTest {
             assertFalse(acceptsUpdateRelease("26.10.11-$stage", true, prerelease, ReleaseCycle.NIGHTLY))
         }
     }
+    @Test fun offSkipsTheReleaseServiceWithoutSendingRequests() = kotlinx.coroutines.runBlocking {
+        val client = okhttp3.OkHttpClient.Builder().addInterceptor {
+            throw AssertionError("Off attempted a network request")
+        }.build()
+        for (tv in listOf(false, true)) {
+            assertNull(GitHubUpdates(client).check(1L, tv, ReleaseCycle.fromStored("OFF")))
+        }
+        assertFalse(acceptsUpdateRelease("26.10.11-stable", false, false, ReleaseCycle.OFF))
+        assertFalse(acceptsUpdateRelease("26.10.11-nightly", false, true, ReleaseCycle.OFF))
+    }
     @Test fun stableIsDefaultAndInvalidPreferencesFailClosed() {
         assertEquals(ReleaseCycle.STABLE, ReleaseCycle.fromStored(null))
         assertEquals(ReleaseCycle.STABLE, ReleaseCycle.fromStored("unknown"))

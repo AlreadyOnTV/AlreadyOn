@@ -1,11 +1,12 @@
 # Android app updates
 
-Phone and TV release builds check public GitHub releases on startup and when returning to the foreground, at most once every 15 minutes after a successful check; failures retry after one minute. Changing the Release Cycle triggers an immediate check. Admin profiles choose Nightly or Stable in Settings. Stable is the default, independently of the installed release stage:
+Phone and TV release builds check public GitHub releases on startup and when returning to the foreground, at most once every 15 minutes after a successful check; failures retry after one minute. Admin profiles set the Update Cycle in Settings. Choosing Nightly or Stable triggers an immediate check. Stable is the default, independently of the installed release stage:
 
 - **Stable:** published stable releases only.
 - **Nightly:** Nightly or Stable releases.
+- **Off:** skips update checks until Nightly or Stable is selected again.
 
-The device-local preference survives restarts and sign-out. A stored legacy RC preference falls back to Stable. Changing the choice rechecks releases unless installation is underway. Only higher-code APKs are offered; drafts and historical alpha/RC tags are ignored. Checks inspect ten pages of thirty releases; offline/failed checks stay quiet.
+The device-local preference survives restarts and sign-out. A stored legacy RC preference falls back to Stable. Changing the cycle leaves an accepted installation in progress. Only higher-code APKs are offered; drafts and historical alpha/RC tags are ignored. Checks inspect ten pages of thirty releases; offline/failed checks stay quiet.
 
 APKs through `26.10.29-nightly` lack this setting. `26.10.25-Stable` also predates nightly tag/URL recognition and needs a manual signed update preserving data. Published APKs remain immutable.
 

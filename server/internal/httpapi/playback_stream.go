@@ -59,7 +59,8 @@ type tuneResponse struct {
 	DurationSeconds float64 `json:"durationSeconds"`
 	SourceHeight    int     `json:"sourceHeight"`
 	// UHD is true while a hardware encoder is in use, so the Quality menu may offer 4K.
-	UHD bool `json:"uhd"`
+	UHD                  bool `json:"uhd"`
+	AutoCapacityPressure bool `json:"autoCapacityPressure,omitempty"`
 	// Subtitles are the text tracks that can be fetched from the media listener.
 	AudioTracks []playback.AudioTrack    `json:"audioTracks"`
 	Subtitles   []playback.SubtitleTrack `json:"subtitles"`
@@ -93,10 +94,11 @@ func (p *PlaybackHTTP) tune(w http.ResponseWriter, r *http.Request) {
 		return
 	}
 	var body struct {
-		Capabilities  playback.Capabilities `json:"capabilities"`
-		ForceEncode   bool                  `json:"forceEncode"`
-		Token         string                `json:"token"`
-		EntryStartsAt time.Time             `json:"entryStartsAt"`
+		Capabilities     playback.Capabilities `json:"capabilities"`
+		ForceEncode      bool                  `json:"forceEncode"`
+		Token            string                `json:"token"`
+		ReplacementToken string                `json:"replacementToken"`
+		EntryStartsAt    time.Time             `json:"entryStartsAt"`
 		// MaxHeight is the viewer's quality ceiling: 0 for automatic, else one of playback.QualityHeights.
 		MaxHeight        int    `json:"maxHeight"`
 		AudioLanguage    string `json:"audioLanguage"`
@@ -118,8 +120,8 @@ func (p *PlaybackHTTP) tune(w http.ResponseWriter, r *http.Request) {
 		writeJSONError(w, 400, "maxHeight must be 0, 360, 480, 720, 1080 or 2160")
 		return
 	}
-	if body.Capabilities.AutoMaxHeight != 0 && (body.Capabilities.AutoMaxHeight == playback.UHDHeight || !slices.Contains(playback.QualityHeights, body.Capabilities.AutoMaxHeight)) {
-		writeJSONError(w, 400, "autoMaxHeight must be 0, 360, 480, 720 or 1080")
+	if body.Capabilities.AutoMaxHeight != 0 && !playback.ValidAutoHeight(body.Capabilities.AutoMaxHeight) {
+		writeJSONError(w, 400, "invalid Auto quality ceiling")
 		return
 	}
 	if len(body.AudioLanguage) > 32 {
@@ -132,19 +134,11 @@ func (p *PlaybackHTTP) tune(w http.ResponseWriter, r *http.Request) {
 		writeJSONError(w, 500, "could not load playback limits")
 		return
 	}
-	body.Capabilities.Ladder = settings.Ladder
+	// Adaptive Auto requests one rendition at a time to leave room for other viewers.
+	body.Capabilities.Ladder = settings.Ladder && (body.MaxHeight != 0 || body.Capabilities.AutoMaxHeight == 0)
 	// A hardware encoder is used only while its self-test passes.
-	device, hardwareDecoding := "", false
-	if p.Hardware != nil {
-		if ss, err := serversettings.Get(r.Context(), p.DB); err == nil {
-			if encoder := p.Hardware.Resolve(r.Context(), ss.Transcoding, ss.HardwareDecoding); playback.IsHardwareEncoder(encoder) {
-				if status := p.Hardware.Check(r.Context(), encoder, false); status.OK {
-					body.Capabilities.Encoder, device = encoder, status.Device
-					hardwareDecoding = ss.HardwareDecoding
-				}
-			}
-		}
-	}
+	encoder, device, hardwareDecoding := p.defaultHardwareEncoder(r.Context())
+	body.Capabilities.Encoder = encoder
 	label := channelLabel(r.Context(), p.DB, id)
 	e, jobClock, err := playback.TuneEntry(r.Context(), p.DB, p.Clock, id, body.EntryStartsAt)
 	if err != nil {
@@ -197,7 +191,11 @@ func (p *PlaybackHTTP) tune(w http.ResponseWriter, r *http.Request) {
 	}
 	// Use the measured source-specific pipeline; API preference is only the
 	// initial candidate. Re-check failures before applying cached choices.
-	preferred, hasPreferred := p.Capacity.PreferredPipeline(source, body.Capabilities.Encoder)
+	desiredHeight := body.MaxHeight
+	if desiredHeight == 0 {
+		desiredHeight = body.Capabilities.AutoMaxHeight
+	}
+	preferred, hasPreferred := p.Capacity.PreferredPipeline(source, body.Capabilities.Encoder, desiredHeight)
 	if hasPreferred && p.Hardware != nil && preferred.Encoder != "" {
 		status := p.Hardware.Check(r.Context(), preferred.Encoder, false)
 		if !status.OK {
@@ -294,7 +292,11 @@ func (p *PlaybackHTTP) tune(w http.ResponseWriter, r *http.Request) {
 	if p.Tuner != nil {
 		job.Threads = p.Tuner.Threads()
 	}
-	job.Threads = p.Capacity.ProfileThreads(source, plan.Encoder, plan.Decoder == "hardware", job.Threads)
+	if hasPreferred && preferred.Encoder == plan.Encoder && preferred.HardwareDecode == (plan.Decoder == "hardware") {
+		job.Threads = preferred.Threads
+	} else {
+		job.Threads = p.Capacity.ProfileThreads(source, plan.Encoder, plan.Decoder == "hardware", job.Threads)
+	}
 	job.ValidatedThreads = p.Capacity.ValidatedThreads(job)
 	job.Details = playback.Describe(path, source, plan, body.Capabilities)
 	if err := p.Manager.Configure(playback.EffectiveSettings(settings, p.Capacity)); err != nil {
@@ -327,7 +329,45 @@ func (p *PlaybackHTTP) tune(w http.ResponseWriter, r *http.Request) {
 		writeJSONError(w, 409, "playback authorization was cancelled or already used")
 		return
 	}
-	stream, err := p.Manager.Acquire(r.Context(), key, s.ID, job)
+	replace, replaceErr := p.replacementSession(body.Capabilities, body.ReplacementToken, auth.PrincipalID(r.Context()), id)
+	if replaceErr != nil {
+		p.Sessions.Revoke(token)
+		writeJSON(w, http.StatusConflict, map[string]string{"error": "playback replacement is no longer available", "code": "playback_replacement_invalid"})
+		return
+	}
+	var stream playback.ManagedStream
+	if replace != nil {
+		stream, err = p.Manager.AcquireReplacement(r.Context(), key, s.ID, replace.StreamKey, replace.ID, job)
+	} else {
+		stream, err = p.Manager.Acquire(r.Context(), key, s.ID, job)
+	}
+	// Keep the same grant while trying cheaper measured rungs on an initial tune.
+	initialAuto := body.MaxHeight == 0 && body.Capabilities.AutoMaxHeight == playback.AutoStartHeight &&
+		!body.Capabilities.AutoReplacement && !plan.VideoCopy
+	if errors.Is(err, playback.ErrBusy) && initialAuto {
+		caps := body.Capabilities
+		lastHeight := plan.Height
+		for _, height := range []int{480, playback.AutoCapacityHeight, playback.AutoMinHeight} {
+			caps.AutoMaxHeight = height
+			low, planErr := playback.ChooseScheduled(source, caps, body.ForceEncode, jobClock.Now().Sub(e.StartsAt).Seconds()+e.SourceOffsetSeconds)
+			if planErr != nil || low.VideoCopy || low.Height >= lastHeight {
+				continue
+			}
+			lastHeight = low.Height
+			candidate := job
+			candidate.Plan = low
+			candidate.ValidatedThreads = p.Capacity.ValidatedThreads(candidate)
+			if !candidate.ValidatedThreads {
+				continue
+			}
+			candidate.Details = playback.Describe(path, source, low, caps)
+			lowKey := streamKey(id, e, low)
+			if replacement, acquireErr := p.Manager.Acquire(r.Context(), lowKey, s.ID, candidate); acquireErr == nil {
+				stream, key, err = replacement, lowKey, nil
+				break
+			}
+		}
+	}
 	if err != nil {
 		p.Sessions.Revoke(token)
 		// Capacity is expected under rapid channel changes and retried by the client.
@@ -336,6 +376,9 @@ func (p *PlaybackHTTP) tune(w http.ResponseWriter, r *http.Request) {
 			return
 		}
 		if errors.Is(err, playback.ErrBusy) {
+			if initialAuto && body.EntryStartsAt.IsZero() {
+				p.Manager.MarkAutoCapacityPressure()
+			}
 			w.Header().Set("Retry-After", "1")
 			writeJSON(w, 503, map[string]string{"error": "stream capacity reached; retry shortly", "code": "stream_capacity"})
 		} else {
@@ -388,6 +431,17 @@ func writeCapacityFailure(w http.ResponseWriter, err error) bool {
 	return true
 }
 
+func (p *PlaybackHTTP) replacementSession(capabilities playback.Capabilities, token string, principalID, channelID int64) (*playback.Session, error) {
+	if !capabilities.AutoReplacement {
+		return nil, nil
+	}
+	session, err := p.Sessions.Validate(token, channelID)
+	if err != nil || session.KeyID != principalID || session.StreamKey == "" {
+		return nil, playback.ErrUnauthorized
+	}
+	return &session, nil
+}
+
 func channelLabel(ctx context.Context, db *sql.DB, id int64) string {
 	var number int
 	var name string
@@ -431,7 +485,7 @@ func (p *PlaybackHTTP) tuneResult(r *http.Request, s playback.Session, token str
 		value := toProgramResponse(resolved)
 		program = &value
 	}
-	return tuneResponse{ChannelNumber: c.Number, ChannelName: c.Name, Program: program, Session: s, Token: token, MediaURL: fmt.Sprintf("%s/media/%d", base, s.ChannelID), URL: fmt.Sprintf("%s/media/%d/%s?token=%s", base, s.ChannelID, name, url.QueryEscape(token)), HLSOrigin: origin, Plan: j.Plan, Ready: ready, ServerTime: p.Clock.Now(), EntryStartsAt: j.Entry.StartsAt, EntryEndsAt: j.Entry.EndsAt, SourceOffsetSeconds: j.Entry.SourceOffsetSeconds, StreamOffsetSeconds: j.Offset.Seconds(), MediaFileID: j.Entry.MediaFileID, Kind: string(j.Entry.Kind), PresentationDelaySeconds: playback.PresentationDelay.Seconds(), DurationSeconds: j.Source.DurationSeconds, SourceHeight: sourceHeight(j.Source), UHD: p.hardwareEncoderWorks(r.Context()), AudioTracks: playback.AudioTracks(j.Source), Subtitles: playback.SourceSubtitles(r.Context(), p.DB, j.Path, j.Source), Details: j.Details, Runtime: stream.Runtime}, nil
+	return tuneResponse{ChannelNumber: c.Number, ChannelName: c.Name, Program: program, Session: s, Token: token, MediaURL: fmt.Sprintf("%s/media/%d", base, s.ChannelID), URL: fmt.Sprintf("%s/media/%d/%s?token=%s", base, s.ChannelID, name, url.QueryEscape(token)), HLSOrigin: origin, Plan: j.Plan, Ready: ready, ServerTime: p.Clock.Now(), EntryStartsAt: j.Entry.StartsAt, EntryEndsAt: j.Entry.EndsAt, SourceOffsetSeconds: j.Entry.SourceOffsetSeconds, StreamOffsetSeconds: j.Offset.Seconds(), MediaFileID: j.Entry.MediaFileID, Kind: string(j.Entry.Kind), PresentationDelaySeconds: playback.PresentationDelay.Seconds(), DurationSeconds: j.Source.DurationSeconds, SourceHeight: sourceHeight(j.Source), UHD: p.hardwareEncoderWorks(r.Context()), AudioTracks: playback.AudioTracks(j.Source), Subtitles: playback.SourceSubtitles(r.Context(), p.DB, j.Path, j.Source), Details: j.Details, Runtime: stream.Runtime, AutoCapacityPressure: !j.Plan.VideoCopy && p.Manager.AutoCapacityPressure()}, nil
 }
 
 func sourceHeight(src library.ProbeResult) int {
@@ -651,16 +705,24 @@ func (p *PlaybackHTTP) mediaSubtitles(w http.ResponseWriter, r *http.Request) {
 	}
 }
 
-// hardwareEncoderWorks reports whether a hardware encoder is chosen and passing
-// its self-test, which is when the Quality menu may offer 4K.
+// defaultHardwareEncoder is the healthy starting backend before playback
+// selects a measured pipeline for the particular source.
+func (p *PlaybackHTTP) defaultHardwareEncoder(ctx context.Context) (encoder, device string, decode bool) {
+	if p.Hardware != nil && p.DB != nil {
+		if settings, err := serversettings.Get(ctx, p.DB); err == nil {
+			encoder := p.Hardware.Resolve(ctx, settings.Transcoding, settings.HardwareDecoding)
+			if playback.IsHardwareEncoder(encoder) {
+				if status := p.Hardware.Check(ctx, encoder, false); status.OK {
+					return encoder, status.Device, settings.HardwareDecoding
+				}
+			}
+		}
+	}
+	return "", "", false
+}
+
+// hardwareEncoderWorks reports whether hardware output can offer 4K.
 func (p *PlaybackHTTP) hardwareEncoderWorks(ctx context.Context) bool {
-	if p.Hardware == nil {
-		return false
-	}
-	ss, err := serversettings.Get(ctx, p.DB)
-	if err != nil {
-		return false
-	}
-	encoder := p.Hardware.Resolve(ctx, ss.Transcoding, ss.HardwareDecoding)
-	return playback.IsHardwareEncoder(encoder) && p.Hardware.Check(ctx, encoder, false).OK
+	encoder, _, _ := p.defaultHardwareEncoder(ctx)
+	return encoder != ""
 }

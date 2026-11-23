@@ -93,7 +93,7 @@ internal fun AdminSettingsScreen(state: PhoneState, model: PhoneModel, modifier:
                         .focusProperties { left = navigation.getValue(section) }.focusGroup() else Modifier),
                     contentPadding = PaddingValues(bottom = 16.dp), verticalArrangement = Arrangement.spacedBy(12.dp)) {
                     if (section == "Updates") {
-                        item { Text("Release Cycle", style = MaterialTheme.typography.titleLarge) }
+                        item { Text("Update Cycle", style = MaterialTheme.typography.titleLarge) }
                         item {
                             Column(Modifier.fillMaxWidth().selectableGroup()) {
                                 ReleaseCycle.entries.forEach { option ->

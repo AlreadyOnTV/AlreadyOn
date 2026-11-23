@@ -241,3 +241,15 @@ func TestHDRUsesFilmRateMeasurementsWithoutCappingFasterSourcesByThem(t *testing
 		t.Fatal("unmeasured codec used HEVC result")
 	}
 }
+
+func TestAutoRungsConvertFourKHDRToSDR(t *testing.T) {
+	source, caps := detailsFixture()
+	source.Streams[0].Width, source.Streams[0].Height = 3840, 2160
+	for _, height := range []int{360, 240} {
+		caps.AutoMaxHeight = height
+		plan, err := ChooseScheduled(source, caps, true, 10)
+		if err != nil || plan.Height != height || plan.VideoCopy || !plan.ToneMap {
+			t.Fatalf("4K HDR to %dp SDR: %+v, %v", height, plan, err)
+		}
+	}
+}
