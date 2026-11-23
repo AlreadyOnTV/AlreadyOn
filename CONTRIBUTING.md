@@ -18,7 +18,7 @@ Do not commit secrets, local configuration, signing keys, generated media or tes
 
 ## Review
 
-Use the [PR template](.github/PULL_REQUEST_TEMPLATE.md). Explain the problem, resulting behavior, validation and material risks. Prefer clear boundaries and straightforward code over speculative abstractions. Maintainers decide merge, deployment and release timing.
+Use the [PR template](.github/PULL_REQUEST_TEMPLATE.md) and assign every PR to @mlynch1985 by default. Explain the problem, resulting behavior, validation and material risks. Prefer clear boundaries and straightforward code over speculative abstractions. Maintainers decide merge, deployment and release timing.
 
 Report vulnerabilities privately through [SECURITY.md](SECURITY.md). AlreadyOn uses [GNU GPLv3](LICENSE); licensing and third-party redistribution obligations apply to every contribution.
 
