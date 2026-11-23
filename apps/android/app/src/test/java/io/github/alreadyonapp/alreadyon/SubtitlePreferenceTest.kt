@@ -27,6 +27,15 @@ class SubtitlePreferenceTest {
         assertNull(profileSubtitle(media("jpn", listOf(subtitles[2])), profile))
         assertEquals(3, profileSubtitle(media("eng"), profile.copy(subtitleMode = "always", subtitleLanguage = "es")))
     }
+    @Test fun sidecarsUseProfileLanguageAndPreferFullCaptions() {
+        val tracks = listOf(PhoneTrack(-1, "English forced", "en", forced = true),
+            PhoneTrack(-2, "English SDH", "en", sdh = true),
+            PhoneTrack(-3, "English external", "en-US"))
+        assertEquals(-3, profileSubtitle(media("jpn", tracks), profile))
+        assertEquals(-2, profileSubtitle(media("jpn", tracks.take(2)), profile))
+        assertEquals(-1, profileSubtitle(media("jpn", tracks.take(1)), profile))
+        assertNull(profileSubtitle(media("eng", tracks), profile))
+    }
     @Test fun activeAudioChangesReevaluateCaptionChoice() {
         assertEquals(listOf(null, 2, null), listOf("eng", "jpn", "eng").map { profileSubtitle(media(it), profile) })
     }

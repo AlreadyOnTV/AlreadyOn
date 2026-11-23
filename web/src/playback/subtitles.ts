@@ -14,7 +14,7 @@ const sleep = (ms: number, signal: AbortSignal) => new Promise<void>((resolve, r
 // ready, which on a large remux can take minutes.
 export async function loadCues(session: PlaybackSession, track: SubtitleTrack, signal: AbortSignal): Promise<Cue[]> {
   const key = `${session.mediaFileId}:${track.index}`;
-  const hit = cache.get(key);
+  const hit = track.index >= 0 ? cache.get(key) : undefined;
   if (hit) return hit;
   const url = `${session.mediaUrl}/subtitles/${track.index}?token=${encodeURIComponent(session.token)}`;
   for (let attempt = 0; attempt < 300; attempt++) {
@@ -22,8 +22,10 @@ export async function loadCues(session: PlaybackSession, track: SubtitleTrack, s
     if (res.status === 202) { await sleep(2000, signal); continue; }
     if (!res.ok) throw new Error(`subtitles unavailable (${res.status})`);
     const cues: Cue[] = (await res.json()).cues ?? [];
-    if (cache.size >= MAX_CACHED) cache.delete(cache.keys().next().value as string);
-    cache.set(key, cues);
+    if (track.index >= 0) {
+      if (cache.size >= MAX_CACHED) cache.delete(cache.keys().next().value as string);
+      cache.set(key, cues);
+    }
     return cues;
   }
   throw new Error('subtitles took too long to prepare');
@@ -53,14 +55,18 @@ export const SUBTITLE_LANGUAGES = LANGUAGES.map(l => l[0]).sort((a, b) =>
   Number(b === 'en') - Number(a === 'en') || languageLabel(a).localeCompare(languageLabel(b), 'en'));
 export const DEFAULT_SUBTITLE_LANGUAGE = 'en';
 export function canonicalLanguage(code: string): string {
-  const c = code.toLowerCase();
+  const c = code.toLowerCase().split(/[-_]/)[0];
   return LANGUAGES.find(l => l.includes(c))?.[0] ?? c;
 }
 
 // Prefers a full track over a forced (signs-only) one in the chosen language.
 export function pickTrack(tracks: SubtitleTrack[], language: string): SubtitleTrack | undefined {
   const same = tracks.filter(t => canonicalLanguage(trackKey(t)) === canonicalLanguage(language));
-  return same.find(t => !t.forced) ?? same[0];
+  return same.find(t => !t.forced && !t.sdh) ?? same.find(t => !t.forced) ?? same[0];
+}
+
+export function subtitleVariant(track: SubtitleTrack): string {
+  return `${canonicalLanguage(trackKey(track))}:${!!track.forced}:${!!track.sdh}`;
 }
 
 export function languageLabel(code: string): string {

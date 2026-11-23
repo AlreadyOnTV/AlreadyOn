@@ -12,7 +12,7 @@ import java.io.IOException
 import java.util.concurrent.TimeUnit
 
 // Source-file track indices are scoped to the current tune, never to another scheduled file.
-internal data class PhoneTrack(val index: Int, val label: String, val language: String = "und", val forced: Boolean = false)
+internal data class PhoneTrack(val index: Int, val label: String, val language: String = "und", val forced: Boolean = false, val sdh: Boolean = false)
 // Compare ISO-639 two/three-letter tags; stable sorting preserves source order within each language.
 internal fun List<PhoneTrack>.preferredFirst(preference: String?): List<PhoneTrack> {
     fun language(code: String): String {
@@ -24,7 +24,11 @@ internal fun List<PhoneTrack>.preferredFirst(preference: String?): List<PhoneTra
 }
 internal fun phoneTracks(data: JSONArray?): List<PhoneTrack> = if (data == null) emptyList() else List(data.length()) {
     val track = data.getJSONObject(it)
-    PhoneTrack(track.getInt("index"), listOf(track.optString("language", "und"), track.optString("title"), track.optString("codec")).filter { value -> value.isNotBlank() }.joinToString(" · "), track.optString("language", "und"), track.optBoolean("forced"))
+    val language = track.optString("language", "und")
+    val forced = track.optBoolean("forced")
+    val label = listOf(language, track.optString("title"), if (forced) "Forced" else "", track.optString("codec"))
+        .filter { it.isNotBlank() }.joinToString(" · ")
+    PhoneTrack(track.getInt("index"), label, language, forced, track.optBoolean("sdh"))
 }
 internal data class PhoneCue(val start: Double, val end: Double, val text: String)
 
@@ -62,5 +66,5 @@ internal fun profileSubtitle(media: PhonePlayback, profile: ViewerProfile): Int?
         !audio.isNullOrBlank() && audio != "und" && audio != language(profile.language))
     if (!enabled) return null
     val matching = media.subtitleTracks.filter { language(it.language) == language(profile.subtitleLanguage) }
-    return (matching.firstOrNull { !it.forced } ?: matching.firstOrNull())?.index
+    return (matching.firstOrNull { !it.forced && !it.sdh } ?: matching.firstOrNull { !it.forced } ?: matching.firstOrNull())?.index
 }

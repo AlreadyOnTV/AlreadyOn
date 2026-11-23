@@ -3914,7 +3914,7 @@ components:
                   default: { type: boolean }
             subtitles:
               type: array
-              description: Text subtitle tracks fetchable from GET /media/{channel}/subtitles/{index}. Bitmap formats are not listed.
+              description: Embedded and sidecar text tracks fetchable from GET /media/{channel}/subtitles/{index}.
               items:
                 type: object
                 required: [index, codec]
@@ -3922,13 +3922,14 @@ components:
                   index:
                     {
                       type: integer,
-                      description: Stream index in the source file,
+                      description: Embedded stream index or negative sidecar ID,
                     }
                   language: { type: string }
                   title: { type: string }
                   codec: { type: string }
                   default: { type: boolean }
                   forced: { type: boolean }
+                  sdh: { type: boolean }
             presentationDelaySeconds:
               type: number
               description: Clients present serverTime minus this delay. The entry and streamOffsetSeconds are selected for that presented moment, not the server clock.

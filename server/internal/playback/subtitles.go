@@ -8,6 +8,7 @@ import (
 	"io"
 	"os/exec"
 	"regexp"
+	"slices"
 	"strconv"
 	"strings"
 	"sync"
@@ -25,6 +26,8 @@ type SubtitleTrack struct {
 	Codec    string `json:"codec"`
 	Default  bool   `json:"default,omitempty"`
 	Forced   bool   `json:"forced,omitempty"`
+	SDH      bool   `json:"sdh,omitempty"`
+	sidecar  *subtitleSidecar
 }
 
 var textSubtitleCodecs = map[string]bool{"subrip": true, "srt": true, "ass": true, "ssa": true, "mov_text": true, "webvtt": true, "text": true}
@@ -34,7 +37,7 @@ func SubtitleTracks(src library.ProbeResult) []SubtitleTrack {
 	var out []SubtitleTrack
 	for _, s := range src.Streams {
 		if s.Kind == library.StreamSubtitle && textSubtitleCodecs[s.Codec] {
-			out = append(out, SubtitleTrack{Index: s.Index, Language: s.Language, Title: s.Title, Codec: s.Codec, Default: s.Default, Forced: s.Forced})
+			out = append(out, SubtitleTrack{Index: s.Index, Language: s.Language, Title: s.Title, Codec: s.Codec, Default: s.Default, Forced: s.Forced, SDH: s.HearingImpaired})
 		}
 	}
 	return out
@@ -158,29 +161,42 @@ func NewSubtitlesWith(extract func(ctx context.Context, path string, index int) 
 // Get returns the cues if they are ready, and starts the extraction if nobody has.
 // modTime keys the cache so a replaced file is not served stale subtitles.
 func (s *Subtitles) Get(path string, modTime int64, index int) ([]Cue, SubtitleState) {
-	key := fmt.Sprintf("%s|%d|%d", path, modTime, index)
+	key := fmt.Sprintf("%q|%d|%d", path, modTime, index)
+	return s.get(key, func(ctx context.Context) ([]Cue, error) { return s.extract(ctx, path, index) })
+}
+
+func (s *Subtitles) get(key string, extract func(context.Context) ([]Cue, error)) ([]Cue, SubtitleState) {
 	s.mu.Lock()
 	defer s.mu.Unlock()
 	if e := s.entries[key]; e != nil {
 		if e.state == SubtitleFailed && time.Since(e.failed) > retryFailedAfter {
 			delete(s.entries, key)
+			s.order = slices.DeleteFunc(s.order, func(k string) bool { return k == key })
 		} else {
 			return e.cues, e.state
 		}
 	}
+	if len(s.order) == maxCachedTracks {
+		// Never evict pending work. A client polling an evicted pending track
+		// could otherwise enqueue the same extraction repeatedly.
+		oldestFinished := slices.IndexFunc(s.order, func(k string) bool {
+			return s.entries[k].state != SubtitlePending
+		})
+		if oldestFinished < 0 {
+			return nil, SubtitlePending
+		}
+		delete(s.entries, s.order[oldestFinished])
+		s.order = slices.Delete(s.order, oldestFinished, oldestFinished+1)
+	}
 	e := &subtitleEntry{}
 	s.entries[key] = e
 	s.order = append(s.order, key)
-	for len(s.order) > maxCachedTracks {
-		delete(s.entries, s.order[0])
-		s.order = s.order[1:]
-	}
 	go func() {
 		s.slots <- struct{}{}
 		defer func() { <-s.slots }()
 		ctx, cancel := context.WithTimeout(context.Background(), extractTimeout)
 		defer cancel()
-		cues, err := s.extract(ctx, path, index)
+		cues, err := extract(ctx)
 		s.mu.Lock()
 		defer s.mu.Unlock()
 		if err != nil {

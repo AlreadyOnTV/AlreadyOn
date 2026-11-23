@@ -431,20 +431,12 @@ func (p *PlaybackHTTP) tuneResult(r *http.Request, s playback.Session, token str
 		value := toProgramResponse(resolved)
 		program = &value
 	}
-	return tuneResponse{ChannelNumber: c.Number, ChannelName: c.Name, Program: program, Session: s, Token: token, MediaURL: fmt.Sprintf("%s/media/%d", base, s.ChannelID), URL: fmt.Sprintf("%s/media/%d/%s?token=%s", base, s.ChannelID, name, url.QueryEscape(token)), HLSOrigin: origin, Plan: j.Plan, Ready: ready, ServerTime: p.Clock.Now(), EntryStartsAt: j.Entry.StartsAt, EntryEndsAt: j.Entry.EndsAt, SourceOffsetSeconds: j.Entry.SourceOffsetSeconds, StreamOffsetSeconds: j.Offset.Seconds(), MediaFileID: j.Entry.MediaFileID, Kind: string(j.Entry.Kind), PresentationDelaySeconds: playback.PresentationDelay.Seconds(), DurationSeconds: j.Source.DurationSeconds, SourceHeight: sourceHeight(j.Source), UHD: p.hardwareEncoderWorks(r.Context()), AudioTracks: playback.AudioTracks(j.Source), Subtitles: subtitleTracks(j.Source), Details: j.Details, Runtime: stream.Runtime}, nil
+	return tuneResponse{ChannelNumber: c.Number, ChannelName: c.Name, Program: program, Session: s, Token: token, MediaURL: fmt.Sprintf("%s/media/%d", base, s.ChannelID), URL: fmt.Sprintf("%s/media/%d/%s?token=%s", base, s.ChannelID, name, url.QueryEscape(token)), HLSOrigin: origin, Plan: j.Plan, Ready: ready, ServerTime: p.Clock.Now(), EntryStartsAt: j.Entry.StartsAt, EntryEndsAt: j.Entry.EndsAt, SourceOffsetSeconds: j.Entry.SourceOffsetSeconds, StreamOffsetSeconds: j.Offset.Seconds(), MediaFileID: j.Entry.MediaFileID, Kind: string(j.Entry.Kind), PresentationDelaySeconds: playback.PresentationDelay.Seconds(), DurationSeconds: j.Source.DurationSeconds, SourceHeight: sourceHeight(j.Source), UHD: p.hardwareEncoderWorks(r.Context()), AudioTracks: playback.AudioTracks(j.Source), Subtitles: playback.SourceSubtitles(r.Context(), p.DB, j.Path, j.Source), Details: j.Details, Runtime: stream.Runtime}, nil
 }
 
 func sourceHeight(src library.ProbeResult) int {
 	v, _ := playback.Tracks(src)
 	return v.Height
-}
-
-// subtitleTracks is never nil so the JSON field is always an array.
-func subtitleTracks(src library.ProbeResult) []playback.SubtitleTrack {
-	if tracks := playback.SubtitleTracks(src); tracks != nil {
-		return tracks
-	}
-	return []playback.SubtitleTrack{}
 }
 
 func (p *PlaybackHTTP) playbackStatus(w http.ResponseWriter, r *http.Request) {
@@ -615,21 +607,36 @@ func (p *PlaybackHTTP) mediaSubtitles(w http.ResponseWriter, r *http.Request) {
 		return
 	}
 	index, err := strconv.Atoi(r.PathValue("index"))
-	if err != nil || !slices.ContainsFunc(playback.SubtitleTracks(s.Job.Source), func(t playback.SubtitleTrack) bool { return t.Index == index }) {
-		http.NotFound(w, r)
-		return
-	}
-	path, err := playback.AllowedPath(r.Context(), p.DB, s.Job.Path)
 	if err != nil {
 		http.NotFound(w, r)
 		return
 	}
-	info, err := os.Stat(path)
-	if err != nil {
+	tracks := playback.SubtitleTracks(s.Job.Source)
+	if index < 0 {
+		tracks = playback.SourceSubtitles(r.Context(), p.DB, s.Job.Path, s.Job.Source)
+	}
+	match := slices.IndexFunc(tracks, func(t playback.SubtitleTrack) bool { return t.Index == index })
+	if match < 0 {
 		http.NotFound(w, r)
 		return
 	}
-	cues, state := p.Subtitles.Get(path, info.ModTime().UnixNano(), index)
+	var cues []playback.Cue
+	var state playback.SubtitleState
+	if index < 0 {
+		cues, state = p.Subtitles.GetSidecar(tracks[match])
+	} else {
+		path, err := playback.AllowedPath(r.Context(), p.DB, s.Job.Path)
+		if err != nil {
+			http.NotFound(w, r)
+			return
+		}
+		info, err := os.Stat(path)
+		if err != nil {
+			http.NotFound(w, r)
+			return
+		}
+		cues, state = p.Subtitles.Get(path, info.ModTime().UnixNano(), index)
+	}
 	switch state {
 	case playback.SubtitlePending:
 		w.Header().Set("Retry-After", "2")

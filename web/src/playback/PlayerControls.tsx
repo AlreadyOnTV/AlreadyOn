@@ -4,7 +4,7 @@
 import { useEffect, useRef, useState, type ReactNode } from "react";
 import { ProgramOverlay } from "./ProgramOverlay";
 import type { PlaybackSession, AudioTrack, SubtitleTrack } from "./types";
-import { canonicalLanguage, languageLabel, trackKey } from "./subtitles";
+import { canonicalLanguage, languageLabel, subtitleVariant, trackKey } from "./subtitles";
 
 function formatClock(seconds: number): string {
   if (!Number.isFinite(seconds) || seconds < 0) seconds = 0;
@@ -31,13 +31,12 @@ export interface ControlsProps {
   audioTracks: AudioTrack[];
   audioTrackIndex?: number;
   onAudioTrack: (track: AudioTrack) => void;
-  // The chosen subtitle language, or null when subtitles are off.
-  subtitleLanguage: string | null;
+  subtitleIndex: number | null;
   onTogglePlay: () => void;
   onVolume: (v: number) => void;
   onToggleMute: () => void;
   onQuality: (height: number) => void;
-  onSubtitleLanguage: (language: string | null) => void;
+  onSubtitleTrack: (track: SubtitleTrack | null) => void;
   detailsOn: boolean;
   onToggleDetails: () => void;
   onFullscreen: () => void;
@@ -201,15 +200,13 @@ export function PlayerControls(p: ControlsProps) {
     return () => window.removeEventListener("pointerdown", outside, true);
   }, [menu]);
 
-  // One entry per language; a language with several tracks uses its first full one.
-  const languages = [...new Set(p.tracks.map(trackKey))];
-  const captionsOn =
-    p.subtitleLanguage !== null &&
-    p.tracks.some(
-      (track) =>
-        canonicalLanguage(trackKey(track)) ===
-        canonicalLanguage(p.subtitleLanguage!),
-    );
+  // Keep the first track for each language and flag combination.
+  const variants = new Map<string, SubtitleTrack>();
+  for (const track of p.tracks) {
+    const key = subtitleVariant(track);
+    if (!variants.has(key) || track.index === p.subtitleIndex) variants.set(key, track);
+  }
+  const captionsOn = p.subtitleIndex !== null;
   const selectedAudio = p.audioTracks.find(
     (track) => track.index === p.audioTrackIndex,
   );
@@ -265,24 +262,24 @@ export function PlayerControls(p: ControlsProps) {
               role="menuitemradio"
               aria-checked={!captionsOn}
               onClick={() => {
-                p.onSubtitleLanguage(null);
+                p.onSubtitleTrack(null);
                 setMenu(null);
               }}
             >
               Off
             </button>
-            {languages.map((l) => (
+            {[...variants.values()].map((track) => (
               <button
                 {...noFocus}
-                key={l}
+                key={track.index}
                 role="menuitemradio"
-                aria-checked={p.subtitleLanguage === l}
+                aria-checked={p.subtitleIndex === track.index}
                 onClick={() => {
-                  p.onSubtitleLanguage(l);
+                  p.onSubtitleTrack(track);
                   setMenu(null);
                 }}
               >
-                {languageLabel(l)}
+                {languageLabel(trackKey(track))}{track.forced ? " · Forced" : ""}{track.sdh ? " · SDH" : ""}
               </button>
             ))}
           </div>
