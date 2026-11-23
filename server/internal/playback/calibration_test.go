@@ -138,7 +138,7 @@ func TestCalibratedAdmissionUsesPipelineCountAndUnknownFallback(t *testing.T) {
 func TestCachedLimitFailureRetainsMeasuredLowerCount(t *testing.T) {
 	c := &Calibration{Tuner: &Tuner{}}
 	c.measure = func(_ context.Context, _ calibrationCase, n int) ([]float64, error) {
-		if n == 4 {
+		if n >= 3 {
 			return nil, errors.New("overloaded")
 		}
 		if n == 2 {
@@ -149,6 +149,23 @@ func TestCachedLimitFailureRetainsMeasuredLowerCount(t *testing.T) {
 	old := []ProfileCapacity{{Verified: true, Streams: 4}}
 	if p := c.evaluate(context.Background(), calibrationCase{}, old); p.Streams != 2 {
 		t.Fatalf("streams=%d", p.Streams)
+	}
+}
+
+func TestCalibrationMeasuresThreeWhenFourCannotKeepUp(t *testing.T) {
+	c := &Calibration{Tuner: &Tuner{}}
+	c.measure = func(_ context.Context, _ calibrationCase, n int) ([]float64, error) {
+		if n == 4 {
+			return []float64{2, 2, 2, 0.9}, nil
+		}
+		speeds := make([]float64, n)
+		for i := range speeds {
+			speeds[i] = 2
+		}
+		return speeds, nil
+	}
+	if got := c.evaluate(context.Background(), calibrationCase{}, nil).Streams; got != 3 {
+		t.Fatalf("expected three confirmed streams, got %d", got)
 	}
 }
 
@@ -258,8 +275,8 @@ func TestMixedConversionsUseMeasuredDemand(t *testing.T) {
 
 func TestFullCalibrationLimitsAlternateBackendCoverage(t *testing.T) {
 	primary := Plan{Height: UHDHeight, Decoder: "hardware", ToneMap: true, ToneMapper: "gpu"}
-	if got := fullCalibrationHeights(true, 0, primary); len(got) != 3 ||
-		got[0] != AutoCapacityHeight || got[1] != UHDHeight || got[2] != AutoMinHeight {
+	if got := fullCalibrationHeights(true, 0, primary); len(got) != 6 ||
+		got[0] != AutoCapacityHeight || got[1] != 480 || got[2] != 720 || got[3] != 1080 || got[4] != UHDHeight || got[5] != AutoMinHeight {
 		t.Fatalf("primary HDR rungs: %v", got)
 	}
 	if got := fullCalibrationHeights(false, 0, primary); len(got) != 1 || got[0] != AutoCapacityHeight {
@@ -302,10 +319,6 @@ func TestFullCalibrationResumesOnlyMissingAndExpiredCases(t *testing.T) {
 	if len(due) != 2 || due[0].plan.Height != 720 || due[1].plan.Height != 480 {
 		t.Fatalf("resume repeated a finished case: %+v", due)
 	}
-	fresh := freshCalibrationProfiles(history, now)
-	if len(fresh) != 2 || fresh[0].TargetHeight != 360 || fresh[1].TargetHeight != 1080 {
-		t.Fatalf("stale measurements should not be used for admission: %+v", fresh)
-	}
 }
 
 func TestPreferredPipelineDoesNotTradeCheaperHDRForExactMeasuredHeight(t *testing.T) {
@@ -323,5 +336,17 @@ func TestPreferredPipelineDoesNotTradeCheaperHDRForExactMeasuredHeight(t *testin
 		if !found || got.ToneMapper != "gpu" {
 			t.Fatalf("%dp selected %+v, want GPU tone mapping", height, got)
 		}
+	}
+}
+
+func TestPartialFullCalibrationKeepsValidatedQuickRungs(t *testing.T) {
+	baseline := ProfileCapacity{SourceClass: SourceHEVCSDR, TargetHeight: 360, Verified: true, Streams: 2}
+	start := baseline
+	start.TargetHeight = 720
+	fullBaseline := baseline
+	fullBaseline.Streams = 4
+	merged := fillCalibrationGaps([]ProfileCapacity{fullBaseline}, []ProfileCapacity{baseline, start})
+	if len(merged) != 2 || merged[0].Streams != 4 || merged[1].TargetHeight != 720 || merged[1].Streams != 2 {
+		t.Fatalf("expected full 360p and quick 720p evidence, got %+v", merged)
 	}
 }

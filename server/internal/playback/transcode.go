@@ -19,6 +19,7 @@ import (
 )
 
 type Job struct {
+	AutoQualityMax   int  // Device ceiling of the Auto viewer acquiring the job.
 	ValidatedThreads bool // Keep the exact per-stream thread count used by concurrency validation.
 	Entry            schedule.Entry
 	Path             string

@@ -11,7 +11,7 @@ class NativeAutoQualityTest {
         val rung = qualityRungHeight(1280, 532)
         assertEquals(720, rung)
         assertEquals(1080, qualityRungHeight(1920, 800))
-        repeat(2) { assertNull(auto.observe(4000, false, rung, 1080)) }
+        repeat(5) { assertNull(auto.observe(4000, false, rung, 1080)) }
         assertEquals(1080, auto.observe(4000, false, rung, 1080))
     }
 
@@ -19,16 +19,42 @@ class NativeAutoQualityTest {
         val auto = NativeAutoQuality()
         assertNull(auto.observe(4900, false, 720, 1080))
         assertNull(auto.observe(3200, false, 720, 1080))
+        assertNull(auto.observe(4100, false, 720, 1080))
+        assertNull(auto.observe(4900, false, 720, 1080))
+        assertNull(auto.observe(3200, false, 720, 1080))
         assertEquals(1080, auto.observe(4100, false, 720, 1080))
     }
 
     @Test fun bufferedSamplesStepDownFasterThanTheyStepUp() {
         val auto = NativeAutoQuality()
-        assertNull(auto.observe(2000, false, 360, 2160))
-        assertEquals(240, auto.observe(2000, false, 360, 2160))
+        assertNull(auto.observe(1000, false, 360, 720, minimum = 240))
+        assertEquals(240, auto.observe(1000, false, 360, 720, minimum = 240))
         auto.reset()
-        repeat(2) { assertNull(auto.observe(5000, false, 360, 2160)) }
+        repeat(11) { assertNull(auto.observe(5000, false, 360, 2160)) }
         assertEquals(480, auto.observe(5000, false, 360, 2160))
-        repeat(3) { assertNull(auto.observe(5000, false, 360, 360)) }
+        repeat(6) { assertNull(auto.observe(5000, false, 360, 360)) }
+    }
+
+    @Test fun distinguishesBufferingFromDroppedFrames() {
+        val auto = NativeAutoQuality()
+        assertNull(auto.observe(4000, false, 720, 1080, droppedFrames = 8))
+        assertEquals(480, auto.observe(4000, false, 720, 1080, droppedFrames = 9))
+        assertEquals("dropped_frames", auto.decision?.reason)
+        assertEquals(9, auto.decision?.droppedFrames)
+        auto.reset(newWatch = true)
+        assertNull(auto.observe(0, true, 720, 1080))
+        assertEquals(480, auto.observe(0, true, 720, 1080))
+        assertEquals("buffering", auto.decision?.reason)
+    }
+
+    @Test fun sharedCeilingLetsLowerViewersClimbThenStopsUpgrades() {
+        val auto = NativeAutoQuality()
+        assertNull(auto.observe(5000, false, 1080, 1080, serverCeiling = 720))
+        assertEquals(720, auto.observe(5000, false, 1080, 1080, serverCeiling = 720))
+        auto.reset()
+        repeat(11) { assertNull(auto.observe(5000, false, 480, 1080, serverCeiling = 720)) }
+        assertEquals(720, auto.observe(5000, false, 480, 1080, serverCeiling = 720))
+        repeat(6) { assertNull(auto.observe(5000, false, 720, 1080, serverCeiling = 720)) }
+        assertEquals(1080, auto.observe(5000, false, 720, 1080, serverCeiling = 1080))
     }
 }

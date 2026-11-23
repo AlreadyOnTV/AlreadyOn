@@ -5,7 +5,7 @@ import Hls from "hls.js";
 import { APP_VERSION } from "../version";
 import { apiFetch } from "../api/access";
 import { clientCapabilities } from "./capabilities";
-import { AutoQualityAdapter, qualityRungHeight } from "./qualityAdaptation";
+import { AutoQualityAdapter, qualityRungHeight, type AutoDecision } from "./qualityAdaptation";
 import { BROWSER_CODEC_MESSAGE, CodecHelp } from "./CodecHelp";
 import { responsivePlaylistLoader } from "./playlistLoader";
 import { PlayerControls } from "./PlayerControls";
@@ -391,7 +391,7 @@ export function Player({
     profileId: number;
     value: number;
   } | null>(null);
-  const quality = chosen?.profileId === currentUserId ? chosen.value : stored;
+  const quality = Math.min(1080, chosen?.profileId === currentUserId ? chosen.value : stored);
   const qualityRef = useRef(quality);
   const appliedQuality = useRef(quality);
   const autoQualityHeight = useRef(720);
@@ -706,25 +706,24 @@ export function Player({
           Math.min(retryAt - now + liveDelay() * 1000, 2147483647),
         );
     };
+    // Hold the displayed program moment while the replacement buffers.
+    let qualityPosition: { at: number; resumedAt?: number } | undefined;
     const desired = () => {
       if (!current) return 0;
       const s = current.value;
+      const targetTime = qualityPosition
+        ? qualityPosition.at + (qualityPosition.resumedAt === undefined ? 0 : performance.now() - qualityPosition.resumedAt)
+        : wallTime() - liveDelay() * 1000;
       const playing = playingTime();
       if (playing != null)
-        return Math.max(
-          0,
-          video.currentTime +
-            (wallTime() - liveDelay() * 1000 - playing) / 1000,
-        );
+        return Math.max(0, video.currentTime + (targetTime - playing) / 1000);
       if (hlsAnchor)
         return Math.max(
           0,
-          hlsAnchor.start + (wallTime() - hlsAnchor.date) / 1000 - liveDelay(),
+          hlsAnchor.start + (targetTime - hlsAnchor.date) / 1000,
         );
       const source =
-        (wallTime() - Date.parse(s.entryStartsAt)) / 1000 +
-        s.sourceOffsetSeconds -
-        liveDelay();
+        (targetTime - Date.parse(s.entryStartsAt)) / 1000 + s.sourceOffsetSeconds;
       return Math.max(
         0,
         s.plan.mode === "direct" ? source : source - s.streamOffsetSeconds,
@@ -777,8 +776,9 @@ export function Player({
           nowMs: performance.now(),
           bufferedSeconds: active ? bufferedAt(video.currentTime) : 0,
           outputHeight: output ? qualityRungHeight(output.width, output.height) : (active?.value.sourceHeight ?? 360),
-          maxHeight: Math.min(source ? qualityRungHeight(source.width, source.height) : (active?.value.sourceHeight ?? 1080), active?.value.uhd ? 2160 : 1080),
+          maxHeight: Math.min(source ? qualityRungHeight(source.width, source.height) : (active?.value.sourceHeight ?? 1080), 1080),
           serverPressure: active?.value.autoCapacityPressure,
+          serverCeiling: active?.value.autoQualityCeiling,
           droppedVideoFrames: frameQuality?.droppedVideoFrames,
           totalVideoFrames: frameQuality?.totalVideoFrames,
         },
@@ -791,8 +791,8 @@ export function Player({
           !moving &&
           !swapping,
       );
-      if (nextHeight !== null && nextHeight !== autoQualityHeight.current) {
-        void requality(nextHeight);
+      if (nextHeight !== null) {
+        void requality(nextHeight, qualityAdapter.decision);
       }
     };
     // A browser that refuses sound autoplay still allows muted, so retry muted once.
@@ -813,7 +813,15 @@ export function Player({
       setPaused(true);
     };
     const startPlayback = () => {
+      const previousTime = video.currentTime;
+      const previousPosition = qualityPosition ? scheduleTime() : null;
       seek();
+      if (qualityPosition) {
+        if (previousPosition != null && Number.isFinite(previousPosition)) {
+          qualityPosition.at = previousPosition + (video.currentTime - previousTime) * 1000;
+        }
+        qualityPosition.resumedAt = performance.now();
+      }
       started = true;
       clearInterval(startTimer);
       clearTimeout(bufferTimer);
@@ -1001,21 +1009,33 @@ export function Player({
       },
     };
 
-    async function prepare(
-      entryStartsAt?: string,
+    async function prepare({
+      entryStartsAt,
       stopOnCapacity = false,
       autoReplacement = false,
-      replacementToken?: string,
-    ): Promise<Prepared | null> {
+      replacementToken,
+      autoDecision,
+      attempts = entryStartsAt ? 1 : 45,
+    }: {
+      entryStartsAt?: string;
+      stopOnCapacity?: boolean;
+      autoReplacement?: boolean;
+      replacementToken?: string;
+      autoDecision?: AutoDecision;
+      attempts?: number;
+    } = {}): Promise<Prepared | null> {
       const requestedAt = performance.now();
       const capabilities = await clientCapabilities();
-      for (let attempt = 0; attempt < (entryStartsAt ? 1 : 20); attempt++) {
+      for (let attempt = 0; attempt < attempts; attempt++) {
         if (stopped) return null;
         const maxHeight = qualityRef.current;
         const autoMaxHeight = maxHeight === 0 ? autoQualityHeight.current : 0;
         const audio = { ...audioRef.current };
-        const tunedCapabilities =
-          autoMaxHeight > 0 ? { ...capabilities, autoMaxHeight, autoReplacement } : capabilities;
+        const tunedCapabilities = {
+          ...capabilities,
+          clientKind: "web",
+          ...(autoMaxHeight > 0 ? { autoMaxHeight, autoReplacement } : {}),
+        };
         const grant = await request<Authorization>(
           "/api/playback/sessions",
           { channelId },
@@ -1039,6 +1059,7 @@ export function Player({
               capabilities: tunedCapabilities,
               token: grant.token,
               replacementToken,
+              autoDecision,
               forceEncode: forced(entryStartsAt),
               entryStartsAt,
               maxHeight,
@@ -1078,10 +1099,10 @@ export function Player({
               (e as RequestError).code === "stream_capacity") ||
             entryStartsAt ||
             ![409, 503].includes((e as RequestError).status ?? 0) ||
-            attempt === 19
+            attempt === attempts - 1
           )
             throw e;
-          await sleep(300);
+          await sleep((e as RequestError).code === "stream_capacity" ? 1_000 : 300);
         }
       }
       return null;
@@ -1112,12 +1133,15 @@ export function Player({
         else fail(e as RequestError);
       }
     }
-    function attach(prepared: Prepared, following = false) {
+    function attach(prepared: Prepared, following = false, resumePosition?: number) {
       if (stopped) return;
       initialBufferWait = current === null && !following;
       moving = true;
       detach();
       current = prepared;
+      qualityPosition = resumePosition !== undefined && Number.isFinite(resumePosition)
+        ? { at: resumePosition }
+        : undefined;
       moving = false;
       qualityAdapter.reset();
       clearInterval(qualityTimer);
@@ -1223,7 +1247,7 @@ export function Player({
       // Entries shorter than the delay prepare their successor immediately.
       prefetch = setTimeout(
         () => {
-          next = prepare(s.entryEndsAt).catch(() => null);
+          next = prepare({ entryStartsAt: s.entryEndsAt }).catch(() => null);
         },
         Math.max(0, remaining - 2000 * liveDelay()),
       );
@@ -1232,7 +1256,7 @@ export function Player({
     // Switches the airing entry to the newly chosen quality. The new stream is
     // prepared while the old one keeps playing; only then is the picture
     // swapped, holding the last frame for the moment the new stream needs.
-    async function requality(adaptiveHeight?: number) {
+    async function requality(adaptiveHeight?: number, decision?: AutoDecision) {
       if (stopped || moving || swapping || !current) return;
       swapping = true;
       const oldAutoHeight = autoQualityHeight.current;
@@ -1241,12 +1265,12 @@ export function Player({
       try {
         let fresh: Prepared | null;
         try {
-          fresh = await prepare(
-            undefined,
-            true,
-            adaptiveHeight !== undefined,
-            adaptiveHeight !== undefined ? current.value.token : undefined,
-          );
+          fresh = await prepare({
+            stopOnCapacity: true,
+            autoReplacement: adaptiveHeight !== undefined,
+            replacementToken: adaptiveHeight !== undefined ? current.value.token : undefined,
+            autoDecision: decision,
+          });
         } catch (e) {
           if (
             adaptiveHeight !== undefined ||
@@ -1272,8 +1296,9 @@ export function Player({
           await Promise.all([...grants.keys()].map(drop));
           const prefetched = await pending;
           if (prefetched) await drop(prefetched.value.token);
-          // Bounded retries allow the cancelled worker to exit before admission.
-          fresh = await prepare();
+          // Give the cancelled worker time to exit, then report a slot still
+          // owned by another viewer instead of leaving the settings change pending.
+          fresh = await prepare({ attempts: 8 });
         }
         if (!fresh) {
           if (adaptiveHeight !== undefined) autoQualityHeight.current = oldAutoHeight;
@@ -1311,8 +1336,9 @@ export function Player({
           const pending = next;
           next = null;
           void pending?.then((p) => (p ? drop(p.value.token) : undefined));
+          const resumePosition = adaptiveHeight === undefined ? undefined : (scheduleTime() ?? undefined);
           freeze();
-          attach(fresh, true);
+          attach(fresh, true, resumePosition);
           if (old) void drop(old.value.token);
         }
       } catch (e) {
@@ -1610,7 +1636,7 @@ export function Player({
           quality={quality}
           qualities={QUALITY_HEIGHTS.filter(
             (h) =>
-              (h !== 2160 || session.uhd) &&
+              (h >= 360 && h <= 1080) &&
               (!session.sourceHeight || h <= session.sourceHeight),
           )}
           tracks={session.subtitles ?? []}

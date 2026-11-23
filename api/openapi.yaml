@@ -2924,6 +2924,19 @@ paths:
                 replacementToken:
                   type: string
                   description: Existing playback token replaced by an autoReplacement tune. The token must belong to the caller and be bound to this channel's active rendition.
+                autoDecision:
+                  type: object
+                  additionalProperties: false
+                  description: Optional client diagnostics sent with an Auto replacement. Used for logging.
+                  properties:
+                    reason:
+                      type: string
+                      enum: [healthy, server_ceiling, low_buffer, draining_buffer, dropped_frames, buffering]
+                    bufferMs: { type: integer }
+                    bufferDropMs: { type: integer }
+                    droppedFrames: { type: integer }
+                    totalFrames: { type: integer }
+                    serverCeiling: { type: integer }
                 audioLanguage:
                   type: string
                   default: en
@@ -2941,9 +2954,9 @@ paths:
                   default: false
                 maxHeight:
                   type: integer
-                  enum: [0, 360, 480, 720, 1080, 2160]
+                  enum: [0, 240, 360, 480, 720, 1080, 2160]
                   default: 0
-                  description: Viewer's quality ceiling in lines. 0 is automatic. A source taller than the ceiling is always converted; the plan's bitrate is capped for the chosen height. 2160 (4K) is planned only while a hardware encoder is in use and the client reports 4K H.264 decoding; otherwise the stream stays at 1080p.
+                  description: Viewer's quality ceiling in lines. 0 is automatic. A source outside the requested 16:9 quality box is converted; the plan's bitrate is capped for the chosen height. 2160 (4K) is planned only while a hardware encoder is in use and the client reports 4K H.264 decoding; otherwise the stream stays at 1080p.
       responses:
         "201":
           description: Scoped media URL and authoritative timeline; poll status until ready
@@ -3820,10 +3833,14 @@ components:
           type: array
           items:
             type: string
+        clientKind:
+          type: string
+          enum: [phone, web, tv]
+          description: Device class used to apply the player's starting rung and quality limits. Optional for older clients.
         autoMaxHeight:
           type: integer
           enum: [0, 240, 360, 480, 720, 1080, 2160]
-          description: Temporary Auto conversion ceiling. New clients request 720p initially. Direct play can retain source quality.
+          description: Temporary Auto tune ceiling. Phone starts at 480p and ranges from 240p to 720p. Web and TV start at 720p and range from 360p to 1080p, with 2160p available on supported TVs.
         autoReplacement:
           type: boolean
           description: Identifies an Auto rendition replacement. Provide replacementToken so the active rendition's lease can be substituted during admission while it continues playing.
@@ -3914,7 +3931,10 @@ components:
               description: Length of the whole source file, for a total-time display that does not depend on how much has been converted.
             autoCapacityPressure:
               type: boolean
-              description: A new Auto conversion was recently refused. Existing Auto viewers can reduce demand.
+              description: Current output exceeds the shared Auto ceiling. Included for older clients.
+            autoQualityCeiling:
+              type: integer
+              description: Shared ceiling for Auto video conversions, omitted when inactive. Clients may continue stepping upward below this ceiling and stop probing above it.
             sourceHeight:
               type: integer
             details:

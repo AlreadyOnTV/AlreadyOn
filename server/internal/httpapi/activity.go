@@ -14,6 +14,7 @@ import (
 
 	"github.com/alreadyonapp/alreadyon/server/internal/activity"
 	"github.com/alreadyonapp/alreadyon/server/internal/auth"
+	"github.com/alreadyonapp/alreadyon/server/internal/logging"
 	"github.com/alreadyonapp/alreadyon/server/internal/playback"
 	"github.com/alreadyonapp/alreadyon/server/internal/schedule"
 	"github.com/alreadyonapp/alreadyon/server/internal/status"
@@ -129,6 +130,10 @@ func (p *PlaybackHTTP) reportActivity(w http.ResponseWriter, r *http.Request) {
 	if !exists && len(p.activityRows) >= 1024 {
 		writeJSONError(w, 503, "activity capacity reached")
 		return
+	}
+	if stream.Job.AutoQualityMax > 0 && exists && v.channelID == b.ChannelID && v.sessionID != s.ID {
+		logging.Info("auto quality active: channel=%d previous_session=%s session=%s output=%d",
+			b.ChannelID, v.sessionID[:min(8, len(v.sessionID))], s.ID[:min(8, len(s.ID))], playback.PlanQualityHeight(stream.Job.Plan))
 	}
 	commercial := string(stream.Job.Entry.Kind) == "commercial"
 	if !exists || v.channelID != b.ChannelID {

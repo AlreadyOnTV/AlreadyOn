@@ -2,51 +2,40 @@
 
 [![AlreadyOn](../web/public/branding/header-doc.svg)](../README.md)
 
-Tuning selects the current persisted airing. Delivery uses direct play, remux or bounded transcoding according to browser support; GPU availability alone proves neither codec nor HDR compatibility.
+Tuning selects the current persisted airing. Delivery uses direct play, remux or bounded transcoding according to client capabilities. The browser checks hls.js and native HLS. Clients show “Tuning” until playback begins. [Startup readiness](BACKGROUND_JOBS.md) gates playback during benchmarking.
 
-Clients show "Tuning" until playback begins. [Startup readiness](BACKGROUND_JOBS.md) gates playback during benchmarking.
+## Controls
 
-WebUI checks hls.js's media-source constructor and native HLS fallback.
+WebUI saves manual volume adjustments per profile and browser, including zero. Guide loads and profile switches start muted. The mute button, `m` or fullscreen entry unmutes at the saved level. Clearing site data resets volume.
 
-## WebUI volume
+Tablets use a large portrait player and compact landscape player. Fullscreen requires an explicit action and exits on portrait rotation. Phones use the large guide and native fullscreen or a viewport fallback. Exiting restores the guide. Orientation stays unlocked.
 
-WebUI remembers each profile's volume per browser/server across channels and visits. Profile IDs are unique across accounts. Clearing site data resets volume; unavailable storage limits persistence to this visit.
+Device brightness and accessibility settings control display and typography. Current clients ignore the legacy `fontLevel` and `brightnessLevel` API fields. See [channel navigation](CHANNEL_NAVIGATION.md).
 
-Guide loads/profile switches start muted. The mute button, `m` or fullscreen entry unmutes at the saved level. Only slider adjustments save volume, including explicit zero. Muting, autoplay fallback and stream changes never overwrite it.
+## Sessions
 
-## Touch browsers
+Tunes require scoped playback credentials. Status and leases govern activity and cleanup. Token revocation is idempotent and scoped to the principal and channel. The Dashboard shows elapsed and total program time through commercials when available. See [OpenAPI](../api/openapi.yaml).
 
-Tablets use a large portrait player and compact landscape player; fullscreen is explicit and exits on portrait rotation. Phones use the large guide and native fullscreen. Exit restores the guide; portrait re-enables entry. Shared orientation prevents viewport-triggered cancellation. Native video fullscreen or viewport fallback handles unsupported/denied fullscreen. Orientation remains unlocked; desktop is unchanged.
+Schedule times are UTC. Playback presents eight seconds behind the server clock. Clients may prepare the next airing up to eight seconds early. Respect retry hints and cancel obsolete work on channel changes. See [scheduling](SCHEDULING.md).
 
-## Session contract
+## Auto quality
 
-Tunes require scoped playback credentials. Never expose management keys. Session status and leases govern activity and cleanup. Releasing a revoked token is idempotent; live tokens require their principal/channel. [OpenAPI](../api/openapi.yaml) defines fields and errors.
+| Device | Minimum | Start | Maximum |
+| --- | ---: | ---: | ---: |
+| Android phone or tablet | 240p | 480p | 720p |
+| Browser | 360p | 720p | 1080p |
+| Android TV | 360p | 720p | 1080p, or 2160p with compatible display, decoder and server |
 
-Dashboard time shows `HH:MM/HH:MM` position/duration through commercials, or `Unavailable`.
+Auto conversions share a ceiling. Admission pressure, repeated buffering or dropped frames can lower it. Healthy players can upgrade after about 30 seconds, or a minute after a downshift. A departure or a one-minute settling window clears temporary pressure. Source, device, connection and measured pipeline limits still apply.
 
-Schedule times are UTC. Presentation delays four seconds; transition preparation may start up to eight seconds before a boundary. Clients must respect server timing and retry hints, cancel obsolete work after channel changes and handle expired sessions without retry storms.
+Server logs show tune outcomes, ceiling changes and the client’s reported buffer and frame sample. See [transcoding](VIDEO_PROCESSING.md) for Quick and Full calibration.
 
-## Processing
+## Processing and validation
 
-FFmpeg work has bounded lifetimes and cooperative resource controls. Foreground reservations can pause governed background work for the specific high-cost HDR conversion path. Preserve cancellation, stream limits and process cleanup when changing delivery.
+FFmpeg uses bounded workers and can pause competing background work for expensive HDR conversions. MPEG-TS HLS converts 7.1 audio to 5.1 AAC. Direct play can preserve supported layouts.
 
-MPEG-TS HLS carries AAC through ADTS. Converted 7.1 sources use 5.1 AAC because
-FFmpeg rejects eight-channel ADTS; direct play can retain supported layouts.
+At airing boundaries, unmeasured conversions can use the single-rendition fallback within CPU, memory and slot budgets. Measured-unsustainable pipelines are blocked. HDR requires a matching conversion pipeline.
 
-At airing transitions, a conversion without a matching capacity sample may use the conservative single-rendition fallback only while aggregate CPU, memory and transcode-slot budgets allow it. A measured-unsustainable pipeline remains blocked. Matching hardware SDR measurements select a sustainable output before admission, including lower-quality fallback; HDR still requires its matching pipeline matrix.
+Keep media mounts read-only and restrict writers. FFmpeg reopens validated paths, so root confinement alone cannot eliminate pathname races.
 
-Keep media paths within configured roots and library mounts read-only. Authorize resources and reject unsafe inputs.
-
-## Validation
-
-Use synthetic fixtures for channel changes, seeking, program transitions, session expiry, concurrent viewers and failure recovery. Check direct, remux and transcode paths separately. Hardware compatibility requires separate evidence.
-
-See [scheduling](SCHEDULING.md), [TLS](TLS.md) and [runtime tests](../tests/integration/README.md). HTTPS tests cover discovery; proxies remain outside pairing.
-
-See [channel navigation](CHANNEL_NAVIGATION.md) for wraparound controls and edge cases.
-
-Brightness and text sizing use device controls, browser zoom and system accessibility settings. Current clients ignore legacy nullable `fontLevel` and `brightnessLevel` profile fields; the API retains them for older clients without deleting saved preferences. Android typography respects system font scaling.
-
-FFmpeg processes reopen validated media pathnames. Read-only mounts and trusted writers remain necessary: root-confined reads do not eliminate that subprocess pathname race.
-
-See [transcoding](VIDEO_PROCESSING.md).
+Use synthetic fixtures to test tune, seek, transitions, lease cleanup and concurrent viewers. Validate direct, remux and transcode separately, with hardware checks for GPU paths. See [runtime tests](../tests/integration/README.md) and [TLS](TLS.md).

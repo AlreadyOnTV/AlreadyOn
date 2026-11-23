@@ -154,7 +154,7 @@ private fun NativeVideo(playback: PhonePlayback, model: PhoneModel, modifier: Mo
         while (true) {
             delay(5000)
             if (!isStaged) {
-                model.sampleAutoQuality(playback.revision, player.totalBufferedDuration, player.playbackState == Player.STATE_BUFFERING, dropped[0] >= 6)
+                model.sampleAutoQuality(playback.revision, player.totalBufferedDuration, player.playbackState == Player.STATE_BUFFERING, dropped[0])
             }
             dropped[0] = 0
         }
@@ -406,8 +406,9 @@ internal fun PhonePlayer(state: PhoneState, model: PhoneModel, modifier: Modifie
                                     "Quality" -> {
                                         PlayerMenuItem(text = { Text("‹ Quality") }, onClick = { page = null })
                                         val heights = buildList {
-                                            if (tv && state.playback?.uhd == true) add(2160)
-                                            addAll(listOf(1080, 720, 480, 360))
+                                            val maximum = model.maximumQuality(state.playback?.uhd == true)
+                                            addAll(listOf(2160, 1080, 720, 480, 360).filter { it <= maximum })
+                                            if (!tv) add(240)
                                         }
                                         (listOf(0) + (heights + state.quality).distinct().sortedDescending().filter { it == 0 || it <= (state.playback?.sourceHeight ?: 720) || it == state.quality }).forEach { height ->
                                             PlayerMenuItem(text = { Text((if (height == state.quality) "✓ " else "") + if (height == 0) "Auto" else if (height == 2160) "4K" else "${height}p") },

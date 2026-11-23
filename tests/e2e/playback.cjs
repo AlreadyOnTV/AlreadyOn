@@ -4041,6 +4041,7 @@ const noWorkers = async (unreleased = () => 0) => {
     const viewer = await browser.newContext();
     const page = await viewer.newPage();
     page.on("pageerror", (e) => errors.push(e.message));
+    await forceEncode(page);
     await login(page);
     await page.locator(".guide-slot-box").first().click();
     await playing(page);
@@ -4069,6 +4070,13 @@ const noWorkers = async (unreleased = () => 0) => {
       !JSON.stringify(a).includes("token"),
       "Activity never exposes playback tokens",
     );
+    const secondViewer = await browser.newContext();
+    const secondPage = await secondViewer.newPage();
+    secondPage.on("pageerror", (e) => errors.push(e.message));
+    await forceEncode(secondPage);
+    await login(secondPage);
+    await secondPage.locator(".guide-slot-box").first().click();
+    await playing(secondPage);
     const monitor = await browser.newContext();
     const dashboard = await monitor.newPage();
     await login(dashboard);
@@ -4081,6 +4089,15 @@ const noWorkers = async (unreleased = () => 0) => {
       .waitFor();
     await dashboard.waitForFunction(() =>
       document.querySelector(".activity-session"),
+    );
+    await dashboard.waitForFunction(() => {
+      const heading = document.querySelector("#active-streams-title");
+      const match = heading?.textContent?.match(/\((\d+)\/(\d+)\)/);
+      return match?.[1] === "2";
+    });
+    assert(
+      (await dashboard.locator(".activity-session").count()) === 2,
+      "Shared rendition must retain both player sessions",
     );
     assert(
       a.sessions[0].videoReason && a.sessions[0].audioReason,
@@ -4123,6 +4140,7 @@ const noWorkers = async (unreleased = () => 0) => {
         path: process.env.ACTIVITY_SCREENSHOT,
         fullPage: true,
       });
+    await leave(secondPage);
     await leave(page);
     await dashboard.waitForFunction(() =>
       document
@@ -4130,6 +4148,7 @@ const noWorkers = async (unreleased = () => 0) => {
         ?.textContent.includes("No active streaming sessions."),
     );
     await monitor.close();
+    await secondViewer.close();
     await viewer.close();
     console.log(
       "PASS: Active session telemetry, identity, Server cards, and cleanup",

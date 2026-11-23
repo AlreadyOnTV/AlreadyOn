@@ -1,10 +1,12 @@
 package io.github.alreadyonapp.alreadyon
 
 import android.app.Application
+import android.hardware.display.DisplayManager
 import android.media.MediaCodecInfo
 import android.media.MediaCodecList
 import android.media.MediaFormat
 import android.os.SystemClock
+import android.view.Display
 import androidx.lifecycle.AndroidViewModel
 import androidx.lifecycle.viewModelScope
 import kotlinx.coroutines.CancellationException
@@ -55,9 +57,12 @@ internal class PhoneModel(application: Application) : AndroidViewModel(applicati
     private var client: ServerClient? = null
     private var action: Job? = null
     private var viewing: Job? = null
-    private var autoHeight = 720
-    private var adaptiveRequest: Int? = null
+    private val autoStartHeight = if (BuildConfig.IS_TV) 720 else 480
+    private val autoMinimumHeight = if (BuildConfig.IS_TV) 360 else 240
+    private var autoHeight = autoStartHeight
+    private var adaptiveRequest: Pair<Int, NativeAutoDecision>? = null
     private var autoCapacityPressure = false
+    private var autoQualityCeiling = 0
     private var preparedRevision: Long? = null
 
     fun adaptivePrepared(revision: Long) {
@@ -65,7 +70,7 @@ internal class PhoneModel(application: Application) : AndroidViewModel(applicati
     }
     private val autoQuality = NativeAutoQuality()
 
-    fun sampleAutoQuality(revision: Long, bufferedMs: Long, buffering: Boolean, droppedFrames: Boolean) {
+    fun sampleAutoQuality(revision: Long, bufferedMs: Long, buffering: Boolean, droppedFrames: Int) {
         val current = state.value
         val media = current.playback ?: return
         if (media.revision != revision) return
@@ -74,8 +79,10 @@ internal class PhoneModel(application: Application) : AndroidViewModel(applicati
             adaptiveRequest = null
             return
         }
-        adaptiveRequest = autoQuality.observe(bufferedMs, buffering || droppedFrames, media.outputRungHeight,
-            minOf(media.sourceRungHeight, if (media.uhd) 2160 else 1080), autoCapacityPressure) ?: adaptiveRequest
+        val height = autoQuality.observe(bufferedMs, buffering, media.outputRungHeight,
+            minOf(media.sourceRungHeight, maximumQuality(media.uhd)), autoCapacityPressure, autoMinimumHeight, autoQualityCeiling, droppedFrames)
+        val decision = autoQuality.decision
+        if (height != null && decision != null) adaptiveRequest = height to decision
     }
     private var guideEntry: Job? = null
     private val mutableGuideNavigationDeadline = MutableStateFlow(0L)
@@ -396,9 +403,23 @@ internal class PhoneModel(application: Application) : AndroidViewModel(applicati
         (channels.find { it.id == profile.lastChannel && it.programs.isNotEmpty() }
             ?: channels.firstOrNull { it.programs.isNotEmpty() })?.let { watch(it, restart = true) }
     }
+    private fun tvDisplaySupportsUhd(): Boolean {
+        val displays = getApplication<Application>().getSystemService(DisplayManager::class.java)
+        return displays?.getDisplay(Display.DEFAULT_DISPLAY)?.supportedModes?.any {
+            it.physicalWidth >= 3840 && it.physicalHeight >= 2160
+        } == true
+    }
+
+    internal fun maximumQuality(serverUhd: Boolean): Int {
+        if (!BuildConfig.IS_TV) return 720
+        if (!serverUhd || !tvDisplaySupportsUhd()) return 1080
+        val video = decoderCapabilities().getJSONArray("video")
+        return if ((0 until video.length()).any { video.getJSONObject(it).optInt("height") >= 2160 }) 2160 else 1080
+    }
+
     fun setQuality(height: Int) {
-        if (height == 0) autoHeight = 720
-        update { it.copy(quality = height) }
+        if (height == 0) autoHeight = autoStartHeight
+        update { it.copy(quality = if (height == 0) 0 else height.coerceIn(autoMinimumHeight, maximumQuality(it.playback?.uhd == true))) }
         state.value.channel?.let { watch(it, restart = true) }
     }
     fun setAudio(track: PhoneTrack) {
@@ -520,10 +541,11 @@ internal class PhoneModel(application: Application) : AndroidViewModel(applicati
         val api = client ?: return
         val profile = state.value.profile ?: return
         if (state.value.mustChangePassword || state.value.settings != null) return
-        if (state.value.channel?.id != channel.id) autoHeight = 720
+        if (state.value.channel?.id != channel.id) autoHeight = autoStartHeight
         adaptiveRequest = null
         autoCapacityPressure = false
-        autoQuality.reset()
+        autoQualityCeiling = 0
+        autoQuality.reset(newWatch = true)
         val requestedAt = SystemClock.elapsedRealtime()
         val viewerId = UUID.randomUUID().toString()
         val previous = viewing
@@ -537,7 +559,7 @@ internal class PhoneModel(application: Application) : AndroidViewModel(applicati
                     try { withTimeout(5000) { api.request("/api/playback/sessions", "DELETE", JSONObject().put("channelId", channel.id).put("token", token)) } }
                     catch (_: Exception) { /* Failed releases expire with the viewer lease. */ }
                 }
-                suspend fun prepare(ceiling: Int, timeoutMs: Long, replacement: Boolean = false, replacementToken: String? = null): Triple<String, PhonePlayback, Long>? {
+                suspend fun prepare(ceiling: Int, timeoutMs: Long, replacement: Boolean = false, replacementToken: String? = null, decision: NativeAutoDecision? = null): Triple<String, PhonePlayback, Long>? {
                     var token: String? = null
                     var ready = false
                     try {
@@ -545,13 +567,14 @@ internal class PhoneModel(application: Application) : AndroidViewModel(applicati
                         token = withContext(NonCancellable) {
                             JSONObject(api.request("/api/playback/sessions", "POST", JSONObject().put("channelId", channel.id))).getString("token")
                         }
-                        val caps = decoderCapabilities()
+                        val caps = JSONObject(decoderCapabilities().toString()).put("clientKind", if (BuildConfig.IS_TV) "tv" else "phone")
                         if (state.value.quality == 0) caps.put("autoMaxHeight", ceiling).put("autoReplacement", replacement)
                         val body = JSONObject().put("token", token).put("profileId", profile.id)
                             .put("audioLanguage", profile.language)
                             .put("maxHeight", state.value.quality)
                             .put("capabilities", caps)
                         if (replacement && replacementToken != null) body.put("replacementToken", replacementToken)
+                        if (decision != null) body.put("autoDecision", decision.toJson())
                         if (state.value.audioIndex != null && state.value.audioFileId != null) body
                             .put("audioTrackIndex", state.value.audioIndex).put("audioMediaFileId", state.value.audioFileId)
                         var tune = JSONObject(api.request("/api/channels/${channel.id}/tune", "POST", body))
@@ -600,7 +623,9 @@ internal class PhoneModel(application: Application) : AndroidViewModel(applicati
                     }
                 }
                 while (true) {
-                    val (initialToken, initialMedia, remainingMs) = prepare(autoHeight, 90_000) ?: continue
+                    val capacityDeadline = SystemClock.elapsedRealtime() + 45_000
+                    val initial = whileCapacityBusy(capacityDeadline) { prepare(autoHeight, 90_000) }
+                    val (initialToken, initialMedia, remainingMs) = initial ?: continue
                     var token = initialToken
                     var media = initialMedia
                     try {
@@ -616,10 +641,11 @@ internal class PhoneModel(application: Application) : AndroidViewModel(applicati
                             val elapsed = SystemClock.elapsedRealtime()
                             if (elapsed < boundary) {
                                 reportActivity(api, viewerId, channel.id, token, profile.id, state.value.paused)
-                                val nextHeight = adaptiveRequest
+                                val adaptive = adaptiveRequest
                                 adaptiveRequest = null
-                                if (nextHeight != null && state.value.quality == 0 && !state.value.paused) {
-                                    val next = try { prepare(nextHeight, 8_000, replacement = true, replacementToken = token) }
+                                if (adaptive != null && state.value.quality == 0 && !state.value.paused) {
+                                    val (nextHeight, decision) = adaptive
+                                    val next = try { prepare(nextHeight, 8_000, replacement = true, replacementToken = token, decision = decision) }
                                     catch (error: CancellationException) { throw error }
                                     catch (_: Exception) { null } // Keep the working rendition if the candidate cannot start.
                                     if (next != null) {
@@ -655,7 +681,9 @@ internal class PhoneModel(application: Application) : AndroidViewModel(applicati
                                     }
                                 }
                                 if (elapsed - lastStatusAt >= (if (state.value.quality == 0 && media.outputRungHeight > 0) 5000 else 10000)) {
-                                    autoCapacityPressure = status(api, channel.id, token).optBoolean("autoCapacityPressure")
+                                    val status = status(api, channel.id, token)
+                                    autoCapacityPressure = status.optBoolean("autoCapacityPressure")
+                                    autoQualityCeiling = status.optInt("autoQualityCeiling")
                                     lastStatusAt = elapsed
                                 }
                             }
@@ -671,6 +699,17 @@ internal class PhoneModel(application: Application) : AndroidViewModel(applicati
                 update { it.copy(playback = null, error = safeError(e)) }
             } finally {
                 if (activityStarted) withContext(NonCancellable) { endActivity(api, viewerId) }
+            }
+        }
+    }
+
+    private suspend fun <T> whileCapacityBusy(deadline: Long, prepare: suspend () -> T): T {
+        while (true) {
+            try {
+                return prepare()
+            } catch (failure: ServerFailure) {
+                if (failure.code != "stream_capacity" || SystemClock.elapsedRealtime() >= deadline) throw failure
+                delay(1_000)
             }
         }
     }
@@ -761,7 +800,7 @@ internal class PhoneModel(application: Application) : AndroidViewModel(applicati
         val codecs = MediaCodecList(MediaCodecList.REGULAR_CODECS)
         val video = JSONArray()
         val audio = JSONArray()
-        for (candidate in androidVideoCapabilitySpecs(BuildConfig.IS_TV)) {
+        for (candidate in androidVideoCapabilitySpecs(BuildConfig.IS_TV && tvDisplaySupportsUhd())) {
             val (width, height, level, profile, profileName, fps, bitrate) = candidate
             val format = MediaFormat.createVideoFormat("video/avc", width, height).apply {
                 setInteger(MediaFormat.KEY_FRAME_RATE, fps)
