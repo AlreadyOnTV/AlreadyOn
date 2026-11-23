@@ -255,3 +255,22 @@ func TestMixedConversionsUseMeasuredDemand(t *testing.T) {
 		t.Fatalf("mixed load should reject overcommit: %v", err)
 	}
 }
+
+func TestFullCalibrationLimitsAlternateBackendCoverage(t *testing.T) {
+	primary := Plan{Height: UHDHeight, Decoder: "hardware", ToneMap: true, ToneMapper: "gpu"}
+	if got := fullCalibrationHeights(true, 0, primary); len(got) != 3 ||
+		got[0] != AutoCapacityHeight || got[1] != UHDHeight || got[2] != AutoMinHeight {
+		t.Fatalf("primary HDR rungs: %v", got)
+	}
+	if got := fullCalibrationHeights(false, 0, primary); len(got) != 1 || got[0] != AutoCapacityHeight {
+		t.Fatalf("alternate backend rungs: %v", got)
+	}
+	primary.ToneMapper = "cpu"
+	if got := fullCalibrationHeights(true, 1, primary); len(got) != 2 || got[1] != UHDHeight {
+		t.Fatalf("CPU tone-map fallback: %v", got)
+	}
+	if representativeComparison(SourceHEVCPQ, 60) || representativeComparison(SourceHEVCHLG, 24) ||
+		!representativeComparison(SourceHEVCPQ, 30) || !representativeComparison(SourceHEVCSDR, 30) {
+		t.Fatal("alternate backends should compare SDR and 30 fps HDR")
+	}
+}

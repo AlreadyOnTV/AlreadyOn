@@ -333,3 +333,26 @@ func TestInitialFullBenchmark(t *testing.T) {
 		})
 	}
 }
+
+func TestFullBenchmarkHasTimeForTeardownBeforeTenMinutes(t *testing.T) {
+	synctest.Test(t, func(t *testing.T) {
+		ctx, cancel := context.WithCancel(context.Background())
+		defer cancel()
+		b := &Benchmarks{Context: ctx, Governor: governor.Fixed(1), Steps: []func(context.Context){
+			func(ctx context.Context) { <-ctx.Done() },
+		}}
+		b.ready.Store(true)
+		if !b.Start(false) {
+			t.Fatal("could not start the full benchmark")
+		}
+		time.Sleep(9*time.Minute + 39*time.Second)
+		if !b.Running() {
+			t.Fatal("full benchmark ended before its deadline")
+		}
+		time.Sleep(time.Second)
+		synctest.Wait()
+		if b.Running() || b.Status().Outcome != "time-limit" {
+			t.Fatalf("expected the full benchmark to time out: %+v", b.Status())
+		}
+	})
+}

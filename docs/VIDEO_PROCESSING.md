@@ -2,7 +2,7 @@
 
 Server Settings has one Video Transcoding choice: CPU Only (default), Intel, AMD or NVIDIA. Vendor changes save immediately and request a quick capacity check with a two-minute deadline; they do not start full analysis. The legacy `hardwareDecoding` API field remains compatible, but a vendor-only update enables decoding automatically. CPU Only disables GPU processing.
 
-Startup and Quick Test measure 360p SDR capacity, then check 720p within the remaining time budget. Full Test also measures 240p and higher rungs. The server-wide slot ceiling follows validated 360p concurrency. Admission budgets mixed conversions using their measured demand and retains memory headroom.
+Startup and Quick Test measure 360p SDR capacity, then check 720p within the remaining time budget. Full Test samples higher rungs and selected 240p paths, compares alternate drivers on representative inputs, and ends within its ten-minute budget. The server-wide slot ceiling follows validated 360p concurrency. Admission budgets mixed conversions using their measured demand and retains memory headroom.
 
 Auto conversions try 720p SDR first and fall back to measured lower rungs when needed. WebUI, phone and TV sample playback every five seconds, targeting three to five seconds buffered. Two pressured samples lower the quality. Three healthy samples request a higher rung within source and client limits. Higher Auto rungs can yield capacity after a refused tune. The current rendition plays during preparation.
 
@@ -13,7 +13,7 @@ pipelines and ignores concurrency differences. It recommends Full Test only when
 result is verified differently, selects a different output height/frame rate, or
 its one-stream speed differs from the full result by at least 25 percent.
 
-Full Test covers source, output, driver, decode, tone-map and concurrent workloads. Each steady-state
+Each steady-state
 sample uses a half-second warmup and a two-second frame window (48 frames at
 24 fps or 120 frames at 60 fps); borderline concurrent results retain the
 independent confirmation sample and the same 1.3x real-time safety threshold.

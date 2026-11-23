@@ -119,9 +119,9 @@ func (c *Calibration) sample(ctx context.Context, test calibrationCase, count in
 	return measureStreams(trial, test.path, test.source, test.plan, test.threads, count, warmup, window)
 }
 
-// Cases cover every immutable fixture, including PQ/HLG at 24/30/60fps.
-// The mini pass starts with the preferred working encoder; full analysis adds
-// alternate APIs and CPU stages without assuming an API name proves performance.
+// Each source fixture keeps a baseline and a quality ceiling on the preferred
+// pipeline. Alternate backends are compared on representative inputs so their
+// costs do not multiply across every frame rate and output rung.
 func (c *Calibration) cases(ctx context.Context, inputs *benchmarkInputs, threads int, full bool) ([]calibrationCase, error) {
 	encoder := c.Capacity.currentEncoder(ctx)
 	encoders := []string{encoder}
@@ -155,7 +155,11 @@ func (c *Calibration) cases(ctx context.Context, inputs *benchmarkInputs, thread
 		if class == SourceSDRSmall {
 			height = 480
 		}
-		for _, encoder := range encoders {
+		for index, encoder := range encoders {
+			primary := index == 0
+			if full && !primary && !representativeComparison(class, v.FrameRate) {
+				continue
+			}
 			outputHeight := benchmarkOutputHeight(height, v.Height, encoder, full)
 			plan := Plan{Mode: "transcode", Width: outputHeight * 16 / 9 / 2 * 2, Height: outputHeight, FPS: math.Min(30, v.FrameRate), Profile: outputProfile(outputHeight), VideoBitrate: heightBitrate(outputHeight), AudioBitrate: 192000, AudioChannels: 2, Encoder: encoder}
 			if full {
@@ -193,16 +197,19 @@ func (c *Calibration) cases(ctx context.Context, inputs *benchmarkInputs, thread
 				}
 				variants = append(variants, p)
 			}
-			for _, p := range variants {
+			for variant, p := range variants {
+				heights := []int{AutoCapacityHeight}
+				if full {
+					heights = fullCalibrationHeights(primary, variant, p)
+					if len(heights) == 0 {
+						continue
+					}
+				} else if v.Height >= AutoStartHeight {
+					heights = append(heights, AutoStartHeight)
+				}
 				n := threads
 				if p.Decoder == "hardware" {
 					n = DefaultThreads
-				}
-				heights := []int{AutoCapacityHeight}
-				if full {
-					heights = append(heights, AutoMinHeight, p.Height)
-				} else if v.Height >= AutoStartHeight {
-					heights = append(heights, AutoStartHeight)
 				}
 				for _, height := range heights {
 					rung := p
@@ -219,12 +226,43 @@ func (c *Calibration) cases(ctx context.Context, inputs *benchmarkInputs, thread
 			}
 		}
 	}
-	if !full {
-		// Validate baseline capacity for all fixtures before using the remaining
-		// startup budget to check the higher starting rung.
-		sort.SliceStable(cases, func(i, j int) bool { return cases[i].plan.Height < cases[j].plan.Height })
-	}
+	// A deadline should leave a representative result for as many sources as
+	// possible. Stable sorting keeps the preferred backend first within a rung.
+	sort.SliceStable(cases, func(i, j int) bool {
+		priority := func(height int) int {
+			switch height {
+			case AutoCapacityHeight:
+				return 0
+			case AutoMinHeight:
+				return 2
+			default:
+				return 1
+			}
+		}
+		return priority(cases[i].plan.Height) < priority(cases[j].plan.Height)
+	})
 	return cases, nil
+}
+
+func representativeComparison(class SourceClass, fps float64) bool {
+	if class == SourceHEVCPQ || class == SourceHEVCHLG {
+		return fps >= 29 && fps <= 31
+	}
+	return true
+}
+
+func fullCalibrationHeights(primary bool, variant int, plan Plan) []int {
+	if variant != 0 && (!primary || !plan.ToneMap || plan.Decoder != "hardware" || plan.ToneMapper != "cpu") {
+		return nil
+	}
+	heights := []int{AutoCapacityHeight}
+	if primary {
+		heights = append(heights, plan.Height)
+		if variant == 0 && plan.ToneMap {
+			heights = append(heights, AutoMinHeight)
+		}
+	}
+	return heights
 }
 
 func benchmarkOutputHeight(baseHeight, sourceHeight int, encoder string, full bool) int {
@@ -298,7 +336,8 @@ func (c *Calibration) evaluate(ctx context.Context, test calibrationCase, old []
 		logging.Warn("calibration %s: %v", test.class, err)
 		return p
 	}
-	if !test.mini && test.plan.Decoder == "hardware" && len(old) == 0 && c.Tuner.cpuCount() >= 4 {
+	if test.full && test.plan.Height == AutoCapacityHeight && representativeComparison(test.class, video.FrameRate) &&
+		test.plan.Decoder == "hardware" && len(old) == 0 && c.Tuner.cpuCount() >= 4 {
 		alternate := test
 		alternate.threads = 4
 		alternate.resources = &resourceMeasurement{}
@@ -341,7 +380,7 @@ func (c *Calibration) evaluate(ctx context.Context, test calibrationCase, old []
 		v := *resources.GPU / math.Max(minimumSpeed(speeds), .01)
 		p.GPUEngines = &v
 	}
-	if test.full {
+	if test.full && minimumSpeed(speeds) >= CapacityRealTime && minimumSpeed(speeds) < 1.5 {
 		confirmation, e := c.sample(ctx, test, 1)
 		if e != nil || minimumSpeed(confirmation) <= 0 {
 			return p
@@ -349,6 +388,8 @@ func (c *Calibration) evaluate(ctx context.Context, test calibrationCase, old []
 		if minimumSpeed(confirmation) < minimumSpeed(speeds) {
 			speeds = confirmation
 		}
+	}
+	if test.full && p.TargetHeight > AutoCapacityHeight && minimumSpeed(speeds) >= CapacityRealTime && representativeComparison(test.class, video.FrameRate) {
 		p.ReferenceSSIM = c.referenceQuality(ctx, test)
 	}
 	p.SingleSpeed = minimumSpeed(speeds)

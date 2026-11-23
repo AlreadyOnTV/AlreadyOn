@@ -12,6 +12,7 @@ import (
 )
 
 const initialFullDelay = 30 * time.Minute
+const fullBenchmarkBudget = 9*time.Minute + 40*time.Second
 
 var ErrServerStarting = errors.New("Server starting, please wait.")
 var ErrBenchmarkRunning = errors.New("Video transcoding test is running. Try playback again when it finishes.")
@@ -68,15 +69,14 @@ func (b *Benchmarks) startIf(startup bool, mode string, requested, manual bool, 
 	if b.Context.Err() != nil || eligible != nil && !eligible() {
 		return false
 	}
-	ctx, cancel := context.WithCancel(b.Context)
+	budget := fullBenchmarkBudget
 	if mode == "mini" {
-		budget := b.StartupBudget
+		budget = b.StartupBudget
 		if budget <= 0 {
 			budget = 120 * time.Second
 		}
-		cancel()
-		ctx, cancel = context.WithTimeout(b.Context, budget)
 	}
+	ctx, cancel := context.WithTimeout(b.Context, budget)
 	done := make(chan struct{})
 	b.done, b.cancel = done, cancel
 	b.mode, b.startedAt = mode, time.Now()
