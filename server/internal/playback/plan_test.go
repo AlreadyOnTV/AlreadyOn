@@ -439,7 +439,7 @@ func TestSurroundConversionRequiresHLSProbe(t *testing.T) {
 	caps.Mbps = 100
 	caps.Audio = append(caps.Audio, AudioCapability{Codec: "aac", Channels: 8, SampleRate: 48000, Bitrate: 768000, Container: "mp4", HLS: true})
 	p, e := Choose(src, caps, true, false)
-	if e != nil || p.AudioChannels != 8 || p.AudioBitrate != 768000 {
+	if e != nil || p.AudioChannels != 6 || p.AudioBitrate != 512000 {
 		t.Fatalf("%+v %v", p, e)
 	}
 	caps.Audio[1].HLS = false

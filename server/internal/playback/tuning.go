@@ -119,10 +119,6 @@ func (t *Tuner) Start(force bool) bool {
 	return t.start(t.Context, force, true)
 }
 
-// Measure runs synchronously inside the coordinated benchmark group.
-func (t *Tuner) Measure(ctx context.Context) bool {
-	return t.start(ctx, false, false)
-}
 func (t *Tuner) start(base context.Context, force, asynchronous bool) bool {
 	t.mu.Lock()
 	if t.started {
@@ -130,7 +126,7 @@ func (t *Tuner) start(base context.Context, force, asynchronous bool) bool {
 		return false
 	}
 	if !force && t.Busy != nil && t.Busy() {
-		t.status.Detail = "Skipped while a stream is playing; measure again with POST /api/settings/transcoding/threads/tune."
+		t.status.Detail = "Skipped while a stream is playing; run a Video Transcoding Quick Test when playback is clear."
 		t.mu.Unlock()
 		return false
 	}

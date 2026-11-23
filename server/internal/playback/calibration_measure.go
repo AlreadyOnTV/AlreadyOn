@@ -7,6 +7,7 @@ import (
 	"fmt"
 	"io"
 	"os"
+	"path/filepath"
 	"strconv"
 	"strings"
 	"sync"
@@ -21,6 +22,7 @@ type frameProgress struct {
 	frames int64
 	err    error
 	exited bool
+	pid    int
 }
 
 func (p *frameProgress) snapshot() (int64, error, bool) {
@@ -40,6 +42,18 @@ func measureStreams(ctx context.Context, sample string, probe library.ProbeResul
 		return nil, err
 	}
 	defer os.RemoveAll(dir)
+	// Repeating a compressed clip with -stream_loop flushes/reinitializes some
+	// hardware decoders at EOF. A concat timeline keeps decoder/filter surfaces
+	// stable across the short immutable samples instead of measuring that failure.
+	if strings.ContainsAny(sample, "\r\n") {
+		return nil, fmt.Errorf("invalid benchmark sample path")
+	}
+	entry := "file '" + strings.ReplaceAll(sample, "'", "'\\''") + "'\n"
+	timeline := filepath.Join(dir, "sample.ffconcat")
+	if err := os.WriteFile(timeline, []byte(strings.Repeat(entry, 4096)), 0600); err != nil {
+		return nil, err
+	}
+
 	progress := make([]*frameProgress, count)
 	var workers sync.WaitGroup
 	defer func() { cancel(); workers.Wait() }()
@@ -50,7 +64,7 @@ func measureStreams(ctx context.Context, sample string, probe library.ProbeResul
 		}
 		job := Job{Path: sample, Source: probe, Plan: plan, Threads: threads, OutputDir: out, Duration: time.Hour}
 		if plan.Encoder != "" && plan.Encoder != EncoderNvidiaNVENC {
-			job.Device = RenderNode()
+			job.Device = RenderNodeFor(plan.Encoder)
 		}
 		args, err := Arguments(job)
 		if err != nil {
@@ -63,7 +77,9 @@ func measureStreams(ctx context.Context, sample string, probe library.ProbeResul
 				continue
 			}
 			if args[i] == "-i" {
-				fast = append(fast, "-stream_loop", "-1")
+				fast = append(fast, "-f", "concat", "-safe", "0", "-i", timeline)
+				i++
+				continue
 			}
 			fast = append(fast, args[i])
 		}
@@ -94,7 +110,8 @@ func measureStreams(ctx context.Context, sample string, probe library.ProbeResul
 		go func() {
 			defer workers.Done()
 			defer writer.Close()
-			err := governor.BenchmarkCommand(ctx, cmd)
+			observed := governor.WithCommandObserver(ctx, func(pid int) { state.mu.Lock(); state.pid = pid; state.mu.Unlock() })
+			err := governor.BenchmarkCommand(observed, cmd)
 			state.mu.Lock()
 			state.exited = true
 			if ctx.Err() == nil {
@@ -144,6 +161,7 @@ func measureStreams(ctx context.Context, sample string, probe library.ProbeResul
 	for i, p := range progress {
 		initial[i], _, _ = p.snapshot()
 	}
+	before := readResources(progress)
 	started := time.Now()
 	if err := wait(window); err != nil {
 		return nil, err
@@ -157,5 +175,76 @@ func measureStreams(ctx context.Context, sample string, probe library.ProbeResul
 		}
 		speeds[i] = float64(frames-initial[i]) / plan.FPS / elapsed
 	}
+	if m, ok := ctx.Value(resourceKey{}).(*resourceMeasurement); ok {
+		after := readResources(progress)
+		m.CPU = float64(after.cpu-before.cpu) / float64(time.Second) / elapsed
+		if before.gpuKnown && after.gpuKnown && after.gpu >= before.gpu {
+			v := float64(after.gpu-before.gpu) / 1e9 / elapsed
+			m.GPU = &v
+		}
+	}
 	return speeds, nil
+}
+
+type resourceKey struct{}
+type resourceMeasurement struct {
+	CPU float64
+	GPU *float64
+}
+type resourceCounters struct {
+	cpu      time.Duration
+	gpu      uint64
+	gpuKnown bool
+}
+
+// DRM fdinfo reports engine time attributable to these benchmark processes.
+// Unknown telemetry remains nil; zero must never mean "not available".
+func readResources(states []*frameProgress) resourceCounters {
+	result := resourceCounters{gpuKnown: true}
+	for _, state := range states {
+		state.mu.Lock()
+		pid := state.pid
+		state.mu.Unlock()
+		cpu, err := governor.ProcessCPUTime(pid)
+		if err == nil {
+			result.cpu += cpu
+		}
+		gpu, ok := processGPUTime(pid)
+		result.gpu += gpu
+		result.gpuKnown = result.gpuKnown && ok
+	}
+	return result
+}
+func processGPUTime(pid int) (uint64, bool) {
+	paths, _ := filepath.Glob(fmt.Sprintf("/proc/%d/fdinfo/*", pid))
+	clients := map[string]uint64{}
+	for _, path := range paths {
+		raw, err := os.ReadFile(path)
+		if err != nil {
+			continue
+		}
+		id := ""
+		var engine uint64
+		for _, line := range strings.Split(string(raw), "\n") {
+			fields := strings.Fields(line)
+			if len(fields) < 2 {
+				continue
+			}
+			if fields[0] == "drm-client-id:" {
+				id = fields[1]
+			}
+			if strings.HasPrefix(fields[0], "drm-engine-") && len(fields) == 3 && fields[2] == "ns" {
+				v, _ := strconv.ParseUint(fields[1], 10, 64)
+				engine += v
+			}
+		}
+		if id != "" && engine > clients[id] {
+			clients[id] = engine
+		}
+	}
+	var sum uint64
+	for _, v := range clients {
+		sum += v
+	}
+	return sum, len(clients) > 0
 }

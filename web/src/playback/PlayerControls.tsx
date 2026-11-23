@@ -38,7 +38,6 @@ export interface ControlsProps {
   onToggleMute: () => void;
   onQuality: (height: number) => void;
   onSubtitleLanguage: (language: string | null) => void;
-  onPictureInPicture: () => void;
   detailsOn: boolean;
   onToggleDetails: () => void;
   onFullscreen: () => void;
@@ -215,9 +214,6 @@ export function PlayerControls(p: ControlsProps) {
     (track) => track.index === p.audioTrackIndex,
   );
   const toggle = (next: Menu) => setMenu((m) => (m ? null : next));
-  const pipSupported =
-    typeof document !== "undefined" && document.pictureInPictureEnabled;
-
   return (
     <div
       className={"playback-controls" + (menu ? " is-open" : "")}
@@ -311,18 +307,6 @@ export function PlayerControls(p: ControlsProps) {
           >
             Subtitles ({captionsOn ? "on" : "off"})
           </button>
-          {pipSupported && (
-            <button
-              {...noFocus}
-              role="menuitem"
-              onClick={() => {
-                p.onPictureInPicture();
-                setMenu(null);
-              }}
-            >
-              Picture In Picture
-            </button>
-          )}
           <button
             {...noFocus}
             role="menuitem"

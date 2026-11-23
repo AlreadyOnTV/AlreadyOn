@@ -208,7 +208,7 @@ func TestCheckDecodeReportsPassAndFailure(t *testing.T) {
 
 func TestQuickSyncSessionFailureNamesTheSupportedGPUs(t *testing.T) {
 	stderr := "[QSV @ 0x1] Error creating a MFX session: -9.\nFailed to set value 'qsv=hw' for option 'init_hw_device': Unknown error occurred"
-	if detail, _ := hardwareHint(EncoderIntelQSV, stderr); !strings.Contains(detail, "Tiger Lake") || !strings.Contains(detail, "VA-API") {
+	if detail, _ := hardwareHint(EncoderIntelQSV, stderr); !strings.Contains(detail, "runtime") || !strings.Contains(detail, "VA-API") {
 		t.Fatalf("detail = %q, want the supported generations and the VA-API alternative", detail)
 	}
 	if detail, _ := hardwareHint(EncoderIntelVAAPI, stderr); strings.Contains(detail, "Tiger Lake") {
@@ -279,7 +279,7 @@ func TestIntelTestButtonNamesTheEncoderStreamsWillUse(t *testing.T) {
 	h = &Hardware{Executable: fakeQuickSync(t, "all"), Device: device}
 	for _, decoding := range []bool{false, true} {
 		st := h.TestSetting(ctx, SettingIntel, decoding)
-		if !st.OK || st.Encoder != EncoderIntelVAAPI || !strings.Contains(st.Detail, "Intel uses VA-API") || !strings.Contains(st.Detail, "Tiger Lake") {
+		if !st.OK || st.Encoder != EncoderIntelVAAPI || !strings.Contains(st.Detail, "Intel uses VA-API") || !strings.Contains(st.Detail, "runtime") {
 			t.Errorf("fallback (decoding=%v): %+v", decoding, st)
 		}
 	}

@@ -41,8 +41,9 @@ type Capabilities struct {
 	Encoder string `json:"-"`
 	// HWDecode: Hardware Decoding is on, Encoder is set, and the GPU can decode this
 	// source. HWToneMap: the GPU's own HDR tone mapper passed its test.
-	HWDecode  bool `json:"-"`
-	HWToneMap bool `json:"-"`
+	HWDecode        bool   `json:"-"`
+	HWToneMap       bool   `json:"-"`
+	HWToneMapMethod string `json:"-"`
 	// HDRMeasured allows a measured mixed GPU/CPU limit without capping SDR.
 	HDRMeasured bool `json:"-"`
 }
@@ -354,11 +355,13 @@ func choose(source library.ProbeResult, caps Capabilities, allowDirect, forceEnc
 		p.Reason = "convert video: " + keyframeWhy
 	}
 	if !p.AudioCopy {
-		for _, channels := range []int{8, 6, 2} {
+		// MPEG-TS HLS carries AAC through ADTS. FFmpeg rejects the 7.1/8-channel
+		// configuration in that transport, so converted surround uses 5.1.
+		for _, channels := range []int{6, 2} {
 			if channels > 2 && (a.Channels < channels || p.Normalization != nil) {
 				continue
 			}
-			bitrate := map[int]int64{2: 192000, 6: 512000, 8: 768000}[channels]
+			bitrate := map[int]int64{2: 192000, 6: 512000}[channels]
 			// Keep audio inside the connection budget, including VBR overhead.
 			if bitrate*2 > budget/2 {
 				continue
@@ -469,8 +472,11 @@ func choose(source library.ProbeResult, caps Capabilities, allowDirect, forceEnc
 	}
 	if p.ToneMap {
 		p.ToneMapper = "cpu"
-		if p.Decoder == "hardware" && caps.HWToneMap && v.ColorTransfer == "smpte2084" {
+		if p.Decoder == "hardware" && caps.HWToneMap && (p.Encoder != EncoderIntelQSV || v.HDRStaticMetadata || caps.HWToneMapMethod == "opencl") && (v.ColorTransfer == "smpte2084" || caps.HWToneMapMethod == "opencl") {
 			p.ToneMapper = "gpu"
+			if caps.HWToneMapMethod == "opencl" {
+				p.ToneMapper = "opencl"
+			}
 		}
 	}
 	if caps.Ladder && caps.Encoder == "" && !p.ToneMap && p.Height >= ladderMinHeight {

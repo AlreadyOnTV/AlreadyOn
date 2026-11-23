@@ -192,7 +192,11 @@ const assert = require("node:assert/strict");
         const head = document
           .querySelector(".guide-head-row")
           .getBoundingClientRect();
-        return scroll.scrollLeft === 0 && Math.abs(row.top - head.bottom) <= 1;
+        const viewportBottom = scroll.getBoundingClientRect().bottom;
+        const atBottom = scroll.scrollTop >= scroll.scrollHeight - scroll.clientHeight - 1;
+        return scroll.scrollLeft === 0 && row.top >= head.bottom - 1 &&
+          row.bottom <= viewportBottom + 1 &&
+          (Math.abs(row.top - head.bottom) <= 1 || atBottom);
       });
       const geometry = await tuned.evaluate((cell) => {
         const scroll = document
@@ -406,11 +410,43 @@ const assert = require("node:assert/strict");
     await page.clock.fastForward(1_800_000);
     await leave();
     await assertRestored(103);
-    // Last row must also reach the top, not be clamped to the viewport bottom.
+    // The final row stops naturally at the viewport bottom without exposing a
+    // trailing blank region. Focus can then move upward through visible rows
+    // without forcing another downward translation.
     await enter();
     await changeChannels("ArrowDown", 17);
     await leave();
     await assertRestored(120);
+    const lastRowGeometry = await page.evaluate(() => {
+      const scroll = document.querySelector(".guide-scroll");
+      const row = document.querySelector(".guide-slot-box-focused").closest(".guide-row").getBoundingClientRect();
+      const viewport = scroll.getBoundingClientRect();
+      return {
+        atBottom: Math.abs(scroll.scrollTop - (scroll.scrollHeight - scroll.clientHeight)) <= 1,
+        rowAtBottom: Math.abs(row.bottom - viewport.bottom) <= 1,
+        noTrailingSpace: Math.abs(scroll.scrollHeight - Math.round(row.bottom - viewport.top + scroll.scrollTop)) <= 1,
+      };
+    });
+    assert(lastRowGeometry.atBottom && lastRowGeometry.rowAtBottom && lastRowGeometry.noTrailingSpace,
+      `Last guide row exposed trailing space: ${JSON.stringify(lastRowGeometry)}`);
+    const bottomScroll = await page.locator(".guide-scroll").evaluate(element => element.scrollTop);
+    await page.keyboard.press("ArrowUp");
+    assert.equal(await page.locator(".guide-scroll").evaluate(element => element.scrollTop), bottomScroll,
+      "Moving focus through the visible bottom rows does not translate the guide");
+    await page.keyboard.press("ArrowDown");
+    assert.equal(await page.locator(".guide-scroll").evaluate(element => element.scrollTop), bottomScroll,
+      "Returning focus to the last row remains clamped at the guide bottom");
+    for (let i = 0; i < 10; i++) await page.keyboard.press("ArrowUp");
+    const upwardScroll = await page.locator(".guide-scroll").evaluate(element => element.scrollTop);
+    assert(upwardScroll < bottomScroll, "Upward navigation resumes normal guide scrolling");
+    for (let i = 0; i < 10; i++) await page.keyboard.press("ArrowDown");
+    await page.keyboard.press("ArrowDown");
+    await page.waitForFunction(() =>
+      document.querySelector(".guide-slot-box-focused")?.closest(".guide-row")?.querySelector(".guide-channel-num")?.textContent === "101"
+    );
+    await page.waitForFunction(() =>
+      document.querySelector(".guide-scroll").scrollTop === 0
+    );
     // Ordinary guide navigation still reveals future programs and remote focus.
     await page.keyboard.press("ArrowRight");
     assert.equal(await page.locator(".guide-slot-box-focused").count(), 1);
@@ -429,10 +465,31 @@ const assert = require("node:assert/strict");
       await assertTimeline(hour + slot * 900_000);
       if (slot === 2) await page.setViewportSize({ width: 390, height: 844 });
     }
+    lineup.splice(2);
+    await page.reload();
+    await page.waitForFunction(() =>
+      document.querySelectorAll(".guide-row").length === 2
+    );
+    const shortGeometry = await page.locator(".guide-scroll").evaluate(scroll => ({
+      scrollable: scroll.scrollHeight - scroll.clientHeight,
+      top: scroll.scrollTop,
+    }));
+    assert(shortGeometry.scrollable <= 1 && shortGeometry.top === 0,
+      `Short guide should fit without trailing vertical space: ${JSON.stringify(shortGeometry)}`);
+    await page.keyboard.press("ArrowDown");
+    await page.waitForFunction(() =>
+      document.querySelector(".guide-slot-box-focused")?.closest(".guide-row")?.querySelector(".guide-channel-num")?.textContent === "102"
+    );
+    await page.keyboard.press("ArrowDown");
+    await page.waitForFunction(() =>
+      document.querySelector(".guide-slot-box-focused")?.closest(".guide-row")?.querySelector(".guide-channel-num")?.textContent === "101"
+    );
+    assert.equal(await page.locator(".guide-scroll").evaluate(scroll => scroll.scrollTop), 0,
+      "Short-list wrap does not introduce vertical scroll");
     assert.equal(errors.length, 0, errors.join("\n"));
     if (process.argv[3]) await page.screenshot({ path: process.argv[3] });
     console.log(
-      "PASS: CH101 → fullscreen → CH115 → quarter-hour alignment and midnight on desktop and mobile, lower channels, last-row top alignment, live overlap, cached program transition, polling and keyboard focus",
+      "PASS: CH101 → fullscreen → CH115 → quarter-hour alignment and midnight on desktop and mobile, natural bottom boundary, short-list wrap, live overlap, cached program transition, polling and keyboard focus",
     );
     await context.close();
   } finally {

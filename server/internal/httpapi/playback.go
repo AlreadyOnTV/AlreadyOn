@@ -1,6 +1,7 @@
 package httpapi
 
 import (
+	"context"
 	"crypto/rand"
 	"database/sql"
 	"errors"
@@ -14,17 +15,16 @@ import (
 	"time"
 
 	"github.com/alreadyonapp/alreadyon/server/internal/auth"
-	"github.com/alreadyonapp/alreadyon/server/internal/governor"
 	"github.com/alreadyonapp/alreadyon/server/internal/logging"
 	"github.com/alreadyonapp/alreadyon/server/internal/playback"
 	"github.com/alreadyonapp/alreadyon/server/internal/schedule"
-	"github.com/alreadyonapp/alreadyon/server/internal/serversettings"
 )
 
 // PlaybackHTTP keeps session issuance and scoped media authorization separate
 // on one HTTPS listener. Browser cookies never authorize media payloads.
 type PlaybackHTTP struct {
 	Benchmarks   *playback.Benchmarks
+	Calibration  *playback.Calibration
 	activityMu   sync.Mutex
 	activityRows map[string]viewerActivity
 	DB           *sql.DB
@@ -62,11 +62,11 @@ func (p *PlaybackHTTP) register(mux *http.ServeMux) {
 	mux.HandleFunc("DELETE /api/playback/sessions", p.revoke)
 	mux.HandleFunc("GET /api/settings/playback/delivery", p.getDelivery)
 	mux.HandleFunc("PUT /api/settings/playback/delivery", p.putDelivery)
-	mux.HandleFunc("POST /api/settings/transcoding/test", p.testTranscoding)
 	mux.HandleFunc("GET /api/settings/transcoding/threads", p.getThreads)
-	mux.HandleFunc("POST /api/settings/transcoding/threads/tune", p.tuneThreads)
+	mux.HandleFunc("GET /api/settings/transcoding/benchmark", p.getBenchmark)
 	mux.HandleFunc("GET /api/settings/transcoding/capacity", p.getCapacity)
-	mux.HandleFunc("POST /api/settings/transcoding/capacity/measure", p.measureCapacity)
+	mux.HandleFunc("POST /api/settings/transcoding/benchmark", p.startBenchmark)
+	mux.HandleFunc("DELETE /api/settings/transcoding/benchmark", p.stopBenchmark)
 }
 
 func (p *PlaybackHTTP) issue(w http.ResponseWriter, r *http.Request) {
@@ -85,11 +85,15 @@ func (p *PlaybackHTTP) issue(w http.ResponseWriter, r *http.Request) {
 }
 func (p *PlaybackHTTP) issueProbe(w http.ResponseWriter, r *http.Request) { p.issueFor(w, r, 0) }
 func (p *PlaybackHTTP) issueFor(w http.ResponseWriter, r *http.Request, channelID int64) {
-	release, ok := p.admitPlayback(w, r)
-	if !ok {
-		return
+	// Capability/network probes run on settings pages too. They must respect
+	// initial readiness without cancelling an idle benchmark merely to view status.
+	if channelID != 0 || p.Benchmarks != nil && !p.Benchmarks.Ready() {
+		release, ok := p.admitPlayback(w, r)
+		if !ok {
+			return
+		}
+		defer release()
 	}
-	defer release()
 	token, s, err := p.Sessions.Issue(auth.PrincipalID(r.Context()), channelID)
 	if errors.Is(err, playback.ErrBusy) {
 		w.Header().Set("Retry-After", "1")
@@ -216,11 +220,13 @@ func (p *PlaybackHTTP) MediaHandler() http.Handler {
 		if parts[2] == "source" || segmentName.MatchString(parts[2]) {
 			w = &mediaCounter{ResponseWriter: w, sessions: p.Sessions, token: token}
 		}
-		release, ok := p.admitPlayback(w, r)
-		if !ok {
-			return
+		if parts[2] != "probe" || p.Benchmarks != nil && !p.Benchmarks.Ready() {
+			release, ok := p.admitPlayback(w, r)
+			if !ok {
+				return
+			}
+			defer release()
 		}
-		defer release()
 		mux.ServeHTTP(w, r)
 	})
 }
@@ -270,49 +276,15 @@ func (p *PlaybackHTTP) mediaProbe(w http.ResponseWriter, r *http.Request) {
 	}
 }
 
-// testTranscoding tries the named Transcoding choice on this host (a one-second
-// synthetic encode, or with decoding set a synthetic GPU decode) so the administrator learns whether it works before relying
-// on it. Streams fall back to software on their own when it does not.
-func (p *PlaybackHTTP) testTranscoding(w http.ResponseWriter, r *http.Request) {
-	var body struct {
-		Transcoding string `json:"transcoding"`
-		Decoding    bool   `json:"decoding"`
-	}
-	if !decodeStrict(w, r, &body) {
-		return
-	}
-	if !slices.Contains(serversettings.Transcoding, body.Transcoding) {
-		writeJSONError(w, 400, serversettings.ErrInvalidTranscoding.Error())
-		return
-	}
-	if body.Decoding && body.Transcoding == "software" {
-		writeJSONError(w, 400, serversettings.ErrDecodeNeedsEncode.Error())
-		return
-	}
-	if p.Hardware == nil {
-		writeJSONError(w, 503, "hardware testing is not available")
-		return
-	}
-	ctx := r.Context()
-	if p.Benchmarks != nil {
-		// Explicit hardware diagnostics join benchmark priority after any group stops.
-		release, ok := p.admitPlayback(w, r)
-		if !ok {
-			return
-		}
-		defer release()
-		end := p.Benchmarks.Governor.Reserve(governor.PriorityBenchmark)
-		defer end()
-		ctx = governor.WithPriority(ctx, governor.PriorityBenchmark)
-	}
-	writeJSON(w, 200, p.Hardware.TestSetting(ctx, body.Transcoding, body.Decoding))
-}
-
 // retune re-measures the thread count and the server's capacity after the
 // encoder settings changed.
 func (p *PlaybackHTTP) retune() {
 	if p.Benchmarks != nil {
-		p.Benchmarks.Request()
+		p.Benchmarks.AutomaticMini()
+		if err := p.pauseStreams(); err != nil {
+			p.Benchmarks.Stop()
+			logging.Warn("video transcoding: could not pause streams for quick test: %v", err)
+		}
 		return
 	}
 	if p.Tuner != nil {
@@ -331,18 +303,71 @@ func (p *PlaybackHTTP) getCapacity(w http.ResponseWriter, r *http.Request) {
 	writeJSON(w, 200, p.capacityStatus())
 }
 
-// measureCapacity queues the full idle-only group; embedded test routers retain their local tuner.
-func (p *PlaybackHTTP) measureCapacity(w http.ResponseWriter, r *http.Request) {
-	if p.Capacity == nil {
-		writeJSONError(w, 503, "server capacity measurement is not available")
+func (p *PlaybackHTTP) startBenchmark(w http.ResponseWriter, r *http.Request) {
+	var body struct {
+		Mode               string `json:"mode"`
+		AllowActiveStreams bool   `json:"allowActiveStreams"`
+	}
+	if !decodeStrict(w, r, &body) {
 		return
 	}
-	if p.Benchmarks != nil {
-		p.Benchmarks.Request()
-	} else {
-		p.Capacity.Start(true)
+	if body.Mode != "quick" && body.Mode != "full" {
+		writeJSONError(w, 400, "mode must be quick or full")
+		return
 	}
-	writeJSON(w, 202, p.capacityStatus())
+	if p.Benchmarks == nil {
+		writeJSONError(w, 503, "benchmarking is not available")
+		return
+	}
+	_, _, viewers := p.streamCounts()
+	if body.Mode == "full" && viewers > 0 && !body.AllowActiveStreams {
+		writeJSON(w, http.StatusConflict, map[string]any{"error": "Active streams will be paused while the full test runs. Confirm before starting it.", "activeStreams": viewers})
+		return
+	}
+	if body.Mode == "quick" {
+		p.Benchmarks.Mini()
+	} else {
+		p.Benchmarks.Full()
+	}
+	// Locking the benchmark happens before stream teardown, so no new viewer can
+	// race into the resource reservation.
+	if err := p.pauseStreams(); err != nil {
+		p.Benchmarks.Stop()
+		writeJSONError(w, 503, "could not pause active streams for the test")
+		return
+	}
+	writeJSON(w, 202, p.benchmarkStatus())
+}
+
+func (p *PlaybackHTTP) stopBenchmark(w http.ResponseWriter, _ *http.Request) {
+	if p.Benchmarks == nil {
+		writeJSONError(w, 503, "benchmarking is not available")
+		return
+	}
+	p.Benchmarks.Stop()
+	writeJSON(w, 202, p.benchmarkStatus())
+}
+
+func (p *PlaybackHTTP) pauseStreams() error {
+	if p.Manager == nil {
+		return nil
+	}
+	ctx, cancel := context.WithTimeout(context.Background(), 30*time.Second)
+	defer cancel()
+	if err := p.Manager.PauseAll(ctx); err != nil {
+		return err
+	}
+	if p.Sessions != nil {
+		p.Sessions.PauseStreaming()
+	}
+	return nil
+}
+
+func (p *PlaybackHTTP) streamCounts() (processes, renditions, viewers int) {
+	if p.Manager == nil {
+		return 0, 0, 0
+	}
+	return p.Manager.Counts()
 }
 
 func (p *PlaybackHTTP) getThreads(w http.ResponseWriter, r *http.Request) {
@@ -351,20 +376,6 @@ func (p *PlaybackHTTP) getThreads(w http.ResponseWriter, r *http.Request) {
 		return
 	}
 	writeJSON(w, 200, p.threadStatus())
-}
-
-// tuneThreads queues the same full idle-only group as capacity measurement.
-func (p *PlaybackHTTP) tuneThreads(w http.ResponseWriter, r *http.Request) {
-	if p.Tuner == nil {
-		writeJSONError(w, 503, "thread tuning is not available")
-		return
-	}
-	if p.Benchmarks != nil {
-		p.Benchmarks.Request()
-	} else {
-		p.Tuner.Start(true)
-	}
-	writeJSON(w, 202, p.threadStatus())
 }
 
 type mediaCounter struct {
@@ -403,6 +414,8 @@ func (p *PlaybackHTTP) admitPlayback(w http.ResponseWriter, r *http.Request) (fu
 		w.Header().Set("Cache-Control", "no-store")
 		if errors.Is(err, playback.ErrServerStarting) {
 			writeJSON(w, 503, map[string]any{"code": "server_starting", "error": playback.ErrServerStarting.Error()})
+		} else if errors.Is(err, playback.ErrBenchmarkRunning) {
+			writeJSON(w, 503, map[string]any{"code": "benchmark_running", "error": playback.ErrBenchmarkRunning.Error()})
 		} else {
 			writeJSONError(w, 503, "Playback is waiting for background work to stop; retry shortly.")
 		}
@@ -422,6 +435,29 @@ func (p *PlaybackHTTP) threadStatus() playback.TuneStatus {
 	s := p.Tuner.Status()
 	if p.Benchmarks != nil && p.Benchmarks.Running() {
 		s.State = "running"
+	}
+	return s
+}
+
+func (p *PlaybackHTTP) getBenchmark(w http.ResponseWriter, r *http.Request) {
+	if p.Benchmarks == nil {
+		writeJSONError(w, 503, "benchmarking is not available")
+		return
+	}
+	writeJSON(w, 200, p.benchmarkStatus())
+}
+
+func (p *PlaybackHTTP) benchmarkStatus() playback.BenchmarkStatus {
+	s := p.Benchmarks.Status()
+	if p.Capacity != nil {
+		s.Profiles = p.Capacity.Status().Profiles
+	}
+	_, _, s.ActiveStreams = p.streamCounts()
+	if p.Calibration != nil {
+		calibration := p.Calibration.Status()
+		s.QuickAt, s.FullAt = calibration.QuickAt, calibration.FullAt
+		s.QuickProfiles, s.FullProfiles = calibration.QuickProfiles, calibration.FullProfiles
+		s.RecommendFull = calibration.RecommendFull
 	}
 	return s
 }

@@ -1194,12 +1194,6 @@ export default function GuidePage() {
                 }}
               />
             ))}
-          <div
-            aria-hidden="true"
-            style={{
-              height: `max(0px, calc(100% - ${rowMinHeight}px - 40px))`,
-            }}
-          />
         </div>
       </div>
     </div>

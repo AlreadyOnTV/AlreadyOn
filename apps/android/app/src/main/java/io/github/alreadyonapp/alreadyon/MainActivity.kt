@@ -78,11 +78,11 @@ class MainActivity : ComponentActivity() {
     private var pipControls: PhonePipControls? = null
     override fun onPictureInPictureModeChanged(isInPictureInPictureMode: Boolean, newConfig: Configuration) {
         super.onPictureInPictureModeChanged(isInPictureInPictureMode, newConfig)
-        pip = isInPictureInPictureMode
+        pip = !BuildConfig.IS_TV && isInPictureInPictureMode
     }
     override fun onUserLeaveHint() {
         super.onUserLeaveHint()
-        pipControls?.enterOnOlderAndroid()
+        if (!BuildConfig.IS_TV) pipControls?.enterOnOlderAndroid()
     }
     override fun onCreate(savedInstanceState: Bundle?) {
         super.onCreate(savedInstanceState)
@@ -132,7 +132,7 @@ class MainActivity : ComponentActivity() {
                     onDispose { owner.lifecycle.removeObserver(observer) }
                 }
                 val controls = remember(model) {
-                    if (packageManager.hasSystemFeature(android.content.pm.PackageManager.FEATURE_PICTURE_IN_PICTURE))
+                    if (!BuildConfig.IS_TV && packageManager.hasSystemFeature(android.content.pm.PackageManager.FEATURE_PICTURE_IN_PICTURE))
                         PhonePipControls(this@MainActivity, model) else null
                 }
                 DisposableEffect(controls) {
@@ -414,10 +414,9 @@ internal fun ChannelGuide(state: PhoneState, model: PhoneModel, palette: PhonePa
                 }
             }
         }
-        BoxWithConstraints(Modifier.weight(1f)) {
+        Box(Modifier.weight(1f)) {
         LazyColumn(state = rows, verticalArrangement = Arrangement.spacedBy(4.dp),
-            modifier = Modifier.testTag("guide-rows"),
-            contentPadding = PaddingValues(bottom = (maxHeight - 72.dp).coerceAtLeast(0.dp))) {
+            modifier = Modifier.testTag("guide-rows")) {
             if (channels.isEmpty()) item { Text("No channels are available for this profile.") }
             items(channels, key = { it.id }) { channel ->
                 Row(Modifier.fillMaxWidth().height(72.dp).testTag("guide-channel-${channel.id}")) {

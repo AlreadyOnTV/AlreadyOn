@@ -29,6 +29,7 @@ type StreamInfo struct {
 	DolbyVisionLevel         int
 	DolbyVisionCompatibility int
 	HDR10Plus                bool
+	HDRStaticMetadata        bool // mastering-display or content-light side data, required by QSV VPP tone mapping
 	Index                    int
 	Kind                     StreamKind
 	Codec                    string
@@ -102,14 +103,14 @@ func Probe(ctx context.Context, path string) (ProbeResult, error) {
 		return ProbeResult{}, fmt.Errorf("library: parse ffprobe output for %s: %w", path, err)
 	}
 
-	// Optional bounded frame sampling discovers HDR10+ metadata. A missing
+	// Optional bounded frame sampling discovers static HDR and HDR10+ metadata. A missing
 	// decoder must not prevent cataloging or direct-playing the original file.
 	for _, stream := range raw.Streams {
 		if stream.CodecType != "video" || (stream.ColorTransfer != "smpte2084" && stream.ColorTransfer != "arib-std-b67") {
 			continue
 		}
 		frameCtx, cancel := governor.WithTimeout(ctx, 3*time.Second)
-		frameCmd := exec.CommandContext(frameCtx, "ffprobe", "-v", "error", "-protocol_whitelist", "file,pipe", "-threads", "1", "-select_streams", "v:0", "-read_intervals", "%+#64", "-show_frames", "-show_entries", "frame=stream_index:frame_side_data", "-of", "json", "--", path)
+		frameCmd := exec.CommandContext(frameCtx, "ffprobe", "-v", "error", "-protocol_whitelist", "file,pipe", "-threads", "1", "-select_streams", "v:0", "-read_intervals", "%+#8", "-show_frames", "-show_entries", "frame=stream_index:frame_side_data", "-of", "json", "--", path)
 		var frames bytes.Buffer
 		frameCmd.Stdout = &frames
 		frameErr := governor.RunCommand(frameCtx, frameCmd)
@@ -173,7 +174,7 @@ type rawFormat struct {
 
 func (r rawProbe) toProbeResult() ProbeResult {
 	result := ProbeResult{
-		MetadataVersion: 2,
+		MetadataVersion: 3,
 		Container:       r.Format.FormatName,
 		DurationSeconds: parseFloat(r.Format.Duration),
 		SizeBytes:       parseInt(r.Format.Size),
@@ -190,6 +191,7 @@ func (r rawProbe) toProbeResult() ProbeResult {
 			continue
 		}
 		dvProfile, dvLevel, dvCompatibility, hdr10plus := 0, 0, 0, false
+		staticHDR := false
 		sideData := append([]rawSideData(nil), s.SideData...)
 		for _, frame := range r.Frames {
 			if frame.StreamIndex == s.Index {
@@ -197,6 +199,9 @@ func (r rawProbe) toProbeResult() ProbeResult {
 			}
 		}
 		for _, side := range sideData {
+			if strings.Contains(side.Type, "Mastering display metadata") || strings.Contains(side.Type, "Content light level metadata") {
+				staticHDR = true
+			}
 			if strings.Contains(side.Type, "DOVI configuration") {
 				dvProfile, dvLevel, dvCompatibility = side.DVProfile, side.DVLevel, side.DVCompatibility
 			}
@@ -205,7 +210,7 @@ func (r rawProbe) toProbeResult() ProbeResult {
 			}
 		}
 		result.Streams = append(result.Streams, StreamInfo{
-			CodecTag: s.CodecTag, DolbyVisionProfile: dvProfile, DolbyVisionLevel: dvLevel, DolbyVisionCompatibility: dvCompatibility, HDR10Plus: hdr10plus,
+			CodecTag: s.CodecTag, DolbyVisionProfile: dvProfile, DolbyVisionLevel: dvLevel, DolbyVisionCompatibility: dvCompatibility, HDR10Plus: hdr10plus, HDRStaticMetadata: staticHDR,
 			Index:    s.Index,
 			Kind:     kind,
 			Codec:    s.CodecName,

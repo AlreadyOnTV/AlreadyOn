@@ -57,7 +57,7 @@ func gpuPipelineFor(p Plan, transfer, device string) (gpuPipeline, error) {
 	if err != nil {
 		return gpuPipeline{}, err
 	}
-	if p.ToneMap && (p.ToneMapper != "gpu" && p.ToneMapper != "cpu" || !IsHDRTransfer(transfer)) {
+	if p.ToneMap && (p.ToneMapper != "gpu" && p.ToneMapper != "opencl" && p.ToneMapper != "cpu" || !IsHDRTransfer(transfer)) {
 		return gpuPipeline{}, errors.New("playback: tone mapping needs a PQ or HLG source and a tone mapper")
 	}
 	size := fmt.Sprintf("w=%d:h=%d", p.Width, p.Height)
@@ -78,6 +78,11 @@ func gpuPipelineFor(p Plan, transfer, device string) (gpuPipeline, error) {
 		switch {
 		case !p.ToneMap:
 			g.filter = "scale_vaapi=" + size + ":format=nv12" + tail
+		case p.ToneMapper == "opencl":
+			// OpenCL shares VA surfaces when the driver supports cl_intel_va_api_media_sharing.
+			// Scale first, keep HDR tags, then map the result back for hardware encoding.
+			g.global = append(g.global[:len(g.global)-2], "-init_hw_device", "opencl=ocl@va", "-filter_hw_device", "ocl")
+			g.filter = "scale_vaapi=" + size + ":format=p010,hwmap=derive_device=opencl," + openCLToneMap() + ",hwmap=derive_device=vaapi:reverse=1,format=vaapi" + tail
 		case p.ToneMapper == "gpu":
 			g.filter = "scale_vaapi=" + size + ":format=p010,tonemap_vaapi=format=nv12:p=bt709:t=bt709:m=bt709" + tail
 		default:
@@ -92,6 +97,12 @@ func gpuPipelineFor(p Plan, transfer, device string) (gpuPipeline, error) {
 		switch {
 		case !p.ToneMap:
 			g.filter = "vpp_qsv=" + size + ":format=nv12" + tail
+		case p.ToneMapper == "opencl":
+			// Hybrid VA-API decode and QSV encode share surfaces through OpenCL.
+			// Avoid downloading full frames to the CPU between GPU stages.
+			g.global = append(g.global[:len(g.global)-2], "-init_hw_device", "opencl=ocl@va", "-filter_hw_device", "ocl")
+			g.input = []string{"-hwaccel", "vaapi", "-hwaccel_device", "va", "-hwaccel_output_format", "vaapi"}
+			g.filter = "scale_vaapi=" + size + ":format=p010,hwmap=derive_device=opencl," + openCLToneMap() + ",hwmap=derive_device=vaapi:reverse=1,format=vaapi,hwmap=derive_device=qsv,format=qsv" + tail
 		case p.ToneMapper == "gpu":
 			g.filter = "vpp_qsv=" + size + ":format=nv12:tonemap=1" + tail
 		default:
@@ -134,9 +145,20 @@ func DescribePipeline(p Plan) Pipeline {
 	}
 	if p.ToneMap {
 		pl.ToneMapper = "Software (CPU)"
-		if p.ToneMapper == "gpu" {
+		if p.ToneMapper == "gpu" || p.ToneMapper == "opencl" {
 			pl.ToneMapper = gpu
+			if p.ToneMapper == "opencl" {
+				pl.ToneMapper = "OpenCL (GPU)"
+				if p.Encoder == EncoderIntelQSV {
+					pl.Decoder = "Intel VAAPI (GPU)"
+					pl.Scaler = "Intel VAAPI (GPU)"
+				}
+			}
 		}
 	}
 	return pl
+}
+
+func openCLToneMap() string {
+	return "tonemap_opencl=tonemap=hable:desat=0:format=nv12:primaries=bt709:transfer=bt709:matrix=bt709:range=tv"
 }

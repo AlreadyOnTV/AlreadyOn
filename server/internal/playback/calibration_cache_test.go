@@ -11,7 +11,7 @@ import (
 
 func TestCalibrationCacheIdentityAndExpiry(t *testing.T) {
 	path := filepath.Join(t.TempDir(), "cache.json")
-	record := calibrationCache{Fingerprint: "fixture-driver-policy", At: time.Now().Add(-time.Minute), Threads: 2}
+	record := calibrationCache{Fingerprint: "fixture-driver-policy", At: time.Now().Add(-time.Minute), Threads: 2, Profiles: []ProfileCapacity{{Threads: 2, Streams: 1, Height: 1080, FPS: 30, SourceFPS: 30, SourceWidth: 1920, SourceHeight: 1080}}}
 	write := func() {
 		t.Helper()
 		raw, err := json.Marshal(record)

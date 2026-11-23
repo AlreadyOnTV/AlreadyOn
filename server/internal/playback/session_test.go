@@ -98,6 +98,32 @@ func TestAuthenticatedRenewalKeepsLongPlaybackAlive(t *testing.T) {
 	}
 }
 
+func TestPauseStreamingAllowsSessionToResume(t *testing.T) {
+	clock := &testClock{now: time.Now()}
+	sessions := NewSessions(clock)
+	token, _, err := sessions.Issue(1, 7)
+	if err != nil {
+		t.Fatal(err)
+	}
+	if _, err = sessions.Claim(token, 1, 7); err != nil {
+		t.Fatal(err)
+	}
+	if err = sessions.Bind(token, "worker"); err != nil {
+		t.Fatal(err)
+	}
+	clock.advance(4 * time.Minute)
+	if paused := sessions.PauseStreaming(); paused != 1 {
+		t.Fatalf("paused %d sessions", paused)
+	}
+	session, err := sessions.Validate(token, 7)
+	if err != nil || session.StreamKey != "" {
+		t.Fatal("paused session retained its stream binding:", session.StreamKey, err)
+	}
+	if _, err = sessions.Claim(token, 1, 7); err != nil {
+		t.Fatal("paused session could not resume:", err)
+	}
+}
+
 // A probe flood by one principal must leave capacity for another, and released
 // or expired tokens must stop charging against that principal's quota.
 func TestSessionQuotaIsolationAndRecovery(t *testing.T) {

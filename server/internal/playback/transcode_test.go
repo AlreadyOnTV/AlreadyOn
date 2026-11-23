@@ -255,7 +255,7 @@ func TestRunnerAppliesMeasuredLoudness(t *testing.T) {
 	}
 }
 
-func TestRunnerRealSurroundAAC(t *testing.T) {
+func TestRunnerDownmixesSevenOneAACForTransport(t *testing.T) {
 	j := fixture(t)
 	path := filepath.Join(t.TempDir(), "surround.mkv")
 	cmd := exec.CommandContext(t.Context(), "ffmpeg", "-v", "error", "-f", "lavfi", "-i", "testsrc2=size=128x72:rate=24", "-f", "lavfi", "-i", "anullsrc=channel_layout=7.1:sample_rate=48000", "-t", "3", "-c:v", "mpeg4", "-c:a", "pcm_s16le", path)
@@ -273,7 +273,7 @@ func TestRunnerRealSurroundAAC(t *testing.T) {
 	if err != nil {
 		t.Fatal(err)
 	}
-	if plan.AudioChannels != 8 {
+	if plan.AudioChannels != 6 {
 		t.Fatalf("%+v", plan)
 	}
 	j.Path, j.Source, j.Plan = path, src, plan
@@ -285,7 +285,7 @@ func TestRunnerRealSurroundAAC(t *testing.T) {
 		t.Fatal(err)
 	}
 	_, audio := Tracks(out)
-	if audio.Channels != 8 || audio.Codec != "aac" {
+	if audio.Channels != 6 || audio.Codec != "aac" {
 		t.Fatalf("surround lost: %+v", audio)
 	}
 }

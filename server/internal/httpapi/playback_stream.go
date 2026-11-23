@@ -195,10 +195,32 @@ func (p *PlaybackHTTP) tune(w http.ResponseWriter, r *http.Request) {
 		}
 		body.Capabilities.VolumeOffsetDB = commercials.VolumeOffsetDB
 	}
+	// Use the measured source-specific pipeline; API preference is only the
+	// initial candidate. Re-check failures before applying cached choices.
+	preferred, hasPreferred := p.Capacity.PreferredPipeline(source, body.Capabilities.Encoder)
+	if hasPreferred && p.Hardware != nil && preferred.Encoder != "" {
+		status := p.Hardware.Check(r.Context(), preferred.Encoder, false)
+		if !status.OK {
+			hasPreferred = false
+		} else {
+			body.Capabilities.Encoder, device = preferred.Encoder, status.Device
+			hardwareDecoding = preferred.HardwareDecode
+			body.Capabilities.HWToneMapMethod = preferred.ToneMapper
+		}
+	}
+
 	// GPU decoding, scaling and tone mapping, when switched on, suit sources the GPU can decode.
 	if video, _ := playback.Tracks(source); hardwareDecoding && p.Hardware.DecodeAllowed(body.Capabilities.Encoder, video) && p.Hardware.DecodeReady(r.Context(), body.Capabilities.Encoder) {
 		body.Capabilities.HWDecode = true
 		body.Capabilities.HWToneMap = p.Hardware.ToneMapOnGPU(r.Context(), body.Capabilities.Encoder)
+		if hasPreferred {
+			body.Capabilities.HWToneMap = body.Capabilities.HWToneMap && (preferred.ToneMapper == "gpu" || preferred.ToneMapper == "opencl")
+		}
+	}
+	// QSV silently skips VPP tone mapping without static HDR metadata. Prefer
+	// the compiled OpenCL path in that case; driver failures retain CPU fallback.
+	if video, _ := playback.Tracks(source); body.Capabilities.Encoder == playback.EncoderIntelQSV && !video.HDRStaticMetadata && body.Capabilities.HWToneMap {
+		body.Capabilities.HWToneMapMethod = "opencl"
 	}
 	video, _ := playback.Tracks(source)
 	if height, fps, measured, sustainable := p.Capacity.LimitFor(body.Capabilities.Encoder, video); measured {
@@ -214,6 +236,14 @@ func (p *PlaybackHTTP) tune(w http.ResponseWriter, r *http.Request) {
 		body.Capabilities.ServerMaxHeight, body.Capabilities.ServerMaxFPS = height, fps
 		body.Capabilities.ServerMeasured, body.Capabilities.ServerSustainable = true, sustainable
 		body.Capabilities.HDRMeasured = true
+	}
+	// Limits must describe the selected tone mapper/API, not the first HDR
+	// record from a different candidate that happened to be benchmarked earlier.
+	if hasPreferred {
+		body.Capabilities.ServerMaxHeight, body.Capabilities.ServerMaxFPS = preferred.Height, preferred.FPS
+		body.Capabilities.ServerMeasured, body.Capabilities.ServerSustainable = true, true
+		body.Capabilities.HDRMeasured = playback.IsHDRTransfer(video.ColorTransfer)
+		threads = preferred.Threads
 	}
 	_, audioTrack := playback.Tracks(source)
 	normalization, err := loudness.Lookup(r.Context(), p.DB, e.MediaFileID, path, audioTrack.Index)

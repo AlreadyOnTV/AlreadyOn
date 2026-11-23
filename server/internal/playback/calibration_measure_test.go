@@ -24,3 +24,13 @@ func TestMeasurementCancellationTearsDownProgressReaders(t *testing.T) {
 		t.Fatal("cancelled measurement leaked a process/progress reader")
 	}
 }
+
+func TestBenchmarkTimelinePreservesQuotedPathsAcrossClipBoundaries(t *testing.T) {
+	job := fixture(t)
+	ctx, cancel := context.WithTimeout(t.Context(), 12*time.Second)
+	defer cancel()
+	speeds, err := measureStreams(ctx, job.Path, job.Source, job.Plan, 2, 1, 100*time.Millisecond, time.Second)
+	if err != nil || len(speeds) != 1 || speeds[0] <= 0 {
+		t.Fatalf("concat benchmark failed on quoted synthetic path: %v %v", speeds, err)
+	}
+}

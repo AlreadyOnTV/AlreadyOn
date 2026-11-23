@@ -327,7 +327,12 @@ func fallbackPlans(p Plan) []Plan {
 	if p.Encoder == "" || p.VideoCopy {
 		return plans
 	}
-	if p.ToneMapper == "gpu" {
+	if p.ToneMapper == "gpu" && (p.Encoder == EncoderIntelQSV || p.Encoder == EncoderIntelVAAPI || p.Encoder == EncoderAMDVAAPI) {
+		alternative := p
+		alternative.ToneMapper = "opencl"
+		plans = append(plans, alternative)
+	}
+	if p.ToneMapper == "gpu" || p.ToneMapper == "opencl" {
 		p.ToneMapper = "cpu"
 		plans = append(plans, p)
 	}
@@ -351,7 +356,7 @@ func fallbackPlans(p Plan) []Plan {
 func (r Runner) blame(j Job, tried []Plan, errs []error, worked Plan) {
 	if worked.ToneMapper == "cpu" && worked.Decoder == "hardware" && r.OnToneMapFailure != nil {
 		for i, p := range tried {
-			if p.ToneMapper == "gpu" && p.Encoder == worked.Encoder {
+			if (p.ToneMapper == "gpu" || p.ToneMapper == "opencl") && p.Encoder == worked.Encoder {
 				r.OnToneMapFailure(p.Encoder, errs[i])
 				break
 			}

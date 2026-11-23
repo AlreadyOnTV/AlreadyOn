@@ -41,7 +41,7 @@ func (c *Capacity) HDRLimit(encoder string, decode bool, v library.StreamInfo, t
 		if r.SourceFPS < v.FrameRate || r.Encoder != encoder || r.HardwareDecode != decode || r.Transfer != v.ColorTransfer || r.Threads != threads {
 			continue
 		}
-		if r.ToneMapper == "gpu" && c.Hardware != nil && !c.Hardware.ToneMapOnGPU(context.Background(), encoder) {
+		if (r.ToneMapper == "gpu" || r.ToneMapper == "opencl") && c.Hardware != nil && !c.Hardware.ToneMapOnGPU(context.Background(), encoder) {
 			continue
 		}
 		if selected == nil || r.SourceFPS < selected.SourceFPS {
@@ -139,7 +139,7 @@ func (c *Capacity) benchmarkHDRSource(ctx context.Context, encoder string, sourc
 				plan.Decoder = "hardware"
 			}
 			speed, err := timePlan(ctx, exe, dir, sample, probe, plan, threads)
-			if err != nil && r.ToneMapper == "gpu" && ctx.Err() == nil {
+			if err != nil && (r.ToneMapper == "gpu" || r.ToneMapper == "opencl") && ctx.Err() == nil {
 				gpuError = err
 				r.ToneMapper = "cpu"
 				plan.ToneMapper = "cpu"

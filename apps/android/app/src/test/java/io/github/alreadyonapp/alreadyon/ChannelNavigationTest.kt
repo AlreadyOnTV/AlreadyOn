@@ -21,4 +21,10 @@ class ChannelNavigationTest {
         assertEquals(1L, nextPlayableChannel(channels, 99, 1)?.id)
         assertEquals(3L, nextPlayableChannel(channels, 99, -1)?.id)
     }
+    @Test fun revealStopsAtNaturalViewportEdges() {
+        assertEquals(0f, guideVerticalRevealDistance(20, 56, 20, 200, 60f))
+        assertEquals(36f, guideVerticalRevealDistance(180, 56, 20, 200, 60f))
+        assertEquals(-20f, guideVerticalRevealDistance(0, 56, 20, 200, -60f))
+        assertEquals(60f, guideVerticalRevealDistance(null, 0, 20, 200, 60f))
+    }
 }

@@ -27,7 +27,13 @@ generate() {
     fi
     # A fixed seed and small encoder thread pool bound build cost on CI runners.
     if [ "$codec" = libx265 ]; then
-        set -- -x265-params pools=2:frame-threads=2:log-level=error
+        params='pools=2:frame-threads=2:log-level=error'
+        # QSV VPP only enables HDR tone mapping when static HDR side data exists.
+        # Transfer tags alone can otherwise produce a misleading successful no-op.
+        if [ "$transfer" = smpte2084 ]; then
+            params="$params:master-display=G(8500,39850)B(6550,2300)R(35400,14600)WP(15635,16450)L(10000000,1):max-cll=1000,400"
+        fi
+        set -- -x265-params "$params"
     else set -- -threads 2; fi
     ffmpeg -hide_banner -v error -nostdin -y -f lavfi \
         -i "testsrc2=size=${width}x${height}:rate=$fps:duration=3,$filter,format=$pixel" \

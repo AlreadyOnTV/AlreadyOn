@@ -3,28 +3,25 @@ import LoudnessRow from './LoudnessRow';
 import TlsControls, { type TlsControlsHandle } from './TlsControls';
 import DdnsControls, { type DdnsControlsHandle } from './DdnsControls';
 // One box of server settings in three columns: the setting's name, its control,
-// and buttons for it (Test, Clear, Reset Default, More Info). More Info opens the
-// setting's help in a centered modal.
+// and its immediate actions. More Info opens the setting's help in a centered
+// modal.
 //
-// Hardware Encoding is in use: a hardware choice is tried by the server (see the
-// Test button) and used only while that test passes. Hardware Decoding builds on
-// it (it needs a hardware encoder) and moves decode, scale and tone mapping to the
-// GPU, falling back to the CPU per file. Instance TLS and custom upload are active;
-// DDNS has provider-specific write-only setup (#267); Let's Encrypt uses HTTP-01 (#242). Timezone is not configured
-// here; set it with the TZ environment variable in docker-compose.yaml (it
-// defaults to America/New_York).
-//
+// The vendor choice controls the whole playback pipeline; calibration selects
+// working GPU stages and retains software fallbacks.
 import { useEffect, useRef, useState, type ReactNode } from 'react';
 import {
   getHealth,
   getMetadataSettings,
   getServerSettings,
   restartServer,
-  testTranscoding,
+  getBenchmarkStatus,
+  runFullBenchmark,
+  runQuickBenchmark,
+  stopBenchmark,
+  type BenchmarkStatus,
   updateMetadataSettings,
   updateServerSettings,
   type ServerSettings,
-  type TranscodingTest,
 } from '../../api/client';
 import SettingsActions from './SettingsActions';
 import InfoModal from './InfoModal';
@@ -43,25 +40,13 @@ function isValidTmdbKey(value: string): boolean {
 }
 
 const TRANSCODING_OPTIONS = [
-  { value: 'software', label: 'Software Only (Default)' },
+  { value: 'software', label: 'CPU Only (Default)' },
   { value: 'intel', label: 'Intel' },
   { value: 'amd-vaapi', label: 'AMD' },
   { value: 'nvidia-nvenc', label: 'NVIDIA' },
 ];
 
-const DECODING_OPTIONS = [
-  { value: 'off', label: 'Disabled (Default)' },
-  { value: 'on', label: 'Enabled' },
-];
-
-const DEFAULTS: Pick<ServerSettings, 'transcoding' | 'hardwareDecoding' | 'tlsMode' | 'ddnsProvider'> = {
-  transcoding: 'software',
-  hardwareDecoding: false,
-  tlsMode: 'self-signed',
-  ddnsProvider: 'none',
-};
-
-type InfoKey = 'name' | 'encoding' | 'decoding' | 'tmdb' | 'tls';
+type InfoKey = 'name' | 'encoding' | 'tmdb' | 'tls';
 
 // A grid row: the wrapper is display: contents, so the three cells (and an
 // optional note beneath them) lay out on the shared grid.
@@ -148,17 +133,7 @@ function TmdbKeyRow({ keySet, onInfo, onSet, onClear }: { keySet: boolean; onInf
   );
 }
 
-function Select({ value, options, onChange }: { value: string; options: { value: string; label: string }[]; onChange: (value: string) => void }) {
-  return (
-    <select value={value} onChange={(e) => onChange(e.target.value)}>
-      {options.map((o) => (
-        <option key={o.value} value={o.value}>
-          {o.label}
-        </option>
-      ))}
-    </select>
-  );
-}
+
 
 // The server keeps its process ID and comes back in a few seconds; the page
 // reloads once it has gone down and answered again.
@@ -213,9 +188,17 @@ export default function ServerPage() {
   const [draft, setDraft] = useState<ServerSettings | null>(null);
   const [serverLoadError, setServerLoadError] = useState<string | null>(null);
   const [info, setInfo] = useState<InfoKey | null>(null);
-  type TestState = { busy: boolean; result?: TranscodingTest; error?: string };
-  const [test, setTest] = useState<TestState>({ busy: false });
-  const [decodeTest, setDecodeTest] = useState<TestState>({ busy: false });
+  const [benchmark, setBenchmark] = useState<BenchmarkStatus | null>(null);
+  const [testError, setTestError] = useState<string | null>(null);
+  const [requesting, setRequesting] = useState(false);
+  const [confirmFullTest, setConfirmFullTest] = useState(false);
+  const [dismissedRecommendation, setDismissedRecommendation] = useState('');
+  useEffect(() => {
+    let active = true;
+    const poll = () => { void getBenchmarkStatus().then(s => { if (active) setBenchmark(s); }).catch(() => {}); };
+    poll(); const timer = window.setInterval(poll, 5000);
+    return () => { active = false; window.clearInterval(timer); };
+  }, []);
 
   useEffect(() => {
     getServerSettings()
@@ -255,16 +238,65 @@ export default function ServerPage() {
       tlsMode: draft.tlsMode, acmeProvider: draft.acmeProvider, acmeDomain: draft.acmeDomain });
   };
 
-  const runTest = async (decoding: boolean) => {
+  const selectVendor = async (transcoding: string) => {
     if (!draft) return;
-    const set = decoding ? setDecodeTest : setTest;
-    set({ busy: true });
+    setRequesting(true); setTestError(null);
     try {
-      set({ busy: false, result: await testTranscoding(draft.transcoding, decoding) });
+      const result = await updateServerSettings({ transcoding });
+      setSaved(old => old && { ...old, transcoding: result.transcoding, hardwareDecoding: result.hardwareDecoding });
+      change({ transcoding: result.transcoding, hardwareDecoding: result.hardwareDecoding });
+      setBenchmark(await getBenchmarkStatus());
+    } catch (err) { setTestError(err instanceof Error ? err.message : 'Could not save processing option'); }
+    finally { setRequesting(false); }
+  };
+  const startTest = async (mode: 'quick' | 'full', allowActiveStreams = false) => {
+    setRequesting(true); setTestError(null);
+    try {
+      if (mode === 'quick') {
+        setBenchmark(await runQuickBenchmark());
+      } else {
+        setBenchmark(await runFullBenchmark(allowActiveStreams));
+      }
+      setConfirmFullTest(false);
+    }
+    catch (err) { setTestError(err instanceof Error ? err.message : `Could not start ${mode} test`); }
+    finally { setRequesting(false); }
+  };
+  const requestFullTest = async () => {
+    setTestError(null);
+    setRequesting(true);
+    try {
+      const status = await getBenchmarkStatus();
+      setBenchmark(status);
+      if (status.activeStreams > 0) {
+        setConfirmFullTest(true);
+      } else {
+        setBenchmark(await runFullBenchmark());
+      }
     } catch (err) {
-      set({ busy: false, error: err instanceof Error ? err.message : 'The test failed' });
+      setTestError(err instanceof Error ? err.message : 'Could not start full test');
+    } finally {
+      setRequesting(false);
     }
   };
+  const stopTest = async () => {
+    setRequesting(true); setTestError(null);
+    try { setBenchmark(await stopBenchmark()); }
+    catch (err) { setTestError(err instanceof Error ? err.message : 'Could not stop test'); }
+    finally { setRequesting(false); }
+  };
+  const testRunning = benchmark?.state === 'queued' || benchmark?.state === 'running';
+  const recommendationKey = benchmark?.quickAt ?? '';
+  const progress = (() => {
+    if (!benchmark || !testRunning) return '';
+    if (benchmark.state === 'queued') return `Waiting to start the ${benchmark.mode === 'mini' ? 'quick' : 'full'} test…`;
+    const task = benchmark.tasks.find(candidate => candidate.name === 'Pipeline analysis' && candidate.total > 0);
+    if (!task) return `Preparing the ${benchmark.mode === 'mini' ? 'quick' : 'full'} video transcoding test…`;
+    const current = Math.min(task.total, task.completed + 1);
+    const percent = Math.round(current * 100 / task.total);
+    const name = task.currentFile || 'Video transcoding pipeline';
+    return `${current} out of ${task.total} test: ${name} (${percent}%)`;
+  })();
 
 
   if (draft === null) {
@@ -275,19 +307,6 @@ export default function ServerPage() {
     );
   }
 
-  const noteFor = (t: TestState) =>
-    t.busy ? (
-      <p className="setting-note">Testing…</p>
-    ) : t.error ? (
-      <p className="profile-field-error setting-note">{t.error}</p>
-    ) : t.result ? (
-      <p className={t.result.ok ? 'setting-note setting-ok' : 'profile-field-error setting-note'}>
-        {t.result.ok ? '✓ ' : '✗ '}
-        {t.result.detail}
-        {t.result.device ? ` (${t.result.device})` : ''}
-      </p>
-    ) : null;
-  const testNote = noteFor(test);
 
   return (
     <div className="admin-section">
@@ -295,81 +314,23 @@ export default function ServerPage() {
       <div className="admin-card">
         <div className="settings-grid">
           <Row name="Server Name" control={<input aria-label="Server Name" type="text" value={draft.serverName} maxLength={64} required onChange={(e) => setDraft({ ...draft, serverName: e.target.value })} />} actions={<Button onClick={() => setInfo('name')}>More Info</Button>} />
-          <Row
-            name="Hardware Encoding"
-            control={
-              <Select
-                value={draft.transcoding}
-                options={TRANSCODING_OPTIONS}
-                onChange={(transcoding) => {
-                  // Decoding on the GPU needs a hardware encoder, so software takes it off.
-                  change(transcoding === 'software' ? { transcoding, hardwareDecoding: false } : { transcoding });
-                  setTest({ busy: false });
-                  setDecodeTest({ busy: false });
-                }}
-              />
-            }
-            actions={
-              <>
-                {draft.transcoding !== 'software' && (
-                  <Button onClick={() => void runTest(false)} disabled={test.busy}>
-                    Test
-                  </Button>
-                )}
-                <Button
-                  onClick={() => {
-                    change({ transcoding: DEFAULTS.transcoding, hardwareDecoding: false });
-                    setTest({ busy: false });
-                    setDecodeTest({ busy: false });
-                  }}
-                  disabled={draft.transcoding === DEFAULTS.transcoding}
-                >
-                  Reset Default
-                </Button>
-                <Button onClick={() => setInfo('encoding')}>More Info</Button>
-              </>
-            }
-            note={testNote}
-          />
-
-          <Row
-            name="Hardware Decoding"
-            control={
-              <select
-                value={draft.hardwareDecoding ? 'on' : 'off'}
-                disabled={draft.transcoding === 'software'}
-                onChange={(e) => {
-                  change({ hardwareDecoding: e.target.value === 'on' });
-                  setDecodeTest({ busy: false });
-                }}
-              >
-                {DECODING_OPTIONS.map((o) => (
-                  <option key={o.value} value={o.value}>
-                    {o.label}
-                  </option>
-                ))}
-              </select>
-            }
-            actions={
-              <>
-                {draft.hardwareDecoding && (
-                  <Button onClick={() => void runTest(true)} disabled={decodeTest.busy}>
-                    Test
-                  </Button>
-                )}
-                <Button
-                  onClick={() => {
-                    change({ hardwareDecoding: DEFAULTS.hardwareDecoding });
-                    setDecodeTest({ busy: false });
-                  }}
-                  disabled={!draft.hardwareDecoding}
-                >
-                  Reset Default
-                </Button>
-                <Button onClick={() => setInfo('decoding')}>More Info</Button>
-              </>
-            }
-            note={draft.transcoding === 'software' ? <p className="setting-note">Choose a hardware encoder above first.</p> : noteFor(decodeTest)}
+          <Row name="Video Transcoding"
+            control={<select aria-label="Video Transcoding" value={draft.transcoding} disabled={requesting || testRunning}
+              onChange={e => void selectVendor(e.target.value)}>
+              {TRANSCODING_OPTIONS.map(o => <option key={o.value} value={o.value}>{o.label}</option>)}
+            </select>}
+            actions={<>
+              {testRunning ? (
+                <Button primary onClick={() => void stopTest()} disabled={requesting}>Stop Test</Button>
+              ) : (
+                <>
+                  <Button onClick={() => void startTest('quick')} disabled={requesting}>Quick Test</Button>
+                  <Button onClick={() => void requestFullTest()} disabled={requesting}>Full Test</Button>
+                </>
+              )}
+              <Button onClick={() => setInfo('encoding')}>More Info</Button>
+            </>}
+            note={testRunning ? <div className="setting-note" role="status" aria-live="polite"><p>{progress}</p></div> : undefined}
           />
 
           <LoudnessRow />
@@ -421,75 +382,32 @@ export default function ServerPage() {
       <InfoModal open={info === 'name'} title="Server Name" onClose={() => setInfo(null)}>
         <p>Choose a recognizable name for this AlreadyOn server. Phones, tablets and TVs show this name when searching your home network, so you can tell servers apart before signing in. Save a new name to update what clients see during discovery.</p>
       </InfoModal>
-      <InfoModal open={info === 'encoding'} title="Hardware Encoding" onClose={() => setInfo(null)}>
-        <p>
-          Converting a video the browser can't play (or that is too large for the connection) is the most demanding thing the server does. <strong>Software Only</strong>{' '}
-          encodes on the CPU and works everywhere. A hardware choice moves the video <em>encoding</em> (the compressing of the finished stream) to a GPU, which uses
-          much less CPU.
-        </p>
-        <p>
-          Picking one assumes the drivers are installed on the host and the device is passed into the container. AlreadyOn tests the choice with a one-second
-          encode (the Test button, and again on its own every ten minutes): while the test passes, streams use the hardware, and when it fails they quietly use
-          software, so a wrong choice never stops playback. A stream that fails on the hardware also switches the next ones to software for a minute.
-        </p>
-        <ul>
-          <li>
-            <strong>Intel</strong>: an Intel GPU and the full Intel media driver on the host. The server uses Quick Sync (QSV) when it works fully (the encode test, and with Hardware
-            Decoding on the whole-GPU test too) and falls back to VA-API otherwise. Quick Sync needs an Intel 11th-generation (Tiger Lake) or newer GPU, or Arc; older Intel GPUs use VA-API. The
-            Test button says which one streams will use.
-          </li>
-          <li>
-            <strong>AMD</strong>: an AMD GPU with Mesa's VA-API drivers.
-          </li>
-          <li>
-            <strong>NVIDIA</strong>: an NVIDIA GPU, its driver, and the NVIDIA Container Toolkit.
-          </li>
-        </ul>
-        <p>
-          Intel and AMD need the render device in docker-compose.yaml. The container gives the server that device's group itself, so PUID and PGID can stay as they
-          are:
-        </p>
-        <pre>{`devices:
-  - /dev/dri:/dev/dri`}</pre>
-        <p>NVIDIA needs the toolkit's GPU reservation instead:</p>
-        <pre>{`deploy:
-  resources:
-    reservations:
-      devices:
-        - driver: nvidia
-          count: 1
-          capabilities: [gpu, video]`}</pre>
-        <p>
-          With only Hardware Encoding, decoding, scaling and HDR tone mapping still run on the CPU (see Hardware Decoding), and the optional two-rung ladder
-          (Playback settings API) is software only. Videos that play directly are never transcoded.
-        </p>
+      <InfoModal open={info === 'encoding'} title="Video Transcoding" onClose={() => setInfo(null)}>
+        <p>CPU Only is the default. Intel, AMD and NVIDIA let AlreadyOn test compatible GPU decoding, scaling, HDR tone mapping and encoding, retaining CPU fallbacks for unsupported sources.</p>
+        <p>Quick Test pauses streaming and background work, then runs a check limited to two minutes. Full Test pauses background work and asks before interrupting active streams. Stop Test preserves completed cases and removes the temporary files from incomplete work. Progress refreshes every five seconds.</p>
+        <p>Startup skips the quick check when compatible results already exist. Manual quick results do not replace full-test results. Intel tries Quick Sync and VA-API with compatible runtimes; OpenCL provides an alternative GPU tone mapper when available.</p>
+        <p>Intel and AMD need /dev/dri passed into the container. NVIDIA needs its host driver and NVIDIA Container Toolkit. Direct playback avoids conversion. Playback Details shows which stages the current stream actually uses.</p>
       </InfoModal>
 
-      <InfoModal open={info === 'decoding'} title="Hardware Decoding" onClose={() => setInfo(null)}>
-        <p>
-          Before encoding, the server has to <em>decode</em> your file back into raw pictures, resize them to the streaming size and, for HDR video, convert the
-          colors to normal (SDR) ones (<em>tone mapping</em>). Hardware Decoding moves all three to the GPU too, so the pictures stay on the GPU from start to
-          finish and the CPU barely works. The gain is largest for 4K, HEVC and HDR files.
-        </p>
-        <p>
-          <strong>It needs a hardware encoder.</strong> The option stays off until you pick one under Hardware Encoding, and choosing Software Only there turns it
-          off again. With a software encoder the pictures would have to be copied back to the CPU anyway, which loses the benefit.
-        </p>
-        <p>
-          Each file is checked against what a GPU can decode (codec, 10-bit, size). A file it can't handle is decoded on the CPU, and the GPU still encodes. If
-          GPU decoding fails or stalls while starting, the stream retries on the CPU, so playback never stops because of it, and that kind of video stays on the
-          CPU for ten minutes.
-        </p>
-        <p>
-          <strong>HDR tone mapping</strong> depends on the GPU. <strong>Intel</strong> (Quick Sync or VA-API) does it on the GPU for HDR10 video. AMD and NVIDIA
-          GPUs, and HLG video, tone map on the CPU, at the reduced size, after the GPU has decoded and scaled. The GPU's colors differ a little from the CPU's,
-          and are slightly darker.
-        </p>
-        <p>
-          When it is Enabled, the Test button runs a short H.264 clip through the whole GPU path (decode, scale and encode) and says whether it worked. It
-          doesn't test other codecs (HEVC, AV1, 10-bit); a file that fails on the GPU falls back as above. Show Playback Details in the player menu shows where
-          each step ran for the stream you are watching.
-        </p>
+      <InfoModal open={confirmFullTest} title="Active Streams Detected" onClose={() => setConfirmFullTest(false)}>
+        <p>Active streams have been detected and will be paused while the full test runs. Select Test Anyway to pause all streams and background tasks, or Cancel to keep playback running.</p>
+        {testError && <p className="profile-field-error">{testError}</p>}
+        <div className="admin-modal-actions">
+          <Button onClick={() => setConfirmFullTest(false)} disabled={requesting}>Cancel</Button>
+          <Button primary onClick={() => void startTest('full', true)} disabled={requesting}>Test Anyway</Button>
+        </div>
+      </InfoModal>
+
+      <InfoModal open={Boolean(testError) && !confirmFullTest} title="Video Transcoding Test" onClose={() => setTestError(null)}>
+        <p className="profile-field-error">{testError}</p>
+      </InfoModal>
+
+      <InfoModal open={Boolean(benchmark?.recommendFull) && benchmark?.manual === true && benchmark?.mode === 'mini' && (benchmark?.outcome === 'completed' || benchmark?.outcome === 'time-limit') && recommendationKey !== dismissedRecommendation && !testRunning && !testError && !confirmFullTest && info === null} title="Full Test Recommended" onClose={() => setDismissedRecommendation(recommendationKey)}>
+        <p>Quick Test results differ substantially from the previous Full Test. Run a Full Test to refresh the server settings.</p>
+        <div className="admin-modal-actions">
+          <Button onClick={() => setDismissedRecommendation(recommendationKey)}>Cancel</Button>
+          <Button primary onClick={() => void requestFullTest()} disabled={requesting}>Run Full Test</Button>
+        </div>
       </InfoModal>
 
       <InfoModal open={info === 'tmdb'} title="TMDb API Key" onClose={() => setInfo(null)}>

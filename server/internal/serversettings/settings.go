@@ -88,6 +88,9 @@ func Save(ctx context.Context, db *sql.DB, u Update) (Settings, error) {
 			return Settings{}, ErrInvalidTranscoding
 		}
 		s.Transcoding = *u.Transcoding
+		// A vendor selects the complete automatic GPU pipeline. Keep the stored
+		// decoding field for older API clients; new vendor updates enable it.
+		s.HardwareDecoding = s.Transcoding != "software"
 		// Going back to software takes decoding with it.
 		if s.Transcoding == "software" {
 			s.HardwareDecoding = false

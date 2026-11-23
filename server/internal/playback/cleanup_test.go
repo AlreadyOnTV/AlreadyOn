@@ -94,6 +94,7 @@ func TestManagerSharesAndHoldsSlotUntilReaped(t *testing.T) {
 	if err != nil {
 		t.Fatal(err)
 	}
+
 	defer m.Close()
 	a, err := m.Acquire(context.Background(), "channel/plan", "viewer1", Job{Plan: Plan{Mode: "transcode"}})
 	if err != nil {
@@ -122,6 +123,36 @@ func TestManagerSharesAndHoldsSlotUntilReaped(t *testing.T) {
 	}
 	if _, err := os.Stat(a.Job.OutputDir); !errors.Is(err, os.ErrNotExist) {
 		t.Fatal("output leaked")
+	}
+}
+
+func TestManagerPauseAllStopsWorkersWithoutClosing(t *testing.T) {
+	clock := &testClock{now: time.Now()}
+	started, stopped := make(chan struct{}), make(chan struct{})
+	var startOnce, stopOnce sync.Once
+	m, err := NewManager(t.TempDir(), clock, workerFunc(func(ctx context.Context, _ Job) error {
+		startOnce.Do(func() { close(started) })
+		<-ctx.Done()
+		stopOnce.Do(func() { close(stopped) })
+		return ctx.Err()
+	}), DefaultSettings())
+	if err != nil {
+		t.Fatal(err)
+	}
+	defer m.Close()
+	if _, err := m.Acquire(t.Context(), "channel", "viewer", Job{Plan: Plan{Mode: "transcode"}}); err != nil {
+		t.Fatal(err)
+	}
+	<-started
+	if err := m.PauseAll(t.Context()); err != nil {
+		t.Fatal(err)
+	}
+	<-stopped
+	if processes, renditions, viewers := m.Counts(); processes != 0 || renditions != 0 || viewers != 0 {
+		t.Fatalf("pause leaked %d/%d/%d", processes, renditions, viewers)
+	}
+	if _, err := m.Acquire(t.Context(), "new", "viewer-2", Job{Plan: Plan{Mode: "transcode"}}); err != nil {
+		t.Fatal("manager remained closed after pause:", err)
 	}
 }
 
