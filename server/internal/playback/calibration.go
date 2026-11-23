@@ -67,12 +67,20 @@ const (
 	miniSampleWindow = time.Second
 )
 
+// BenchmarkResult summarizes one recorded pipeline case for Server Settings.
+type BenchmarkResult struct {
+	Name       string  `json:"name"`
+	Multiplier float64 `json:"multiplier"`
+	Passed     bool    `json:"passed"`
+}
+
 type CalibrationStatus struct {
-	QuickAt       time.Time `json:"quickAt,omitempty"`
-	FullAt        time.Time `json:"fullAt,omitempty"`
-	RecommendFull bool      `json:"recommendFull"`
-	QuickProfiles int       `json:"quickProfiles"`
-	FullProfiles  int       `json:"fullProfiles"`
+	QuickAt       time.Time         `json:"quickAt,omitempty"`
+	FullAt        time.Time         `json:"fullAt,omitempty"`
+	RecommendFull bool              `json:"recommendFull"`
+	QuickProfiles int               `json:"quickProfiles"`
+	FullProfiles  int               `json:"fullProfiles"`
+	Results       []BenchmarkResult `json:"results,omitempty"`
 }
 
 func (c *Calibration) Status() CalibrationStatus {
@@ -82,10 +90,12 @@ func (c *Calibration) Status() CalibrationStatus {
 	if c.quickOK {
 		status.QuickAt = c.quick.At
 		status.QuickProfiles = len(c.quick.Profiles)
+		status.Results = appendBenchmarkResults(status.Results, "Quick", c.quick.Profiles)
 	}
 	if c.fullOK {
 		status.FullAt = c.full.At
 		status.FullProfiles = len(c.full.Profiles)
+		status.Results = appendBenchmarkResults(status.Results, "Full", c.full.Profiles)
 	}
 	return status
 }
@@ -558,9 +568,28 @@ func (c *Calibration) remember(mode string, cache calibrationCache) {
 	c.quick, c.quickOK = cache, len(cache.Profiles) > 0
 }
 
+func appendBenchmarkResults(results []BenchmarkResult, mode string, profiles []ProfileCapacity) []BenchmarkResult {
+	for _, p := range profiles {
+		name := mode + " Test · " + benchmarkPipelineLabel(p.SourceClass, p.Encoder, p.HardwareDecode, p.ToneMapper, p.Height, p.FPS)
+		multiplier := p.SingleSpeed
+		if len(p.Speeds) > 0 {
+			multiplier = minimumSpeed(p.Speeds)
+		}
+		if p.Streams > 1 {
+			name += fmt.Sprintf(", %d streams", p.Streams)
+		}
+		results = append(results, BenchmarkResult{Name: name, Multiplier: multiplier, Passed: p.Verified && p.Streams > 0})
+	}
+	return results
+}
+
 func benchmarkTestLabel(test calibrationCase) string {
+	return benchmarkPipelineLabel(test.class, test.plan.Encoder, test.plan.Decoder == "hardware", test.plan.ToneMapper, test.plan.Height, test.plan.FPS)
+}
+
+func benchmarkPipelineLabel(class SourceClass, encoder string, hardwareDecode bool, toneMapper string, height int, fps float64) string {
 	device, driver := "CPU", "FFmpeg software"
-	switch test.plan.Encoder {
+	switch encoder {
 	case EncoderIntelQSV:
 		device, driver = "Intel GPU", "Quick Sync"
 	case EncoderIntelVAAPI:
@@ -571,14 +600,14 @@ func benchmarkTestLabel(test calibrationCase) string {
 		device, driver = "NVIDIA GPU", "NVENC"
 	}
 	decode := "CPU decode"
-	if test.plan.Decoder == "hardware" {
+	if hardwareDecode {
 		decode = "hardware decode"
 	}
 	tone := "no tone map"
-	if test.plan.ToneMapper != "" {
-		tone = test.plan.ToneMapper + " tone map"
+	if toneMapper != "" {
+		tone = toneMapper + " tone map"
 	}
-	return fmt.Sprintf("%s/%s - %s, %s, %s, %dp at %.0ffps", device, driver, test.class, decode, tone, test.plan.Height, test.plan.FPS)
+	return fmt.Sprintf("%s/%s - %s, %s, %s, %dp at %.0ffps", device, driver, class, decode, tone, height, fps)
 }
 
 func (c *Calibration) recommendFullLocked() bool {

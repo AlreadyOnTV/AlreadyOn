@@ -3432,6 +3432,13 @@ const noWorkers = async (unreleased = () => 0) => {
     );
     // Superseded scans stop early, so wait for the durable latest revision rather than matching log counts.
     await require("./wait-library-updates.cjs")(page.request, url);
+    const benchmarkPath = "**/api/settings/transcoding/benchmark";
+    let displayResults = [];
+    const benchmarkResponse = page.waitForResponse(response =>
+      response.url().endsWith("/api/settings/transcoding/benchmark") && response.request().method() === "GET");
+    await page.route(benchmarkPath, route => route.fulfill({json: {
+      state: "idle", mode: "", tasks: [], results: displayResults,
+    }}));
     await page.goto(url + "/admin/server");
     await page.locator(".settings-grid").waitFor();
     assert(
@@ -3502,6 +3509,26 @@ const noWorkers = async (unreleased = () => 0) => {
       `Settings out of order: ${JSON.stringify(names)}`,
     );
     const row = page.locator(".setting-row", {hasText: "Video Transcoding"}).first();
+    await benchmarkResponse;
+    const showResults = row.getByRole("button", {name: "See Test Results"});
+    assert(await showResults.count() === 0, "Results link is hidden before measurements");
+    displayResults = [
+      {name: "Full Test · Intel Quick Sync 4K HDR", multiplier: 1.67, passed: true},
+      {name: "Quick Test · CPU 1080p", multiplier: 0, passed: false},
+    ];
+    await showResults.click();
+    const resultsDialog = page.getByRole("dialog", {name: "Video Transcoding Test Results"});
+    await resultsDialog.waitFor();
+    assert((await resultsDialog.getByRole("columnheader").allTextContents()).join("|") ===
+      "Test Name|Multiplier|Result", "Results have the requested columns");
+    assert((await resultsDialog.getByRole("row").allTextContents()).slice(1).join("|") ===
+      "Full Test · Intel Quick Sync 4K HDRx1.67Pass|Quick Test · CPU 1080p—Fail",
+      "Each recorded case has its measured multiplier and outcome");
+    await page.keyboard.press("Escape");
+    await resultsDialog.waitFor({state: "hidden"});
+    assert(await showResults.evaluate(element => element === document.activeElement), "Focus returns to results link");
+    await page.unroute(benchmarkPath);
+
     await row.getByRole("button", {name: "More Info"}).click();
     await page.getByRole("dialog", {name: "Video Transcoding"}).waitFor();
     await page.keyboard.press("Escape");

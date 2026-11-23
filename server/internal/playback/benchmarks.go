@@ -319,6 +319,7 @@ type BenchmarkStatus struct {
 	FullAt        time.Time         `json:"fullAt,omitempty"`
 	QuickProfiles int               `json:"quickProfiles"`
 	FullProfiles  int               `json:"fullProfiles"`
+	Results       []BenchmarkResult `json:"results,omitempty"`
 	RecommendFull bool              `json:"recommendFull"`
 	Manual        bool              `json:"manual"`
 }

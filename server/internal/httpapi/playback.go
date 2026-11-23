@@ -458,6 +458,7 @@ func (p *PlaybackHTTP) benchmarkStatus() playback.BenchmarkStatus {
 		s.QuickAt, s.FullAt = calibration.QuickAt, calibration.FullAt
 		s.QuickProfiles, s.FullProfiles = calibration.QuickProfiles, calibration.FullProfiles
 		s.RecommendFull = calibration.RecommendFull
+		s.Results = calibration.Results
 	}
 	return s
 }

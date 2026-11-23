@@ -215,3 +215,19 @@ func TestUnmeasuredCalibrationAllowsTwoConversionSlots(t *testing.T) {
 		t.Fatalf("third conversion: %v", err)
 	}
 }
+
+func TestCalibrationStatusIncludesQuickAndFullCases(t *testing.T) {
+	c := &Calibration{}
+	c.remember("quick", calibrationCache{Profiles: []ProfileCapacity{{
+		SourceClass: SourceH264HD, SingleSpeed: 0.8, Verified: true,
+	}}})
+	c.remember("full", calibrationCache{Profiles: []ProfileCapacity{{
+		SourceClass: SourceHEVCPQ, Encoder: EncoderIntelQSV, Streams: 2,
+		SingleSpeed: 3, Speeds: []float64{2.1, 1.67}, Verified: true,
+	}}})
+	rows := c.Status().Results
+	if len(rows) != 2 || rows[0].Passed || rows[0].Multiplier != 0.8 ||
+		!rows[1].Passed || rows[1].Multiplier != 1.67 {
+		t.Fatalf("unexpected test results: %+v", rows)
+	}
+}

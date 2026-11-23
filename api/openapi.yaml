@@ -1925,6 +1925,18 @@ paths:
                   fullAt: { type: string, format: date-time }
                   quickProfiles: { type: integer }
                   fullProfiles: { type: integer }
+                  results:
+                    type: array
+                    description: Recorded cases from the most recent compatible Quick and Full results.
+                    items:
+                      type: object
+                      required: [name, multiplier, passed]
+                      properties:
+                        name: { type: string }
+                        multiplier:
+                          type: number
+                          description: Slowest measured real-time speed ratio for the reported run. Zero indicates no usable speed.
+                        passed: { type: boolean }
                   recommendFull: { type: boolean }
                   manual:
                     type: boolean

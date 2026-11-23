@@ -46,7 +46,7 @@ const TRANSCODING_OPTIONS = [
   { value: 'nvidia-nvenc', label: 'NVIDIA' },
 ];
 
-type InfoKey = 'name' | 'encoding' | 'tmdb' | 'tls';
+type InfoKey = 'name' | 'encoding' | 'benchmark-results' | 'tmdb' | 'tls';
 
 // A grid row: the wrapper is display: contents, so the three cells (and an
 // optional note beneath them) lay out on the shared grid.
@@ -286,6 +286,7 @@ export default function ServerPage() {
     finally { setRequesting(false); }
   };
   const testRunning = benchmark?.state === 'queued' || benchmark?.state === 'running';
+  const testResults = benchmark?.results ?? [];
   const recommendationKey = benchmark?.quickAt ?? '';
   const progress = (() => {
     if (!benchmark || !testRunning) return '';
@@ -330,7 +331,16 @@ export default function ServerPage() {
               )}
               <Button onClick={() => setInfo('encoding')}>More Info</Button>
             </>}
-            note={testRunning ? <div className="setting-note" role="status" aria-live="polite"><p>{progress}</p></div> : undefined}
+            note={(testRunning || testResults.length > 0) && (
+              <div className="setting-note">
+                {testResults.length > 0 && (
+                  <button type="button" className="benchmark-results-link" onClick={() => setInfo('benchmark-results')}>
+                    See Test Results
+                  </button>
+                )}
+                {testRunning && <p role="status" aria-live="polite">{progress}</p>}
+              </div>
+            )}
           />
 
           <LoudnessRow />
@@ -387,6 +397,24 @@ export default function ServerPage() {
         <p>Quick Test pauses streaming and background work, then runs a check limited to two minutes. Full Test pauses background work and asks before interrupting active streams. Stop Test preserves completed cases and removes the temporary files from incomplete work. Progress refreshes every five seconds.</p>
         <p>Startup skips the quick check when compatible results already exist. Manual quick results do not replace full-test results. Intel tries Quick Sync and VA-API with compatible runtimes; OpenCL provides an alternative GPU tone mapper when available.</p>
         <p>Intel and AMD need /dev/dri passed into the container. NVIDIA needs its host driver and NVIDIA Container Toolkit. Direct playback avoids conversion. Playback Details shows which stages the current stream actually uses.</p>
+      </InfoModal>
+
+      <InfoModal open={info === 'benchmark-results'} title="Video Transcoding Test Results"
+        className="benchmark-results-dialog" onClose={() => setInfo(null)}>
+        <div className="modal-table-scroll" tabIndex={0} role="region" aria-label="Test results">
+          <table className="admin-table benchmark-results-table">
+            <thead><tr><th scope="col">Test Name</th><th scope="col">Multiplier</th><th scope="col">Result</th></tr></thead>
+            <tbody>
+              {testResults.map((test, index) => (
+                <tr key={`${test.name}:${index}`}>
+                  <th scope="row">{test.name}</th>
+                  <td>{test.multiplier > 0 ? `x${test.multiplier.toFixed(2)}` : '—'}</td>
+                  <td>{test.passed ? 'Pass' : 'Fail'}</td>
+                </tr>
+              ))}
+            </tbody>
+          </table>
+        </div>
       </InfoModal>
 
       <InfoModal open={confirmFullTest} title="Active Streams Detected" onClose={() => setConfirmFullTest(false)}>
