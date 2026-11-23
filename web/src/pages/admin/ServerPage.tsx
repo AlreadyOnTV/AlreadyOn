@@ -405,13 +405,14 @@ export default function ServerPage() {
         {selection && <p>Default backend: {selection.driver} (FFmpeg {selection.library}) · Concurrent transcode limit: {selection.concurrentLimit}</p>}
         <div className="modal-table-scroll" tabIndex={0} role="region" aria-label="Test results">
           <table className="admin-table benchmark-results-table">
-            <thead><tr><th scope="col">Test Name</th><th scope="col">Multiplier</th><th scope="col">Result</th></tr></thead>
+            <thead><tr><th scope="col">Test Name</th><th scope="col">Multiplier</th><th scope="col">Result</th><th scope="col">Last Completed</th></tr></thead>
             <tbody>
               {testResults.map((test, index) => (
                 <tr key={`${test.name}:${index}`}>
                   <th scope="row">{test.name}</th>
                   <td>{test.multiplier > 0 ? `x${test.multiplier.toFixed(2)}` : '—'}</td>
                   <td>{test.passed ? 'Pass' : 'Fail'}</td>
+                  <td>{test.lastCompleted ? <time dateTime={test.lastCompleted}>{new Date(test.lastCompleted).toLocaleString()}</time> : '—'}</td>
                 </tr>
               ))}
             </tbody>

@@ -56,7 +56,20 @@ func (c *Calibration) fingerprint(ctx context.Context, inputs *benchmarkInputs) 
 	fmt.Fprintf(hash, "%s:%t:%s", c.Capacity.currentEncoder(ctx), c.Capacity.HardwareDecoding != nil && c.Capacity.HardwareDecoding(ctx), RenderNode())
 	return hex.EncodeToString(hash.Sum(nil)), nil
 }
+
+const calibrationFreshness = 24 * time.Hour
+
 func readCalibrationCache(path, fingerprint string) (calibrationCache, bool) {
+	cache, ok := readCompatibleCalibrationCache(path, fingerprint)
+	if !ok || time.Since(cache.At) >= calibrationFreshness {
+		return calibrationCache{}, false
+	}
+	return cache, true
+}
+
+// Full refreshes need their complete history to resume after the time limit,
+// even when the last write is too old to use for admission.
+func readCompatibleCalibrationCache(path, fingerprint string) (calibrationCache, bool) {
 	var cached calibrationCache
 	info, err := os.Lstat(path)
 	if err != nil || !info.Mode().IsRegular() || info.Size() > 2<<20 {
@@ -66,7 +79,7 @@ func readCalibrationCache(path, fingerprint string) (calibrationCache, bool) {
 	if err != nil || json.Unmarshal(raw, &cached) != nil {
 		return cached, false
 	}
-	if cached.Fingerprint != fingerprint || cached.At.After(time.Now()) || time.Since(cached.At) > 24*time.Hour || cached.Threads < 1 || cached.Threads > MaxThreads || len(cached.Profiles) == 0 || len(cached.Profiles) > 256 || len(cached.Status.Samples) > 128 || len(cached.HDR) > 128 {
+	if cached.Fingerprint != fingerprint || cached.At.After(time.Now()) || cached.Threads < 1 || cached.Threads > MaxThreads || len(cached.Profiles) == 0 || len(cached.Profiles) > 256 || len(cached.Status.Samples) > 128 || len(cached.HDR) > 128 {
 		return calibrationCache{}, false
 	}
 	for _, p := range cached.Profiles {

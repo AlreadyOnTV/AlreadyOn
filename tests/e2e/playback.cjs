@@ -3516,7 +3516,7 @@ const noWorkers = async (unreleased = () => 0) => {
     const showResults = row.getByRole("button", {name: "See Test Results"});
     assert(await showResults.count() === 0, "Results link is hidden before measurements");
     displayResults = [
-      {name: "Full Test · Intel Quick Sync 4K HDR", multiplier: 1.67, passed: true},
+      {name: "Full Test · Intel Quick Sync 4K HDR", multiplier: 1.67, passed: true, lastCompleted: "2026-11-23T14:00:00Z"},
       {name: "Quick Test · CPU 1080p", multiplier: 0, passed: false},
     ];
     await showResults.click();
@@ -3530,10 +3530,14 @@ const noWorkers = async (unreleased = () => 0) => {
       element.compareDocumentPosition(element.closest(".admin-modal-body").querySelector("table")) &
       Node.DOCUMENT_POSITION_FOLLOWING), "Backend summary appears above the table");
     assert((await resultsDialog.getByRole("columnheader").allTextContents()).join("|") ===
-      "Test Name|Multiplier|Result", "Results have the requested columns");
-    assert((await resultsDialog.getByRole("row").allTextContents()).slice(1).join("|") ===
-      "Full Test · Intel Quick Sync 4K HDRx1.67Pass|Quick Test · CPU 1080p—Fail",
-      "Each recorded case has its measured multiplier and outcome");
+      "Test Name|Multiplier|Result|Last Completed", "Results have the requested columns");
+    const resultRows = resultsDialog.getByRole("row");
+    assert(await resultRows.count() === 3 &&
+      (await resultRows.nth(1).getByRole("cell").allTextContents()).slice(0, 2).join("|") === "x1.67|Pass" &&
+      (await resultRows.nth(2).getByRole("cell").allTextContents()).join("|") === "—|Fail|—",
+      "Each recorded case has its multiplier, outcome, and completion time when known");
+    assert(await resultRows.nth(1).locator("time").getAttribute("datetime") === "2026-11-23T14:00:00Z",
+      "Last Completed displays the recorded case timestamp");
     await page.keyboard.press("Escape");
     await resultsDialog.waitFor({state: "hidden"});
     assert(await showResults.evaluate(element => element === document.activeElement), "Focus returns to results link");

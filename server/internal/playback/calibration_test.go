@@ -274,3 +274,36 @@ func TestFullCalibrationLimitsAlternateBackendCoverage(t *testing.T) {
 		t.Fatal("alternate backends should compare SDR and 30 fps HDR")
 	}
 }
+
+func TestFullCalibrationResumesOnlyMissingAndExpiredCases(t *testing.T) {
+	now := time.Date(2026, 11, 23, 14, 0, 0, 0, time.UTC)
+	source := sourceInfo()
+	video, _ := Tracks(source)
+	cases := func() []calibrationCase {
+		var result []calibrationCase
+		for _, height := range []int{360, 480, 720, 1080} {
+			result = append(result, calibrationCase{class: SourceH264HD, source: source, plan: Plan{Height: height}})
+		}
+		return result
+	}
+	profile := func(height int, age time.Duration) ProfileCapacity {
+		return ProfileCapacity{SourceClass: SourceH264HD, TargetHeight: height, SourceFPS: video.FrameRate,
+			LastCompleted: now.Add(-age)}
+	}
+	history := []ProfileCapacity{profile(360, time.Hour), profile(480, 24*time.Hour), profile(720, 48*time.Hour)}
+	due := dueFullCalibrationCases(cases(), history, now)
+	if len(due) != 3 || due[0].plan.Height != 1080 || due[1].plan.Height != 720 || due[2].plan.Height != 480 {
+		t.Fatalf("expected missing then oldest cases, got %+v", due)
+	}
+	// A completed failure also counts as completed. Interrupted 720p/480p
+	// cases keep their old timestamps and are retried.
+	history = append(history, profile(1080, 0))
+	due = dueFullCalibrationCases(cases(), history, now)
+	if len(due) != 2 || due[0].plan.Height != 720 || due[1].plan.Height != 480 {
+		t.Fatalf("resume repeated a finished case: %+v", due)
+	}
+	fresh := freshCalibrationProfiles(history, now)
+	if len(fresh) != 2 || fresh[0].TargetHeight != 360 || fresh[1].TargetHeight != 1080 {
+		t.Fatalf("stale measurements should not be used for admission: %+v", fresh)
+	}
+}

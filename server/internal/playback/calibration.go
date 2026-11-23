@@ -33,6 +33,7 @@ type ProfileCapacity struct {
 	Speeds            []float64   `json:"perStreamSpeeds"`
 	Verified          bool        `json:"verified"`
 	MeasuredAt        time.Time   `json:"measuredAt"`
+	LastCompleted     time.Time   `json:"lastCompleted,omitzero"`
 	CPUCores          float64     `json:"cpuCores"`
 	GPUEngines        *float64    `json:"gpuEngines,omitempty"`
 	ReferenceSSIM     *float64    `json:"referenceSsim,omitempty"`
@@ -70,9 +71,10 @@ const (
 
 // BenchmarkResult summarizes one recorded pipeline case for Server Settings.
 type BenchmarkResult struct {
-	Name       string  `json:"name"`
-	Multiplier float64 `json:"multiplier"`
-	Passed     bool    `json:"passed"`
+	Name          string    `json:"name"`
+	Multiplier    float64   `json:"multiplier"`
+	Passed        bool      `json:"passed"`
+	LastCompleted time.Time `json:"lastCompleted,omitzero"`
 }
 
 type CalibrationStatus struct {
@@ -441,6 +443,59 @@ func sameProfile(a, b ProfileCapacity) bool {
 	return a.SourceClass == b.SourceClass && a.SourceFPS == b.SourceFPS && a.Encoder == b.Encoder && a.HardwareDecode == b.HardwareDecode && a.ToneMapper == b.ToneMapper && a.Height == b.Height && a.FPS == b.FPS && a.Threads == b.Threads
 }
 
+type calibrationCaseKey struct {
+	class               SourceClass
+	sourceFPS           float64
+	height              int
+	encoder, toneMapper string
+	hardwareDecode      bool
+}
+
+func (p ProfileCapacity) caseKey() calibrationCaseKey {
+	return calibrationCaseKey{p.SourceClass, p.SourceFPS, p.TargetHeight, p.Encoder, p.ToneMapper, p.HardwareDecode}
+}
+
+func (p ProfileCapacity) completionTime() time.Time {
+	if !p.LastCompleted.IsZero() {
+		return p.LastCompleted
+	}
+	return p.MeasuredAt // Older caches recorded sample time but not case completion.
+}
+
+func freshCalibrationProfiles(profiles []ProfileCapacity, now time.Time) []ProfileCapacity {
+	var fresh []ProfileCapacity
+	for _, profile := range profiles {
+		at := profile.completionTime()
+		if !at.After(now) && now.Sub(at) < calibrationFreshness {
+			fresh = append(fresh, profile)
+		}
+	}
+	return fresh
+}
+
+func dueFullCalibrationCases(cases []calibrationCase, profiles []ProfileCapacity, now time.Time) []calibrationCase {
+	byKey := make(map[calibrationCaseKey]time.Time, len(profiles))
+	for _, profile := range profiles {
+		at := profile.completionTime()
+		if !at.After(now) && at.After(byKey[profile.caseKey()]) {
+			byKey[profile.caseKey()] = at
+		}
+	}
+	due := cases[:0]
+	key := func(test calibrationCase) calibrationCaseKey {
+		video, _ := Tracks(test.source)
+		return calibrationCaseKey{test.class, video.FrameRate, test.plan.Height, test.plan.Encoder, test.plan.ToneMapper, test.plan.Decoder == "hardware"}
+	}
+	for _, test := range cases {
+		if now.Sub(byKey[key(test)]) >= calibrationFreshness {
+			due = append(due, test)
+		}
+	}
+	// Preserve the normal order among untested cases, then refresh oldest first.
+	sort.SliceStable(due, func(i, j int) bool { return byKey[key(due[i])].Before(byKey[key(due[j])]) })
+	return due
+}
+
 // Startup is deliberately bounded by the owning Benchmarks group's deadline.
 // A valid quick or full cache satisfies startup without repeating a test.
 func (c *Calibration) Startup(ctx context.Context) { c.run(ctx, false, true) }
@@ -470,12 +525,15 @@ func (c *Calibration) run(ctx context.Context, full, startup bool) {
 		return
 	}
 	quick, quickOK := readCalibrationCache(benchmarkCachePath(c.DataDir, "quick"), fingerprint)
-	previousFull, fullOK := readCalibrationCache(benchmarkCachePath(c.DataDir, "full"), fingerprint)
+	previousFull, fullSaved := readCompatibleCalibrationCache(benchmarkCachePath(c.DataDir, "full"), fingerprint)
+	freshFull := previousFull
+	freshFull.Profiles = freshCalibrationProfiles(previousFull.Profiles, time.Now())
+	fullOK := len(freshFull.Profiles) > 0
 	c.mu.Lock()
 	c.quick, c.quickOK = quick, quickOK
-	c.full, c.fullOK = previousFull, fullOK
+	c.full, c.fullOK = previousFull, fullSaved
 	c.mu.Unlock()
-	effective, effectiveOK := previousFull, fullOK
+	effective, effectiveOK := freshFull, fullOK
 	mode := "quick"
 	if full {
 		mode = "full"
@@ -499,11 +557,11 @@ func (c *Calibration) run(ctx context.Context, full, startup bool) {
 	// A manual quick check observes its own result, but must not retune settings
 	// already selected by a full analysis.
 	threads := c.Tuner.Threads()
-	if fullOK && !full {
+	if fullSaved {
 		threads = previousFull.Threads
 		c.Tuner.Load(threads, previousFull.At)
 	}
-	if full || !fullOK {
+	if !fullSaved {
 		c.tune(ctx, inputs)
 	}
 	threads = c.Tuner.Threads()
@@ -514,8 +572,9 @@ func (c *Calibration) run(ctx context.Context, full, startup bool) {
 	}
 	old := previousFull.Profiles
 	profiles := append([]ProfileCapacity(nil), old...)
-	if !full {
-		old = previousFull.Profiles
+	if full {
+		cases = dueFullCalibrationCases(cases, old, time.Now())
+	} else {
 		profiles = nil
 		// A manual quick run replaces only the prior quick record, including
 		// when it is stopped before completing every case.
@@ -574,6 +633,9 @@ func (c *Calibration) run(ctx context.Context, full, startup bool) {
 			measureCtx = fixtureCtx
 		}
 		result := c.evaluate(measureCtx, test, old)
+		if full && ctx.Err() != nil {
+			break // An interrupted case does not replace its previous result.
+		}
 		// Keep a proven smaller count if the bounded concurrent trial timed out.
 		if measureCtx.Err() != nil && (!result.Verified || result.Streams == 0) {
 			if ctx.Err() != nil {
@@ -588,18 +650,19 @@ func (c *Calibration) run(ctx context.Context, full, startup bool) {
 		if !result.Verified && ctx.Err() != nil {
 			break
 		}
+		result.LastCompleted = time.Now()
 		filtered := profiles[:0]
 		for _, prior := range profiles {
-			if prior.TargetHeight != result.TargetHeight || prior.SourceClass != result.SourceClass || prior.SourceFPS != result.SourceFPS || prior.HardwareDecode != result.HardwareDecode || prior.Encoder != result.Encoder || prior.ToneMapper != result.ToneMapper {
+			if prior.caseKey() != result.caseKey() {
 				filtered = append(filtered, prior)
 			}
 		}
 		profiles = append(filtered, result)
-		if len(profiles) > 0 || fullOK && full {
-			c.save(fingerprint, mode, profiles)
-			c.remember(mode, calibrationCache{Fingerprint: fingerprint, At: time.Now(), Threads: c.Tuner.Threads(), Profiles: profiles})
-		}
-		if full && (len(profiles) > 0 || fullOK) || !full && !fullOK {
+		c.save(fingerprint, mode, profiles)
+		c.remember(mode, calibrationCache{Fingerprint: fingerprint, At: result.LastCompleted, Threads: c.Tuner.Threads(), Profiles: profiles})
+		if full {
+			c.Capacity.publishProfiles(freshCalibrationProfiles(profiles, result.LastCompleted))
+		} else if !fullOK {
 			c.Capacity.publishProfiles(profiles)
 		}
 		completed++
@@ -607,13 +670,6 @@ func (c *Calibration) run(ctx context.Context, full, startup bool) {
 	}
 	fixtureCancel()
 	activity.Default.Progress(progressID, completed, len(cases))
-	if len(profiles) > 0 {
-		c.save(fingerprint, mode, profiles)
-		c.remember(mode, calibrationCache{Fingerprint: fingerprint, At: time.Now(), Threads: c.Tuner.Threads(), Profiles: profiles})
-	}
-	if len(profiles) > 0 && (full || !fullOK) {
-		c.Capacity.publishProfiles(profiles)
-	}
 	if c.Capacity.OnChange != nil {
 		c.Capacity.OnChange()
 	}
@@ -625,6 +681,7 @@ func (c *Calibration) apply(cache calibrationCache) {
 }
 
 func (c *Calibration) remember(mode string, cache calibrationCache) {
+	cache.Profiles = append([]ProfileCapacity(nil), cache.Profiles...)
 	c.mu.Lock()
 	defer c.mu.Unlock()
 	if mode == "full" {
@@ -644,7 +701,7 @@ func appendBenchmarkResults(results []BenchmarkResult, mode string, profiles []P
 		if p.Streams > 1 {
 			name += fmt.Sprintf(", %d streams", p.Streams)
 		}
-		results = append(results, BenchmarkResult{Name: name, Multiplier: multiplier, Passed: p.Verified && p.Streams > 0})
+		results = append(results, BenchmarkResult{Name: name, Multiplier: multiplier, Passed: p.Verified && p.Streams > 0, LastCompleted: p.completionTime()})
 	}
 	return results
 }

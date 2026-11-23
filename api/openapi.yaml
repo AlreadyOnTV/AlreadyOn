@@ -1945,6 +1945,7 @@ paths:
                           type: number
                           description: Slowest measured real-time speed ratio for the reported run. Zero indicates no usable speed.
                         passed: { type: boolean }
+                        lastCompleted: { type: string, format: date-time }
                   recommendFull: { type: boolean }
                   manual:
                     type: boolean

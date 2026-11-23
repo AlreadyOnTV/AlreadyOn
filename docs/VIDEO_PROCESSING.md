@@ -6,7 +6,7 @@ Startup and Quick Test measure 360p SDR capacity, then check 720p within the rem
 
 Auto conversions try 720p SDR first and fall back to measured lower rungs when needed. WebUI, phone and TV sample playback every five seconds, targeting three to five seconds buffered. Two pressured samples lower the quality. Three healthy samples request a higher rung within source and client limits. Higher Auto rungs can yield capacity after a refused tune. The current rendition plays during preparation.
 
-Quick and Full results remain separate. See Test Results shows the default backend, FFmpeg encoder and slot ceiling. Stop Test retains completed cases. Manual Full Test asks before pausing active streams.
+Quick and Full results remain separate. See Test Results shows the default backend, FFmpeg encoder and slot ceiling. Each completed case is saved immediately with its completion time. Later Full Tests run only missing cases or results at least 24 hours old. Manual Full Test asks before pausing active streams.
 
 Recommendation comparison uses only matching source/encoder/decode/tone-map
 pipelines and ignores concurrency differences. It recommends Full Test only when a newer quick
