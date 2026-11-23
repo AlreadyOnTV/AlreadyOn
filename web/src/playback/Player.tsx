@@ -1009,16 +1009,24 @@ export function Player({
       },
     };
 
-    async function prepare(
-      entryStartsAt?: string,
+    async function prepare({
+      entryStartsAt,
       stopOnCapacity = false,
       autoReplacement = false,
-      replacementToken?: string,
-      autoDecision?: AutoDecision,
-    ): Promise<Prepared | null> {
+      replacementToken,
+      autoDecision,
+      attempts = entryStartsAt ? 1 : 45,
+    }: {
+      entryStartsAt?: string;
+      stopOnCapacity?: boolean;
+      autoReplacement?: boolean;
+      replacementToken?: string;
+      autoDecision?: AutoDecision;
+      attempts?: number;
+    } = {}): Promise<Prepared | null> {
       const requestedAt = performance.now();
       const capabilities = await clientCapabilities();
-      for (let attempt = 0; attempt < (entryStartsAt ? 1 : 45); attempt++) {
+      for (let attempt = 0; attempt < attempts; attempt++) {
         if (stopped) return null;
         const maxHeight = qualityRef.current;
         const autoMaxHeight = maxHeight === 0 ? autoQualityHeight.current : 0;
@@ -1091,7 +1099,7 @@ export function Player({
               (e as RequestError).code === "stream_capacity") ||
             entryStartsAt ||
             ![409, 503].includes((e as RequestError).status ?? 0) ||
-            attempt === 44
+            attempt === attempts - 1
           )
             throw e;
           await sleep((e as RequestError).code === "stream_capacity" ? 1_000 : 300);
@@ -1239,7 +1247,7 @@ export function Player({
       // Entries shorter than the delay prepare their successor immediately.
       prefetch = setTimeout(
         () => {
-          next = prepare(s.entryEndsAt).catch(() => null);
+          next = prepare({ entryStartsAt: s.entryEndsAt }).catch(() => null);
         },
         Math.max(0, remaining - 2000 * liveDelay()),
       );
@@ -1257,13 +1265,12 @@ export function Player({
       try {
         let fresh: Prepared | null;
         try {
-          fresh = await prepare(
-            undefined,
-            true,
-            adaptiveHeight !== undefined,
-            adaptiveHeight !== undefined ? current.value.token : undefined,
-            decision,
-          );
+          fresh = await prepare({
+            stopOnCapacity: true,
+            autoReplacement: adaptiveHeight !== undefined,
+            replacementToken: adaptiveHeight !== undefined ? current.value.token : undefined,
+            autoDecision: decision,
+          });
         } catch (e) {
           if (
             adaptiveHeight !== undefined ||
@@ -1289,8 +1296,9 @@ export function Player({
           await Promise.all([...grants.keys()].map(drop));
           const prefetched = await pending;
           if (prefetched) await drop(prefetched.value.token);
-          // Bounded retries allow the cancelled worker to exit before admission.
-          fresh = await prepare();
+          // Give the cancelled worker time to exit, then report a slot still
+          // owned by another viewer instead of leaving the settings change pending.
+          fresh = await prepare({ attempts: 8 });
         }
         if (!fresh) {
           if (adaptiveHeight !== undefined) autoQualityHeight.current = oldAutoHeight;
