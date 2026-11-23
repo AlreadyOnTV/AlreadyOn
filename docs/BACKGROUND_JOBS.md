@@ -4,7 +4,7 @@ Database migrations complete before HTTPS, authentication and the WebUI start. E
 
 ## Startup and priority
 
-After the website becomes available, **Performance Benchmarks** runs representative startup calibration within 120 seconds unless compatible quick or full results exist. Synthetic SDR, PQ and HLG fixtures use fixed frame windows after warm-up. Thread choices and concurrent stream counts are measured separately; every stream must exceed the safety margin, with borderline results confirmed. Unverified paths remain conservative. Matching fixture, FFmpeg, hardware, driver and resource fingerprints allow 24-hour reuse. Playback authorization and tuning return 503 with `code: server_starting` and `Retry-After: 2`; the WebUI says **Server starting, please wait.** Completed measurements survive interruption; shutdown cancels the group.
+After the website becomes available, **Performance Benchmarks** runs representative startup calibration within 120 seconds unless compatible quick or full results exist. Synthetic SDR, PQ and HLG fixtures use fixed frame windows after warm-up. Thread choices and concurrent stream counts are measured separately; every stream must exceed the safety margin, with borderline results confirmed. Automatic capacity starts at two conversion slots, subject to memory limits, until compatible results exist. Matching fixture, FFmpeg, hardware, driver and resource fingerprints allow 24-hour reuse. Playback authorization and tuning return 503 with `code: server_starting` and `Retry-After: 2`; the WebUI says **Server starting, please wait.** Completed measurements survive interruption; shutdown cancels the group.
 
 The library pipeline follows: scan/probe, TMDb enrichment, free-provider metadata, channel population and schedule generation. It runs alongside playback under resource-pressure limits. Benchmark reservations pause library subprocesses and yield cooperative work at safe checkpoints outside database transactions.
 
@@ -13,6 +13,8 @@ Keyframe and enabled loudness analysis have lowest priority. One analysis subpro
 Health, authentication, metrics, playback cleanup, DNS and certificate services continue independently. Resource-pressure and CPU-budget controls remain active; priority does not bypass them.
 
 ## Recurring work
+
+At 30 minutes after startup, a Full Test runs once if compatible Full results are missing and playback and benchmarks are idle.
 
 Performance benchmarks run at local **00:00, 04:00, 08:00, 12:00, 16:00 and 20:00**, following the configured server timezone. These idle runs compare complete pipelines across the prepared fixtures and supported output rungs, refining representative concurrency. A due run waits while playback is active. New playback cancels a recurring benchmark and waits for its subprocess teardown before admission. Interrupted runs retain previous valid measurements. Missed runs coalesce.
 

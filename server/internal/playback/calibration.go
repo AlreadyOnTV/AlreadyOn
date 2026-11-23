@@ -623,6 +623,9 @@ func samePipeline(a, b ProfileCapacity) bool {
 		a.Encoder == b.Encoder && a.HardwareDecode == b.HardwareDecode &&
 		a.ToneMapper == b.ToneMapper && a.Threads == b.Threads
 }
+
+const unmeasuredProcessLimit = 2
+
 func (c *Capacity) resetCalibration() {
 	c.mu.Lock()
 	defer c.mu.Unlock()
@@ -630,7 +633,7 @@ func (c *Capacity) resetCalibration() {
 	c.profiles = nil
 	c.hdr = nil
 	c.status.Samples = nil
-	c.status.Processes = 1
+	c.status.Processes = unmeasuredProcessLimit
 	c.status.Calibration = "unverified"
 	c.status.MaxHeight = 0
 	c.status.MaxFPS = 0
@@ -712,6 +715,10 @@ func (c *Capacity) calibratedAdmission(active []Job, job Job) (bool, error) {
 		return false, nil
 	}
 	limit, total := MaxParallel, 0
+	unmatchedLimit := 1
+	if len(profiles) == 0 {
+		unmatchedLimit = unmeasuredProcessLimit
+	}
 	for _, current := range append(append([]Job(nil), active...), job) {
 		cost := jobResourceCost(current)
 		if cost == 0 {
@@ -726,7 +733,7 @@ func (c *Capacity) calibratedAdmission(active []Job, job Job) (bool, error) {
 			}
 		}
 		if selected == nil {
-			limit = 1
+			limit = min(limit, unmatchedLimit)
 		} else {
 			if selected.Streams == 0 {
 				return true, ErrCapacityUnsustainable

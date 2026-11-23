@@ -11,6 +11,8 @@ import (
 	"github.com/alreadyonapp/alreadyon/server/internal/governor"
 )
 
+const initialFullDelay = 30 * time.Minute
+
 var ErrServerStarting = errors.New("Server starting, please wait.")
 var ErrBenchmarkRunning = errors.New("Video transcoding test is running. Try playback again when it finishes.")
 
@@ -51,12 +53,19 @@ func (b *Benchmarks) Start(startup bool) bool {
 	return b.start(startup, mode, false, false)
 }
 func (b *Benchmarks) start(startup bool, mode string, requested, manual bool) bool {
+	return b.startIf(startup, mode, requested, manual, nil)
+}
+
+func (b *Benchmarks) startIf(startup bool, mode string, requested, manual bool, eligible func() bool) bool {
 	b.mu.Lock()
 	defer b.mu.Unlock()
 	if !startup && !requested && b.pendingMode != "" {
 		return false
 	}
 	if b.done != nil || (!startup && (!b.ready.Load() || b.admissions > 0 || b.Busy != nil && b.Busy())) {
+		return false
+	}
+	if b.Context.Err() != nil || eligible != nil && !eligible() {
 		return false
 	}
 	ctx, cancel := context.WithCancel(b.Context)
@@ -175,6 +184,22 @@ func NextBenchmark(now time.Time) time.Time {
 	}
 	return next
 }
+
+// RunInitialFull makes one idle-only attempt per server start. A busy server
+// skips this attempt and continues on the regular schedule.
+func (b *Benchmarks) RunInitialFull(ctx context.Context, startedAt time.Time, hasFullResults func() bool) {
+	timer := time.NewTimer(time.Until(startedAt.Add(initialFullDelay)))
+	defer timer.Stop()
+	select {
+	case <-ctx.Done():
+		return
+	case <-timer.C:
+		if ctx.Err() == nil {
+			b.startIf(false, "full", false, false, func() bool { return !hasFullResults() })
+		}
+	}
+}
+
 func (b *Benchmarks) RunPeriodic(ctx context.Context) {
 	b.runPeriodic(ctx, NextBenchmark, 30*time.Second)
 }

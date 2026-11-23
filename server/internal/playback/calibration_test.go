@@ -198,3 +198,20 @@ func TestAdmissionUsesClosestMeasuredSourceRate(t *testing.T) {
 		t.Fatalf("60fps failure overrode working film-rate profile: %v", err)
 	}
 }
+
+func TestUnmeasuredCalibrationAllowsTwoConversionSlots(t *testing.T) {
+	c := &Capacity{memory: func() uint64 { return 16 << 30 }}
+	c.resetCalibration()
+	job := Job{Source: sourceInfo(), Plan: Plan{Mode: "transcode", Height: 1080, FPS: 30}, Threads: 2}
+	settings := DefaultSettings()
+	settings.AutoProcesses = true
+	if got := EffectiveSettings(settings, c).MaxProcesses; got != 2 {
+		t.Fatalf("effective process limit = %d, want 2", got)
+	}
+	if err := c.AdmissionError([]Job{job}, job); err != nil {
+		t.Fatalf("second conversion: %v", err)
+	}
+	if err := c.AdmissionError([]Job{job, job}, job); !errors.Is(err, ErrBusy) {
+		t.Fatalf("third conversion: %v", err)
+	}
+}
