@@ -1292,7 +1292,7 @@ button.admin-badge:disabled {
 .metrics-expanded-dialog {
   padding: 0;
   margin: auto;
-  max-width: 95vw;
+  max-width: calc(100vw - 32px);
   max-height: 90vh;
   border: 1px solid var(--border);
   border-radius: var(--radius);

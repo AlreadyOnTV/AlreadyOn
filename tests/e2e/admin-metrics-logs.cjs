@@ -301,8 +301,26 @@ module.exports = async function adminMetricsAndLogs({
     "Mount read/write lines should be distinguishable",
   );
   await disk.click();
-  await page.getByRole("dialog", { name: "Disk graph", exact: true }).waitFor();
+  const graphDialog = page.getByRole("dialog", {
+    name: "Disk graph",
+    exact: true,
+  });
+  await graphDialog.waitFor();
+  for (const width of [1440, 1920, 390]) {
+    await page.setViewportSize({ width, height: 1000 });
+    await page.waitForFunction(() => {
+      const dialog = document.querySelector(".metrics-expanded-dialog");
+      const panel = document.querySelector('.metrics-grid [data-metric="disk"]');
+      if (!dialog || !panel) return false;
+      const bounds = dialog.getBoundingClientRect();
+      const height = Math.min(panel.getBoundingClientRect().height * 1.5, window.innerHeight * 0.9);
+      return Math.abs(bounds.left - 16) < 1 &&
+        Math.abs(window.innerWidth - bounds.right - 16) < 1 &&
+        Math.abs(bounds.height - height) < 1;
+    }, null, { timeout: 5000 });
+  }
   await page.keyboard.press("Escape");
+  await page.setViewportSize({ width: 1440, height: 1000 });
   const start = await cpu();
   const requestStart = requests;
   await delay(12000);

@@ -148,10 +148,7 @@ export default function ServerMetrics({
         `[data-metric="${expanded}"]`,
       )!;
       setExpandedSize({
-        width: Math.min(
-          area.getBoundingClientRect().width * 0.9,
-          window.innerWidth * 0.95,
-        ),
+        width: Math.max(0, window.innerWidth - 32),
         height: Math.min(
           panel.getBoundingClientRect().height * 1.5,
           window.innerHeight * 0.9,
