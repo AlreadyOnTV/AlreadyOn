@@ -199,13 +199,12 @@ func (m *Manager) updateCloudflare(ctx context.Context, c Config, ip string) err
 			return permanent("Cloudflare returned a record that does not match this hostname")
 		}
 		if r.Content == ip && !r.Proxied {
-			logging.Info("DDNS cloudflare: A record already correct and DNS only; no write needed")
 			return nil
 		}
 		method, endpoint = "PATCH", base+"/"+r.ID
 		payload = map[string]any{"content": ip, "proxied": false}
 	}
-	logging.Info("DDNS cloudflare: %s A record with DNS-only routing", map[string]string{"POST": "creating", "PATCH": "updating"}[method])
+	logging.Info("DDNS cloudflare: %s A record for %s at %s with DNS-only routing", map[string]string{"POST": "creating", "PATCH": "updating"}[method], c.Hostname, ip)
 	b, err = m.request(ctx, method, endpoint, &c, payload)
 	if err != nil {
 		return err

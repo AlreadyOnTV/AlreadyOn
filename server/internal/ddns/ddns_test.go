@@ -3,14 +3,69 @@ package ddns
 import (
 	"context"
 	"encoding/json"
+	"fmt"
 	"io"
 	"net/http"
 	"strings"
 	"testing"
 	"time"
 
+	"github.com/alreadyonapp/alreadyon/server/internal/logging"
 	"github.com/alreadyonapp/alreadyon/server/internal/storage"
 )
+
+func TestAutomaticCloudflareCadenceAndLogs(t *testing.T) {
+	m := testManager(t)
+	ctx := context.Background()
+	now := time.Unix(1800000000, 0)
+	m.now = func() time.Time { return now }
+	secret := "synthetic-secret"
+	if _, err := m.Save(ctx, Update{Provider: "cloudflare", Hostname: "tv.example.com", ZoneID: strings.Repeat("a", 32), Secret: &secret, Enabled: true}); err != nil {
+		t.Fatal(err)
+	}
+	ip, recordIP := "203.0.113.10", "203.0.113.10"
+	m.client.Transport = fixtureTransport(func(r *http.Request) (*http.Response, error) {
+		switch r.URL.Host {
+		case "api.ipify.org":
+			return response(ip), nil
+		case "cloudflare-dns.com":
+			return response(fmt.Sprintf(`{"Status":0,"Answer":[{"type":1,"data":%q}]}`, recordIP)), nil
+		case "api.cloudflare.com":
+			switch r.Method {
+			case http.MethodGet:
+				return response(fmt.Sprintf(`{"success":true,"result":[{"id":"bbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbb","name":"tv.example.com","type":"A","content":%q}]}`, recordIP)), nil
+			case http.MethodPatch:
+				recordIP = ip
+				return response(fmt.Sprintf(`{"success":true,"result":{"content":%q}}`, recordIP)), nil
+			}
+		}
+		t.Fatalf("unexpected request: %s %s", r.Method, r.URL)
+		return nil, nil
+	})
+	if _, err := m.runScheduled(ctx, "cloudflare", false, true); err != nil {
+		t.Fatal(err)
+	}
+	logCount := len(logging.Default.Entries(nil, 0))
+	now = now.Add(5 * time.Minute)
+	if _, err := m.run(ctx, "cloudflare", false); err != nil {
+		t.Fatal(err)
+	}
+	entries := logging.Default.Entries(nil, 0)[logCount:]
+	if len(entries) != 1 || !strings.Contains(entries[0].Message, "verified tv.example.com at 203.0.113.10") {
+		t.Fatalf("expected a single verified heartbeat, got %+v", entries)
+	}
+	logCount++
+	now = now.Add(5 * time.Minute)
+	ip = "203.0.113.11"
+	if _, err := m.run(ctx, "cloudflare", false); err != nil {
+		t.Fatal(err)
+	}
+	entries = logging.Default.Entries(nil, 0)[logCount:]
+	if len(entries) != 3 || !strings.Contains(entries[0].Message, "changed from 203.0.113.10 to 203.0.113.11") ||
+		!strings.Contains(entries[1].Message, "updating A record") || !strings.Contains(entries[2].Message, "verified") {
+		t.Fatalf("expected address change, update and verification details, got %+v", entries)
+	}
+}
 
 // Provider fixtures never contact public DNS, alter real records or reuse a
 // preview database. The transport also inspects credential placement/redaction.
