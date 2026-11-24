@@ -89,7 +89,7 @@
 <li>For Cloudflare, use a zone-scoped token with DNS Edit and Zone Read. AlreadyOn discovers the zone and creates/updates the IPv4 A record in <strong>DNS-only</strong> mode; it disables proxying on that record.</li>
 <li>For No-IP, enter the actual full hostname and update credentials/DDNS Key. A provider group alias is not the hostname.</li>
 <li>Save Changes to store the configuration and trigger an initial sync. Review last attempt, success/failure and next retry in the status.</li>
-</ol><p>Checks run about every five minutes and failures back off. The updater manages IPv4 A records; inspect existing AAAA records separately. Provider account obligations, such as No-IP hostname confirmation, remain yours. Stored credentials are not returned to the form; reveal controls expose only a replacement draft.</p>
+</ol><p>Checks run every five minutes during normal operation and failures back off. An unchanged Cloudflare sync logs a single verified-status line. Address changes, DNS record updates and failures log more detail. The updater manages IPv4 A records; inspect existing AAAA records separately. Provider account obligations, such as No-IP hostname confirmation, remain yours. Stored credentials are not returned to the form; reveal controls expose only a replacement draft.</p>
 <p>DNS and certificate names should agree with the URL viewers use. DDNS neither opens firewall ports nor installs a publicly trusted certificate.</p>
 </section>
 

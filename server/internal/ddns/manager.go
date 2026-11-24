@@ -4,13 +4,16 @@ import (
 	"context"
 	"database/sql"
 	"errors"
-	"github.com/alreadyonapp/alreadyon/server/internal/logging"
 	"net/http"
 	"strings"
 	"sync"
 	"sync/atomic"
 	"time"
+
+	"github.com/alreadyonapp/alreadyon/server/internal/logging"
 )
+
+const syncInterval = 5 * time.Minute
 
 // Manager serializes provider updates and configuration changes so an in-flight
 // update never publishes status under a different provider's credentials.
@@ -58,8 +61,11 @@ func (m *Manager) runScheduled(ctx context.Context, provider string, manual, sta
 		return Status{}, ErrInvalid
 	}
 	now := m.now().Unix()
+	quiet := provider == "cloudflare" && !manual
 	if c.Blocked || (now < c.NextAttempt && !(startup && startupEligible(c))) {
-		logging.Info("DDNS %s: sync skipped; blocked=%t; next retry=%s", provider, c.Blocked, time.Unix(c.NextAttempt, 0).UTC().Format(time.RFC3339))
+		if !quiet {
+			logging.Info("DDNS %s: sync skipped; blocked=%t; next retry=%s", provider, c.Blocked, time.Unix(c.NextAttempt, 0).UTC().Format(time.RFC3339))
+		}
 		return m.Status(ctx)
 	}
 	if !manual {
@@ -78,8 +84,18 @@ func (m *Manager) runScheduled(ctx context.Context, provider string, manual, sta
 	if _, err = m.db.ExecContext(ctx, `UPDATE ddns_configs SET last_attempt=? WHERE provider=?`, now, provider); err != nil {
 		return Status{}, err
 	}
-	logging.Info("DDNS %s: sync started; startup=%t; attempt=%s", provider, startup, time.Unix(now, 0).UTC().Format(time.RFC3339))
+	if !quiet {
+		logging.Info("DDNS %s: sync started; startup=%t; attempt=%s", provider, startup, time.Unix(now, 0).UTC().Format(time.RFC3339))
+	}
+	previousIP := c.LastIP
 	ip, opErr := m.publicIP(ctx)
+	if quiet && opErr == nil && ip != previousIP {
+		if previousIP == "" {
+			logging.Info("DDNS cloudflare: detected initial public IPv4 address %s for %s", ip, c.Hostname)
+		} else {
+			logging.Info("DDNS cloudflare: public IPv4 address changed from %s to %s for %s", previousIP, ip, c.Hostname)
+		}
+	}
 	if opErr == nil && (manual || startup || c.Provider == "cloudflare" || ip != c.LastIP || c.LastUpdate == 0) {
 		opErr = m.update(ctx, c, ip)
 		if opErr == nil {
@@ -96,13 +112,12 @@ func (m *Manager) runScheduled(ctx context.Context, provider string, manual, sta
 	message := ""
 	blocked := false
 	failures := 0
-	delay := 5 * time.Minute
+	delay := syncInterval
 	if opErr != nil {
 		message = opErr.Error()
 		failures = c.Failures + 1
 		var pe *providerError
 		blocked = errors.As(opErr, &pe) && pe.permanent
-		delay = 5 * time.Minute
 		for i := 1; i < failures && delay < time.Hour; i++ {
 			delay *= 2
 		}
@@ -124,7 +139,14 @@ func (m *Manager) runScheduled(ctx context.Context, provider string, manual, sta
 		return Status{}, err
 	}
 	if message == "" {
-		logging.Info("DDNS %s: sync succeeded; public DNS verified; attempt=%s", provider, time.Unix(now, 0).UTC().Format(time.RFC3339))
+		if quiet {
+			if c.LastError != "" {
+				logging.Info("DDNS cloudflare: recovered from the previous sync failure for %s", c.Hostname)
+			}
+			logging.Info("DDNS cloudflare: sync succeeded; verified %s at %s", c.Hostname, ip)
+		} else {
+			logging.Info("DDNS %s: sync succeeded; public DNS verified; attempt=%s", provider, time.Unix(now, 0).UTC().Format(time.RFC3339))
+		}
 	} else {
 		logging.Warn("DDNS %s: sync failed; attempt=%s; %s", provider, time.Unix(now, 0).UTC().Format(time.RFC3339), message)
 	}
@@ -133,12 +155,13 @@ func (m *Manager) runScheduled(ctx context.Context, provider string, manual, sta
 }
 
 // Start waits one minute before the initial sync to avoid competing with
-// startup work, then checks the persisted normal cadence/backoff every minute.
+// startup work, then checks settings at least every minute and wakes sooner
+// when a Cloudflare sync is due between checks.
 // Disabled/unconfigured instances make no requests and log nothing while the
 // provider is None; cancellation ends the delay.
 func (m *Manager) Start(ctx context.Context) {
-	tick := time.NewTicker(time.Minute)
-	defer tick.Stop()
+	timer := time.NewTimer(time.Minute)
+	defer timer.Stop()
 	if status, err := m.Status(ctx); err == nil && status.Provider != "none" {
 		logging.Info("DDNS: startup sync scheduled in one minute")
 	}
@@ -147,8 +170,9 @@ func (m *Manager) Start(ctx context.Context) {
 		select {
 		case <-ctx.Done():
 			return
-		case <-tick.C:
+		case <-timer.C:
 		}
+		nextCheck := m.now().Add(time.Minute)
 		status, err := m.Status(ctx)
 		if err != nil {
 			logging.Warn("DDNS: scheduled check could not read settings")
@@ -158,17 +182,31 @@ func (m *Manager) Start(ctx context.Context) {
 				if c.Provider != status.Provider {
 					continue
 				}
-				logging.Info("DDNS %s: scheduled check; startup=%t", c.Provider, startup)
+				quiet := c.Provider == "cloudflare"
+				if !quiet {
+					logging.Info("DDNS %s: scheduled check; startup=%t", c.Provider, startup)
+				}
 				if !c.Enabled {
-					logging.Info("DDNS %s: sync skipped; configuration incomplete or disabled", c.Provider)
+					if !quiet {
+						logging.Info("DDNS %s: sync skipped; configuration incomplete or disabled", c.Provider)
+					}
 					continue
 				}
 				if c.Blocked {
-					logging.Info("DDNS %s: sync skipped; provider blocked; correct setup and save", c.Provider)
+					if !quiet {
+						logging.Info("DDNS %s: sync skipped; provider blocked; correct setup and save", c.Provider)
+					}
 					continue
 				}
 				if m.now().Unix() < c.NextAttempt && !(startup && startupEligible(c)) {
-					logging.Info("DDNS %s: sync waiting until %s", c.Provider, time.Unix(c.NextAttempt, 0).UTC().Format(time.RFC3339))
+					retryAt := time.Unix(c.NextAttempt, 0)
+					if quiet {
+						if retryAt.Before(nextCheck) {
+							nextCheck = retryAt
+						}
+					} else {
+						logging.Info("DDNS %s: sync waiting until %s", c.Provider, retryAt.UTC().Format(time.RFC3339))
+					}
 					continue
 				}
 				if _, err := m.runScheduled(ctx, c.Provider, false, startup); err != nil {
@@ -177,5 +215,6 @@ func (m *Manager) Start(ctx context.Context) {
 			}
 		}
 		startup = false
+		timer.Reset(nextCheck.Sub(m.now()))
 	}
 }
